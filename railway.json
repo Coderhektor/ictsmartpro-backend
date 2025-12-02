@@ -1,0 +1,7 @@
+{
+  "build": {
+    "builder": "paketo",
+    "buildpacks": ["gcr.io/paketo-buildpacks/nodejs"]
+  },
+  "start": "npm run start:prod"
+}
