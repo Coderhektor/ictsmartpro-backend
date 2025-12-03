@@ -1,11 +1,15 @@
+# nixpacks.toml
 [phases.setup]
-  nixPkgs = ["nodejs-18_x"]
+nixPkgs = ["nodejs-18_x"]
 
 [phases.install]
-  cmds = ["npm ci"]                  # devDependencies dahil her şeyi yükler
+cmds = ["npm ci"]
 
 [phases.build]
-  cmds = ["npm run build"]
+cmds = ["npm run build"]
 
 [start]
-  cmd = "npm run start:prod"
+cmd = "npm run start:prod"
+
+[variables]
+NIXPACKS_PATH = "/app"
