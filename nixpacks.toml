@@ -1,5 +1,11 @@
 [phases.setup]
-nixPkgs = ["nodejs-18_x"]
+  nixPkgs = ["nodejs-18_x"]
+
+[phases.install]
+  cmds = ["npm ci"]                  # devDependencies dahil her şeyi yükler
+
+[phases.build]
+  cmds = ["npm run build"]
 
 [start]
-cmd = "npm run start:prod"
+  cmd = "npm run start:prod"
