@@ -1,15 +1,11 @@
 {
   "name": "ictsmartpro-backend",
   "version": "1.0.0",
-  "description": "Backend service for ICTSmartPro",
   "main": "index.js",
   "scripts": {
     "start": "node index.js"
   },
-  "keywords": ["railway", "node", "backend"],
-  "author": "Hüseyin YILMAZ",
-  "license": "MIT",
   "engines": {
-    "node": ">=20.0.0"
+    "node": ">=20"
   }
 }
