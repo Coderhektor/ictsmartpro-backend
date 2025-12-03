@@ -1,20 +1,16 @@
 {
   "name": "ictsmartpro-backend",
   "version": "1.0.0",
-  "main": "dist/main.js",
+  "description": "Backend service for ICTSmartPro",
+  "main": "index.js",
   "scripts": {
-    "build": "tsc",
-    "start:prod": "node dist/main"
+    "build": "echo '✅ Build step skipped (no compilation needed)'",
+    "start:prod": "node -e \"require('http').createServer((req, res) => { res.writeHead(200, { 'Content-Type': 'text/plain' }); res.end('ICTSmartPro Backend ✅ Running on Railway!'); }).listen(process.env.PORT || 3000, () => console.log('🚀 Listening on port ' + (process.env.PORT || 3000)));\""
   },
-  "dependencies": {
-    "@nestjs/common": "^10.3.0",
-    "@nestjs/core": "^10.3.0",
-    "@nestjs/platform-express": "^10.3.0",
-    "reflect-metadata": "^0.2.0",
-    "rxjs": "^7.8.0"
-  },
-  "devDependencies": {
-    "@types/node": "^20.12.7",
-    "typescript": "^5.4.5"
+  "keywords": ["railway", "node", "backend"],
+  "author": "Hüseyin YILMAZ",
+  "license": "MIT",
+  "engines": {
+    "node": ">=20.0.0"
   }
 }

@@ -4,3 +4,12 @@
   "providers": ["node"],
   "startCommand": "npm run start:prod"
 }
+{
+  "$schema": "https://railway.app/railway.schema.json",
+  "build": {
+    "builder": "DOCKER"
+  },
+  "env": {
+    "PORT": "3000"
+  }
+}
