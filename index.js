@@ -1,5 +1,5 @@
-// ICTSmartPro Backend - Minimal & Çalışan Versiyon
 const http = require('http');
+
 const port = process.env.PORT || 3000;
 
 const server = http.createServer((req, res) => {
@@ -8,5 +8,5 @@ const server = http.createServer((req, res) => {
 });
 
 server.listen(port, () => {
-  console.log('🚀 ICTSmartPro Backend listening on port ' + port);
+  console.log('ICTSmartPro Backend listening on port ' + port);
 });
