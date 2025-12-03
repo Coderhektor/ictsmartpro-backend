@@ -1,4 +1,4 @@
-'{
+ {
   "$schema": "https://railway.app/railway.schema.json",
   "build": {
     "builder": "DOCKERFILE"
@@ -6,4 +6,5 @@
   "env": {
     "PORT": "3000"
   }
-}' | Out-File -Encoding utf8 -NoNewline railway.json
+} 
+
