@@ -1,6 +1,5 @@
-# nixpacks.toml
 [phases.setup]
-nixPkgs = ["nodejs-18_x"]
+nixPkgs = ["nodejs-20_x"]
 
 [phases.install]
 cmds = ["npm ci"]
@@ -10,6 +9,3 @@ cmds = ["npm run build"]
 
 [start]
 cmd = "npm run start:prod"
-
-[variables]
-NIXPACKS_PATH = "/app"

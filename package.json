@@ -1,11 +1,9 @@
 {
   "name": "ictsmartpro-backend",
   "version": "1.0.0",
-  "description": "Backend API for ICTSmartPro",
   "main": "dist/main.js",
   "scripts": {
-    "build": "nest build",
-    "start": "node dist/main",
+    "build": "tsc",
     "start:prod": "node dist/main"
   },
   "dependencies": {
@@ -16,13 +14,7 @@
     "rxjs": "^7.8.0"
   },
   "devDependencies": {
-    "@nestjs/cli": "^10.3.0",
-    "@nestjs/schematics": "^10.0.0",
-    "@types/express": "^4.17.21",
     "@types/node": "^20.12.7",
     "typescript": "^5.4.5"
-  },
-  "engines": {
-    "node": ">=18.0.0"
   }
 }
