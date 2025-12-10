@@ -1,5 +1,6 @@
 from fastapi import FastAPI
 from fastapi.responses import HTMLResponse
+from fastapi.staticfiles import StaticFiles   # ← bu satır yeni
 import os
 
 app = FastAPI(
@@ -8,6 +9,9 @@ app = FastAPI(
     docs_url="/docs",
     redoc_url=None
 )
+
+# BU SATIRI EKLE → kök dizindeki dosyaları (logo.png vs) sunar
+app.mount("/", StaticFiles(directory=".", html=False), name="root")
 
 @app.get("/", response_class=HTMLResponse)
 async def root():
@@ -36,7 +40,7 @@ async def root():
         <img src="/logo.png" alt="ICT Smart Pro Logo" class="logo">
         <h1>ICT Smart Pro</h1>
         <p>Akıllı Teknoloji Çözümleri</p>
-        <div class="status">● Canlı ve Çalışır Durumda</div>
+        <div class="status">Canlı ve Çalışır Durumda</div>
     </body>
     </html>
     """
@@ -45,7 +49,6 @@ async def root():
 async def health():
     return {"status": "ok"}
 
-# Railway için %100 çalışan port
 if __name__ == "__main__":
     import uvicorn
     port = int(os.environ.get("PORT", "8080"))
