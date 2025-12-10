@@ -1,6 +1,6 @@
 from fastapi import FastAPI
 from fastapi.responses import HTMLResponse
-from fastapi.staticfiles import StaticFiles   # ← bu satır yeni
+from fastapi.staticfiles import StaticFiles   # bunu ekle
 import os
 
 app = FastAPI(
@@ -10,8 +10,8 @@ app = FastAPI(
     redoc_url=None
 )
 
-# BU SATIRI EKLE → kök dizindeki dosyaları (logo.png vs) sunar
-app.mount("/", StaticFiles(directory=".", html=False), name="root")
+# Sadece /assets klasörü gibi bir yol aç, kök yolu elleme
+app.mount("/assets", StaticFiles(directory=".", html=False), name="assets")  # logo.png'yi /assets/logo.png olarak sunar
 
 @app.get("/", response_class=HTMLResponse)
 async def root():
@@ -22,7 +22,7 @@ async def root():
         <meta charset="UTF-8">
         <meta name="viewport" content="width=device-width, initial-scale=1.0">
         <title>ICT Smart Pro - Akıllı Teknoloji Çözümleri</title>
-        <link rel="icon" href="/logo.png" type="image/png">
+        <link rel="icon" href="/assets/logo.png" type="image/png">
         <style>
             @import url('https://fonts.googleapis.com/css2?family=Orbitron:wght@700;900&display=swap');
             body{margin:0;padding:0;height:100vh;background:linear-gradient(135deg,#0f0c29,#302b63,#24243e);
@@ -37,7 +37,7 @@ async def root():
         </style>
     </head>
     <body>
-        <img src="/logo.png" alt="ICT Smart Pro Logo" class="logo">
+        <img src="/assets/logo.png" alt="ICT Smart Pro Logo" class="logo">
         <h1>ICT Smart Pro</h1>
         <p>Akıllı Teknoloji Çözümleri</p>
         <div class="status">Canlı ve Çalışır Durumda</div>
