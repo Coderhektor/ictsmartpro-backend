@@ -19,26 +19,36 @@ async def update_top_gainers():
     while True:
         try:
             async with httpx.AsyncClient(timeout=15.0) as client:
-                # 24 saatlik tüm verileri al (değişim yüzdesi burda var)
                 r = await client.get("https://api.binance.com/api/v3/ticker/24hr")
+                r.raise_for_status()
                 data = r.json()
 
-                # Sadece USDT çiftleri ve hacmi yüksek olanlar
-                usdt_pairs = [
-                    coin for coin in data
-                    if coin["symbol"].endswith("USDT")
-                    and float(coin["quoteVolume"]) > 10_000_000  # min $10M hacim
-                ]
+                valid_coins = []
+                for coin in data:
+                    # Güvenli kontrol: tüm gerekli alanlar var mı ve sayısal mı?
+                    if not isinstance(coin, dict):
+                        continue
+                    if not coin.get("symbol", "").endswith("USDT"):
+                        continue
+                    try:
+                        change = float(coin.get("priceChangePercent", 0) or 0)
+                        volume = float(coin.get("quoteVolume", 0) or 0)
+                        price = coin.get("lastPrice", "0")
+                        if price == "0":
+                            continue
+                    except (ValueError, TypeError):
+                        continue
 
-                # 24 saatlik değişime göre sırala (en çok yükselen en üstte)
-                sorted_coins = sorted(
-                    usdt_pairs,
-                    key=lambda x: float(x["priceChangePercent"]),
-                    reverse=True
-                )
+                    if volume >= 10_000_000:  # min 10M$ hacim
+                        valid_coins.append({
+                            "symbol": coin["symbol"],
+                            "lastPrice": price,
+                            "priceChangePercent": f"{change:+.2f}",
+                            "quoteVolume": volume
+                        })
 
-                # İlk 10'u al
-                top_gainers = sorted_coins[:10]
+                # En çok yükselen 10
+                top_gainers = sorted(valid_coins, key=lambda x: float(x["priceChangePercent"]), reverse=True)[:10]
                 last_update = datetime.now().strftime("%d %B %Y - %H:%M:%S")
 
         except Exception as e:
@@ -46,7 +56,7 @@ async def update_top_gainers():
             top_gainers = []
             last_update = "Bağlantı hatası"
 
-        await asyncio.sleep(10)  # Her 10 saniyede bir güncelle
+        await asyncio.sleep(10)
 
 
 # Uygulama başladığında arka planda çalışsın
@@ -130,3 +140,4 @@ async def root():
 @app.get("/health")
 async def health():
     return {"status": "pump hunting", "coins_tracked": len(top_gainers), "last_update": last_update}
+
