@@ -15,7 +15,7 @@ async def fetch_data():
     global top_gainers, last_update
     try:
         async with httpx.AsyncClient(timeout=12) as client:
-            response = await client.get("https://api.binance.com/api/v3/ticker/24hr")
+            response = await client.get("https://api.binance.us/api/v3/ticker/24hr")
             
         # KRİTİK KONTROL: veri gerçekten JSON listesi mi?
         if response.status_code != 200:
@@ -125,3 +125,4 @@ async def ana_sayfa():
     </body>
     </html>
     """
+
