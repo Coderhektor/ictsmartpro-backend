@@ -6,138 +6,120 @@ import asyncio
 from datetime import datetime
 import os
 
-app = FastAPI(title="ICT Smart Pro - Canlı Kripto Sıralaması")
-
+app = FastAPI(title="ICT Smart Pro – Canlı Pump Tablosu")
 app.mount("/assets", StaticFiles(directory=".", html=False), name="assets")
 
-# Memory'de tutacağımız veri (her 10 saniyede bir güncellenecek)
+# Global değişkenler
 top_gainers = []
-last_update = "Henüz yüklenmedi"
+last_update = "Yükleniyor..."
 
-async def update_top_gainers():
+async def update_data():
     global top_gainers, last_update
     while True:
         try:
-            async with httpx.AsyncClient(timeout=15.0) as client:
+            async with httpx.AsyncClient(timeout=20.0) as client:
+                # Tek seferde hem fiyat hem 24s değişim alıyoruz
                 r = await client.get("https://api.binance.com/api/v3/ticker/24hr")
                 r.raise_for_status()
-                data = r.json()
+                raw_data = r.json()
 
-                valid_coins = []
-                for coin in data:
-                    # Güvenli kontrol: tüm gerekli alanlar var mı ve sayısal mı?
-                    if not isinstance(coin, dict):
-                        continue
-                    if not coin.get("symbol", "").endswith("USDT"):
-                        continue
-                    try:
-                        change = float(coin.get("priceChangePercent", 0) or 0)
-                        volume = float(coin.get("quoteVolume", 0) or 0)
-                        price = coin.get("lastPrice", "0")
-                        if price == "0":
-                            continue
-                    except (ValueError, TypeError):
-                        continue
+            # Temiz ve güvenli liste oluştur
+            clean_list = []
+            for item in raw_data:
+                if not isinstance(item, dict):
+                    continue
+                symbol = item.get("symbol", "")
+                if not symbol.endswith("USDT"):
+                    continue
+                try:
+                    price = float(item.get("lastPrice", 0))
+                    change = float(item.get("priceChangePercent", 0))
+                    volume = float(item.get("quoteVolume", 0))
+                except (TypeError, ValueError):
+                    continue
 
-                    if volume >= 10_000_000:  # min 10M$ hacim
-                        valid_coins.append({
-                            "symbol": coin["symbol"],
-                            "lastPrice": price,
-                            "priceChangePercent": f"{change:+.2f}",
-                            "quoteVolume": volume
-                        })
+                if price > 0 and volume >= 5_000_000:  # min 5M$ hacim (daha çok coin çıksın)
+                    clean_list.append({
+                        "symbol": symbol.replace("USDT", "/USDT"),
+                        "price": price,
+                        "change": change,
+                        "volume": volume
+                    })
 
-                # En çok yükselen 10
-                top_gainers = sorted(valid_coins, key=lambda x: float(x["priceChangePercent"]), reverse=True)[:10]
-                last_update = datetime.now().strftime("%d %B %Y - %H:%M:%S")
+            # Sırala ve ilk 10’u al
+            top_gainers = sorted(clean_list, key=lambda x: x["change"], reverse=True)[:10]
+            last_update = datetime.now().strftime("%d %b %Y – %H:%M:%S")
 
         except Exception as e:
-            print("Güncelleme hatası:", e)
-            top_gainers = []
-            last_update = "Bağlantı hatası"
+            print("Bağlantı hatası (tekrar deneyecek):", e)
+            # Hata olsa bile eski veriyi koru (boş kalmasın)
+            await asyncio.sleep(5)
+            continue
 
-        await asyncio.sleep(10)
+        await asyncio.sleep(10)  # 10 saniyede bir güncelle
 
 
-# Uygulama başladığında arka planda çalışsın
 @app.on_event("startup")
-async def startup_event():
-    asyncio.create_task(update_top_gainers())
+async def on_startup():
+    asyncio.create_task(update_data())
 
 
 @app.get("/", response_class=HTMLResponse)
-async def root():
+async def ana_sayfa():
+    rows = ""
+    if top_gainers:
+        for i, coin in enumerate(top_gainers, 1):
+            renk = "color:#00ff88" if coin["change"] > 0 else "color:#ff4444"
+            rows += f"""
+            <tr>
+                <td class="rank">{i}</td>
+                <td class="coin">{coin['symbol']}</td>
+                <td class="price">${coin['price']:,.4f}</td>
+                <td style="{renk};font-weight:bold">{coin['change']:+.2f}%</td>
+            </tr>
+            """
+    else:
+        rows = '<tr><td colspan="4" style="color:#ff9900">Veri yükleniyor, 10 saniye içinde gelecek...</td></tr>'
+
     return f"""
     <!DOCTYPE html>
     <html lang="tr">
     <head>
         <meta charset="UTF-8">
         <meta name="viewport" content="width=device-width, initial-scale=1.0">
-        <title>ICT Smart Pro - En Hızlı Yükselen Coinler</title>
+        <title>ICT Smart Pro – En Çok Yükselenler</title>
         <link rel="icon" href="/assets/logo.png" type="image/png">
         <style>
-            @import url('https://fonts.googleapis.com/css2?family=Orbitron:wght@800&family=Rajdhani:wght@600&display=swap');
-            body {{margin:0;padding:0;height:100vh;background:linear-gradient(135deg,#0f0c29,#302b63,#24243e);color:white;font-family:'Rajdhani',sans-serif;overflow:hidden}}
-            .container {{display:flex;flex-direction:column;align-items:center;padding:20px}}
-            .logo {{width:160px;margin-bottom:20px;animation:pulse 3s infinite;border-radius:25px;box-shadow:0 0 30px #00dbde}}
-            h1 {{font-family:'Orbitron',sans-serif;font-size:4rem;margin:10px;background:linear-gradient(90deg,#00dbde,#fc00ff,#00dbde);-webkit-background-clip:text;-webkit-text-fill-color:transparent;animation:glow 2s infinite alternate}}
-            .update {{margin:15px 0;font-size:1.1rem;opacity:0.8}}
-            table {{width:90%;max-width:1000px;border-collapse:collapse;margin-top:20px;background:rgba(0,0,0,0.4);border-radius:20px;overflow:hidden;box-shadow:0 0 40px rgba(0,255,136,0.3)}}
-            th {{background:linear-gradient(90deg,#fc00ff,#00dbde);padding:18px;font-size:1.4rem}}
-            td {{padding:16px 12px;text-align:center;font-size:1.3rem;transition:0.3s}}
-            tr:nth-child(even) {{background:rgba(255,255,255,0.05)}}
-            tr:hover {{background:rgba(0,255,255,0.15);transform:scale(1.02);box-shadow:0 0 20px #00ffff}}
-            .rank {{font-size:2rem;font-weight:bold;color:#00ff88;text-shadow:0 0 15px #00ff88}}
-            .symbol {{font-size:1.6rem;font-weight:bold;color:#00dbde;text-shadow:0 0 10px}}
+            @import url('https://fonts.googleapis.com/css2?family=Orbitron:wght@900&family=Rajdhani:wght@700&display=swap');
+            body {{margin:0;padding:0;background:linear-gradient(135deg,#0f0c29,#302b63,#24243e);color:#fff;font-family:'Rajdhani',sans-serif;overflow:hidden;height:100vh}}
+            .container {{text-align:center;padding:20px}}
+            .logo {{width:140px;margin:20px auto;display:block;animation:pulse 3s infinite;border-radius:20px}}
+            h1 {{font-family:'Orbitron',sans-serif;font-size:4.5rem;background:-webkit-linear-gradient(#00dbde,#fc00ff);-webkit-background-clip:text;-webkit-text-fill-color:transparent}}
+            table {{width:95%;max-width:1100px;margin:30px auto;border-collapse:collapse;background:rgba(0,0,0,0.5);border-radius:20px;overflow:hidden;box-shadow:0 0 50px rgba(0,255,136,0.4)}}
+            th {{background:linear-gradient(90deg,#fc00ff,#00dbde);padding:20px;font-size:1.5rem}}
+            td {{padding:18px;font-size:1.4rem}}
+            tr:hover {{background:rgba(0,255,255,0.2);transform:scale(1.02)}
+            .rank {{font-size:2.5rem;color:#00ff88;text-shadow:0 0 20px #00ff88}}
+            .coin {{font-size:1.8rem;color:#00dbde;font-weight:bold}}
             .price {{color:#ffd700}}
-            .positive {{color:#00ff88;font-weight:bold;text-shadow:0 0 15px #00ff88;animation:pulseGreen 1.5s infinite}}
-            .status {{margin-top:30px;padding:15px 40px;background:rgba(0,255,136,0.2);border:2px solid #00ff88;border-radius:50px;font-size:1.4rem;font-weight:bold;color:#00ff88;box-shadow:0 0 20px #00ff8850}}
-            @keyframes pulse {{0%,100%{{transform:scale(1)}}50%{{transform:scale(1.08)}}}}
-            @keyframes glow {{from{{text-shadow:0 0 20px #00dbde}}to{{text-shadow:0 0 40px #fc00ff}}}}
-            @keyframes pulseGreen {{0%,100%{{opacity:1}}50%{{opacity:0.7}}}}
+            .update {{margin:20px;font-size:1.3rem;color:#00ff88}}
+            @keyframes pulse {{0%,100%{{transform:scale(1)}}50%{{transform:scale(1.1)}}}}
         </style>
     </head>
     <body>
         <div class="container">
-            <img src="/assets/logo.png" alt="Logo" class="logo">
-            <h1>EN ÇOK YÜKSELENLER</h1>
-            <p style="font-size:1.6rem;margin:10px">Son 24 Saatte Pompalar Burada!</p>
+            <img src="/assets/logo.png" class="logo" onerror="this.style.display='none'">
+            <h1>PUMP RADARI</h1>
             <div class="update">Son Güncelleme: {last_update}</div>
-            <div class="status">7/24 CANLI TAKİP</div>
-
             <table>
-                <thead>
-                    <tr>
-                        <th>#</th>
-                        <th>Coin</th>
-                        <th>Fiyat</th>
-                        <th>24s Değişim</th>
-                    </tr>
-                </thead>
-                <tbody>
-                    {"".join(
-                        f"""
-                        <tr>
-                            <td class="rank">{i+1}</td>
-                            <td class="symbol">{coin['symbol']}</td>
-                            <td class="price">${float(coin['lastPrice']):,.4f}</td>
-                            <td class="positive">+{coin['priceChangePercent']}%</td>
-                        </tr>
-                        """ for i, coin in enumerate(top_gainers)
-                    ) if top_gainers else "<tr><td colspan='4'>Yükleniyor...</td></tr>"}
-                </tbody>
+                <thead><tr><th>#</th><th>COIN</th><th>FİYAT</th><th>24S DEĞİŞİM</th></tr></thead>
+                <tbody>{rows}</tbody>
             </table>
-
-            <script>
-                // Her 10 saniyede bir sayfayı yenile (sadece tablo güncellenir)
-                setTimeout(() => location.reload(), 10000);
-            </script>
         </div>
+        <script>setTimeout(()=>location.reload(), 10000)</script>
     </body>
     </html>
     """
 
 @app.get("/health")
-async def health():
-    return {"status": "pump hunting", "coins_tracked": len(top_gainers), "last_update": last_update}
-
+async def health(): return {"status": "pump hunting", "coins": len(top_gainers)}
