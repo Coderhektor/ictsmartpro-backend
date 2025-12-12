@@ -15,46 +15,37 @@ async def fetch_data():
     global top_gainers, last_update
     try:
         async with httpx.AsyncClient(timeout=15) as client:
-            # GLOBAL BINANCE - ÇOK DAHA FAZLA VERİ!
-            response = await client.get("https://api.binance.com/api/v3/ticker/24hr")
+            # CoinGecko: Tüm coin'ler için market data (page=1 ilk 250, page=2 sonraki)
+            response1 = await client.get("https://api.coingecko.com/api/v3/coins/markets?vs_currency=usd&order=percent_change_24h_desc&per_page=250&page=1&sparkline=false")
+            response2 = await client.get("https://api.coingecko.com/api/v3/coins/markets?vs_currency=usd&order=percent_change_24h_desc&per_page=250&page=2&sparkline=false")
             
-        if response.status_code != 200:
-            print("API hatası:", response.status_code)
+        if response1.status_code != 200 or response2.status_code != 200:
+            print("CoinGecko API hatası:", response1.status_code, response2.status_code)
             return
 
-        data = response.json()
-        if not isinstance(data, list):
-            print("Beklenmeyen veri tipi:", type(data))
-            return
+        data = response1.json() + response2.json()  # İlk 500 coini birleştir
 
         clean_coins = []
         for item in data:
-            if not isinstance(item, dict):
-                continue
-                
-            symbol = item.get("symbol", "")
-            if not symbol or not symbol.endswith("USDT"):
-                continue
-                
             try:
-                price = float(item.get("lastPrice", 0))
-                change = float(item.get("priceChangePercent", 0))
-                volume = float(item.get("quoteVolume", 0))  # USDT hacmi zaten
+                symbol = item.get("symbol", "").upper() + "/USDT"  # CoinGecko'da direkt symbol, biz /USDT ekliyoruz görsel için
+                price = float(item.get("current_price", 0))
+                change = float(item.get("price_change_percentage_24h", 0) or 0)
+                volume = float(item.get("total_volume", 0))  # 24h total volume
                 
-                # Hacim filtresini biraz düşür: 1M$ yeterli olur, daha fazla coin gösterir
-                if price > 0 and volume >= 1_000_000:  # 1 milyon USDT hacim
+                if price > 0 and volume >= 1_000_000:  # 1M$ volume filtre (daha fazla coin için düşürebilirsin)
                     clean_coins.append({
-                        "symbol": symbol.replace("USDT", "/USDT"),
+                        "symbol": symbol,
                         "price": price,
                         "change": change
                     })
             except (ValueError, TypeError):
                 continue
 
-        # En yüksek 10 yükselen (change'e göre sırala)
-        top_gainers = sorted(clean_coins, key=lambda x: x["change"], reverse=True)[:10]
+        # Zaten %24h'ye göre sıralı geliyor, ilk 10 al
+        top_gainers = clean_coins[:10]
         last_update = datetime.now().strftime("%H:%M:%S")
-        print(f"{len(top_gainers)} coin yüklendi – {last_update}")
+        print(f"{len(top_gainers)} coin yüklendi (CoinGecko) – {last_update}")
 
     except Exception as e:
         print("Bağlantı/API hatası:", e)
@@ -125,5 +116,6 @@ async def ana_sayfa():
     </body>
     </html>
     """
+
 
 
