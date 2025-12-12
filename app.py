@@ -191,7 +191,7 @@ async def api_signal(pair: str = "BTCUSDT", timeframe: str = "1h"):
     except Exception as e:
         return {"error": str(e)}
 
-# ====================== SİNYAL SAYFASI (BURASI EKSİK OLAN!) ======================
+# ====================== SİNYAL SAYFASI (BU EKSİK OLAN KISIM!) ======================
 @app.get("/signal", response_class=HTMLResponse)
 async def signal_page():
     return f"""
