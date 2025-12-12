@@ -15,40 +15,93 @@ async def fetch_data():
     global top_gainers, last_update
     try:
         async with httpx.AsyncClient(timeout=15) as client:
-            # CoinGecko: Tüm coin'ler için market data (page=1 ilk 250, page=2 sonraki)
-            response1 = await client.get("https://api.coingecko.com/api/v3/coins/markets?vs_currency=usd&order=percent_change_24h_desc&per_page=250&page=1&sparkline=false")
-            response2 = await client.get("https://api.coingecko.com/api/v3/coins/markets?vs_currency=usd&order=percent_change_24h_desc&per_page=250&page=2&sparkline=false")
+            # 1. Önce Binance alternatif endpoint'lerini dene (en hızlı olanlar)
+            binance_urls = [
+                "https://data.binance.com/api/v3/ticker/24hr",          # En stabil
+                "https://data-api.binance.vision/api/v3/ticker/24hr",
+                "https://api1.binance.com/api/v3/ticker/24hr",
+                "https://api2.binance.com/api/v3/ticker/24hr",
+                "https://api3.binance.com/api/v3/ticker/24hr",
+            ]
             
-        if response1.status_code != 200 or response2.status_code != 200:
-            print("CoinGecko API hatası:", response1.status_code, response2.status_code)
-            return
+            binance_data = None
+            for url in binance_urls:
+                try:
+                    response = await client.get(url, timeout=10)
+                    if response.status_code == 200:
+                        binance_data = response.json()
+                        print(f"Binance veri alındı: {url}")
+                        break
+                except:
+                    continue
 
-        data = response1.json() + response2.json()  # İlk 500 coini birleştir
-
-        clean_coins = []
-        for item in data:
-            try:
-                symbol = item.get("symbol", "").upper() + "/USDT"  # CoinGecko'da direkt symbol, biz /USDT ekliyoruz görsel için
-                price = float(item.get("current_price", 0))
-                change = float(item.get("price_change_percentage_24h", 0) or 0)
-                volume = float(item.get("total_volume", 0))  # 24h total volume
+            # 2. Binance başarısızsa veya hiç veri gelmediyse → CoinGecko'ya geç
+            if not binance_data or not isinstance(binance_data, list):
+                print("Binance başarısız, CoinGecko'ya geçiliyor...")
+                resp1 = await client.get("https://api.coingecko.com/api/v3/coins/markets?vs_currency=usd&order=percent_change_24h_desc&per_page=250&page=1")
+                resp2 = await client.get("https://api.coingecko.com/api/v3/coins/markets?vs_currency=usd&order=percent_change_24h_desc&per_page=250&page=2")
                 
-                if price > 0 and volume >= 1_000_000:  # 1M$ volume filtre (daha fazla coin için düşürebilirsin)
-                    clean_coins.append({
-                        "symbol": symbol,
-                        "price": price,
-                        "change": change
-                    })
-            except (ValueError, TypeError):
-                continue
+                if resp1.status_code == 200 and resp2.status_code == 200:
+                    coingecko_data = resp1.json() + resp2.json()
+                    print("CoinGecko veri alındı")
+                else:
+                    coingecko_data = []
+            else:
+                coingecko_data = []
 
-        # Zaten %24h'ye göre sıralı geliyor, ilk 10 al
-        top_gainers = clean_coins[:10]
-        last_update = datetime.now().strftime("%H:%M:%S")
-        print(f"{len(top_gainers)} coin yüklendi (CoinGecko) – {last_update}")
+            # 3. Verileri birleştir ve temizle
+            clean_coins = []
+
+            # Binance verisi varsa öncelikli kullan
+            if binance_data:
+                for item in binance_data:
+                    if not isinstance(item, dict):
+                        continue
+                    symbol = item.get("symbol", "")
+                    if not symbol or not symbol.endswith("USDT"):
+                        continue
+                    try:
+                        price = float(item.get("lastPrice", 0))
+                        change = float(item.get("priceChangePercent", 0))
+                        volume = float(item.get("quoteVolume", 0))
+                        if price > 0 and volume >= 1_000_000:  # 1M USDT hacim
+                            clean_coins.append({
+                                "symbol": symbol.replace("USDT", "/USDT"),
+                                "price": price,
+                                "change": change,
+                                "source": "Binance"  # Opsiyonel: kaynağını gösterebiliriz
+                            })
+                    except:
+                        continue
+
+            # Binance yoksa veya az veri geldiyse CoinGecko'yu ekle (tekrar olmasın diye kontrol edebilirsin ama gerek yok)
+            for item in coingecko_data:
+                try:
+                    sym = item.get("symbol", "").upper()
+                    if not sym:
+                        continue
+                    price = float(item.get("current_price", 0))
+                    change = float(item.get("price_change_percentage_24h") or 0)
+                    volume = float(item.get("total_volume", 0))
+                    if price > 0 and volume >= 1_000_000:
+                        # Binance'te yoksa ekle (tekrar önlemek için basit kontrol)
+                        if not any(c["symbol"].startswith(sym) for c in clean_coins):
+                            clean_coins.append({
+                                "symbol": f"{sym}/USDT",
+                                "price": price,
+                                "change": change,
+                                "source": "CoinGecko"
+                            })
+                except:
+                    continue
+
+            # Sırala ve ilk 10'u al
+            top_gainers = sorted(clean_coins, key=lambda x: x["change"], reverse=True)[:10]
+            last_update = datetime.now().strftime("%H:%M:%S")
+            print(f"{len(top_gainers)} coin yüklendi – {last_update} (Kaynak: {'Binance' if binance_data else 'CoinGecko'})")
 
     except Exception as e:
-        print("Bağlantı/API hatası:", e)
+        print("Genel hata:", e)
 
 # Uygulama başladığında hemen veri çek + sonra her 9 saniyede bir
 @app.on_event("startup")
@@ -116,6 +169,7 @@ async def ana_sayfa():
     </body>
     </html>
     """
+
 
 
 
