@@ -14,22 +14,21 @@ last_update = "Başlatılıyor..."
 async def fetch_data():
     global top_gainers, last_update
     try:
-        async with httpx.AsyncClient(timeout=12) as client:
-            response = await client.get("https://api.binance.us/api/v3/ticker/24hr")
+        async with httpx.AsyncClient(timeout=15) as client:
+            # GLOBAL BINANCE - ÇOK DAHA FAZLA VERİ!
+            response = await client.get("https://api.binance.com/api/v3/ticker/24hr")
             
-        # KRİTİK KONTROL: veri gerçekten JSON listesi mi?
         if response.status_code != 200:
-            print("Binance API hatası:", response.status_code)
+            print("API hatası:", response.status_code)
             return
-            
+
         data = response.json()
-        if not isinstance(data, list):  # bazen string dönebiliyor
-            print("Binance garip veri döndü:", type(data))
+        if not isinstance(data, list):
+            print("Beklenmeyen veri tipi:", type(data))
             return
 
         clean_coins = []
         for item in data:
-            # item dict değilse (string vs) atla
             if not isinstance(item, dict):
                 continue
                 
@@ -40,9 +39,10 @@ async def fetch_data():
             try:
                 price = float(item.get("lastPrice", 0))
                 change = float(item.get("priceChangePercent", 0))
-                volume = float(item.get("quoteVolume", 0))
+                volume = float(item.get("quoteVolume", 0))  # USDT hacmi zaten
                 
-                if price > 0 and volume >= 2_000_000:  # 2 milyon dolar hacim
+                # Hacim filtresini biraz düşür: 1M$ yeterli olur, daha fazla coin gösterir
+                if price > 0 and volume >= 1_000_000:  # 1 milyon USDT hacim
                     clean_coins.append({
                         "symbol": symbol.replace("USDT", "/USDT"),
                         "price": price,
@@ -51,13 +51,13 @@ async def fetch_data():
             except (ValueError, TypeError):
                 continue
 
-        # Sırala ve ilk 10'u al
+        # En yüksek 10 yükselen (change'e göre sırala)
         top_gainers = sorted(clean_coins, key=lambda x: x["change"], reverse=True)[:10]
         last_update = datetime.now().strftime("%H:%M:%S")
         print(f"{len(top_gainers)} coin yüklendi – {last_update}")
 
     except Exception as e:
-        print("Bağlantı hatası:", e)
+        print("Bağlantı/API hatası:", e)
 
 # Uygulama başladığında hemen veri çek + sonra her 9 saniyede bir
 @app.on_event("startup")
@@ -125,4 +125,5 @@ async def ana_sayfa():
     </body>
     </html>
     """
+
 
