@@ -5,7 +5,7 @@ import httpx
 import asyncio
 from datetime import datetime
 
-# SİNYAL İÇİN GEREKLİ IMPORTLAR
+# SİNYAL İÇİN GEREKLİ KÜTÜPHANELER
 import ccxt
 import pandas as pd
 import pandas_ta as ta
@@ -16,7 +16,7 @@ app.mount("/assets", StaticFiles(directory=".", html=False), name="assets")
 top_gainers = []
 last_update = "Başlatılıyor..."
 
-# ccxt Binance bağlantısı (sinyal için)
+# Binance bağlantısı (sinyal için)
 exchange = ccxt.binance({'enableRateLimit': True})
 
 # ====================== PUMP RADAR VERİ ÇEKME ======================
@@ -51,7 +51,6 @@ async def fetch_data():
                 coingecko_data = []
 
             clean_coins = []
-
             if binance_data:
                 for item in binance_data:
                     if not isinstance(item, dict): continue
@@ -146,7 +145,7 @@ async def ana_sayfa():
     </html>
     """
 
-# ====================== SİNYAL API VE SAYFASI ======================
+# ====================== SİNYAL API ======================
 @app.get("/api/signal")
 async def api_signal(pair: str = "BTCUSDT", timeframe: str = "1h"):
     pair = pair.upper().replace("/", "").replace(" ", "")
@@ -187,11 +186,12 @@ async def api_signal(pair: str = "BTCUSDT", timeframe: str = "1h"):
             "rsi_14": round(rsi_14, 2) if not pd.isna(rsi_14) else None,
             "signal": signal,
             "signal_color": color,
-            "last_candle": latest['timestamp'].strftime("%d.%m.%Y %H:%M")
+            "last_candle": pd.to_datetime(latest['timestamp'], unit='ms').strftime("%d.%m.%Y %H:%M")
         }
     except Exception as e:
         return {"error": str(e)}
 
+# ====================== SİNYAL SAYFASI (BURASI EKSİK OLAN!) ======================
 @app.get("/signal", response_class=HTMLResponse)
 async def signal_page():
     return f"""
@@ -230,7 +230,7 @@ async def signal_page():
             </form>
             <div id="result" class="result" style="display:none"></div>
         </div>
-        <div class="back"><a href="/">← Ana Sayfaya Dön</a></div>
+        <div class="back" style="margin-top:40px;"><a href="/">← Ana Sayfaya Dön</a></div>
         <script>
             document.getElementById('signalForm').addEventListener('submit', async (e) => {{
                 e.preventDefault();
@@ -246,16 +246,20 @@ async def signal_page():
                         resultDiv.innerHTML = `<p style="color:#ff4444">HATA: ${{data.error}}</p>`;
                         return;
                     }}
-                    const color = data.signal_color === 'green' ? '#00ff88' : data.signal_color === 'lightgreen' ? '#90EE90' : data.signal_color === 'red' ? '#ff4444' : '#ffd700';
+                    const color = data.signal_color === 'green' ? '#00ff88' : 
+                                  data.signal_color === 'lightgreen' ? '#90EE90' : 
+                                  data.signal_color === 'red' ? '#ff4444' : '#ffd700';
                     resultDiv.innerHTML = `
                         <h2 style="color:${{color}}">${{data.signal}}</h2>
                         <p><strong>${{data.pair}} - ${{data.timeframe}}</strong></p>
                         <p>Fiyat: <strong>$${data.current_price}</strong></p>
-                        <p>EMA 21: <strong>${{data.ema_21 || 'Hesaplanıyor'}}</strong></p>
-                        <p>RSI 14: <strong>${{data.rsi_14 || 'Hesaplanıyor'}}</strong></p>
+                        <p>EMA 21: <strong>${{data.ema_21 ?? 'Hesaplanıyor'}}</strong></p>
+                        <p>RSI 14: <strong>${{data.rsi_14 ?? 'Hesaplanıyor'}}</strong></p>
                         <p>Son Mum: ${{data.last_candle}}</p>
                     `;
-                }} catch {{ resultDiv.innerHTML = '<p style="color:#ff4444">Bağlantı hatası!</p>'; }}
+                }} catch {{
+                    resultDiv.innerHTML = '<p style="color:#ff4444">Bağlantı hatası!</p>';
+                }}
             }});
         </script>
     </body>
