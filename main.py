@@ -143,7 +143,7 @@ async def ana_sayfa():
         <title>ICT Smart Pro – PUMP RADARI</title>
         <style>
             body{{margin:0;padding:20px;background:linear-gradient(135deg,#0f0c29,#302b63,#24243e);color:#fff;font-family:Arial;text-align:center}}
-            h1{{font-size:4.5rem;background:linear-gradient(90deg,#00dbde,#fc00ff);-webkit-background-clip-path:text;-webkit-text-fill-color:transparent}}
+            h1{{font-size:4.5rem;background:linear-gradient(90deg,#00dbde,#fc00ff);-webkit-background-clip:text;-webkit-text-fill-color:transparent}}
             table{{width:98%;max-width:1100px;margin:30px auto;background:#00000088;border-radius:20px;overflow:hidden;box-shadow:0 0 40px #00ff8844}}
             th{{background:linear-gradient(90deg,#fc00ff,#00dbde);padding:20px;font-size:1.7rem}}
             td{{padding:18px;font-size:1.5rem}}
@@ -163,13 +163,17 @@ async def ana_sayfa():
             <tr><th>SIRA</th><th>COIN</th><th>FİYAT</th><th>24 SAAT</th></tr>
             {rows}
         </table>
+
+        <!-- YENİ BUTON -->
+        <div style="margin:60px auto; text-align:center;">
+            <a href="/signal" style="background:linear-gradient(90deg,#fc00ff,#00dbde); color:white; padding:20px 50px; font-size:2.2rem; text-decoration:none; border-radius:20px; display:inline-block; box-shadow:0 0 40px #00ff88; transition:0.3s;">
+                🚀 SİNYAL SORGULA 🚀
+            </a>
+        </div>
+
         <script>
             setTimeout(()=>location.reload(), 9000);
         </script>
     </body>
     </html>
     """
-
-
-
-
