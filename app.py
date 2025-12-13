@@ -4,8 +4,6 @@ from fastapi.staticfiles import StaticFiles
 import httpx
 import asyncio
 from datetime import datetime
-
-# SİNYAL İÇİN GEREKLİ KÜTÜPHANELER
 import ccxt
 import pandas as pd
 import pandas_ta as ta
@@ -16,10 +14,8 @@ app.mount("/assets", StaticFiles(directory=".", html=False), name="assets")
 top_gainers = []
 last_update = "Başlatılıyor..."
 
-# Binance bağlantısı (sinyal için)
 exchange = ccxt.binance({'enableRateLimit': True})
 
-# ====================== PUMP RADAR VERİ ÇEKME ======================
 async def fetch_data():
     global top_gainers, last_update
     try:
@@ -37,13 +33,11 @@ async def fetch_data():
                     response = await client.get(url, timeout=10)
                     if response.status_code == 200:
                         binance_data = response.json()
-                        print(f"Binance veri alındı: {url}")
                         break
                 except:
                     continue
 
-            if not binance_data or not isinstance(binance_data, list):
-                print("Binance başarısız, CoinGecko'ya geçiliyor...")
+            if not binance_data:
                 resp1 = await client.get("https://api.coingecko.com/api/v3/coins/markets?vs_currency=usd&order=percent_change_24h_desc&per_page=250&page=1")
                 resp2 = await client.get("https://api.coingecko.com/api/v3/coins/markets?vs_currency=usd&order=percent_change_24h_desc&per_page=250&page=2")
                 coingecko_data = resp1.json() + resp2.json() if resp1.status_code == 200 and resp2.status_code == 200 else []
@@ -77,10 +71,9 @@ async def fetch_data():
 
             top_gainers = sorted(clean_coins, key=lambda x: x["change"], reverse=True)[:10]
             last_update = datetime.now().strftime("%H:%M:%S")
-            print(f"{len(top_gainers)} coin yüklendi – {last_update}")
 
     except Exception as e:
-        print("Genel hata:", e)
+        print("Hata:", e)
 
 @app.on_event("startup")
 async def startup():
@@ -90,7 +83,110 @@ async def startup():
             await asyncio.sleep(9)
             await fetch_data()
     asyncio.create_task(loop())
-# ====================== SİNYAL SAYFASI (EKSİK OLAN KISIM!) ======================
+
+@app.get("/", response_class=HTMLResponse)
+async def ana_sayfa():
+    mesaj = f"Son Güncelleme: {last_update}" if top_gainers else "Veri yükleniyor..."
+    rows = ""
+    for i, coin in enumerate(top_gainers or [], 1):
+        renk = "#00ff88" if coin["change"] > 0 else "#ff4444"
+        rows += f"<tr><td class='sira'>{i}</td><td class='coin'>{coin['symbol']}</td><td class='fiyat'>${coin['price']:,.4f}</td><td style='color:{renk};font-weight:bold;font-size:1.6rem'>{coin['change']:+.2f}%</td></tr>"
+    if not rows:
+        rows = '<tr><td colspan="4" style="color:#ff9900;font-size:2rem">Veri geliyor...</td></tr>'
+
+    return f"""
+    <!DOCTYPE html>
+    <html lang="tr">
+    <head>
+        <meta charset="UTF-8">
+        <meta name="viewport" content="width=device-width, initial-scale=1.0">
+        <title>ICT Smart Pro – PUMP RADARI</title>
+        <style>
+            body{{margin:0;padding:20px;background:linear-gradient(135deg,#0f0c29,#302b63,#24243e);color:#fff;font-family:Arial;text-align:center}}
+            h1{{font-size:4.5rem;background:linear-gradient(90deg,#00dbde,#fc00ff);-webkit-background-clip:text;-webkit-text-fill-color:transparent}}
+            table{{width:98%;max-width:1100px;margin:30px auto;background:#00000088;border-radius:20px;overflow:hidden;box-shadow:0 0 40px #00ff8844}}
+            th{{background:linear-gradient(90deg,#fc00ff,#00dbde);padding:20px;font-size:1.7rem}}
+            td{{padding:18px;font-size:1.5rem}}
+            .sira{{font-size:2.8rem;color:#00ff88;text-shadow:0 0 20px #00ff88}}
+            .coin{{font-size:2rem;color:#00dbde;font-weight:bold}}
+            .fiyat{{color:#ffd700}}
+            img{{width:150px;border-radius:20px;animation:pulse 3s infinite}}
+            .info{{font-size:1.5rem;color:#00ff88;margin:20px}}
+            @keyframes pulse{{0%,100%{{transform:scale(1)}}50%{{transform:scale(1.1)}}}}
+        </style>
+    </head>
+    <body>
+        <img src="/assets/logo.png" onerror="this.style.display='none'">
+        <h1>PUMP RADARI</h1>
+        <div class="info">{mesaj}</div>
+        <table>
+            <tr><th>SIRA</th><th>COIN</th><th>FİYAT</th><th>24 SAAT</th></tr>
+            {rows}
+        </table>
+
+        <div style="margin:60px auto; text-align:center;">
+            <a href="/signal" style="background:linear-gradient(90deg,#fc00ff,#00dbde); color:white; padding:20px 50px; font-size:2.2rem; text-decoration:none; border-radius:20px; display:inline-block; box-shadow:0 0 40px #00ff88;">
+                🚀 SİNYAL SORGULA 🚀
+            </a>
+        </div>
+
+        <script>
+            setTimeout(()=>location.reload(), 9000);
+        </script>
+    </body>
+    </html>
+    """
+
+@app.get("/api/signal")
+async def api_signal(pair: str = "BTCUSDT", timeframe: str = "1h"):
+    pair = pair.upper().replace("/", "").replace(" ", "")
+    try:
+        valid_tf = ['1m', '3m', '5m', '15m', '30m', '1h', '2h', '4h', '6h', '8h', '12h', '1d', '3d', '1w']
+        if timeframe not in valid_tf:
+            return {"error": "Geçersiz timeframe"}
+
+        ohlcv = await asyncio.to_thread(exchange.fetch_ohlcv, pair, timeframe, limit=100)
+        if not ohlcv:
+            return {"error": "Pair bulunamadı"}
+
+        df = pd.DataFrame(ohlcv, columns=['timestamp', 'open', 'high', 'low', 'close', 'volume'])
+        df['EMA_21'] = ta.ema(df['close'], length=21)
+        df['RSI_14'] = ta.rsi(df['close'], length=14)
+
+        latest = df.iloc[-1]
+        current_price = latest['close']
+        ema_21 = latest['EMA_21']
+        rsi_14 = latest['RSI_14']
+
+        if pd.isna(ema_21) or pd.isna(rsi_14):
+            signal = "Yetersiz veri"
+            color = "orange"
+        elif current_price > ema_21 and rsi_14 < 30:
+            signal = "🔥 GÜÇLÜ ALIM SİNYALİ 🔥"
+            color = "green"
+        elif current_price > ema_21 and rsi_14 < 45:
+            signal = "ALIM FIRSATI"
+            color = "lightgreen"
+        elif current_price < ema_21 and rsi_14 > 70:
+            signal = "SATIM SİNYALİ"
+            color = "red"
+        else:
+            signal = "BEKLE"
+            color = "gray"
+
+        return {
+            "pair": pair.replace("USDT", "/USDT"),
+            "timeframe": timeframe,
+            "current_price": round(current_price, 6),
+            "ema_21": round(ema_21, 6) if not pd.isna(ema_21) else None,
+            "rsi_14": round(rsi_14, 2) if not pd.isna(rsi_14) else None,
+            "signal": signal,
+            "signal_color": color,
+            "last_candle": pd.to_datetime(latest['timestamp'], unit='ms').strftime("%d.%m.%Y %H:%M")
+        }
+    except Exception as e:
+        return {"error": str(e)}
+
 @app.get("/signal", response_class=HTMLResponse)
 async def signal_page():
     return f"""
@@ -101,7 +197,7 @@ async def signal_page():
         <meta name="viewport" content="width=device-width, initial-scale=1.0">
         <title>ICT Smart Pro – Sinyal Sorgula</title>
         <style>
-            body{{margin:0;padding:20px;background:linear-gradient(135deg,#0f0c29,#302b63,#24243e);color:#fff;font-family:Arial;text-align:center;min-height:100vh}}
+            body{{margin:0;padding:20px;background:linear-gradient(135deg,#0f0c29,#302b63,#24243e);color:#fff;font-family:Arial;text-align:center}}
             h1{{font-size:3.5rem;background:linear-gradient(90deg,#00dbde,#fc00ff);-webkit-background-clip:text;-webkit-text-fill-color:transparent}}
             .container{{max-width:600px;margin:40px auto;background:#00000099;padding:30px;border-radius:20px;box-shadow:0 0 40px #00ff8844}}
             input, select, button{{width:100%;padding:15px;margin:10px 0;font-size:1.4rem;border:none;border-radius:10px}}
@@ -142,22 +238,20 @@ async def signal_page():
                     const resp = await fetch(`/api/signal?pair=${{pair}}&timeframe=${{timeframe}}`);
                     const data = await resp.json();
                     if (data.error) {{
-                        resultDiv.innerHTML = `<p style="color:#ff4444">HATA: ${{data.error}}</p>`;
-                        return;
+                        resultDiv.innerHTML = `<p style="color:#ff4444">${{data.error}}</p>`;
+                    }} else {{
+                        const color = data.signal_color === 'green' ? '#00ff88' : data.signal_color === 'lightgreen' ? '#90EE90' : data.signal_color === 'red' ? '#ff4444' : '#ffd700';
+                        resultDiv.innerHTML = `
+                            <h2 style="color:${{color}}">${{data.signal}}</h2>
+                            <p><strong>${{data.pair}} - ${{data.timeframe}}</strong></p>
+                            <p>Fiyat: $${data.current_price}</p>
+                            <p>EMA 21: ${{data.ema_21 ?? 'Hesaplanıyor'}}</p>
+                            <p>RSI 14: ${{data.rsi_14 ?? 'Hesaplanıyor'}}</p>
+                            <p>Son Mum: ${{data.last_candle}}</p>
+                        `;
                     }}
-                    const color = data.signal_color === 'green' ? '#00ff88' : 
-                                  data.signal_color === 'lightgreen' ? '#90EE90' : 
-                                  data.signal_color === 'red' ? '#ff4444' : '#ffd700';
-                    resultDiv.innerHTML = `
-                        <h2 style="color:${{color}}">${{data.signal}}</h2>
-                        <p><strong>${{data.pair}} - ${{data.timeframe}}</strong></p>
-                        <p>Fiyat: <strong>$${data.current_price}</strong></p>
-                        <p>EMA 21: <strong>${{data.ema_21 ?? 'Hesaplanıyor'}}</strong></p>
-                        <p>RSI 14: <strong>${{data.rsi_14 ?? 'Hesaplanıyor'}}</strong></p>
-                        <p>Son Mum: ${{data.last_candle}}</p>
-                    `;
                 }} catch {{
-                    resultDiv.innerHTML = '<p style="color:#ff4444">Bağlantı hatası!</p>';
+                    resultDiv.innerHTML = '<p style="color:#ff4444">Bağlantı hatası</p>';
                 }}
             }});
         </script>
