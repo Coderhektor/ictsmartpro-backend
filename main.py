@@ -1,3 +1,8 @@
+# main.py'nin en başına EKLEYİN (app = FastAPI() tanımından önce/sonra farketmez, ama önce tercih edilir)
+import ccxt
+import pandas as pd
+import pandas_ta as ta
+import asyncio
 from fastapi import FastAPI
 from fastapi.responses import HTMLResponse
 from fastapi.staticfiles import StaticFiles
@@ -177,3 +182,4 @@ async def ana_sayfa():
     </body>
     </html>
     """
+
