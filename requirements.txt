@@ -1,6 +1,6 @@
 fastapi
 uvicorn
 httpx
-ccxt
 pandas
 pandas_ta
+
