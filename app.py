@@ -136,8 +136,7 @@ async def ana_sayfa():
     </body>
     </html>
     """
-
-# ====================== SİNYAL API ======================
+# SİNYAL API (JSON döner)
 @app.get("/api/signal")
 async def api_signal(pair: str = "BTCUSDT", timeframe: str = "1h"):
     pair = pair.upper().replace("/", "").replace(" ", "")
@@ -188,7 +187,7 @@ async def api_signal(pair: str = "BTCUSDT", timeframe: str = "1h"):
     except Exception as e:
         return {"error": str(e)}
 
-# ====================== SİNYAL SAYFASI ======================
+# SİNYAL SAYFASI (HTML form)
 @app.get("/signal", response_class=HTMLResponse)
 async def signal_page():
     return f"""
@@ -242,9 +241,7 @@ async def signal_page():
                     if (data.error) {{
                         resultDiv.innerHTML = `<p style="color:#ff4444">${{data.error}}</p>`;
                     }} else {{
-                        const color = data.signal_color === 'green' ? '#00ff88' : 
-                                      data.signal_color === 'lightgreen' ? '#90EE90' : 
-                                      data.signal_color === 'red' ? '#ff4444' : '#ffd700';
+                        const color = data.signal_color === 'green' ? '#00ff88' : data.signal_color === 'lightgreen' ? '#90EE90' : data.signal_color === 'red' ? '#ff4444' : '#ffd700';
                         resultDiv.innerHTML = `
                             <h2 style="color:${{color}}">${{data.signal}}</h2>
                             <p><strong>${{data.pair}} - ${{data.timeframe}}</strong></p>
@@ -262,3 +259,4 @@ async def signal_page():
     </body>
     </html>
     """
+
