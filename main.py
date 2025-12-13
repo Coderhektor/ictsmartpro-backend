@@ -75,7 +75,7 @@ async def startup():
     await fetch_data()
     async def loop():
         while True:
-            await asyncio.sleep(9)
+            await asyncio.sleep(30)
             await fetch_data()
     asyncio.create_task(loop())
 
@@ -291,4 +291,5 @@ async def api_signal(pair: str = "BTCUSDT", timeframe: str = "1h"):
             "last_candle": pd.to_datetime(last['ts'], unit='ms').strftime("%d.%m %H:%M")
         }
     except Exception as e:
+
         return {"error": f"API Hatası: {str(e)}"}
