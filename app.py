@@ -137,6 +137,7 @@ async def ana_sayfa():
     </html>
     """
 
+# ====================== SİNYAL API ======================
 @app.get("/api/signal")
 async def api_signal(pair: str = "BTCUSDT", timeframe: str = "1h"):
     pair = pair.upper().replace("/", "").replace(" ", "")
@@ -147,7 +148,7 @@ async def api_signal(pair: str = "BTCUSDT", timeframe: str = "1h"):
 
         ohlcv = await asyncio.to_thread(exchange.fetch_ohlcv, pair, timeframe, limit=100)
         if not ohlcv:
-            return {"error": "Pair bulunamadı"}
+            return {"error": "Pair bulunamadı. Örnek: BTCUSDT"}
 
         df = pd.DataFrame(ohlcv, columns=['timestamp', 'open', 'high', 'low', 'close', 'volume'])
         df['EMA_21'] = ta.ema(df['close'], length=21)
@@ -187,6 +188,7 @@ async def api_signal(pair: str = "BTCUSDT", timeframe: str = "1h"):
     except Exception as e:
         return {"error": str(e)}
 
+# ====================== SİNYAL SAYFASI ======================
 @app.get("/signal", response_class=HTMLResponse)
 async def signal_page():
     return f"""
@@ -197,7 +199,7 @@ async def signal_page():
         <meta name="viewport" content="width=device-width, initial-scale=1.0">
         <title>ICT Smart Pro – Sinyal Sorgula</title>
         <style>
-            body{{margin:0;padding:20px;background:linear-gradient(135deg,#0f0c29,#302b63,#24243e);color:#fff;font-family:Arial;text-align:center}}
+            body{{margin:0;padding:20px;background:linear-gradient(135deg,#0f0c29,#302b63,#24243e);color:#fff;font-family:Arial;text-align:center;min-height:100vh}}
             h1{{font-size:3.5rem;background:linear-gradient(90deg,#00dbde,#fc00ff);-webkit-background-clip:text;-webkit-text-fill-color:transparent}}
             .container{{max-width:600px;margin:40px auto;background:#00000099;padding:30px;border-radius:20px;box-shadow:0 0 40px #00ff8844}}
             input, select, button{{width:100%;padding:15px;margin:10px 0;font-size:1.4rem;border:none;border-radius:10px}}
@@ -240,7 +242,9 @@ async def signal_page():
                     if (data.error) {{
                         resultDiv.innerHTML = `<p style="color:#ff4444">${{data.error}}</p>`;
                     }} else {{
-                        const color = data.signal_color === 'green' ? '#00ff88' : data.signal_color === 'lightgreen' ? '#90EE90' : data.signal_color === 'red' ? '#ff4444' : '#ffd700';
+                        const color = data.signal_color === 'green' ? '#00ff88' : 
+                                      data.signal_color === 'lightgreen' ? '#90EE90' : 
+                                      data.signal_color === 'red' ? '#ff4444' : '#ffd700';
                         resultDiv.innerHTML = `
                             <h2 style="color:${{color}}">${{data.signal}}</h2>
                             <p><strong>${{data.pair}} - ${{data.timeframe}}</strong></p>
