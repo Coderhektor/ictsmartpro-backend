@@ -1,4 +1,3 @@
-import ccxt
 import pandas as pd
 import pandas_ta as ta
 import asyncio
@@ -294,3 +293,4 @@ async def api_signal(pair: str = "BTCUSDT", timeframe: str = "1h"):
 
         return {"error": f"API Hatası: {str(e)}"}
         #
+
