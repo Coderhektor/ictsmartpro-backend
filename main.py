@@ -291,4 +291,6 @@ async def api_signal(pair: str = "BTCUSDT", timeframe: str = "1h"):
             "last_candle": pd.to_datetime(last['ts'], unit='ms').strftime("%d.%m %H:%M")
         }
     except Exception as e:
+
         return {"error": f"API Hatası: {str(e)}"}
+        #
