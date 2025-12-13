@@ -172,7 +172,7 @@ async def ana_sayfa():
 
         <!-- YENİ BUTON -->
         <div style="margin:60px auto; text-align:center;">
-            <a href="/signal" style="background:linear-gradient(90deg,#fc00ff,#00dbde); color:white; padding:20px 50px; font-size:2.2rem; text-decoration:none; border-radius:20px; display:inline-block; box-shadow:0 0 40px #00ff88; transition:0.3s;">
+            <a href="/app.py" style="background:linear-gradient(90deg,#fc00ff,#00dbde); color:white; padding:20px 50px; font-size:2.2rem; text-decoration:none; border-radius:20px; display:inline-block; box-shadow:0 0 40px #00ff88; transition:0.3s;">
                 🚀 SİNYAL SORGULA 🚀
             </a>
         </div>
@@ -183,5 +183,6 @@ async def ana_sayfa():
     </body>
     </html>
     """
+
 
 
