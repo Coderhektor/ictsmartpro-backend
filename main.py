@@ -1,20 +1,21 @@
-# main.py'nin en başına EKLEYİN (app = FastAPI() tanımından önce/sonra farketmez, ama önce tercih edilir)
 import ccxt
 import pandas as pd
 import pandas_ta as ta
 import asyncio
+import httpx
+from datetime import datetime
+
 from fastapi import FastAPI
 from fastapi.responses import HTMLResponse
 from fastapi.staticfiles import StaticFiles
-import httpx
-import asyncio
-from datetime import datetime
 
 app = FastAPI()
 app.mount("/assets", StaticFiles(directory=".", html=False), name="assets")
 
 top_gainers = []
 last_update = "Başlatılıyor..."
+
+exchange = ccxt.binance({'enableRateLimit': True})
 
 async def fetch_data():
     global top_gainers, last_update
@@ -182,4 +183,5 @@ async def ana_sayfa():
     </body>
     </html>
     """
+
 
