@@ -7,12 +7,16 @@ from datetime import datetime
 from fastapi import FastAPI
 from fastapi.responses import HTMLResponse
 from fastapi.staticfiles import StaticFiles
+import time
 
 app = FastAPI()
 app.mount("/assets", StaticFiles(directory=".", html=False), name="assets")
 
+# Global değişkenler
 top_gainers = []
 last_update = "Başlatılıyor..."
+signals_cache = []          # Sinyal sorguları için önbellek
+signals_last_update = None   # Opsiyonel: cache'in toplu yenilenme zamanı (şu an kullanmıyoruz)
 exchange = ccxt.binance({'enableRateLimit': True})
 
 async def fetch_data():
@@ -248,10 +252,19 @@ async def signal_page():
 </body>
 </html>"""
 
-# ====================== SİNYAL API ======================
+# ====================== SİNYAL API (Cache destekli) ======================
 @app.get("/api/signal")
 async def api_signal(pair: str = "BTCUSDT", timeframe: str = "1h"):
     pair = pair.upper().replace("/", "").replace(" ", "")
+    
+    # Cache kontrolü (son 60 saniye içinde aynı sorgu varsa cache'den dön)
+    current_time = time.time()
+    for item in signals_cache:
+        if item["pair"] == pair and item["timeframe"] == timeframe:
+            if current_time - item["timestamp"] < 60:  # 60 saniye cache süresi
+                return item["data"]
+
+    # Cache'de yoksa veya süresi geçmişse yeni veri çek
     try:
         valid = ['1m','3m','5m','15m','30m','1h','2h','4h','6h','8h','12h','1d','3d','1w']
         if timeframe not in valid: 
@@ -281,7 +294,7 @@ async def api_signal(pair: str = "BTCUSDT", timeframe: str = "1h"):
         else:
             signal = "😐 BEKLEMEDE"
 
-        return {
+        result = {
             "pair": pair.replace("USDT","/USDT"),
             "timeframe": timeframe,
             "current_price": round(price, 8),
@@ -290,6 +303,22 @@ async def api_signal(pair: str = "BTCUSDT", timeframe: str = "1h"):
             "signal": signal,
             "last_candle": pd.to_datetime(last['ts'], unit='ms').strftime("%d.%m %H:%M")
         }
-    except Exception as e:
 
+        # Cache'e ekle (eski aynı kaydı sil)
+        signals_cache[:] = [i for i in signals_cache if not (i["pair"] == pair and i["timeframe"] == timeframe)]
+        signals_cache.append({
+            "pair": pair,
+            "timeframe": timeframe,
+            "data": result,
+            "timestamp": current_time
+        })
+
+        # Cache boyutu sınırı (max 50 kayıt)
+        if len(signals_cache) > 50:
+            signals_cache.sort(key=lambda x: x["timestamp"], reverse=True)
+            signals_cache[:] = signals_cache[:50]
+
+        return result
+
+    except Exception as e:
         return {"error": f"API Hatası: {str(e)}"}
