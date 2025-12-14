@@ -322,3 +322,9 @@ async def api_signal(pair: str = "BTCUSDT", timeframe: str = "1h"):
 
     except Exception as e:
         return {"error": f"API Hatası: {str(e)}"}
+
+# ====================== HEALTHCHECK ======================
+@app.get("/health")
+async def health_check():
+    return {"status": "healthy", "time": datetime.now().isoformat()}
+
