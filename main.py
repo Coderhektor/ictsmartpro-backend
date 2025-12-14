@@ -1,4 +1,4 @@
- 
+import ccxt
 import pandas as pd
 import pandas_ta as ta
 import asyncio
@@ -10,23 +10,26 @@ from fastapi.staticfiles import StaticFiles
 import time
 
 app = FastAPI()
-app.mount("/assets", StaticFiles(directory=".", html=False), name="assets")
+
+# Static dosyalar için assets klasörü (logo.png vs.)
+app.mount("/assets", StaticFiles(directory="assets", html=False), name="assets")
 
 # Global değişkenler
 top_gainers = []
 last_update = "Başlatılıyor..."
-signals_cache = []          # Sinyal sorguları için önbellek
-signals_last_update = None   # Opsiyonel: cache'in toplu yenilenme zamanı (şu an kullanmıyoruz)
+signals_cache = []  # Sinyal cache'i
 exchange = ccxt.binance({'enableRateLimit': True})
 
 async def fetch_data():
     global top_gainers, last_update
     try:
-        async with httpx.AsyncClient(timeout=15) as client:
+        async with httpx.AsyncClient(timeout=20) as client:
+            # Binance 24hr ticker (birden fazla endpoint fallback ile)
             binance_urls = [
-                "https://data.binance.com/api/v3/ticker/24hr",
-                "https://data-api.binance.vision/api/v3/ticker/24hr",
+                "https://api.binance.com/api/v3/ticker/24hr",
                 "https://api1.binance.com/api/v3/ticker/24hr",
+                "https://api2.binance.com/api/v3/ticker/24hr",
+                "https://api3.binance.com/api/v3/ticker/24hr",
             ]
             binance_data = None
             for url in binance_urls:
@@ -38,50 +41,72 @@ async def fetch_data():
                 except:
                     continue
 
+            # Binance başarısızsa Coingecko fallback
             if not binance_data:
-                r1 = await client.get("https://api.coingecko.com/api/v3/coins/markets?vs_currency=usd&order=percent_change_24h_desc&per_page=250&page=1")
-                r2 = await client.get("https://api.coingecko.com/api/v3/coins/markets?vs_currency=usd&order=percent_change_24h_desc&per_page=250&page=2")
-                coingecko_data = (r1.json() + r2.json()) if r1.status_code == 200 and r2.status_code == 200 else []
+                try:
+                    r1 = await client.get("https://api.coingecko.com/api/v3/coins/markets?vs_currency=usd&order=percent_change_24h_desc&per_page=250&page=1")
+                    r2 = await client.get("https://api.coingecko.com/api/v3/coins/markets?vs_currency=usd&order=percent_change_24h_desc&per_page=250&page=2")
+                    coingecko_data = (r1.json() + r2.json()) if r1.status_code == 200 and r2.status_code == 200 else []
+                except:
+                    coingecko_data = []
             else:
                 coingecko_data = []
 
             clean_coins = []
+
+            # Binance verisi varsa öncelikli
             if binance_data:
                 for item in binance_data:
-                    s = item.get("symbol", "")
-                    if not s.endswith("USDT"): continue
+                    symbol = item.get("symbol", "")
+                    if not symbol.endswith("USDT"):
+                        continue
                     try:
                         price = float(item["lastPrice"])
                         change = float(item["priceChangePercent"])
                         volume = float(item["quoteVolume"])
-                        if volume >= 1_000_000:
-                            clean_coins.append({"symbol": s.replace("USDT", "/USDT"), "price": price, "change": change})
-                    except: continue
+                        if volume >= 1_000_000:  # 1M+ volume
+                            clean_coins.append({
+                                "symbol": symbol.replace("USDT", "/USDT"),
+                                "price": price,
+                                "change": change
+                            })
+                    except:
+                        continue
 
+            # Coingecko ile eksik kalanları tamamla
             for item in coingecko_data:
                 try:
                     sym = item["symbol"].upper()
-                    if any(c["symbol"].startswith(sym) for c in clean_coins): continue
+                    if any(c["symbol"].startswith(sym) for c in clean_coins):
+                        continue
                     price = item["current_price"]
-                    change = item["price_change_percentage_24h"] or 0
+                    change = item.get("price_change_percentage_24h") or 0
                     volume = item["total_volume"]
                     if volume >= 1_000_000:
-                        clean_coins.append({"symbol": f"{sym}/USDT", "price": price, "change": change})
-                except: continue
+                        clean_coins.append({
+                            "symbol": f"{sym}/USDT",
+                            "price": price,
+                            "change": change
+                        })
+                except:
+                    continue
 
+            # En iyi 10 pump
             top_gainers = sorted(clean_coins, key=lambda x: x["change"], reverse=True)[:10]
             last_update = datetime.now().strftime("%H:%M:%S")
-    except Exception as e:
-        print("Hata:", e)
 
+    except Exception as e:
+        print("fetch_data hata:", e)
+
+# Uygulama başladığında veri çek ve 30 saniyede bir güncelle
 @app.on_event("startup")
-async def startup():
+async def startup_event():
     await fetch_data()
-    async def loop():
+    async def background_loop():
         while True:
             await asyncio.sleep(30)
             await fetch_data()
-    asyncio.create_task(loop())
+    asyncio.create_task(background_loop())
 
 # ====================== ANA SAYFA ======================
 @app.get("/", response_class=HTMLResponse)
@@ -94,12 +119,12 @@ async def ana_sayfa():
             <td class="rank">#{i}</td>
             <td class="symbol">{coin['symbol']}</td>
             <td class="price">${coin['price']:,.4f}</td>
-            <td class="change" style="color:{'#00ff88' if coin['change']>0 else '#ff3366'};{glow}">
+            <td class="change" style="color:{'#00ff88' if coin['change']>0 else '#ff3366'}; {glow}">
                 {'+' if coin['change']>0 else ''}{coin['change']:.2f}%
             </td>
         </tr>"""
 
-    return f"""<!DOCTYPE html>
+    html_content = f"""<!DOCTYPE html>
 <html lang="tr">
 <head>
     <meta charset="UTF-8">
@@ -110,7 +135,7 @@ async def ana_sayfa():
         :root {{ --bg: linear-gradient(135deg, #0a0022 0%, #1a0033 50%, #000000 100%); --primary: #00ffff; --green: #00ff88; --red: #ff0044; --gold: #ffd700; }}
         * {{ margin:0; padding:0; box-sizing:border-box; }}
         body {{ background: var(--bg); color: white; font-family: 'Rajdhani', sans-serif; min-height: 100vh; overflow-x: hidden; background-attachment: fixed; }}
-        .stars {{ position:fixed; top:0; left:0; width:100%; height:100%; pointer-events:none; }}
+        .stars {{ position:fixed; top:0; left:0; width:100%; height:100%; pointer-events:none; z-index:1; }}
         .stars div {{ position:absolute; background:#fff; border-radius:50%; animation: twinkle 4s infinite; }}
         @keyframes twinkle {{ 0%,100% {{opacity:0.3}} 50% {{opacity:1}} }}
         header {{ text-align:center; padding: 30px 10px; position:relative; z-index:10; }}
@@ -157,18 +182,19 @@ async def ana_sayfa():
 
     <script>
         const starsDiv = document.getElementById('stars');
-        for(let i=0; i<200; i++){
+        for (let i = 0; i < 200; i++) {{
             const s = document.createElement('div');
-            s.style.width = s.style.height = Math.random()*3 + 'px';
-            s.style.top = Math.random()*100 + '%';
-            s.style.left = Math.random()*100 + '%';
-            s.style.animationDelay = Math.random()*4 + 's';
+            s.style.width = s.style.height = Math.random() * 3 + 'px';
+            s.style.top = Math.random() * 100 + '%';
+            s.style.left = Math.random() * 100 + '%';
+            s.style.animationDelay = Math.random() * 4 + 's';
             starsDiv.appendChild(s);
-        }
-        setTimeout(()=>location.reload(), 9000);
+        }}
+        setTimeout(() => location.reload(), 9000);
     </script>
 </body>
 </html>"""
+    return html_content
 
 # ====================== SİNYAL SAYFASI ======================
 @app.get("/signal", response_class=HTMLResponse)
@@ -181,20 +207,20 @@ async def signal_page():
     <title>ICT Smart Pro - Sinyal Robotu</title>
     <link href="https://fonts.bunny.net/css?family=orbitron:900|rajdhani:700" rel="stylesheet">
     <style>
-        body {margin:0; padding:20px; background:linear-gradient(135deg,#0a0022,#1a0033,#000); color:#fff; font-family:'Rajdhani'; text-align:center; min-height:100vh;}
-        h1 {font-family:'Orbitron'; font-size:4.5rem; background:linear-gradient(90deg,#00dbde,#fc00ff); -webkit-background-clip:text; -webkit-text-fill-color:transparent; animation:gradient 6s infinite;}
-        @keyframes gradient {0%{background-position:0%}100%{background-position:200%}}
-        .card {max-width:600px; margin:40px auto; background:#ffffff0d; padding:40px; border-radius:30px; border:2px solid #00ffff44; box-shadow:0 0 80px #00ffff33; backdrop-filter:blur(10px);}
-        input, select, button {width:100%; padding:18px; margin:15px 0; font-size:1.6rem; border:none; border-radius:15px;}
-        input, select {background:#333; color:#fff;}
-        button {background:linear-gradient(45deg,#fc00ff,#00dbde); color:white; cursor:pointer; font-weight:bold; font-size:2rem; transition:0.4s;}
-        button:hover {transform:scale(1.05); box-shadow:0 0 60px #ff00ff;}
-        .result {margin-top:40px; padding:30px; background:#00000099; border-radius:20px; font-size:2rem; min-height:150px; border:3px solid transparent;}
-        .green {border-color:#00ff88; box-shadow:0 0 60px #00ff8844;}
-        .red {border-color:#ff0044; box-shadow:0 0 60px #ff004444;}
-        .orange {border-color:#ffd700; box-shadow:0 0 60px #ffd70044;}
-        .back {margin:50px; font-size:1.6rem;}
-        .back a {color:#00dbde; text-decoration:none;}
+        body {{margin:0; padding:20px; background:linear-gradient(135deg,#0a0022,#1a0033,#000); color:#fff; font-family:'Rajdhani'; text-align:center; min-height:100vh;}}
+        h1 {{font-family:'Orbitron'; font-size:4.5rem; background:linear-gradient(90deg,#00dbde,#fc00ff); -webkit-background-clip:text; -webkit-text-fill-color:transparent; animation:gradient 6s infinite;}}
+        @keyframes gradient {{0%{{background-position:0%}}100%{{background-position:200%}}}}
+        .card {{max-width:600px; margin:40px auto; background:#ffffff0d; padding:40px; border-radius:30px; border:2px solid #00ffff44; box-shadow:0 0 80px #00ffff33; backdrop-filter:blur(10px);}}
+        input, select, button {{width:100%; padding:18px; margin:15px 0; font-size:1.6rem; border:none; border-radius:15px;}}
+        input, select {{background:#333; color:#fff;}}
+        button {{background:linear-gradient(45deg,#fc00ff,#00dbde); color:white; cursor:pointer; font-weight:bold; font-size:2rem; transition:0.4s;}}
+        button:hover {{transform:scale(1.05); box-shadow:0 0 60px #ff00ff;}}
+        .result {{margin-top:40px; padding:30px; background:#00000099; border-radius:20px; font-size:2rem; min-height:150px; border:3px solid transparent;}}
+        .green {{border-color:#00ff88; box-shadow:0 0 60px #00ff8844;}}
+        .red {{border-color:#ff0044; box-shadow:0 0 60px #ff004444;}}
+        .orange {{border-color:#ffd700; box-shadow:0 0 60px #ffd70044;}}
+        .back {{margin:50px; font-size:1.6rem;}}
+        .back a {{color:#00dbde; text-decoration:none;}}
     </style>
 </head>
 <body>
@@ -218,7 +244,7 @@ async def signal_page():
     <div class="back"><a href="/">← Pump Radara Dön</a></div>
 
     <script>
-        document.getElementById('form').onsubmit = async e => {
+        document.getElementById('form').onsubmit = async e => {{
             e.preventDefault();
             const pair = document.getElementById('pair').value.trim().toUpperCase();
             const tf = document.getElementById('tf').value;
@@ -226,48 +252,47 @@ async def signal_page():
             res.className = 'result';
             res.innerHTML = '<p style="color:#ffd700">Analiz ediliyor...</p>';
             
-            try {
-                const r = await fetch(`/api/signal?pair=${pair}&timeframe=${tf}`);
+            try {{
+                const r = await fetch(`/api/signal?pair=${{pair}}&timeframe=${{tf}}`);
                 const d = await r.json();
-                if(d.error){
-                    res.innerHTML = `<p style="color:#ff4444">Hata: ${d.error}</p>`;
+                if (d.error) {{
+                    res.innerHTML = `<p style="color:#ff4444">Hata: ${{d.error}}</p>`;
                     return;
-                }
+                }}
                 let col = 'orange';
-                if(d.signal.includes('ALIM') || d.signal.includes('GÜÇLÜ')) col = 'green';
-                else if(d.signal.includes('SAT')) col = 'red';
+                if (d.signal.includes('ALIM') || d.signal.includes('GÜÇLÜ')) col = 'green';
+                else if (d.signal.includes('SAT')) col = 'red';
                 res.classList.add(col);
                 res.innerHTML = `
-                    <h2 style="font-size:3rem; color:${col==='green'?'#00ff88':col==='red'?'#ff4444':'#ffd700'}">${d.signal}</h2>
-                    <p><strong>${d.pair} - ${d.timeframe}</strong></p>
-                    <p>Fiyat: $${d.current_price}</p>
-                    <p>EMA21: ${d.ema_21 ?? '-'} | RSI14: ${d.rsi_14 ?? '-'}</p>
-                    <p>Son Mum: ${d.last_candle}</p>
+                    <h2 style="font-size:3rem; color:${{col==='green'?'#00ff88':col==='red'?'#ff4444':'#ffd700'}}">${{d.signal}}</h2>
+                    <p><strong>${{d.pair}} - ${{d.timeframe}}</strong></p>
+                    <p>Fiyat: $${{d.current_price}}</p>
+                    <p>EMA21: ${{d.ema_21 ?? '-'}} | RSI14: ${{d.rsi_14 ?? '-'}}</p>
+                    <p>Son Mum: ${{d.last_candle}}</p>
                 `;
-            } catch { 
-                res.innerHTML = '<p style="color:#ff4444">Sunucu bağlantı hatası</p>'; 
-            }
-        };
+            }} catch {{
+                res.innerHTML = '<p style="color:#ff4444">Sunucu bağlantı hatası</p>';
+            }}
+        }};
     </script>
 </body>
 </html>"""
 
-# ====================== SİNYAL API (Cache destekli) ======================
+# ====================== SİNYAL API ======================
 @app.get("/api/signal")
 async def api_signal(pair: str = "BTCUSDT", timeframe: str = "1h"):
     pair = pair.upper().replace("/", "").replace(" ", "")
     
-    # Cache kontrolü (son 60 saniye içinde aynı sorgu varsa cache'den dön)
+    # Cache kontrol
     current_time = time.time()
     for item in signals_cache:
         if item["pair"] == pair and item["timeframe"] == timeframe:
-            if current_time - item["timestamp"] < 60:  # 60 saniye cache süresi
+            if current_time - item["timestamp"] < 60:
                 return item["data"]
 
-    # Cache'de yoksa veya süresi geçmişse yeni veri çek
     try:
-        valid = ['1m','3m','5m','15m','30m','1h','2h','4h','6h','8h','12h','1d','3d','1w']
-        if timeframe not in valid: 
+        valid_timeframes = ['1m','3m','5m','15m','30m','1h','2h','4h','6h','8h','12h','1d','3d','1w']
+        if timeframe not in valid_timeframes:
             return {"error": "Geçersiz timeframe"}
 
         ohlcv = await asyncio.to_thread(exchange.fetch_ohlcv, pair, timeframe, limit=120)
@@ -275,8 +300,8 @@ async def api_signal(pair: str = "BTCUSDT", timeframe: str = "1h"):
             return {"error": "Coin çifti bulunamadı veya veri yetersiz"}
 
         df = pd.DataFrame(ohlcv, columns=['ts','open','high','low','close','volume'])
-        df['EMA21'] = ta.ema(df['close'], 21)
-        df['RSI14'] = ta.rsi(df['close'], 14)
+        df['EMA21'] = ta.ema(df['close'], length=21)
+        df['RSI14'] = ta.rsi(df['close'], length=14)
         last = df.iloc[-1]
 
         price = last['close']
@@ -295,7 +320,7 @@ async def api_signal(pair: str = "BTCUSDT", timeframe: str = "1h"):
             signal = "😐 BEKLEMEDE"
 
         result = {
-            "pair": pair.replace("USDT","/USDT"),
+            "pair": pair.replace("USDT", "/USDT"),
             "timeframe": timeframe,
             "current_price": round(price, 8),
             "ema_21": round(ema, 8) if not pd.isna(ema) else None,
@@ -304,19 +329,11 @@ async def api_signal(pair: str = "BTCUSDT", timeframe: str = "1h"):
             "last_candle": pd.to_datetime(last['ts'], unit='ms').strftime("%d.%m %H:%M")
         }
 
-        # Cache'e ekle (eski aynı kaydı sil)
+        # Cache'e ekle
         signals_cache[:] = [i for i in signals_cache if not (i["pair"] == pair and i["timeframe"] == timeframe)]
-        signals_cache.append({
-            "pair": pair,
-            "timeframe": timeframe,
-            "data": result,
-            "timestamp": current_time
-        })
-
-        # Cache boyutu sınırı (max 50 kayıt)
+        signals_cache.append({"pair": pair, "timeframe": timeframe, "data": result, "timestamp": current_time})
         if len(signals_cache) > 50:
-            signals_cache.sort(key=lambda x: x["timestamp"], reverse=True)
-            signals_cache[:] = signals_cache[:50]
+            signals_cache = signals_cache[-50:]
 
         return result
 
@@ -326,7 +343,4 @@ async def api_signal(pair: str = "BTCUSDT", timeframe: str = "1h"):
 # ====================== HEALTHCHECK ======================
 @app.get("/health")
 async def health_check():
-    return {"status": "healthy", "time": datetime.now().isoformat()}
-
-
-
+    return {"status": "healthy", "time": datetime.now().isoformat(), "gainers_count": len(top_gainers)}
