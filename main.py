@@ -1,4 +1,4 @@
-import ccxt
+ 
 import pandas as pd
 import pandas_ta as ta
 import asyncio
@@ -327,5 +327,6 @@ async def api_signal(pair: str = "BTCUSDT", timeframe: str = "1h"):
 @app.get("/health")
 async def health_check():
     return {"status": "healthy", "time": datetime.now().isoformat()}
+
 
 
