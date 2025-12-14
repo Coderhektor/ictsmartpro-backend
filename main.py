@@ -6,13 +6,9 @@ import httpx
 from datetime import datetime
 from fastapi import FastAPI
 from fastapi.responses import HTMLResponse
-from fastapi.staticfiles import StaticFiles
 import time
 
 app = FastAPI()
-
-# Static dosyalar için assets klasörü (logo.png vs.)
-app.mount("/assets", StaticFiles(directory="assets", html=False), name="assets")
 
 # Global değişkenler
 top_gainers = []
@@ -24,7 +20,7 @@ async def fetch_data():
     global top_gainers, last_update
     try:
         async with httpx.AsyncClient(timeout=20) as client:
-            # Binance 24hr ticker (birden fazla endpoint fallback ile)
+            # Binance fallback'li endpoint'ler
             binance_urls = [
                 "https://api.binance.com/api/v3/ticker/24hr",
                 "https://api1.binance.com/api/v3/ticker/24hr",
@@ -41,7 +37,7 @@ async def fetch_data():
                 except:
                     continue
 
-            # Binance başarısızsa Coingecko fallback
+            # Binance başarısızsa Coingecko
             if not binance_data:
                 try:
                     r1 = await client.get("https://api.coingecko.com/api/v3/coins/markets?vs_currency=usd&order=percent_change_24h_desc&per_page=250&page=1")
@@ -54,7 +50,6 @@ async def fetch_data():
 
             clean_coins = []
 
-            # Binance verisi varsa öncelikli
             if binance_data:
                 for item in binance_data:
                     symbol = item.get("symbol", "")
@@ -64,7 +59,7 @@ async def fetch_data():
                         price = float(item["lastPrice"])
                         change = float(item["priceChangePercent"])
                         volume = float(item["quoteVolume"])
-                        if volume >= 1_000_000:  # 1M+ volume
+                        if volume >= 1_000_000:
                             clean_coins.append({
                                 "symbol": symbol.replace("USDT", "/USDT"),
                                 "price": price,
@@ -73,7 +68,6 @@ async def fetch_data():
                     except:
                         continue
 
-            # Coingecko ile eksik kalanları tamamla
             for item in coingecko_data:
                 try:
                     sym = item["symbol"].upper()
@@ -91,14 +85,13 @@ async def fetch_data():
                 except:
                     continue
 
-            # En iyi 10 pump
             top_gainers = sorted(clean_coins, key=lambda x: x["change"], reverse=True)[:10]
             last_update = datetime.now().strftime("%H:%M:%S")
 
     except Exception as e:
         print("fetch_data hata:", e)
 
-# Uygulama başladığında veri çek ve 30 saniyede bir güncelle
+# Başlangıçta veri çek ve 30 saniyede bir yenile
 @app.on_event("startup")
 async def startup_event():
     await fetch_data()
@@ -124,7 +117,7 @@ async def ana_sayfa():
             </td>
         </tr>"""
 
-    html_content = f"""<!DOCTYPE html>
+    return f"""<!DOCTYPE html>
 <html lang="tr">
 <head>
     <meta charset="UTF-8">
@@ -164,6 +157,7 @@ async def ana_sayfa():
 <body>
     <div class="stars" id="stars"></div>
     <header>
+        <!-- Logo yoksa gizlenir, hata vermez -->
         <img src="/assets/logo.png" class="logo" onerror="this.style.display='none'">
         <h1>PUMP RADAR</h1>
         <div class="update">Son Güncelleme: {last_update if top_gainers else 'Yükleniyor...'}</div>
@@ -194,7 +188,6 @@ async def ana_sayfa():
     </script>
 </body>
 </html>"""
-    return html_content
 
 # ====================== SİNYAL SAYFASI ======================
 @app.get("/signal", response_class=HTMLResponse)
@@ -283,7 +276,6 @@ async def signal_page():
 async def api_signal(pair: str = "BTCUSDT", timeframe: str = "1h"):
     pair = pair.upper().replace("/", "").replace(" ", "")
     
-    # Cache kontrol
     current_time = time.time()
     for item in signals_cache:
         if item["pair"] == pair and item["timeframe"] == timeframe:
@@ -329,7 +321,7 @@ async def api_signal(pair: str = "BTCUSDT", timeframe: str = "1h"):
             "last_candle": pd.to_datetime(last['ts'], unit='ms').strftime("%d.%m %H:%M")
         }
 
-        # Cache'e ekle
+        # Cache güncelle
         signals_cache[:] = [i for i in signals_cache if not (i["pair"] == pair and i["timeframe"] == timeframe)]
         signals_cache.append({"pair": pair, "timeframe": timeframe, "data": result, "timestamp": current_time})
         if len(signals_cache) > 50:
