@@ -4,7 +4,9 @@ httpx
 pandas
 numpy
 uvicorn[standard] 
-
+cachetools  # <-- BU EKLENDİ
+websockets
 pandas-ta  # veya pandas-ta-classic
 
  
+
