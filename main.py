@@ -4,7 +4,7 @@ import pandas_ta as ta
 import asyncio
 import httpx
 from datetime import datetime
-from fastapi import FastAPI
+from fastapi import FastAPI, WebSocket, WebSocketDisconnect
 from fastapi.responses import HTMLResponse
 from fastapi.staticfiles import StaticFiles
 import time
@@ -16,10 +16,12 @@ app.mount("/assets", StaticFiles(directory=".", html=False), name="assets")
 # Global değişkenler
 top_gainers = []
 last_update = "Başlatılıyor..."
-signals_cache = []          # Sinyal sorguları için önbellek
 exchange = ccxt.binance({'enableRateLimit': True})
 
-# Railway Volume için log dosyası yolu (volume yoksa hata vermesin)
+# Aktif WebSocket bağlantıları (key: "PAIR_TIMEFRAME")
+active_connections: dict[str, WebSocket] = {}
+
+# Log dosyası (Railway volume için)
 LOG_FILE = "/data/all_signals.csv"
 
 async def fetch_data():
@@ -81,11 +83,122 @@ async def fetch_data():
 @app.on_event("startup")
 async def startup():
     await fetch_data()
-    async def loop():
+    
+    # Pump Radar güncelleme döngüsü
+    async def radar_loop():
         while True:
             await asyncio.sleep(30)
             await fetch_data()
-    asyncio.create_task(loop())
+    asyncio.create_task(radar_loop())
+
+    # WebSocket'lere sinyal broadcast döngüsü
+    async def signal_broadcaster():
+        while True:
+            await asyncio.sleep(15)  # Her 15 saniyede bir tüm aktif bağlantılara güncel sinyal gönder
+            for key, ws in list(active_connections.items()):
+                try:
+                    pair, timeframe = key.split("_", 1)
+                    result = await calculate_signal(pair, timeframe)
+                    if result:
+                        await ws.send_json(result)
+                except Exception as e:
+                    print(f"Broadcast hatası ({key}): {e}")
+                    try:
+                        await ws.close()
+                    except:
+                        pass
+                    active_connections.pop(key, None)
+
+    asyncio.create_task(signal_broadcaster())
+
+# Sinyal hesaplama fonksiyonu (tekrar kullanılabilir)
+async def calculate_signal(original_pair: str, timeframe: str):
+    pair = original_pair.upper().replace("/", "").replace(" ", "").replace("-", "")
+    if not pair.endswith("USDT"):
+        if not (pair.endswith("UP") or pair.endswith("DOWN")):
+            pair += "USDT"
+
+    try:
+        valid_timeframes = ['1m','3m','5m','15m','30m','1h','2h','4h','6h','8h','12h','1d','3d','1w','1M']
+        if timeframe not in valid_timeframes:
+            return {"error": "Geçersiz zaman dilimi"}
+
+        ohlcv = await asyncio.to_thread(exchange.fetch_ohlcv, pair, timeframe, limit=200)
+        if not ohlcv or len(ohlcv) < 50:
+            return {"error": "Veri yetersiz veya coin bulunamadı"}
+
+        df = pd.DataFrame(ohlcv, columns=['ts','open','high','low','close','volume'])
+        df['EMA21'] = ta.ema(df['close'], length=21)
+        df['RSI14'] = ta.rsi(df['close'], length=14)
+        
+        last = df.iloc[-1]
+        price = float(last['close'])
+        ema = last['EMA21']
+        rsi = last['RSI14']
+
+        if pd.isna(ema) or pd.isna(rsi):
+            signal = "Yetersiz Veri"
+        elif price > ema and rsi < 30:
+            signal = "🔥 ÇOK GÜÇLÜ ALIM 🔥"
+        elif price > ema and rsi < 45:
+            signal = "🚀 ALIM SİNYALİ 🚀"
+        elif price < ema and rsi > 70:
+            signal = "⚠️ SATIM SİNYALİ ⚠️"
+        elif price < ema and rsi > 55:
+            signal = "⚡ ZAYIF SATIŞ UYARISI ⚡"
+        else:
+            signal = "😐 NÖTR / BEKLEMEDE"
+
+        result = {
+            "pair": original_pair.replace("USDT", "/USDT") if "/" not in original_pair else original_pair,
+            "timeframe": timeframe,
+            "current_price": round(price, 8),
+            "ema_21": round(ema, 8) if not pd.isna(ema) else None,
+            "rsi_14": round(rsi, 2) if not pd.isna(rsi) else None,
+            "signal": signal,
+            "last_candle": pd.to_datetime(last['ts'], unit='ms').strftime("%d.%m %H:%M")
+        }
+
+        # Log kaydet (güvenli)
+        try:
+            if os.path.exists("/data"):
+                os.makedirs("/data", exist_ok=True)
+                if not os.path.exists(LOG_FILE):
+                    df.head(1).to_csv(LOG_FILE, index=False)
+                df.tail(1).to_csv(LOG_FILE, mode='a', header=False, index=False)
+                print(f"LOG → {result['pair']} | {signal}")
+        except Exception as e:
+            print(f"Log hatası: {e}")
+
+        return result
+
+    except Exception as e:
+        return {"error": str(e)[:100]}
+
+# WebSocket Endpoint
+@app.websocket("/ws/signal/{pair}/{timeframe}")
+async def websocket_endpoint(websocket: WebSocket, pair: str, timeframe: str):
+    await websocket.accept()
+    key = f"{pair.upper()}_{timeframe}"
+
+    active_connections[key] = websocket
+
+    # İlk bağlandığında hemen sinyal gönder
+    try:
+        initial_result = await calculate_signal(pair, timeframe)
+        if initial_result:
+            await websocket.send_json(initial_result)
+    except:
+        pass
+
+    try:
+        while True:
+            # İstemciden mesaj bekle (bağlantı kontrolü için)
+            await websocket.receive_text()
+    except WebSocketDisconnect:
+        active_connections.pop(key, None)
+    except Exception:
+        active_connections.pop(key, None)
 
 # ====================== ANA SAYFA ======================
 @app.get("/", response_class=HTMLResponse)
@@ -131,7 +244,7 @@ async def ana_sayfa():
         .coin-row:hover {{ transform: translateY(-8px) scale(1.02); box-shadow: 0 20px 40px #00ffff44; border-color: var(--primary); }}
         .coin-row td {{ padding: 22px 15px; text-align: center; font-size: 1.6rem; }}
         .rank {{ font-size: 3rem; font-weight: bold; color: var(--gold); text-shadow: 0 0 20px var(--gold); }}
-        .symbol {{ font-size: 2.2rem; color: var(--primary); font-weight: bold; }}
+        .symbol {{ font-size: 2.2rem; color:var(--primary); font-weight: bold; }}
         .price {{ color: var(--gold); }}
         .change {{ font-size: 2.4rem; font-weight: bold; animation: pulse 1.5s infinite; }}
         @keyframes pulse {{ 0%,100% {{transform:scale(1)}} 50% {{transform:scale(1.1)}} }}
@@ -139,7 +252,6 @@ async def ana_sayfa():
         .signal-btn:hover {{ transform: scale(1.1); box-shadow: 0 0 100px #ff00ff; }}
         @keyframes btnGlow {{ 0%,100% {{box-shadow:0 0 60px #ff00ff88}} 50% {{box-shadow:0 0 100px #ff00ff}} }}
         footer {{ text-align:center; padding:30px; color:#00ffff88; font-size:1.2rem; }}
-        @media (max-width:768px) {{ h1 {{ font-size:3.5rem; }} .rank {{ font-size:2rem; }} .symbol {{ font-size:1.6rem; }} .change {{ font-size:1.8rem; }} }}
     </style>
 </head>
 <body>
@@ -154,13 +266,13 @@ async def ana_sayfa():
         <tbody>{rows}</tbody>
     </table>
 
-    <a href="/signal" class="signal-btn">🚀 SİNYAL SORGULA 🚀</a>
+    <a href="/signal" class="signal-btn">🚀 CANLI SİNYAL ROBOTU 🚀</a>
 
     <footer>© 2025 ICT Smart Pro - En Hızlı Pump Radar</footer>
 </body>
 </html>"""
 
-# ====================== SİNYAL SAYFASI ======================
+# ====================== CANLI SİNYAL SAYFASI (WebSocket) ======================
 @app.get("/signal", response_class=HTMLResponse)
 async def signal_page():
     return """<!DOCTYPE html>
@@ -168,7 +280,7 @@ async def signal_page():
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>ICT Smart Pro - Sinyal Robotu</title>
+    <title>ICT Smart Pro - Canlı Sinyal Robotu</title>
     <link href="https://fonts.bunny.net/css?family=orbitron:900|rajdhani:700" rel="stylesheet">
     <style>
         body {margin:0; padding:20px; background:linear-gradient(135deg,#0a0022,#1a0033,#000); color:#fff; font-family:'Rajdhani'; text-align:center; min-height:100vh;}
@@ -179,19 +291,20 @@ async def signal_page():
         input, select {background:#333; color:#fff;}
         button {background:linear-gradient(45deg,#fc00ff,#00dbde); color:white; cursor:pointer; font-weight:bold; font-size:2rem; transition:0.4s;}
         button:hover {transform:scale(1.05); box-shadow:0 0 60px #ff00ff;}
-        .result {margin-top:40px; padding:30px; background:#00000099; border-radius:20px; font-size:2rem; min-height:150px; border:3px solid transparent; line-height:1.6;}
+        .result {margin-top:40px; padding:30px; background:#00000099; border-radius:20px; font-size:2rem; min-height:200px; border:3px solid transparent; line-height:1.6;}
         .green {border-color:#00ff88; box-shadow:0 0 60px #00ff8844;}
         .red {border-color:#ff0044; box-shadow:0 0 60px #ff004444;}
         .orange {border-color:#ffd700; box-shadow:0 0 60px #ffd70044;}
         .back {margin:50px; font-size:1.6rem;}
         .back a {color:#00dbde; text-decoration:none;}
+        .status {font-size:1.4rem; color:#00ffff; margin:10px 0;}
     </style>
 </head>
 <body>
-    <h1>SİNYAL ROBOTU</h1>
+    <h1>CANLI SİNYAL ROBOTU</h1>
     <div class="card">
         <form id="form">
-            <input type="text" id="pair" placeholder="Coin (örn: BTCUSDT veya BTC)" value="BTCUSDT" required>
+            <input type="text" id="pair" placeholder="Coin (örn: BTCUSDT)" value="BTCUSDT" required>
             <select id="tf">
                 <option value="5m">5 Dakika</option>
                 <option value="15m">15 Dakika</option>
@@ -201,32 +314,39 @@ async def signal_page():
                 <option value="1d">1 Gün</option>
                 <option value="1w">1 Hafta</option>
             </select>
-            <button type="submit">🚀 SİNYAL AL</button>
+            <button type="submit">🔴 CANLI BAĞLANTI KUR</button>
         </form>
-        <div id="result" class="result">Sonucu burada göreceksin...</div>
+        <div class="status" id="status">Bağlantı bekleniyor...</div>
+        <div id="result" class="result">Sinyal burada canlı olarak güncellenecek...</div>
     </div>
     <div class="back"><a href="/">← Pump Radara Dön</a></div>
 
     <script>
-        document.getElementById('form').onsubmit = async e => {
+        let socket = null;
+
+        document.getElementById('form').onsubmit = e => {
             e.preventDefault();
+            if (socket) socket.close();
+
             const pair = document.getElementById('pair').value.trim().toUpperCase();
             const tf = document.getElementById('tf').value;
             const res = document.getElementById('result');
-            
-            res.className = 'result';
-            res.innerHTML = '<p style="color:#ffd700; font-size:2.2rem;">🔄 Analiz ediliyor, lütfen bekleyin...</p>';
+            const status = document.getElementById('status');
 
-            try {
-                const response = await fetch(`/api/signal?pair=${encodeURIComponent(pair)}&timeframe=${tf}`);
-                
-                if (!response.ok) {
-                    res.innerHTML = `<p style="color:#ff4444">Sunucu hatası: ${response.status}</p>`;
-                    return;
-                }
+            status.textContent = "Bağlantı kuruluyor...";
+            status.style.color = "#ffd700";
+            res.innerHTML = "<p style='color:#ffd700'>İlk sinyal yükleniyor...</p>";
 
-                const data = await response.json();
+            const protocol = location.protocol === 'https:' ? 'wss' : 'ws';
+            socket = new WebSocket(`${protocol}://${location.host}/ws/signal/${pair}/${tf}`);
 
+            socket.onopen = () => {
+                status.textContent = "✅ CANLI BAĞLANTI AKTİF!";
+                status.style.color = "#00ff88";
+            };
+
+            socket.onmessage = (event) => {
+                const data = JSON.parse(event.data);
                 if (data.error) {
                     res.innerHTML = `<p style="color:#ff6666; font-size:2.2rem;">❌ Hata:<br>${data.error}</p>`;
                     res.classList.add('red');
@@ -245,120 +365,29 @@ async def signal_page():
 
                 res.className = 'result ' + colorClass;
                 res.innerHTML = `
-                    <h2 style="font-size:3.5rem; color:${signalColor}; margin:10px 0;">${data.signal}</h2>
+                    <h2 style="font-size:3.8rem; color:${signalColor}; margin:15px 0;">${data.signal}</h2>
                     <p><strong>${data.pair} - ${data.timeframe}</strong></p>
                     <p>Fiyat: <strong>$${data.current_price}</strong></p>
-                    <p>EMA21: <strong>${data.ema_21 !== null ? data.ema_21 : '-'}</strong> | 
-                       RSI14: <strong>${data.rsi_14 !== null ? data.rsi_14 : '-'}</strong></p>
-                    <p>Son Mum: ${data.last_candle}</p>
+                    <p>EMA21: <strong>${data.ema_21 ?? '-'} | RSI14: ${data.rsi_14 ?? '-'}</strong></p>
+                    <p>Son Mum: ${data.last_candle} <em style="color:#00ffff;">(canlı güncelleniyor ↺)</em></p>
                 `;
-            } catch (err) {
-                console.error(err);
-                res.innerHTML = '<p style="color:#ff4444; font-size:2.2rem;">🌐 Bağlantı hatası!<br>Sunucuya ulaşılamıyor.</p>';
-                res.classList.add('red');
-            }
+            };
+
+            socket.onerror = () => {
+                status.textContent = "Bağlantı hatası!";
+                status.style.color = "#ff4444";
+            };
+
+            socket.onclose = () => {
+                status.textContent = "Bağlantı kapandı. Yeniden bağlanmak için butona bas.";
+                status.style.color = "#ff6666";
+            };
         };
     </script>
 </body>
 </html>"""
 
-# ====================== SİNYAL API (TAMAMEN DÜZELTİLDİ) ======================
-@app.get("/api/signal")
-async def api_signal(pair: str = "BTCUSDT", timeframe: str = "1h"):
-    global signals_cache  # <<< KRİTİK SATIR! UnboundLocalError hatasını çözer
-
-    original_pair = pair.upper().strip()
-    pair = original_pair.replace("/", "").replace(" ", "").replace("-", "")
-
-    if not pair.endswith("USDT"):
-        if pair.endswith("UP") or pair.endswith("DOWN"):
-            pass
-        else:
-            pair += "USDT"
-
-    current_time = time.time()
-
-    # Cache kontrol
-    for item in signals_cache:
-        if item["pair"] == pair and item["timeframe"] == timeframe:
-            if current_time - item["timestamp"] < 60:
-                return item["data"]
-
-    try:
-        valid_timeframes = ['1m','3m','5m','15m','30m','1h','2h','4h','6h','8h','12h','1d','3d','1w','1M']
-        if timeframe not in valid_timeframes:
-            return {"error": f"Geçersiz zaman dilimi. Desteklenenler: {', '.join(valid_timeframes)}"}
-
-        ohlcv = await asyncio.to_thread(exchange.fetch_ohlcv, pair, timeframe, limit=200)
-        
-        if not ohlcv or len(ohlcv) < 50:
-            return {"error": f"{original_pair} çifti bulunamadı veya veri yetersiz. Denenen: {pair}"}
-
-        df = pd.DataFrame(ohlcv, columns=['ts','open','high','low','close','volume'])
-        df['EMA21'] = ta.ema(df['close'], length=21)
-        df['RSI14'] = ta.rsi(df['close'], length=14)
-        
-        last = df.iloc[-1]
-
-        price = float(last['close'])
-        ema = last['EMA21']
-        rsi = last['RSI14']
-
-        if pd.isna(ema) or pd.isna(rsi):
-            signal = "Yetersiz Veri (İndikatörler hesaplanamadı)"
-        elif price > ema and rsi < 30:
-            signal = "🔥 ÇOK GÜÇLÜ ALIM 🔥"
-        elif price > ema and rsi < 45:
-            signal = "🚀 ALIM SİNYALİ 🚀"
-        elif price < ema and rsi > 70:
-            signal = "⚠️ SATIM SİNYALİ ⚠️"
-        elif price < ema and rsi > 55:
-            signal = "⚡ ZAYIF SATIŞ UYARISI ⚡"
-        else:
-            signal = "😐 NÖTR / BEKLEMEDE"
-
-        result = {
-            "pair": original_pair.replace("USDT", "/USDT") if "/" not in original_pair else original_pair,
-            "timeframe": timeframe,
-            "current_price": round(price, 8),
-            "ema_21": round(ema, 8) if not pd.isna(ema) else None,
-            "rsi_14": round(rsi, 2) if not pd.isna(rsi) else None,
-            "signal": signal,
-            "last_candle": pd.to_datetime(last['ts'], unit='ms').strftime("%d.%m %H:%M")
-        }
-
-        # ==================== GÜVENLİ LOG KAYDETME ====================
-        try:
-            if os.path.exists("/data"):  # Volume mount edilmiş mi?
-                os.makedirs("/data", exist_ok=True)
-                if not os.path.exists(LOG_FILE):
-                    df.head(1).to_csv(LOG_FILE, index=False)
-                df.tail(1).to_csv(LOG_FILE, mode='a', header=False, index=False)
-                print(f"LOG KAYDEDİLDİ → {result['pair']} | {timeframe} | {signal}")
-            else:
-                print("Volume (/data) bağlı değil, log kaydedilmedi. Railway'de Volume ekleyin.")
-        except Exception as log_err:
-            print(f"Log hatası (uygulama etkilenmez): {log_err}")
-        # ==============================================================
-
-        # Cache güncelle
-        signals_cache[:] = [i for i in signals_cache if not (i["pair"] == pair and i["timeframe"] == timeframe)]
-        signals_cache.append({"pair": pair, "timeframe": timeframe, "data": result, "timestamp": current_time})
-        if len(signals_cache) > 100:
-            signals_cache = signals_cache[-100:]
-
-        return result
-
-    except Exception as e:
-        error_msg = str(e)
-        if "symbol" in error_msg.lower() or "market" in error_msg.lower():
-            return {"error": f"{original_pair} çifti Binance'te bulunamadı. USDT ile deneyin (örn: BTCUSDT)"}
-        elif "rate limit" in error_msg.lower():
-            return {"error": "Binance rate limit aşıldı, lütfen biraz bekleyin"}
-        else:
-            return {"error": f"Teknik hata: {error_msg[:100]}"}
-
 # ====================== HEALTHCHECK ======================
 @app.get("/health")
 async def health_check():
-    return {"status": "healthy", "time": datetime.now().isoformat()}
+    return {"status": "healthy", "time": datetime.now().isoformat(), "active_ws": len(active_connections)}
