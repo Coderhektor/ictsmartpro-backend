@@ -160,6 +160,7 @@ async def ana_sayfa():
 </html>"""
 
 # ====================== SİNYAL SAYFASI ======================
+# ====================== SİNYAL SAYFASI (GÜNCELLENMİŞ) ======================
 @app.get("/signal", response_class=HTMLResponse)
 async def signal_page():
     return """<!DOCTYPE html>
@@ -178,7 +179,7 @@ async def signal_page():
         input, select {background:#333; color:#fff;}
         button {background:linear-gradient(45deg,#fc00ff,#00dbde); color:white; cursor:pointer; font-weight:bold; font-size:2rem; transition:0.4s;}
         button:hover {transform:scale(1.05); box-shadow:0 0 60px #ff00ff;}
-        .result {margin-top:40px; padding:30px; background:#00000099; border-radius:20px; font-size:2rem; min-height:150px; border:3px solid transparent;}
+        .result {margin-top:40px; padding:30px; background:#00000099; border-radius:20px; font-size:2rem; min-height:150px; border:3px solid transparent; line-height:1.6;}
         .green {border-color:#00ff88; box-shadow:0 0 60px #00ff8844;}
         .red {border-color:#ff0044; box-shadow:0 0 60px #ff004444;}
         .orange {border-color:#ffd700; box-shadow:0 0 60px #ffd70044;}
@@ -190,7 +191,7 @@ async def signal_page():
     <h1>SİNYAL ROBOTU</h1>
     <div class="card">
         <form id="form">
-            <input type="text" id="pair" placeholder="Coin (örn: BTCUSDT)" value="BTCUSDT" required>
+            <input type="text" id="pair" placeholder="Coin (örn: BTCUSDT veya BTC)" value="BTCUSDT" required>
             <select id="tf">
                 <option value="5m">5 Dakika</option>
                 <option value="15m">15 Dakika</option>
@@ -212,29 +213,52 @@ async def signal_page():
             const pair = document.getElementById('pair').value.trim().toUpperCase();
             const tf = document.getElementById('tf').value;
             const res = document.getElementById('result');
-            res.className = 'result';
-            res.innerHTML = '<p style="color:#ffd700">Analiz ediliyor...</p>';
             
+            // Temizle
+            res.className = 'result';
+            res.innerHTML = '<p style="color:#ffd700; font-size:2.2rem;">🔄 Analiz ediliyor, lütfen bekleyin...</p>';
+
             try {
-                const r = await fetch(`/api/signal?pair=${pair}&timeframe=${tf}`);
-                const d = await r.json();
-                if(d.error){
-                    res.innerHTML = `<p style="color:#ff4444">Hata: ${d.error}</p>`;
+                const response = await fetch(`/api/signal?pair=${encodeURIComponent(pair)}&timeframe=${tf}`);
+                
+                if (!response.ok) {
+                    res.innerHTML = `<p style="color:#ff4444">Sunucu hatası: ${response.status}</p>`;
                     return;
                 }
-                let col = 'orange';
-                if(d.signal.includes('ALIM') || d.signal.includes('GÜÇLÜ')) col = 'green';
-                else if(d.signal.includes('SAT')) col = 'red';
-                res.classList.add(col);
+
+                const data = await response.json();
+
+                // Hata varsa göster
+                if (data.error) {
+                    res.innerHTML = `<p style="color:#ff6666; font-size:2.2rem;">❌ Hata:<br>${data.error}</p>`;
+                    res.classList.add('red');
+                    return;
+                }
+
+                // Başarılı sonuç
+                let colorClass = 'orange';
+                let signalColor = '#ffd700';
+                if (data.signal.includes('ALIM') || data.signal.includes('GÜÇLÜ')) {
+                    colorClass = 'green';
+                    signalColor = '#00ff88';
+                } else if (data.signal.includes('SAT')) {
+                    colorClass = 'red';
+                    signalColor = '#ff4444';
+                }
+
+                res.className = 'result ' + colorClass;
                 res.innerHTML = `
-                    <h2 style="font-size:3rem; color:${col==='green'?'#00ff88':col==='red'?'#ff4444':'#ffd700'}">${d.signal}</h2>
-                    <p><strong>${d.pair} - ${d.timeframe}</strong></p>
-                    <p>Fiyat: $${d.current_price}</p>
-                    <p>EMA21: ${d.ema_21 ?? '-'} | RSI14: ${d.rsi_14 ?? '-'}</p>
-                    <p>Son Mum: ${d.last_candle}</p>
+                    <h2 style="font-size:3.5rem; color:${signalColor}; margin:10px 0;">${data.signal}</h2>
+                    <p><strong>${data.pair} - ${data.timeframe}</strong></p>
+                    <p>Fiyat: <strong>$${data.current_price}</strong></p>
+                    <p>EMA21: <strong>${data.ema_21 !== null ? data.ema_21 : '-'}</strong> | 
+                       RSI14: <strong>${data.rsi_14 !== null ? data.rsi_14 : '-'}</strong></p>
+                    <p>Son Mum: ${data.last_candle}</p>
                 `;
-            } catch { 
-                res.innerHTML = '<p style="color:#ff4444">Sunucu bağlantı hatası</p>'; 
+            } catch (err) {
+                console.error(err);
+                res.innerHTML = '<p style="color:#ff4444; font-size:2.2rem;">🌐 Bağlantı hatası!<br>Sunucuya ulaşılamıyor.</p>';
+                res.classList.add('red');
             }
         };
     </script>
@@ -330,5 +354,6 @@ async def api_signal(pair: str = "BTCUSDT", timeframe: str = "1h"):
 @app.get("/health")
 async def health_check():
     return {"status": "healthy", "time": datetime.now().isoformat()}
+
 
 
