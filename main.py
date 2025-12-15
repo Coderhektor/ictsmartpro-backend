@@ -113,9 +113,7 @@ async def startup():
 
     asyncio.create_task(signal_broadcaster())
 
-# ... (diğer import'lar ve kod aynı kalıyor, sadece calculate_signal değişiyor)
-
-async def calculate_signal(original_pair: str, timeframe: str, cache_duration: int = 60):
+async def calculate_signal(original_pair: str, timeframe: str):
     global ohlcv_cache
     pair = original_pair.upper().replace("/", "").replace(" ", "").replace("-", "")
     if not pair.endswith("USDT"):
@@ -133,7 +131,7 @@ async def calculate_signal(original_pair: str, timeframe: str, cache_duration: i
         # Cache kontrol
         if cache_key in ohlcv_cache:
             cached_ohlcv, cached_time = ohlcv_cache[cache_key]
-            if current_time - cached_time < cache_duration:
+            if current_time - cached_time < 30:
                 ohlcv = cached_ohlcv
             else:
                 ohlcv = await asyncio.to_thread(exchange.fetch_ohlcv, pair, timeframe, limit=100)
@@ -142,6 +140,7 @@ async def calculate_signal(original_pair: str, timeframe: str, cache_duration: i
             ohlcv = await asyncio.to_thread(exchange.fetch_ohlcv, pair, timeframe, limit=100)
             ohlcv_cache[cache_key] = (ohlcv, current_time)
 
+        # Cache temizleme
         if len(ohlcv_cache) > MAX_CACHE_SIZE:
             oldest = min(ohlcv_cache, key=lambda k: ohlcv_cache[k][1])
             del ohlcv_cache[oldest]
@@ -152,27 +151,22 @@ async def calculate_signal(original_pair: str, timeframe: str, cache_duration: i
         df = pd.DataFrame(ohlcv, columns=['ts','open','high','low','close','volume'])
         df['EMA21'] = ta.ema(df['close'], length=21)
         df['RSI14'] = ta.rsi(df['close'], length=14)
-        df['SMA9'] = ta.sma(df['close'], length=9)  # Yeni: SMA9
-
+        
         last = df.iloc[-1]
-        prev = df.iloc[-2]
         price = float(last['close'])
         ema = last['EMA21']
         rsi = last['RSI14']
-        sma9 = last['SMA9']
-        prev_rsi = prev['RSI14']
-        prev_sma9 = prev['SMA9']
 
-        # Yeni crossover hesapları
-        rsi_cross_above = (prev_rsi < prev_sma9) and (rsi > sma9)  # Yukarı kesim
-        rsi_cross_below = (prev_rsi > prev_sma9) and (rsi < sma9)  # Aşağı kesim
-
-        if pd.isna(ema) or pd.isna(rsi) or pd.isna(sma9):
+        if pd.isna(ema) or pd.isna(rsi):
             signal = "Yetersiz Veri"
-        elif price > ema and (rsi < 30 or rsi_cross_above):
-            signal = "🔥 ÇOK GÜÇLÜ ALIM 🔥" if rsi < 30 else "🚀 ALIM SİNYALİ 🚀"
-        elif price < ema and ((rsi > 70 and rsi < sma9) or rsi_cross_below):
-            signal = "⚠️ SATIM SİNYALİ ⚠️" if rsi > 70 else "⚡ ZAYIF SATIŞ UYARISI ⚡"
+        elif price > ema and rsi < 30:
+            signal = "🔥 ÇOK GÜÇLÜ ALIM 🔥"
+        elif price > ema and rsi < 45:
+            signal = "🚀 ALIM SİNYALİ 🚀"
+        elif price < ema and rsi > 70:
+            signal = "⚠️ SATIM SİNYALİ ⚠️"
+        elif price < ema and rsi > 55:
+            signal = "⚡ ZAYIF SATIŞ UYARISI ⚡"
         else:
             signal = "😐 NÖTR / BEKLEMEDE"
 
@@ -182,7 +176,6 @@ async def calculate_signal(original_pair: str, timeframe: str, cache_duration: i
             "current_price": round(price, 8),
             "ema_21": round(ema, 8) if not pd.isna(ema) else None,
             "rsi_14": round(rsi, 2) if not pd.isna(rsi) else None,
-            "sma_9": round(sma9, 8) if not pd.isna(sma9) else None,  # Yeni: SMA9 ekle
             "signal": signal,
             "last_candle": pd.to_datetime(last['ts'], unit='ms').strftime("%d.%m %H:%M")
         }
@@ -202,8 +195,6 @@ async def calculate_signal(original_pair: str, timeframe: str, cache_duration: i
     except Exception as e:
         print(f"Sinyal hatası ({original_pair} {timeframe}): {e}")
         return {"error": "Teknik hata"}
-
-# ... (diğer kod aynı kalıyor)
 
 @app.websocket("/ws/signal/{pair}/{timeframe}")
 async def websocket_endpoint(websocket: WebSocket, pair: str, timeframe: str):
@@ -363,14 +354,6 @@ async def signal_page():
             status.style.color = "#ffd700";
             res.innerHTML = "<p style='color:#ffd700'>İlk sinyal yükleniyor...</p>";
 
-                            res.innerHTML = `
-                    <h2 style="font-size:3.8rem; color:${signalColor}; margin:15px 0;">${data.signal}</h2>
-                    <p><strong>${data.pair} - ${data.timeframe}</strong></p>
-                    <p>Fiyat: <strong>$${data.current_price}</strong></p>
-                    <p>EMA21: <strong>${data.ema_21 ?? '-'} | RSI14: ${data.rsi_14 ?? '-'} | SMA9: ${data.sma_9 ?? '-'}</strong></p>
-                    <p>Son Mum: ${data.last_candle} <em style="color:#00ffff;">(canlı güncelleniyor ↺)</em></p>
-                `;
-
             const protocol = location.protocol === 'https:' ? 'wss' : 'ws';
             socket = new WebSocket(`${protocol}://${location.host}/ws/signal/${pair}/${tf}`);
 
@@ -423,6 +406,4 @@ async def signal_page():
 
 @app.get("/health")
 async def health_check():
-    return {"status": "healthy", "active_ws": len(active_connections), "cache_size": len(ohlcv_cache)} 
-
-
+    return {"status": "healthy", "active_ws": len(active_connections), "cache_size": len(ohlcv_cache)} evet kodu  buna göre güncelleyelim
