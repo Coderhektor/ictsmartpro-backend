@@ -3,4 +3,6 @@ ccxt
 httpx
 pandas
 numpy
+uvicorn[standard]
+
 pandas-ta  # veya pandas-ta-classic
