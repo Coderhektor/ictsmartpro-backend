@@ -1,3 +1,10 @@
+# --- EKLENEN IMPORT'LAR ---
+from cachetools import TTLCache, LRUCache
+from collections import defaultdict
+import logging
+import json
+from contextlib import asynccontextmanager
+# ---------------------------
 import ccxt
 import pandas as pd
 import pandas_ta as ta
@@ -113,88 +120,143 @@ async def startup():
 
     asyncio.create_task(signal_broadcaster())
 
+
 async def calculate_signal(original_pair: str, timeframe: str):
-    global ohlcv_cache
-    pair = original_pair.upper().replace("/", "").replace(" ", "").replace("-", "")
-    if not pair.endswith("USDT"):
-        if not (pair.endswith("UP") or pair.endswith("DOWN")):
-            pair += "USDT"
+    # 🔹 1. Pair'i normalize et (BTCUSDT, btc/usdt, BTC-USDT → BTC/USDT)
+    pair_clean = original_pair.upper().replace("-", "").replace(" ", "")
+    if "/" in pair_clean:
+        base, quote = pair_clean.split("/", 1)
+    else:
+        # USDT son ekliyse ayır
+        if pair_clean.endswith("USDT"):
+            base, quote = pair_clean[:-4], "USDT"
+        else:
+            return {"error": "Geçersiz pair formatı. Örnek: BTC/USDT veya BTCUSDT"}
+    pair = f"{base}/{quote}"
+    
+    # 🔹 2. Zaman dilimi kontrolü
+    valid_timeframes = ['1m','3m','5m','15m','30m','1h','2h','4h','6h','8h','12h','1d','3d','1w','1M']
+    if timeframe not in valid_timeframes:
+        return {"error": "Geçersiz zaman dilimi"}
 
     cache_key = f"{pair}_{timeframe}"
-    current_time = time.time()
+    
+    # 🔹 3. Sinyal cache kontrolü (en hızlı erişim)
+    if cache_key in signal_cache:
+        return signal_cache[cache_key]
+
+    # 🔹 4. OHLCV verisini al (cache'li veya yeni)
+    ohlcv = None
+    if cache_key in ohlcv_cache:
+        ohlcv = ohlcv_cache[cache_key]
+        logger.debug(f"Cache hit: {cache_key}")
+    else:
+        try:
+            # ⏱️ 8 saniye timeout ile koruma
+            ohlcv = await asyncio.wait_for(
+                fetch_ohlcv_safe(pair, timeframe, limit=100),
+                timeout=8.0
+            )
+            ohlcv_cache[cache_key] = ohlcv
+            logger.info(f"OHLCV fetched: {pair} {timeframe} ({len(ohlcv)} mum)")
+        except asyncio.TimeoutError:
+            return {"error": "Veri çekme zaman aşımına uğradı (8 sn)"}
+        except Exception as e:
+            logger.error(f"OHLCV error for {pair} {timeframe}: {str(e)}")
+            return {"error": f"Veri hatası: {str(e)[:100]}"}
+
+    # 🔹 5. DataFrame ve indikatörler
+    if not ohlcv or len(ohlcv) < 50:
+        return {"error": "Yetersiz veri (en az 50 mum gerekli)"}
 
     try:
-        valid_timeframes = ['1m','3m','5m','15m','30m','1h','2h','4h','6h','8h','12h','1d','3d','1w','1M']
-        if timeframe not in valid_timeframes:
-            return {"error": "Geçersiz zaman dilimi"}
-
-        # Cache kontrol
-        if cache_key in ohlcv_cache:
-            cached_ohlcv, cached_time = ohlcv_cache[cache_key]
-            if current_time - cached_time < 30:
-                ohlcv = cached_ohlcv
-            else:
-                ohlcv = await asyncio.to_thread(exchange.fetch_ohlcv, pair, timeframe, limit=100)
-                ohlcv_cache[cache_key] = (ohlcv, current_time)
-        else:
-            ohlcv = await asyncio.to_thread(exchange.fetch_ohlcv, pair, timeframe, limit=100)
-            ohlcv_cache[cache_key] = (ohlcv, current_time)
-
-        # Cache temizleme
-        if len(ohlcv_cache) > MAX_CACHE_SIZE:
-            oldest = min(ohlcv_cache, key=lambda k: ohlcv_cache[k][1])
-            del ohlcv_cache[oldest]
-
-        if not ohlcv or len(ohlcv) < 50:
-            return {"error": "Veri yetersiz"}
-
         df = pd.DataFrame(ohlcv, columns=['ts','open','high','low','close','volume'])
+        df['close'] = pd.to_numeric(df['close'])
+        df['volume'] = pd.to_numeric(df['volume'])
+
+        # 📈 EMA, RSI, MACD, Bollinger
         df['EMA21'] = ta.ema(df['close'], length=21)
         df['RSI14'] = ta.rsi(df['close'], length=14)
-        
+        macd = ta.macd(df['close'], fast=12, slow=26, signal=9)
+        df['MACD'] = macd['MACD_12_26_9']
+        df['MACD_signal'] = macd['MACDs_12_26_9']
+        bb = ta.bbands(df['close'], length=20, std=2)
+        df['BB_upper'] = bb['BBU_20_2.0']
+        df['BB_lower'] = bb['BBL_20_2.0']
+        df['volume_ma20'] = df['volume'].rolling(20).mean()
+
         last = df.iloc[-1]
         price = float(last['close'])
         ema = last['EMA21']
         rsi = last['RSI14']
+        macd_diff = last['MACD'] - last['MACD_signal'] if not pd.isna(last['MACD']) else 0
+        in_bb_low = price < last['BB_lower'] if not pd.isna(last['BB_lower']) else False
+        volume_spike = last['volume'] > 1.5 * last['volume_ma20'] if not pd.isna(last['volume_ma20']) else False
+
+        # 🔹 6. Gelişmiş sinyal mantığı
+        signal = "😐 NÖTR"
+        confidence = 0.5
 
         if pd.isna(ema) or pd.isna(rsi):
-            signal = "Yetersiz Veri"
-        elif price > ema and rsi < 30:
-            signal = "🔥 ÇOK GÜÇLÜ ALIM 🔥"
-        elif price > ema and rsi < 45:
-            signal = "🚀 ALIM SİNYALİ 🚀"
-        elif price < ema and rsi > 70:
-            signal = "⚠️ SATIM SİNYALİ ⚠️"
-        elif price < ema and rsi > 55:
-            signal = "⚡ ZAYIF SATIŞ UYARISI ⚡"
-        else:
-            signal = "😐 NÖTR / BEKLEMEDE"
+            signal = "⚠️ Yetersiz İndikatör Verisi"
+        elif price > ema and rsi < 30 and macd_diff > 0 and volume_spike and in_bb_low:
+            signal = "💥 ULTRA GÜÇLÜ ALIM (RSI+MACD+BB+HACİM)"
+            confidence = 0.95
+        elif price > ema and rsi < 40 and macd_diff > 0:
+            signal = "🚀 GÜÇLÜ ALIM (EMA+RSI+MACD)"
+            confidence = 0.85
+        elif price > ema and rsi < 50 and (macd_diff > 0 or volume_spike):
+            signal = "📈 ALIM (EMA Destekli)"
+            confidence = 0.75
+        elif price < ema and rsi > 70 and macd_diff < 0:
+            signal = "📉 GÜÇLÜ SATIM (Aşırı Alım + MACD)"
+            confidence = 0.8
+        elif price < ema and rsi > 60:
+            signal = "⬇️ SATIM EĞİLİMİ"
+            confidence = 0.65
 
+        # 🔹 7. Sonuç hazırlama
         result = {
-            "pair": original_pair.replace("USDT", "/USDT") if "/" not in original_pair else original_pair,
+            "pair": pair,
             "timeframe": timeframe,
             "current_price": round(price, 8),
             "ema_21": round(ema, 8) if not pd.isna(ema) else None,
             "rsi_14": round(rsi, 2) if not pd.isna(rsi) else None,
+            "macd_diff": round(macd_diff, 4),
+            "in_bb_low": bool(in_bb_low),
+            "volume_spike": bool(volume_spike),
             "signal": signal,
-            "last_candle": pd.to_datetime(last['ts'], unit='ms').strftime("%d.%m %H:%M")
+            "confidence": round(confidence, 2),
+            "last_candle": pd.to_datetime(last['ts'], unit='ms').strftime("%d.%m %H:%M"),
+            "timestamp": datetime.utcnow().isoformat() + "Z"
         }
 
-        # Log kaydet
+        # 🔹 8. Cache'e kaydet
+        signal_cache[cache_key] = result
+
+        # 🔹 9. Loglama (CSV + JSON)
         try:
-            if os.path.exists("/data"):
-                os.makedirs("/data", exist_ok=True)
-                if not os.path.exists(LOG_FILE):
-                    df.head(1).to_csv(LOG_FILE, index=False)
-                df.tail(1).to_csv(LOG_FILE, mode='a', header=False, index=False)
+            os.makedirs("/data", exist_ok=True)
+            # JSON log (tüm sinyaller)
+            with open("/data/signal_log.jsonl", "a") as f:
+                f.write(json.dumps(result, ensure_ascii=False) + "\n")
+            # CSV (özet)
+            log_row = [result["timestamp"], pair, timeframe, price, rsi, signal]
+            pd.DataFrame([log_row], columns=["time","pair","tf","price","rsi","signal"]).to_csv(
+                "/data/signal_summary.csv", 
+                mode='a', 
+                header=not os.path.exists("/data/signal_summary.csv"), 
+                index=False
+            )
         except Exception as e:
-            print(f"Log hatası: {e}")
+            logger.warning(f"Log kaydetme hatası: {e}")
 
         return result
 
     except Exception as e:
-        print(f"Sinyal hatası ({original_pair} {timeframe}): {e}")
-        return {"error": "Teknik hata"}
+        logger.exception(f"Sinyal hesaplama hatası ({pair} {timeframe})")
+        return {"error": f"İşlem hatası: {str(e)[:100]}"}
+
 
 @app.websocket("/ws/signal/{pair}/{timeframe}")
 async def websocket_endpoint(websocket: WebSocket, pair: str, timeframe: str):
@@ -407,4 +469,5 @@ async def signal_page():
 @app.get("/health")
 async def health_check():
     return {"status": "healthy", "active_ws": len(active_connections), "cache_size": len(ohlcv_cache)} 
+
 
