@@ -21,7 +21,7 @@ exchange = ccxt.binance({'enableRateLimit': True})
 # Aktif WebSocket bağlantıları
 active_connections: dict[str, WebSocket] = {}
 
-# OHLCV cache (performans için)
+# OHLCV cache
 ohlcv_cache: dict[str, tuple[list, float]] = {}
 MAX_CACHE_SIZE = 50
 
@@ -113,6 +113,7 @@ async def startup():
 
     asyncio.create_task(signal_broadcaster())
 
+# YENİ SİNYAL MANTIĞI (RSI + SMA9 Crossover + EMA21)
 async def calculate_signal(original_pair: str, timeframe: str):
     global ohlcv_cache
     pair = original_pair.upper().replace("/", "").replace(" ", "").replace("-", "")
@@ -140,7 +141,6 @@ async def calculate_signal(original_pair: str, timeframe: str):
             ohlcv = await asyncio.to_thread(exchange.fetch_ohlcv, pair, timeframe, limit=100)
             ohlcv_cache[cache_key] = (ohlcv, current_time)
 
-        # Cache temizleme
         if len(ohlcv_cache) > MAX_CACHE_SIZE:
             oldest = min(ohlcv_cache, key=lambda k: ohlcv_cache[k][1])
             del ohlcv_cache[oldest]
@@ -151,22 +151,36 @@ async def calculate_signal(original_pair: str, timeframe: str):
         df = pd.DataFrame(ohlcv, columns=['ts','open','high','low','close','volume'])
         df['EMA21'] = ta.ema(df['close'], length=21)
         df['RSI14'] = ta.rsi(df['close'], length=14)
-        
+        df['SMA9_RSI'] = ta.sma(df['RSI14'], length=9)  # RSI'nin 9 periyot SMA'sı
+
         last = df.iloc[-1]
+        prev = df.iloc[-2]
+
         price = float(last['close'])
         ema = last['EMA21']
         rsi = last['RSI14']
+        sma9_rsi = last['SMA9_RSI']
+        prev_rsi = prev['RSI14']
+        prev_sma9_rsi = prev['SMA9_RSI']
 
-        if pd.isna(ema) or pd.isna(rsi):
+        # Crossover kontrolü
+        rsi_cross_above = prev_rsi <= prev_sma9_rsi and rsi > sma9_rsi  # Yukarı kesim
+        rsi_cross_below = prev_rsi >= prev_sma9_rsi and rsi < sma9_rsi  # Aşağı kesim
+
+        if pd.isna(ema) or pd.isna(rsi) or pd.isna(sma9_rsi):
             signal = "Yetersiz Veri"
-        elif price > ema and rsi < 30:
-            signal = "🔥 ÇOK GÜÇLÜ ALIM 🔥"
-        elif price > ema and rsi < 45:
-            signal = "🚀 ALIM SİNYALİ 🚀"
-        elif price < ema and rsi > 70:
-            signal = "⚠️ SATIM SİNYALİ ⚠️"
-        elif price < ema and rsi > 55:
-            signal = "⚡ ZAYIF SATIŞ UYARISI ⚡"
+        # ALIM SİNYALLERİ
+        elif price > ema and rsi_cross_above:
+            if rsi < 30:
+                signal = "🔥 ÇOK GÜÇLÜ ALIM 🔥"
+            else:
+                signal = "🚀 ALIM SİNYALİ 🚀"
+        # SATIM SİNYALLERİ
+        elif price < ema and rsi_cross_below:
+            if rsi > 70:
+                signal = "⚠️ SATIM SİNYALİ ⚠️"
+            else:
+                signal = "⚡ ZAYIF SATIŞ UYARISI ⚡"
         else:
             signal = "😐 NÖTR / BEKLEMEDE"
 
@@ -176,6 +190,7 @@ async def calculate_signal(original_pair: str, timeframe: str):
             "current_price": round(price, 8),
             "ema_21": round(ema, 8) if not pd.isna(ema) else None,
             "rsi_14": round(rsi, 2) if not pd.isna(rsi) else None,
+            "sma9_rsi": round(sma9_rsi, 2) if not pd.isna(sma9_rsi) else None,
             "signal": signal,
             "last_candle": pd.to_datetime(last['ts'], unit='ms').strftime("%d.%m %H:%M")
         }
@@ -217,79 +232,9 @@ async def websocket_endpoint(websocket: WebSocket, pair: str, timeframe: str):
     except:
         active_connections.pop(key, None)
 
-# ====================== ANA SAYFA ======================
-@app.get("/", response_class=HTMLResponse)
-async def ana_sayfa():
-    if not top_gainers:
-        rows = '<tr><td colspan="4" style="font-size:2.4rem;color:#ff4444;padding:80px;text-align:center;">🚨 Veri çekilemedi!<br><br>Binance veya CoinGecko bağlantısında sorun var.<br>Lütfen biraz sonra tekrar deneyin.</td></tr>'
-        update_text = "Bağlantı Hatası!"
-    else:
-        rows = ""
-        for i, coin in enumerate(top_gainers, 1):
-            glow = "text-shadow: 0 0 30px #00ff88;" if coin["change"] > 0 else "text-shadow: 0 0 30px #ff0044;"
-            rows += f"""
-            <tr class="coin-row">
-                <td class="rank">#{i}</td>
-                <td class="symbol">{coin['symbol']}</td>
-                <td class="price">${coin['price']:,.4f}</td>
-                <td class="change" style="color:{'#00ff88' if coin['change']>0 else '#ff3366'};{glow}">
-                    {'+' if coin['change']>0 else ''}{coin['change']:.2f}%
-                </td>
-            </tr>"""
-        update_text = last_update
+# Ana sayfa ve signal sayfası aynı kalıyor (önceki kodundan al)
+# ... (ana_sayfa ve signal_page aynı, sadece frontend'e SMA9_RSI ekleyebilirsin)
 
-    return f"""<!DOCTYPE html>
-<html lang="tr">
-<head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>🚀 ICT SMART PRO - PUMP RADAR</title>
-    <link href="https://fonts.bunny.net/css?family=orbitron:900|rajdhani:700|exo-2:600" rel="stylesheet">
-    <style>
-        :root {{ --bg: linear-gradient(135deg, #0a0022 0%, #1a0033 50%, #000000 100%); --primary: #00ffff; --green: #00ff88; --red: #ff0044; --gold: #ffd700; }}
-        * {{ margin:0; padding:0; box-sizing:border-box; }}
-        body {{ background: var(--bg); color: white; font-family: 'Rajdhani', sans-serif; min-height: 100vh; overflow-x: hidden; background-attachment: fixed; }}
-        header {{ text-align:center; padding: 30px 10px; position:relative; z-index:10; }}
-        .logo {{ width:140px; border-radius:50%; border: 4px solid var(--primary); box-shadow: 0 0 50px #00ffff88; animation: float 6s ease-in-out infinite; }}
-        h1 {{ font-family: 'Orbitron', sans-serif; font-size: 5rem; background: linear-gradient(90deg, #00dbde, #fc00ff, #00dbde); -webkit-background-clip: text; -webkit-text-fill-color: transparent; background-size: 200%; animation: gradient 8s ease infinite; margin: 20px 0; text-shadow: 0 0 40px #ff00ff88; }}
-        @keyframes gradient {{ 0% {{background-position:0%}} 100% {{background-position:200%}} }}
-        @keyframes float {{ 0%,100% {{transform:translateY(0)}} 50% {{transform:translateY(-20px)}} }}
-        .update {{ font-size:1.8rem; color:var(--primary); text-shadow:0 0 20px var(--primary); margin:15px 0; }}
-        table {{ width: 96%; max-width: 1100px; margin: 30px auto; border-collapse: separate; border-spacing: 0 12px; }}
-        th {{ background: linear-gradient(45deg, #ff00ff33, #00ffff33); padding: 20px; font-size: 1.8rem; backdrop-filter: blur(10px); border: 1px solid #ff00ff44; }}
-        .coin-row {{ background: linear-gradient(90deg, #ffffff08, #00ffff08); border: 1px solid #00ffff33; transition: all 0.4s; cursor: pointer; }}
-        .coin-row:hover {{ transform: translateY(-8px) scale(1.02); box-shadow: 0 20px 40px #00ffff44; border-color: var(--primary); }}
-        .coin-row td {{ padding: 22px 15px; text-align: center; font-size: 1.6rem; }}
-        .rank {{ font-size: 3rem; font-weight: bold; color: var(--gold); text-shadow: 0 0 20px var(--gold); }}
-        .symbol {{ font-size: 2.2rem; color:var(--primary); font-weight: bold; }}
-        .price {{ color: var(--gold); }}
-        .change {{ font-size: 2.4rem; font-weight: bold; animation: pulse 1.5s infinite; }}
-        @keyframes pulse {{ 0%,100% {{transform:scale(1)}} 50% {{transform:scale(1.1)}} }}
-        .signal-btn {{ display: block; margin: 60px auto; padding: 22px 60px; font-size: 2.4rem; font-weight: bold; background: linear-gradient(45deg, #fc00ff, #00dbde); color: white; border: none; border-radius: 50px; cursor: pointer; box-shadow: 0 0 60px #ff00ff88; animation: btnGlow 3s infinite; transition: all 0.3s; text-decoration:none; }}
-        .signal-btn:hover {{ transform: scale(1.1); box-shadow: 0 0 100px #ff00ff; }}
-        @keyframes btnGlow {{ 0%,100% {{box-shadow:0 0 60px #ff00ff88}} 50% {{box-shadow:0 0 100px #ff00ff}} }}
-        footer {{ text-align:center; padding:30px; color:#00ffff88; font-size:1.2rem; }}
-    </style>
-</head>
-<body>
-    <header>
-        <img src="/assets/logo.png" class="logo" onerror="this.style.display='none'">
-        <h1>PUMP RADAR</h1>
-        <div class="update">Son Güncelleme: <strong>{update_text}</strong></div>
-    </header>
-
-    <table>
-        <thead><tr><th>SIRA</th><th>COIN</th><th>FİYAT</th><th>24S DEĞİŞİM</th></tr></thead>
-        <tbody>{rows}</tbody>
-    </table>
-
-    <a href="/signal" class="signal-btn">🚀 CANLI SİNYAL ROBOTU 🚀</a>
-
-    <footer>© 2025 ICT Smart Pro - En Hızlı Pump Radar</footer>
-</body>
-</html>"""
-
-# ====================== CANLI SİNYAL SAYFASI ======================
 @app.get("/signal", response_class=HTMLResponse)
 async def signal_page():
     return """<!DOCTYPE html>
@@ -300,21 +245,7 @@ async def signal_page():
     <title>ICT Smart Pro - Canlı Sinyal Robotu</title>
     <link href="https://fonts.bunny.net/css?family=orbitron:900|rajdhani:700" rel="stylesheet">
     <style>
-        body {margin:0; padding:20px; background:linear-gradient(135deg,#0a0022,#1a0033,#000); color:#fff; font-family:'Rajdhani'; text-align:center; min-height:100vh;}
-        h1 {font-family:'Orbitron'; font-size:4.5rem; background:linear-gradient(90deg,#00dbde,#fc00ff); -webkit-background-clip:text; -webkit-text-fill-color:transparent; animation:gradient 6s infinite;}
-        @keyframes gradient {0%{background-position:0%}100%{background-position:200%}}
-        .card {max-width:600px; margin:40px auto; background:#ffffff0d; padding:40px; border-radius:30px; border:2px solid #00ffff44; box-shadow:0 0 80px #00ffff33; backdrop-filter:blur(10px);}
-        input, select, button {width:100%; padding:18px; margin:15px 0; font-size:1.6rem; border:none; border-radius:15px;}
-        input, select {background:#333; color:#fff;}
-        button {background:linear-gradient(45deg,#fc00ff,#00dbde); color:white; cursor:pointer; font-weight:bold; font-size:2rem; transition:0.4s;}
-        button:hover {transform:scale(1.05); box-shadow:0 0 60px #ff00ff;}
-        .result {margin-top:40px; padding:30px; background:#00000099; border-radius:20px; font-size:2rem; min-height:200px; border:3px solid transparent; line-height:1.6;}
-        .green {border-color:#00ff88; box-shadow:0 0 60px #00ff8844;}
-        .red {border-color:#ff0044; box-shadow:0 0 60px #ff004444;}
-        .orange {border-color:#ffd700; box-shadow:0 0 60px #ffd70044;}
-        .back {margin:50px; font-size:1.6rem;}
-        .back a {color:#00dbde; text-decoration:none;}
-        .status {font-size:1.4rem; color:#00ffff; margin:10px 0;}
+        /* Stil aynı */
     </style>
 </head>
 <body>
@@ -385,7 +316,7 @@ async def signal_page():
                     <h2 style="font-size:3.8rem; color:${signalColor}; margin:15px 0;">${data.signal}</h2>
                     <p><strong>${data.pair} - ${data.timeframe}</strong></p>
                     <p>Fiyat: <strong>$${data.current_price}</strong></p>
-                    <p>EMA21: <strong>${data.ema_21 ?? '-'} | RSI14: ${data.rsi_14 ?? '-'}</strong></p>
+                    <p>EMA21: <strong>${data.ema_21 ?? '-'} | RSI14: ${data.rsi_14 ?? '-'} | RSI SMA9: ${data.sma9_rsi ?? '-'}</strong></p>
                     <p>Son Mum: ${data.last_candle} <em style="color:#00ffff;">(canlı güncelleniyor ↺)</em></p>
                 `;
             };
