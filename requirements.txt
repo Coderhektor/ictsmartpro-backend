@@ -1,0 +1,6 @@
+fastapi
+ccxt
+httpx
+pandas
+numpy
+pandas-ta  # veya pandas-ta-classic
