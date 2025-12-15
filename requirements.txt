@@ -1,6 +1,7 @@
 fastapi
 uvicorn[standard]
 ccxt
-pandas
-pandas_ta
 httpx
+pandas
+numpy<2.0.0
+pandas-ta==0.3.14b0
