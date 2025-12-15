@@ -8,6 +8,7 @@ from fastapi import FastAPI
 from fastapi.responses import HTMLResponse
 from fastapi.staticfiles import StaticFiles
 import time
+import os  # <-- Yeni eklendi
 
 app = FastAPI()
 app.mount("/assets", StaticFiles(directory=".", html=False), name="assets")
@@ -16,8 +17,10 @@ app.mount("/assets", StaticFiles(directory=".", html=False), name="assets")
 top_gainers = []
 last_update = "Başlatılıyor..."
 signals_cache = []          # Sinyal sorguları için önbellek
-signals_last_update = None   # Opsiyonel: cache'in toplu yenilenme zamanı (şu an kullanmıyoruz)
 exchange = ccxt.binance({'enableRateLimit': True})
+
+# Railway Volume için log dosyası yolu
+LOG_FILE = "/data/all_signals.csv"  # <-- Volume mount path'i /data olmalı!
 
 async def fetch_data():
     global top_gainers, last_update
@@ -154,13 +157,10 @@ async def ana_sayfa():
     <a href="/signal" class="signal-btn">🚀 SİNYAL SORGULA 🚀</a>
 
     <footer>© 2025 ICT Smart Pro - En Hızlı Pump Radar</footer>
-
-    
 </body>
 </html>"""
 
 # ====================== SİNYAL SAYFASI ======================
-# ====================== SİNYAL SAYFASI (GÜNCELLENMİŞ) ======================
 @app.get("/signal", response_class=HTMLResponse)
 async def signal_page():
     return """<!DOCTYPE html>
@@ -214,7 +214,6 @@ async def signal_page():
             const tf = document.getElementById('tf').value;
             const res = document.getElementById('result');
             
-            // Temizle
             res.className = 'result';
             res.innerHTML = '<p style="color:#ffd700; font-size:2.2rem;">🔄 Analiz ediliyor, lütfen bekleyin...</p>';
 
@@ -228,14 +227,12 @@ async def signal_page():
 
                 const data = await response.json();
 
-                // Hata varsa göster
                 if (data.error) {
                     res.innerHTML = `<p style="color:#ff6666; font-size:2.2rem;">❌ Hata:<br>${data.error}</p>`;
                     res.classList.add('red');
                     return;
                 }
 
-                // Başarılı sonuç
                 let colorClass = 'orange';
                 let signalColor = '#ffd700';
                 if (data.signal.includes('ALIM') || data.signal.includes('GÜÇLÜ')) {
@@ -265,17 +262,14 @@ async def signal_page():
 </body>
 </html>"""
 
-# ====================== SİNYAL API (Cache destekli) ======================
-
+# ====================== SİNYAL API (LOG KAYDI EKLENDİ) ======================
 @app.get("/api/signal")
 async def api_signal(pair: str = "BTCUSDT", timeframe: str = "1h"):
     original_pair = pair.upper().strip()
     pair = original_pair.replace("/", "").replace(" ", "").replace("-", "")
 
-    # Otomatik USDT ekle eğer yoksa
     if not pair.endswith("USDT"):
-        # Perpetual futures için UPD gibi özel durumlar hariç USDT ekle
-        if pair.endswith("UP") or pair.endswith("DOWN"):  # Binance özel tokenlar
+        if pair.endswith("UP") or pair.endswith("DOWN"):
             pass
         else:
             pair += "USDT"
@@ -285,7 +279,7 @@ async def api_signal(pair: str = "BTCUSDT", timeframe: str = "1h"):
     # Cache kontrol
     for item in signals_cache:
         if item["pair"] == pair and item["timeframe"] == timeframe:
-            if current_time - item["timestamp"] < 60:  # 60 saniye cache
+            if current_time - item["timestamp"] < 60:
                 return item["data"]
 
     try:
@@ -293,7 +287,6 @@ async def api_signal(pair: str = "BTCUSDT", timeframe: str = "1h"):
         if timeframe not in valid_timeframes:
             return {"error": f"Geçersiz zaman dilimi. Desteklenenler: {', '.join(valid_timeframes)}"}
 
-        # OHLCV verisini çek
         ohlcv = await asyncio.to_thread(exchange.fetch_ohlcv, pair, timeframe, limit=200)
         
         if not ohlcv or len(ohlcv) < 50:
@@ -304,7 +297,6 @@ async def api_signal(pair: str = "BTCUSDT", timeframe: str = "1h"):
         df['RSI14'] = ta.rsi(df['close'], length=14)
         
         last = df.iloc[-1]
-        prev = df.iloc[-2] if len(df) > 1 else last
 
         price = float(last['close'])
         ema = last['EMA21']
@@ -333,6 +325,17 @@ async def api_signal(pair: str = "BTCUSDT", timeframe: str = "1h"):
             "last_candle": pd.to_datetime(last['ts'], unit='ms').strftime("%d.%m %H:%M")
         }
 
+        # ==================== KALICI LOG KAYDETME ====================
+        try:
+            os.makedirs("/data", exist_ok=True)  # Volume klasörünü hazırla
+            if not os.path.exists(LOG_FILE):
+                df.head(1).to_csv(LOG_FILE, index=False)  # Başlıkları yaz
+            df.tail(1).to_csv(LOG_FILE, mode='a', header=False, index=False)  # Son satırı ekle
+            print(f"LOG KAYDEDİLDİ → {result['pair']} | {timeframe} | {signal}")
+        except Exception as log_err:
+            print(f"Log kaydetme hatası: {log_err}")
+        # ===========================================================
+
         # Cache'e ekle
         signals_cache[:] = [i for i in signals_cache if not (i["pair"] == pair and i["timeframe"] == timeframe)]
         signals_cache.append({"pair": pair, "timeframe": timeframe, "data": result, "timestamp": current_time})
@@ -354,6 +357,3 @@ async def api_signal(pair: str = "BTCUSDT", timeframe: str = "1h"):
 @app.get("/health")
 async def health_check():
     return {"status": "healthy", "time": datetime.now().isoformat()}
-
-
-
