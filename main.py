@@ -406,4 +406,5 @@ async def signal_page():
 
 @app.get("/health")
 async def health_check():
-    return {"status": "healthy", "active_ws": len(active_connections), "cache_size": len(ohlcv_cache)} evet kodu  buna göre güncelleyelim
+    return {"status": "healthy", "active_ws": len(active_connections), "cache_size": len(ohlcv_cache)} 
+
