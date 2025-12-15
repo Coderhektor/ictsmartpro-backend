@@ -8,7 +8,7 @@ from fastapi import FastAPI
 from fastapi.responses import HTMLResponse
 from fastapi.staticfiles import StaticFiles
 import time
-import os  # <-- Yeni eklendi
+import os
 
 app = FastAPI()
 app.mount("/assets", StaticFiles(directory=".", html=False), name="assets")
@@ -19,8 +19,8 @@ last_update = "Başlatılıyor..."
 signals_cache = []          # Sinyal sorguları için önbellek
 exchange = ccxt.binance({'enableRateLimit': True})
 
-# Railway Volume için log dosyası yolu
-LOG_FILE = "/data/all_signals.csv"  # <-- Volume mount path'i /data olmalı!
+# Railway Volume için log dosyası yolu (volume yoksa hata vermesin)
+LOG_FILE = "/data/all_signals.csv"
 
 async def fetch_data():
     global top_gainers, last_update
@@ -75,7 +75,8 @@ async def fetch_data():
             top_gainers = sorted(clean_coins, key=lambda x: x["change"], reverse=True)[:10]
             last_update = datetime.now().strftime("%H:%M:%S")
     except Exception as e:
-        print("Hata:", e)
+        print("Pump Radar veri hatası:", e)
+        last_update = "Bağlantı Hatası"
 
 @app.on_event("startup")
 async def startup():
@@ -89,18 +90,23 @@ async def startup():
 # ====================== ANA SAYFA ======================
 @app.get("/", response_class=HTMLResponse)
 async def ana_sayfa():
-    rows = ""
-    for i, coin in enumerate(top_gainers or [], 1):
-        glow = "text-shadow: 0 0 30px #00ff88;" if coin["change"] > 0 else "text-shadow: 0 0 30px #ff0044;"
-        rows += f"""
-        <tr class="coin-row">
-            <td class="rank">#{i}</td>
-            <td class="symbol">{coin['symbol']}</td>
-            <td class="price">${coin['price']:,.4f}</td>
-            <td class="change" style="color:{'#00ff88' if coin['change']>0 else '#ff3366'};{glow}">
-                {'+' if coin['change']>0 else ''}{coin['change']:.2f}%
-            </td>
-        </tr>"""
+    if not top_gainers:
+        rows = '<tr><td colspan="4" style="font-size:2.4rem;color:#ff4444;padding:80px;text-align:center;">🚨 Veri çekilemedi!<br><br>Binance veya CoinGecko bağlantısında sorun var.<br>Lütfen biraz sonra tekrar deneyin.</td></tr>'
+        update_text = "Bağlantı Hatası!"
+    else:
+        rows = ""
+        for i, coin in enumerate(top_gainers, 1):
+            glow = "text-shadow: 0 0 30px #00ff88;" if coin["change"] > 0 else "text-shadow: 0 0 30px #ff0044;"
+            rows += f"""
+            <tr class="coin-row">
+                <td class="rank">#{i}</td>
+                <td class="symbol">{coin['symbol']}</td>
+                <td class="price">${coin['price']:,.4f}</td>
+                <td class="change" style="color:{'#00ff88' if coin['change']>0 else '#ff3366'};{glow}">
+                    {'+' if coin['change']>0 else ''}{coin['change']:.2f}%
+                </td>
+            </tr>"""
+        update_text = last_update
 
     return f"""<!DOCTYPE html>
 <html lang="tr">
@@ -113,15 +119,12 @@ async def ana_sayfa():
         :root {{ --bg: linear-gradient(135deg, #0a0022 0%, #1a0033 50%, #000000 100%); --primary: #00ffff; --green: #00ff88; --red: #ff0044; --gold: #ffd700; }}
         * {{ margin:0; padding:0; box-sizing:border-box; }}
         body {{ background: var(--bg); color: white; font-family: 'Rajdhani', sans-serif; min-height: 100vh; overflow-x: hidden; background-attachment: fixed; }}
-        .stars {{ position:fixed; top:0; left:0; width:100%; height:100%; pointer-events:none; }}
-        .stars div {{ position:absolute; background:#fff; border-radius:50%; animation: twinkle 4s infinite; }}
-        @keyframes twinkle {{ 0%,100% {{opacity:0.3}} 50% {{opacity:1}} }}
         header {{ text-align:center; padding: 30px 10px; position:relative; z-index:10; }}
         .logo {{ width:140px; border-radius:50%; border: 4px solid var(--primary); box-shadow: 0 0 50px #00ffff88; animation: float 6s ease-in-out infinite; }}
         h1 {{ font-family: 'Orbitron', sans-serif; font-size: 5rem; background: linear-gradient(90deg, #00dbde, #fc00ff, #00dbde); -webkit-background-clip: text; -webkit-text-fill-color: transparent; background-size: 200%; animation: gradient 8s ease infinite; margin: 20px 0; text-shadow: 0 0 40px #ff00ff88; }}
         @keyframes gradient {{ 0% {{background-position:0%}} 100% {{background-position:200%}} }}
         @keyframes float {{ 0%,100% {{transform:translateY(0)}} 50% {{transform:translateY(-20px)}} }}
-        .update {{ font-size:1.6rem; color:var(--primary); text-shadow:0 0 20px var(--primary); margin:15px 0; }}
+        .update {{ font-size:1.8rem; color:var(--primary); text-shadow:0 0 20px var(--primary); margin:15px 0; }}
         table {{ width: 96%; max-width: 1100px; margin: 30px auto; border-collapse: separate; border-spacing: 0 12px; }}
         th {{ background: linear-gradient(45deg, #ff00ff33, #00ffff33); padding: 20px; font-size: 1.8rem; backdrop-filter: blur(10px); border: 1px solid #ff00ff44; }}
         .coin-row {{ background: linear-gradient(90deg, #ffffff08, #00ffff08); border: 1px solid #00ffff33; transition: all 0.4s; cursor: pointer; }}
@@ -140,18 +143,15 @@ async def ana_sayfa():
     </style>
 </head>
 <body>
-    <div class="stars" id="stars"></div>
     <header>
         <img src="/assets/logo.png" class="logo" onerror="this.style.display='none'">
         <h1>PUMP RADAR</h1>
-        <div class="update">Son Güncelleme: {last_update if top_gainers else 'Yükleniyor...'}</div>
+        <div class="update">Son Güncelleme: <strong>{update_text}</strong></div>
     </header>
 
     <table>
         <thead><tr><th>SIRA</th><th>COIN</th><th>FİYAT</th><th>24S DEĞİŞİM</th></tr></thead>
-        <tbody>
-            {rows or '<tr><td colspan="4" style="font-size:2rem;color:#ffd700;">🚀 Veri yükleniyor, lütfen bekleyin...</td></tr>'}
-        </tbody>
+        <tbody>{rows}</tbody>
     </table>
 
     <a href="/signal" class="signal-btn">🚀 SİNYAL SORGULA 🚀</a>
@@ -262,9 +262,11 @@ async def signal_page():
 </body>
 </html>"""
 
-# ====================== SİNYAL API (LOG KAYDI EKLENDİ) ======================
+# ====================== SİNYAL API (TAMAMEN DÜZELTİLDİ) ======================
 @app.get("/api/signal")
 async def api_signal(pair: str = "BTCUSDT", timeframe: str = "1h"):
+    global signals_cache  # <<< KRİTİK SATIR! UnboundLocalError hatasını çözer
+
     original_pair = pair.upper().strip()
     pair = original_pair.replace("/", "").replace(" ", "").replace("-", "")
 
@@ -325,18 +327,21 @@ async def api_signal(pair: str = "BTCUSDT", timeframe: str = "1h"):
             "last_candle": pd.to_datetime(last['ts'], unit='ms').strftime("%d.%m %H:%M")
         }
 
-        # ==================== KALICI LOG KAYDETME ====================
+        # ==================== GÜVENLİ LOG KAYDETME ====================
         try:
-            os.makedirs("/data", exist_ok=True)  # Volume klasörünü hazırla
-            if not os.path.exists(LOG_FILE):
-                df.head(1).to_csv(LOG_FILE, index=False)  # Başlıkları yaz
-            df.tail(1).to_csv(LOG_FILE, mode='a', header=False, index=False)  # Son satırı ekle
-            print(f"LOG KAYDEDİLDİ → {result['pair']} | {timeframe} | {signal}")
+            if os.path.exists("/data"):  # Volume mount edilmiş mi?
+                os.makedirs("/data", exist_ok=True)
+                if not os.path.exists(LOG_FILE):
+                    df.head(1).to_csv(LOG_FILE, index=False)
+                df.tail(1).to_csv(LOG_FILE, mode='a', header=False, index=False)
+                print(f"LOG KAYDEDİLDİ → {result['pair']} | {timeframe} | {signal}")
+            else:
+                print("Volume (/data) bağlı değil, log kaydedilmedi. Railway'de Volume ekleyin.")
         except Exception as log_err:
-            print(f"Log kaydetme hatası: {log_err}")
-        # ===========================================================
+            print(f"Log hatası (uygulama etkilenmez): {log_err}")
+        # ==============================================================
 
-        # Cache'e ekle
+        # Cache güncelle
         signals_cache[:] = [i for i in signals_cache if not (i["pair"] == pair and i["timeframe"] == timeframe)]
         signals_cache.append({"pair": pair, "timeframe": timeframe, "data": result, "timestamp": current_time})
         if len(signals_cache) > 100:
@@ -357,4 +362,3 @@ async def api_signal(pair: str = "BTCUSDT", timeframe: str = "1h"):
 @app.get("/health")
 async def health_check():
     return {"status": "healthy", "time": datetime.now().isoformat()}
-
