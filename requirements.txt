@@ -1,7 +1,0 @@
-fastapi
-uvicorn[standard]
-ccxt
-httpx
-pandas
-numpy<2.0.0
-pandas-ta==0.3.14b0
