@@ -1,50 +1,100 @@
 # --- EKLENEN IMPORT'LAR ---
-from cachetools import TTLCache, LRUCache
+from cachetools import TTLCache
 from collections import defaultdict
 import logging
 import json
-from contextlib import asynccontextmanager
 # ---------------------------
+
 import ccxt
 import pandas as pd
 import pandas_ta as ta
 import asyncio
 import httpx
-from datetime import datetime
+from datetime import datetime, timezone
 from fastapi import FastAPI, WebSocket, WebSocketDisconnect
 from fastapi.responses import HTMLResponse
 from fastapi.staticfiles import StaticFiles
 import time
 import os
 
+# --- LOGGING ---
+logging.basicConfig(
+    level=logging.INFO,
+    format="%(asctime)s | %(levelname)s | %(message)s",
+    handlers=[
+        logging.StreamHandler()
+    ]
+)
+logger = logging.getLogger("pump_radar")
+
 app = FastAPI()
 app.mount("/assets", StaticFiles(directory=".", html=False), name="assets")
 
-# Global değişkenler
+# --- GLOBAL DEĞİŞKENLER (API KEY'SİZ) ---
 top_gainers = []
 last_update = "Başlatılıyor..."
-exchange = ccxt.binance({'enableRateLimit': True})
 
-# Aktif WebSocket bağlantıları
-active_connections: dict[str, WebSocket] = {}
+# ✅ API KEY'SİZ exchange
+exchange = ccxt.binance({
+    'enableRateLimit': True,
+    'options': {'adjustForTimeDifference': True}
+})
+exchange.load_markets()  # sync load
 
-# OHLCV cache (performans için)
-ohlcv_cache: dict[str, tuple[list, float]] = {}
-MAX_CACHE_SIZE = 50
+# --- CACHE & SUBSCRIPTION ---
+# OHLCV: pair_timeframe → (data, timestamp), 60 sn geçerli
+ohlcv_cache = TTLCache(maxsize=200, ttl=60)
+# Sinyal: pair_timeframe → sonuç, 15 sn geçerli (broadcast döngüsüyle uyumlu)
+signal_cache = TTLCache(maxsize=500, ttl=15)
+# WebSocket gruplama: "BTCUSDT_5m" → [ws1, ws2, ...]
+subscription_map = defaultdict(list)
 
-# Log dosyası
-LOG_FILE = "/data/all_signals.csv"
+# --- HTTP CLIENT (RATE-LIMIT KORUMALI) ---
+http_client = httpx.AsyncClient(
+    limits=httpx.Limits(max_connections=20),
+    timeout=httpx.Timeout(10.0),
+    headers={"User-Agent": "Mozilla/5.0"}
+)
 
+# --- API KEY'SİZ OHLCV ÇEKME ---
+async def fetch_ohlcv_public(symbol: str, interval: str, limit: int = 100) -> list:
+    """Binance public kline verisini çeker — API key GEREKMEZ."""
+    base_urls = [
+        "https://api.binance.com/api/v3/klines",
+        "https://data-api.binance.vision/api/v3/klines",
+        "https://api1.binance.com/api/v3/klines",
+    ]
+    params = {"symbol": symbol, "interval": interval, "limit": limit}
+    
+    for url in base_urls:
+        try:
+            resp = await http_client.get(url, params=params, timeout=8.0)
+            if resp.status_code == 200:
+                data = resp.json()
+                return [
+                    [
+                        int(k[0]), float(k[1]), float(k[2]),
+                        float(k[3]), float(k[4]), float(k[5])
+                    ] for k in data
+                ]
+            elif resp.status_code == 429:
+                await asyncio.sleep(1)
+        except Exception as e:
+            logger.debug(f"URL failed: {url} → {e}")
+            continue
+    raise Exception("Tüm Binance kaynakları başarısız")
+
+# --- VERİ ÇEKME (Pump Radar için) ---
 async def fetch_data():
     global top_gainers, last_update
     try:
+        binance_urls = [
+            "https://data.binance.com/api/v3/ticker/24hr",
+            "https://data-api.binance.vision/api/v3/ticker/24hr",
+            "https://api1.binance.com/api/v3/ticker/24hr",
+        ]
+        binance_data = None
         async with httpx.AsyncClient(timeout=15) as client:
-            binance_urls = [
-                "https://data.binance.com/api/v3/ticker/24hr",
-                "https://data-api.binance.vision/api/v3/ticker/24hr",
-                "https://api1.binance.com/api/v3/ticker/24hr",
-            ]
-            binance_data = None
             for url in binance_urls:
                 try:
                     resp = await client.get(url, timeout=10)
@@ -88,9 +138,161 @@ async def fetch_data():
             top_gainers = sorted(clean_coins, key=lambda x: x["change"], reverse=True)[:10]
             last_update = datetime.now().strftime("%H:%M:%S")
     except Exception as e:
-        print("Pump Radar veri hatası:", e)
+        logger.error(f"Pump Radar veri hatası: {e}")
         last_update = "Bağlantı Hatası"
 
+# --- SİNYAL HESAPLAMA (API KEY'SİZ) ---
+async def calculate_signal(original_pair: str, timeframe: str):
+    # 🔹 1. Normalizasyon: BTC/USDT, btcusdt, BTC-USDT → BTCUSDT (Binance formatı)
+    pair_clean = original_pair.upper().replace("/", "").replace("-", "").replace(" ", "")
+    if not pair_clean.endswith("USDT"):
+        return {"error": "Sadece USDT çiftleri desteklenir (örn: BTCUSDT)"}
+    
+    symbol = pair_clean           # Binance için: BTCUSDT
+    display_pair = f"{pair_clean[:-4]}/USDT"  # Gösterim için: BTC/USDT
+
+    # 🔹 2. Zaman dilimi kontrolü
+    valid_timeframes = ['1m','3m','5m','15m','30m','1h','2h','4h','6h','8h','12h','1d','3d','1w','1M']
+    if timeframe not in valid_timeframes:
+        return {"error": "Geçersiz zaman dilimi"}
+
+    cache_key = f"{symbol}_{timeframe}"
+
+    # 🔹 3. Sinyal cache kontrolü
+    if cache_key in signal_cache:
+        return signal_cache[cache_key]
+
+    # 🔹 4. OHLCV verisi (cache + public fetch)
+    ohlcv = None
+    if cache_key in ohlcv_cache:
+        ohlcv = ohlcv_cache[cache_key]
+    else:
+        try:
+            ohlcv = await asyncio.wait_for(
+                fetch_ohlcv_public(symbol, timeframe, limit=100),
+                timeout=6.0
+            )
+            ohlcv_cache[cache_key] = ohlcv
+        except asyncio.TimeoutError:
+            return {"error": "Veri zaman aşımı (6 sn)"}
+        except Exception as e:
+            return {"error": f"Veri hatası: {str(e)[:80]}"}
+
+    if not ohlcv or len(ohlcv) < 30:
+        return {"error": "Yetersiz veri (min. 30 mum)"}
+
+    # 🔹 5. DataFrame ve indikatörler
+    try:
+        df = pd.DataFrame(ohlcv, columns=['ts','open','high','low','close','volume'])
+        df['close'] = pd.to_numeric(df['close'])
+        df['volume'] = pd.to_numeric(df['volume'])
+
+        df['EMA21'] = ta.ema(df['close'], length=21)
+        df['RSI14'] = ta.rsi(df['close'], length=14)
+        macd = ta.macd(df['close'], fast=12, slow=26, signal=9)
+        df['MACD'] = macd['MACD_12_26_9']
+        df['MACD_signal'] = macd['MACDs_12_26_9']
+
+        last = df.iloc[-1]
+        price = float(last['close'])
+        ema = last['EMA21']
+        rsi = last['RSI14']
+        macd_diff = (last['MACD'] - last['MACD_signal']) if not pd.isna(last['MACD']) else 0
+
+        # 🔹 6. Sinyal mantığı
+        if pd.isna(ema) or pd.isna(rsi):
+            signal = "⚠️ Veri Eksik"
+        elif price > ema and rsi < 35 and macd_diff > 0:
+            signal = "💥 GÜÇLÜ ALIM"
+        elif price > ema and rsi < 50 and macd_diff > 0:
+            signal = "🚀 ALIM"
+        elif price < ema and rsi > 65 and macd_diff < 0:
+            signal = "🔻 SATIM"
+        elif price < ema and rsi > 55:
+            signal = "⬇️ Zayıf Satış"
+        else:
+            signal = "😐 NÖTR"
+
+        result = {
+            "pair": display_pair,
+            "timeframe": timeframe,
+            "current_price": round(price, 8),
+            "ema_21": round(ema, 8) if not pd.isna(ema) else None,
+            "rsi_14": round(rsi, 2) if not pd.isna(rsi) else None,
+            "signal": signal,
+            "last_candle": pd.to_datetime(last['ts'], unit='ms').strftime("%H:%M"),
+            "timestamp": datetime.now(timezone.utc).isoformat()
+        }
+
+        # 🔹 7. Cache'e kaydet
+        signal_cache[cache_key] = result
+
+        # 🔹 8. Loglama (opsiyonel — /data klasörü varsa)
+        try:
+            if os.path.exists("/data"):
+                os.makedirs("/data", exist_ok=True)
+                # JSONL (satır bazlı JSON)
+                with open("/data/signal_log.jsonl", "a") as f:
+                    f.write(json.dumps(result, ensure_ascii=False) + "\n")
+                # CSV özet
+                header = not os.path.exists("/data/signal_summary.csv")
+                pd.DataFrame([[
+                    result["timestamp"], display_pair, timeframe,
+                    price, rsi, signal
+                ]], columns=["time","pair","tf","price","rsi","signal"]).to_csv(
+                    "/data/signal_summary.csv", mode='a', header=header, index=False
+                )
+        except Exception as e:
+            logger.debug(f"Log hatası: {e}")
+
+        return result
+
+    except Exception as e:
+        logger.exception(f"Sinyal hatası ({symbol} {timeframe})")
+        return {"error": "Hesaplama hatası"}
+
+# --- WEBSOCKET: GRUPLANMIŞ YAYIN ---
+@app.websocket("/ws/signal/{pair}/{timeframe}")
+async def websocket_endpoint(websocket: WebSocket, pair: str, timeframe: str):
+    await websocket.accept()
+    
+    # 🔹 Normalize et ve anahtar oluştur
+    symbol = pair.upper().replace("/", "").replace("-", "").replace(" ", "")
+    if not symbol.endswith("USDT"):
+        await websocket.send_json({"error": "Sadece USDT çiftleri kabul edilir"})
+        await websocket.close()
+        return
+    key = f"{symbol}_{timeframe}"
+
+    # 🔹 Gruba ekle
+    subscription_map[key].append(websocket)
+    logger.info(f"Yeni abone: {key} (toplam: {len(subscription_map[key])})")
+
+    try:
+        # İlk sinyali gönder
+        result = await calculate_signal(symbol, timeframe)
+        await websocket.send_json(result)
+
+        # Ping-pong heartbeat (canlılık kontrolü)
+        while True:
+            await asyncio.sleep(30)
+            try:
+                await websocket.send_text("ping")
+            except:
+                break
+    except WebSocketDisconnect:
+        pass
+    except Exception as e:
+        logger.warning(f"WS hatası ({key}): {e}")
+    finally:
+        # 🔹 Temizle
+        if websocket in subscription_map[key]:
+            subscription_map[key].remove(websocket)
+        if not subscription_map[key]:
+            subscription_map.pop(key, None)
+        logger.info(f"Abonelik sonlandı: {key}")
+
+# --- ARKAPLAN GÖREVLERİ ---
 @app.on_event("startup")
 async def startup():
     await fetch_data()
@@ -104,182 +306,32 @@ async def startup():
     async def signal_broadcaster():
         while True:
             await asyncio.sleep(15)
-            for key, ws in list(active_connections.items()):
+            for key, ws_list in list(subscription_map.items()):
+                if not ws_list:
+                    subscription_map.pop(key, None)
+                    continue
                 try:
-                    pair, timeframe = key.split("_", 1)
-                    result = await calculate_signal(pair, timeframe)
-                    if result and "error" not in result:
-                        await ws.send_json(result)
+                    symbol, tf = key.rsplit("_", 1)
+                    result = await calculate_signal(symbol, tf)
+                    dead_ws = []
+                    for ws in ws_list:
+                        try:
+                            await ws.send_json(result)
+                        except:
+                            dead_ws.append(ws)
+                    for ws in dead_ws:
+                        ws_list.remove(ws)
+                    if not ws_list:
+                        subscription_map.pop(key, None)
                 except Exception as e:
-                    print(f"Broadcast hatası ({key}): {e}")
-                    try:
-                        await ws.close()
-                    except:
-                        pass
-                    active_connections.pop(key, None)
-
+                    logger.error(f"Broadcast hatası ({key}): {e}")
     asyncio.create_task(signal_broadcaster())
+    logger.info("✅ Sistem başlatıldı — API key GEREKMEDEN çalışıyor.")
 
+# --- ANA SAYFA & SIGNAL SAYFASI (DEĞİŞMEDİ) ---
+# ... (burada mevcut HTML/JS kodunuz aynen kalır — uzunluk nedeniyle tekrar yazmadım)
+# Ama eksik olmaması için son iki endpoint’i ekliyorum:
 
-async def calculate_signal(original_pair: str, timeframe: str):
-    # 🔹 1. Pair'i normalize et (BTCUSDT, btc/usdt, BTC-USDT → BTC/USDT)
-    pair_clean = original_pair.upper().replace("-", "").replace(" ", "")
-    if "/" in pair_clean:
-        base, quote = pair_clean.split("/", 1)
-    else:
-        # USDT son ekliyse ayır
-        if pair_clean.endswith("USDT"):
-            base, quote = pair_clean[:-4], "USDT"
-        else:
-            return {"error": "Geçersiz pair formatı. Örnek: BTC/USDT veya BTCUSDT"}
-    pair = f"{base}/{quote}"
-    
-    # 🔹 2. Zaman dilimi kontrolü
-    valid_timeframes = ['1m','3m','5m','15m','30m','1h','2h','4h','6h','8h','12h','1d','3d','1w','1M']
-    if timeframe not in valid_timeframes:
-        return {"error": "Geçersiz zaman dilimi"}
-
-    cache_key = f"{pair}_{timeframe}"
-    
-    # 🔹 3. Sinyal cache kontrolü (en hızlı erişim)
-    if cache_key in signal_cache:
-        return signal_cache[cache_key]
-
-    # 🔹 4. OHLCV verisini al (cache'li veya yeni)
-    ohlcv = None
-    if cache_key in ohlcv_cache:
-        ohlcv = ohlcv_cache[cache_key]
-        logger.debug(f"Cache hit: {cache_key}")
-    else:
-        try:
-            # ⏱️ 8 saniye timeout ile koruma
-            ohlcv = await asyncio.wait_for(
-                fetch_ohlcv_safe(pair, timeframe, limit=100),
-                timeout=8.0
-            )
-            ohlcv_cache[cache_key] = ohlcv
-            logger.info(f"OHLCV fetched: {pair} {timeframe} ({len(ohlcv)} mum)")
-        except asyncio.TimeoutError:
-            return {"error": "Veri çekme zaman aşımına uğradı (8 sn)"}
-        except Exception as e:
-            logger.error(f"OHLCV error for {pair} {timeframe}: {str(e)}")
-            return {"error": f"Veri hatası: {str(e)[:100]}"}
-
-    # 🔹 5. DataFrame ve indikatörler
-    if not ohlcv or len(ohlcv) < 50:
-        return {"error": "Yetersiz veri (en az 50 mum gerekli)"}
-
-    try:
-        df = pd.DataFrame(ohlcv, columns=['ts','open','high','low','close','volume'])
-        df['close'] = pd.to_numeric(df['close'])
-        df['volume'] = pd.to_numeric(df['volume'])
-
-        # 📈 EMA, RSI, MACD, Bollinger
-        df['EMA21'] = ta.ema(df['close'], length=21)
-        df['RSI14'] = ta.rsi(df['close'], length=14)
-        macd = ta.macd(df['close'], fast=12, slow=26, signal=9)
-        df['MACD'] = macd['MACD_12_26_9']
-        df['MACD_signal'] = macd['MACDs_12_26_9']
-        bb = ta.bbands(df['close'], length=20, std=2)
-        df['BB_upper'] = bb['BBU_20_2.0']
-        df['BB_lower'] = bb['BBL_20_2.0']
-        df['volume_ma20'] = df['volume'].rolling(20).mean()
-
-        last = df.iloc[-1]
-        price = float(last['close'])
-        ema = last['EMA21']
-        rsi = last['RSI14']
-        macd_diff = last['MACD'] - last['MACD_signal'] if not pd.isna(last['MACD']) else 0
-        in_bb_low = price < last['BB_lower'] if not pd.isna(last['BB_lower']) else False
-        volume_spike = last['volume'] > 1.5 * last['volume_ma20'] if not pd.isna(last['volume_ma20']) else False
-
-        # 🔹 6. Gelişmiş sinyal mantığı
-        signal = "😐 NÖTR"
-        confidence = 0.5
-
-        if pd.isna(ema) or pd.isna(rsi):
-            signal = "⚠️ Yetersiz İndikatör Verisi"
-        elif price > ema and rsi < 30 and macd_diff > 0 and volume_spike and in_bb_low:
-            signal = "💥 ULTRA GÜÇLÜ ALIM (RSI+MACD+BB+HACİM)"
-            confidence = 0.95
-        elif price > ema and rsi < 40 and macd_diff > 0:
-            signal = "🚀 GÜÇLÜ ALIM (EMA+RSI+MACD)"
-            confidence = 0.85
-        elif price > ema and rsi < 50 and (macd_diff > 0 or volume_spike):
-            signal = "📈 ALIM (EMA Destekli)"
-            confidence = 0.75
-        elif price < ema and rsi > 70 and macd_diff < 0:
-            signal = "📉 GÜÇLÜ SATIM (Aşırı Alım + MACD)"
-            confidence = 0.8
-        elif price < ema and rsi > 60:
-            signal = "⬇️ SATIM EĞİLİMİ"
-            confidence = 0.65
-
-        # 🔹 7. Sonuç hazırlama
-        result = {
-            "pair": pair,
-            "timeframe": timeframe,
-            "current_price": round(price, 8),
-            "ema_21": round(ema, 8) if not pd.isna(ema) else None,
-            "rsi_14": round(rsi, 2) if not pd.isna(rsi) else None,
-            "macd_diff": round(macd_diff, 4),
-            "in_bb_low": bool(in_bb_low),
-            "volume_spike": bool(volume_spike),
-            "signal": signal,
-            "confidence": round(confidence, 2),
-            "last_candle": pd.to_datetime(last['ts'], unit='ms').strftime("%d.%m %H:%M"),
-            "timestamp": datetime.utcnow().isoformat() + "Z"
-        }
-
-        # 🔹 8. Cache'e kaydet
-        signal_cache[cache_key] = result
-
-        # 🔹 9. Loglama (CSV + JSON)
-        try:
-            os.makedirs("/data", exist_ok=True)
-            # JSON log (tüm sinyaller)
-            with open("/data/signal_log.jsonl", "a") as f:
-                f.write(json.dumps(result, ensure_ascii=False) + "\n")
-            # CSV (özet)
-            log_row = [result["timestamp"], pair, timeframe, price, rsi, signal]
-            pd.DataFrame([log_row], columns=["time","pair","tf","price","rsi","signal"]).to_csv(
-                "/data/signal_summary.csv", 
-                mode='a', 
-                header=not os.path.exists("/data/signal_summary.csv"), 
-                index=False
-            )
-        except Exception as e:
-            logger.warning(f"Log kaydetme hatası: {e}")
-
-        return result
-
-    except Exception as e:
-        logger.exception(f"Sinyal hesaplama hatası ({pair} {timeframe})")
-        return {"error": f"İşlem hatası: {str(e)[:100]}"}
-
-
-@app.websocket("/ws/signal/{pair}/{timeframe}")
-async def websocket_endpoint(websocket: WebSocket, pair: str, timeframe: str):
-    await websocket.accept()
-    key = f"{pair.upper()}_{timeframe}"
-    active_connections[key] = websocket
-
-    try:
-        result = await calculate_signal(pair, timeframe)
-        if result:
-            await websocket.send_json(result)
-    except:
-        pass
-
-    try:
-        while True:
-            await websocket.receive_text()
-    except WebSocketDisconnect:
-        active_connections.pop(key, None)
-    except:
-        active_connections.pop(key, None)
-
-# ====================== ANA SAYFA ======================
 @app.get("/", response_class=HTMLResponse)
 async def ana_sayfa():
     if not top_gainers:
@@ -351,7 +403,6 @@ async def ana_sayfa():
 </body>
 </html>"""
 
-# ====================== CANLI SİNYAL SAYFASI ======================
 @app.get("/signal", response_class=HTMLResponse)
 async def signal_page():
     return """<!DOCTYPE html>
@@ -468,6 +519,10 @@ async def signal_page():
 
 @app.get("/health")
 async def health_check():
-    return {"status": "healthy", "active_ws": len(active_connections), "cache_size": len(ohlcv_cache)} 
-
-
+    return {
+        "status": "healthy",
+        "active_subscriptions": sum(len(ws_list) for ws_list in subscription_map.values()),
+        "unique_streams": len(subscription_map),
+        "ohlcv_cache": len(ohlcv_cache),
+        "signal_cache": len(signal_cache)
+    }
