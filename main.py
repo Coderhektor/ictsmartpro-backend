@@ -45,9 +45,6 @@ async def get_current_user(user_email: str = Depends(session_cookie)):
         return email
     return None
 
-async def require_login():
-    raise HTTPException(status_code=303, headers={"Location": "/"})
-
 # --- REAL-TIME TICKER ---
 class RealTimeTicker:
     def __init__(self):
@@ -81,7 +78,13 @@ class RealTimeTicker:
 
                         for ws_client in list(self.subscribers[symbol]):
                             try:
-                                await ws_client.send_json({"type": "tick", "symbol": symbol, "price": price, "volume": qty, "ts": ts})
+                                await ws_client.send_json({
+                                    "type": "tick",
+                                    "symbol": symbol,
+                                    "price": price,
+                                    "volume": qty,
+                                    "ts": ts
+                                })
                             except:
                                 self.subscribers[symbol].discard(ws_client)
             except Exception as e:
@@ -184,10 +187,10 @@ async def websocket_endpoint(websocket: WebSocket, pair: str, timeframe: str, us
     rt_ticker.subscribers[symbol].add(websocket)
     logger.info(f"Ücretli abone: {user_email} → {symbol}")
 
-        try:
+    try:
         price = rt_ticker.tickers.get(symbol, {}).get("price", 0) or 0
         first_signal = await quick_signal(symbol, price)
-       await websocket.send_json(first_signal)  # <-- BURADA 7 BOŞLUK VAR!
+        await websocket.send_json(first_signal)
     except Exception as e:
         logger.warning(f"İlk sinyal hatası: {e}")
 
@@ -212,6 +215,7 @@ async def websocket_endpoint(websocket: WebSocket, pair: str, timeframe: str, us
 async def startup():
     asyncio.create_task(fetch_data())
     asyncio.create_task(rt_ticker.start())
+
     async def radar_loop():
         while True:
             await asyncio.sleep(30)
@@ -379,16 +383,16 @@ async def signal_page(user: str = Depends(get_current_user)):
             socket.onopen = () => {{ status.textContent = "✅ AKIŞ AÇIK!"; status.style.color = "#00ff88"; }};
             socket.onmessage = event => {{
                 const data = JSON.parse(event.data);
-                if (data.error) {{ res.innerHTML = `<p style="color:#ff6666;">❌ ${data.error}</p>`; res.classList.add('red'); return; }}
+                if (data.error) {{ res.innerHTML = `<p style="color:#ff6666;">❌ ${{data.error}}</p>`; res.classList.add('red'); return; }}
                 let colorClass = 'orange', signalColor = '#ffd700';
                 if (data.signal.includes('ALIM') || data.signal.includes('YUKARI')) {{ colorClass = 'green'; signalColor = '#00ff88'; }}
                 else if (data.signal.includes('SATIM') || data.signal.includes('AŞAĞI')) {{ colorClass = 'red'; signalColor = '#ff4444'; }}
                 res.className = 'result ' + colorClass;
                 res.innerHTML = `
-                    <h2 style="font-size:3.8rem; color:${signalColor};">${data.signal}</h2>
-                    <p><strong>${data.pair}</strong> — <em>${data.last_update}</em></p>
-                    <p>Fiyat: <strong>$${data.current_price}</strong></p>
-                    <p>Momentum: <strong>${data.momentum === 'up' ? '⬆️' : data.momentum === 'down' ? '⬇️' : '↔️'} ${data.volume_spike ? ' + 💥 HACİM' : ''}</strong></p>
+                    <h2 style="font-size:3.8rem; color:${{signalColor}};">${{data.signal}}</h2>
+                    <p><strong>${{data.pair}}</strong> — <em>${{data.last_update}}</em></p>
+                    <p>Fiyat: <strong>$${data.current_price}}</strong></p>
+                    <p>Momentum: <strong>${{data.momentum === 'up' ? '⬆️' : data.momentum === 'down' ? '⬇️' : '↔️'}} ${{data.volume_spike ? ' + 💥 HACİM' : ''}}</strong></p>
                     <p><em style="color:#00ffff;">Saniyede 2 kez güncelleniyor ↺</em></p>
                 `;
             }};
@@ -403,18 +407,31 @@ async def signal_page(user: str = Depends(get_current_user)):
 @app.get("/abonelik")
 async def abonelik_page():
     return """
-    <!DOCTYPE html><html><head><title>Abonelik</title><style>body{background:#000;color:#fff;font-family:sans-serif;text-align:center;padding:50px;}</style></head>
-    <body><h1>ABONELİK SEÇ</h1>
-    <form method="post">
-        <input type="email" name="email" placeholder="E-posta" required><br><br>
-        <input type="text" name="ad" placeholder="Ad Soyad" required><br><br>
-        <select name="plan">
-            <option value="basic">Basic - $9.99/ay</option>
-            <option value="pro">Pro - $24.99/ay</option>
-            <option value="premium">Premium - $49.99/ay</option>
-        </select><br><br>
-        <button type="submit" style="padding:15px 30px;font-size:1.5rem;background:#00dbde;color:#000;border:none;border-radius:15px;cursor:pointer;">ÖDEMEYE GEÇ</button>
-    </form></body></html>
+    <!DOCTYPE html>
+    <html>
+    <head>
+        <title>Abonelik</title>
+        <style>
+            body {background:#000;color:#fff;font-family:sans-serif;text-align:center;padding:50px;}
+            h1 {font-size:3rem;}
+            input, select, button {margin:10px 0;padding:15px;width:300px;font-size:1.2rem;}
+            button {background:#00dbde;color:#000;border:none;border-radius:15px;cursor:pointer;}
+        </style>
+    </head>
+    <body>
+        <h1>ABONELİK SEÇ</h1>
+        <form method="post">
+            <input type="email" name="email" placeholder="E-posta" required><br>
+            <input type="text" name="ad" placeholder="Ad Soyad" required><br>
+            <select name="plan">
+                <option value="basic">Basic - $9.99/ay</option>
+                <option value="pro">Pro - $24.99/ay</option>
+                <option value="premium">Premium - $49.99/ay</option>
+            </select><br>
+            <button type="submit">ÖDEMEYE GEÇ</button>
+        </form>
+    </body>
+    </html>
     """
 
 @app.post("/abonelik")
@@ -431,7 +448,7 @@ async def abonelik_post(request: Request):
     except Exception as e:
         return HTMLResponse(f"Hata: {e}")
 
-# --- STRIPE WEBHOOK (Tam entegre) ---
+# --- STRIPE WEBHOOK ---
 from odeme import handle_checkout_completed, handle_invoice_paid, handle_invoice_failed, handle_subscription_deleted, WEBHOOK_SECRET
 
 @app.post("/webhook/stripe")
@@ -467,4 +484,3 @@ async def health_check():
         "active_ws": sum(len(s) for s in rt_ticker.subscribers.values()),
         "timestamp": datetime.now(timezone.utc).isoformat()
     }
-
