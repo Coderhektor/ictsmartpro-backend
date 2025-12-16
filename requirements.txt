@@ -2,19 +2,12 @@ fastapi
 uvicorn[standard]
 ccxt
 httpx
+websockets
 pandas
 numpy
-websockets
-pandas-ta  # pandas_ta'nın resmi adı artık bu (pandas-ta değil)
-cachetools  # zaten eklemişsin, iyi
-
-# PostgreSQL + SQLAlchemy için ZORUNLU
-sqlalchemy>=2.0
-psycopg2-binary  # PostgreSQL driver (Railway'de en stabil olanı)
-
-# Opsiyonel ama önerilen (hata ayıklama ve performans için)
-python-dotenv  # .env dosyası okumak istersen
-loguru  # daha iyi logging istersen (isteğe bağlı)
-
-# Stripe için
+pandas-ta
+cachetools
+sqlalchemy
+psycopg2-binary
 stripe
+python-multipart   # <--- BU EKLENDİ, ZORUNLU!
