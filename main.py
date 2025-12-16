@@ -116,8 +116,8 @@ async def fetch_data():
                     continue
 
             clean_coins = []
-            if binance_
-                for item in binance_
+            if binance_data
+                for item in binance_data
                     s = item.get("symbol", "")
                     if not s.endswith("USDT"):
                         continue
