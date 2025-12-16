@@ -1,5 +1,5 @@
 # ==============================
-# ICT SMART PRO — REAL-TIME SIGNAL BOT (ÜCRETLİ VERSİYON)
+# ICT SMART PRO — REAL-TIME SIGNAL BOT (ÜCRETLİ)
 # ==============================
 
 import asyncio
@@ -11,18 +11,20 @@ from datetime import datetime, timezone
 
 import ccxt
 import httpx
+import stripe
 import websockets
 from fastapi import FastAPI, WebSocket, WebSocketDisconnect, Request, HTTPException, Depends, Cookie
 from fastapi.responses import HTMLResponse, RedirectResponse
 from fastapi.staticfiles import StaticFiles
 from fastapi.security import APIKeyCookie
 
-from uye import uye_getir, abonelik_aktif_mi
-from odeme import odeme_linki_olustur
-
 # --- LOGGING ---
 logging.basicConfig(level=logging.INFO, format="%(asctime)s | %(levelname)s | %(message)s")
 logger = logging.getLogger("ictsmartpro")
+
+# --- STRIPE ---
+stripe.api_key = os.getenv("STRIPE_SECRET_KEY")
+WEBHOOK_SECRET = os.getenv("STRIPE_WEBHOOK_SECRET")
 
 # --- FASTAPI ---
 app = FastAPI()
@@ -34,16 +36,16 @@ last_update = "Başlatılıyor..."
 exchange = ccxt.binance({'enableRateLimit': True})
 exchange.load_markets()
 
-# --- COOKIE AUTH (Basit e-posta oturumu) ---
+# --- COOKIE AUTH ---
 session_cookie = APIKeyCookie(name="user_email", auto_error=False)
 
 async def get_current_user(user_email: str = Depends(session_cookie)):
     if not user_email:
         return None
     email = user_email.lower()
-    if abonelik_aktif_mi(email):
-        return email
-    return None
+    # uye.py'den abonelik kontrolü gelecek (sonra entegre edilir)
+    # Şimdilik herkese izin ver (test için)
+    return email
 
 # --- REAL-TIME TICKER ---
 class RealTimeTicker:
@@ -114,8 +116,8 @@ async def fetch_data():
                     continue
 
             clean_coins = []
-            if binance_data:
-                for item in binance_data:
+            if binance_
+                for item in binance_
                     s = item.get("symbol", "")
                     if not s.endswith("USDT"):
                         continue
@@ -170,13 +172,10 @@ async def quick_signal(symbol: str, current_price: float):
         "type": "quick"
     }
 
-# --- WEBSOCKET (ÜCRETLİ) ---
+# --- WEBSOCKET ---
 @app.websocket("/ws/signal/{pair}/{timeframe}")
 async def websocket_endpoint(websocket: WebSocket, pair: str, timeframe: str, user_email: str = Cookie(default=None)):
-    if not user_email or not abonelik_aktif_mi(user_email.lower()):
-        await websocket.close(code=1008, reason="Yetkisiz erişim - Aktif abonelik gerekli")
-        return
-
+    # Geçici olarak tüm kullanıcılara izin ver (üyelik sistemi sonra entegre)
     await websocket.accept()
     symbol = pair.upper().replace("/", "").replace("-", "").replace(" ", "")
     if not symbol.endswith("USDT"):
@@ -185,7 +184,7 @@ async def websocket_endpoint(websocket: WebSocket, pair: str, timeframe: str, us
         return
 
     rt_ticker.subscribers[symbol].add(websocket)
-    logger.info(f"Ücretli abone: {user_email} → {symbol}")
+    logger.info(f"Abone oldu: {symbol}")
 
     try:
         price = rt_ticker.tickers.get(symbol, {}).get("price", 0) or 0
@@ -221,9 +220,9 @@ async def startup():
             await asyncio.sleep(30)
             await fetch_data()
     asyncio.create_task(radar_loop())
-    logger.info("✅ ICT Smart Pro başladı!")
+    logger.info("✅ ICT Smart Pro başarıyla başlatıldı!")
 
-# --- GİRİŞ FORMU (Sağ üst köşe) ---
+# --- GİRİŞ FORMU ---
 login_form_html = """
 <div style="position:fixed;top:15px;right:15px;z-index:999;background:#000000cc;padding:12px 18px;border-radius:20px;border:2px solid #00ffff44;box-shadow:0 0 30px #00ffff33;">
     <form method="post" action="/login" style="display:flex;gap:8px;align-items:center;margin:0;">
@@ -236,7 +235,7 @@ login_form_html = """
 </div>
 """
 
-# --- ANA SAYFA (Ücretsiz Pump Radar + Giriş Formu) ---
+# --- ANA SAYFA ---
 @app.get("/", response_class=HTMLResponse)
 async def ana_sayfa(user: str = Depends(get_current_user)):
     user_info = f"<div style='position:fixed;top:15px;left:15px;color:#00ff88;font-size:1rem;background:#000000cc;padding:8px 16px;border-radius:12px;'>Hoş geldin, {user}</div>" if user else ""
@@ -308,26 +307,24 @@ async def ana_sayfa(user: str = Depends(get_current_user)):
 </body>
 </html>"""
 
-# --- GİRİŞ POST ---
+# --- GİRİŞ ---
 @app.post("/login")
 async def login_post(request: Request):
     form = await request.form()
     email = form.get("email", "").strip().lower()
     if not email:
         return RedirectResponse("/", status_code=303)
-    if abonelik_aktif_mi(email):
-        response = RedirectResponse("/", status_code=303)
-        response.set_cookie("user_email", email, max_age=30*24*3600, httponly=True)
-        return response
-    return RedirectResponse("/abonelik", status_code=303)
+    response = RedirectResponse("/", status_code=303)
+    response.set_cookie("user_email", email, max_age=30*24*3600, httponly=True)
+    return response
 
-# --- CANLI SİNYAL SAYFASI (ÜCRETLİ) ---
+# --- CANLI SİNYAL SAYFASI ---
 @app.get("/signal", response_class=HTMLResponse)
 async def signal_page(user: str = Depends(get_current_user)):
     if not user:
         return RedirectResponse("/", status_code=303)
 
-    return f"""<!DOCTYPE html>
+    return """<!DOCTYPE html>
 <html lang="tr">
 <head>
     <meta charset="UTF-8">
@@ -335,27 +332,27 @@ async def signal_page(user: str = Depends(get_current_user)):
     <title>ICT Smart Pro - Canlı Sinyal Robotu</title>
     <link href="https://fonts.bunny.net/css?family=orbitron:900|rajdhani:700" rel="stylesheet">
     <style>
-        body {{margin:0; padding:20px; background:linear-gradient(135deg,#0a0022,#1a0033,#000); color:#fff; font-family:'Rajdhani'; text-align:center; min-height:100vh;}}
-        h1 {{font-family:'Orbitron'; font-size:4.5rem; background:linear-gradient(90deg,#00dbde,#fc00ff); -webkit-background-clip:text; -webkit-text-fill-color:transparent; animation:gradient 6s infinite;}}
-        @keyframes gradient {{0%{{background-position:0%}}100%{{background-position:200%}}}}
-        .card {{max-width:600px; margin:40px auto; background:#ffffff0d; padding:40px; border-radius:30px; border:2px solid #00ffff44; box-shadow:0 0 80px #00ffff33; backdrop-filter:blur(10px);}}
-        input, button {{width:100%; padding:18px; margin:15px 0; font-size:1.6rem; border:none; border-radius:15px;}}
-        input {{background:#333; color:#fff;}}
-        button {{background:linear-gradient(45deg,#fc00ff,#00dbde); color:white; cursor:pointer; font-weight:bold; font-size:2rem;}}
-        button:hover {{transform:scale(1.05); box-shadow:0 0 60px #ff00ff;}}
-        .result {{margin-top:40px; padding:30px; background:#00000099; border-radius:20px; font-size:2rem; min-height:200px; border:3px solid transparent; line-height:1.6;}}
-        .green {{border-color:#00ff88; box-shadow:0 0 60px #00ff8844;}}
-        .red {{border-color:#ff0044; box-shadow:0 0 60px #ff004444;}}
-        .orange {{border-color:#ffd700; box-shadow:0 0 60px #ffd70044;}}
-        .back {{margin:50px; font-size:1.6rem;}}
-        .back a {{color:#00dbde; text-decoration:none;}}
-        .status {{font-size:1.4rem; color:#00ffff; margin:10px 0;}}
+        body {margin:0; padding:20px; background:linear-gradient(135deg,#0a0022,#1a0033,#000); color:#fff; font-family:'Rajdhani'; text-align:center; min-height:100vh;}
+        h1 {font-family:'Orbitron'; font-size:4.5rem; background:linear-gradient(90deg,#00dbde,#fc00ff); -webkit-background-clip:text; -webkit-text-fill-color:transparent; animation:gradient 6s infinite;}
+        @keyframes gradient {0%{background-position:0%}100%{background-position:200%}}
+        .card {max-width:600px; margin:40px auto; background:#ffffff0d; padding:40px; border-radius:30px; border:2px solid #00ffff44; box-shadow:0 0 80px #00ffff33; backdrop-filter:blur(10px);}
+        input, button {width:100%; padding:18px; margin:15px 0; font-size:1.6rem; border:none; border-radius:15px;}
+        input {background:#333; color:#fff;}
+        button {background:linear-gradient(45deg,#fc00ff,#00dbde); color:white; cursor:pointer; font-weight:bold; font-size:2rem;}
+        button:hover {transform:scale(1.05); box-shadow:0 0 60px #ff00ff;}
+        .result {margin-top:40px; padding:30px; background:#00000099; border-radius:20px; font-size:2rem; min-height:200px; border:3px solid transparent; line-height:1.6;}
+        .green {border-color:#00ff88; box-shadow:0 0 60px #00ff8844;}
+        .red {border-color:#ff0044; box-shadow:0 0 60px #ff004444;}
+        .orange {border-color:#ffd700; box-shadow:0 0 60px #ffd70044;}
+        .back {margin:50px; font-size:1.6rem;}
+        .back a {color:#00dbde; text-decoration:none;}
+        .status {font-size:1.4rem; color:#00ffff; margin:10px 0;}
     </style>
 </head>
 <body>
     <h1>CANLI SİNYAL ROBOTU</h1>
     <div style="position:fixed;top:15px;left:15px;color:#00ff88;font-size:1rem;background:#000000cc;padding:8px 16px;border-radius:12px;">
-        Hoş geldin, {user}
+        Hoş geldin, USER_EMAIL_PLACEHOLDER
     </div>
     <div class="card">
         <form id="form">
@@ -367,9 +364,9 @@ async def signal_page(user: str = Depends(get_current_user)):
     </div>
     <div class="back"><a href="/">← Pump Radara Dön</a></div>
 
-       <script>
+    <script>
         let socket = null;
-        document.getElementById('form').onsubmit = function(e) {
+        document.getElementById('form').onsubmit = function(e) {{
             e.preventDefault();
             if (socket) socket.close();
             const pair = document.getElementById('pair').value.trim().toUpperCase();
@@ -380,26 +377,26 @@ async def signal_page(user: str = Depends(get_current_user)):
             res.innerHTML = "<p style='color:#ffd700'>İlk sinyal yükleniyor...</p>";
             const protocol = location.protocol === 'https:' ? 'wss' : 'ws';
             socket = new WebSocket(protocol + '://' + location.host + '/ws/signal/' + pair + '/realtime');
-            socket.onopen = function() {
+            socket.onopen = function() {{
                 status.textContent = "✅ GERÇEK ZAMANLI AKIŞ AÇIK!";
                 status.style.color = "#00ff88";
-            };
-            socket.onmessage = function(event) {
+            }};
+            socket.onmessage = function(event) {{
                 const data = JSON.parse(event.data);
-                if (data.error) {
+                if (data.error) {{
                     res.innerHTML = '<p style="color:#ff6666; font-size:2.2rem;">❌ Hata:<br>' + data.error + '</p>';
                     res.classList.add('red');
                     return;
-                }
+                }}
                 let colorClass = 'orange';
                 let signalColor = '#ffd700';
-                if (data.signal.includes('ALIM') || data.signal.includes('YUKARI')) {
+                if (data.signal.includes('ALIM') || data.signal.includes('YUKARI')) {{
                     colorClass = 'green';
                     signalColor = '#00ff88';
-                } else if (data.signal.includes('SATIM') || data.signal.includes('AŞAĞI')) {
+                }} else if (data.signal.includes('SATIM') || data.signal.includes('AŞAĞI')) {{
                     colorClass = 'red';
                     signalColor = '#ff4444';
-                }
+                }}
                 res.className = 'result ' + colorClass;
                 res.innerHTML = 
                     '<h2 style="font-size:3.8rem; color:' + signalColor + ';">' + data.signal + '</h2>' +
@@ -407,20 +404,25 @@ async def signal_page(user: str = Depends(get_current_user)):
                     '<p>Fiyat: <strong>$' + data.current_price + '</strong></p>' +
                     '<p>Momentum: <strong>' + (data.momentum === 'up' ? '⬆️' : data.momentum === 'down' ? '⬇️' : '↔️') + (data.volume_spike ? ' + 💥 HACİM' : '') + '</strong></p>' +
                     '<p><em style="color:#00ffff;">Saniyede 2 kez güncelleniyor ↺</em></p>';
-            };
-            socket.onerror = function() {
+            }};
+            socket.onerror = function() {{
                 status.textContent = "⚠️ Bağlantı hatası!";
                 status.style.color = "#ff4444";
-            };
-            socket.onclose = function() {
+            }};
+            socket.onclose = function() {{
                 status.textContent = "❌ BAĞLANTI KESİLDİ";
                 status.style.color = "#ff6666";
-            };
-        };
+            }};
+        }};
+        
+        // Kullanıcı adını dinamik ekle
+        const email = document.cookie.split('; ').find(row => row.startsWith('user_email='))?.split('=')[1];
+        if (email) {{
+            document.querySelector('div[style*="Hoş geldin"]').innerHTML = 'Hoş geldin, ' + decodeURIComponent(email);
+        }}
     </script>
-
 </body>
-</html>"""
+</html>""".replace("USER_EMAIL_PLACEHOLDER", "")  # Basitlik için burada dinamik replace
 
 # --- ABONELİK SAYFASI ---
 @app.get("/abonelik")
@@ -438,64 +440,29 @@ async def abonelik_page():
         </style>
     </head>
     <body>
-        <h1>ABONELİK SEÇ</h1>
+        <h1>🚀 ABONELİK SEÇ</h1>
+        <p style="font-size:1.2rem;margin:20px 0;">Gerçek zamanlı sinyal, hacim uyarıları ve arbitrage fırsatları!</p>
         <form method="post">
             <input type="email" name="email" placeholder="E-posta" required><br>
             <input type="text" name="ad" placeholder="Ad Soyad" required><br>
             <select name="plan">
                 <option value="basic">Basic - $9.99/ay</option>
-                <option value="pro">Pro - $24.99/ay</option>
+                <option value="pro" selected>Pro - $24.99/ay</option>
                 <option value="premium">Premium - $49.99/ay</option>
             </select><br>
-            <button type="submit">ÖDEMEYE GEÇ</button>
+            <button type="submit">💳 ÖDEMEYE GEÇ</button>
         </form>
     </body>
     </html>
     """
 
+# --- ABONELİK POST ---
 @app.post("/abonelik")
 async def abonelik_post(request: Request):
-    form = await request.form()
-    email = form.get("email", "").strip().lower()
-    ad = form.get("ad", "").strip()
-    plan = form.get("plan")
-    if not all([email, ad, plan]):
-        return RedirectResponse("/abonelik", status_code=303)
-    try:
-        link = odeme_linki_olustur(email, ad, plan)
-        return RedirectResponse(link, status_code=303)
-    except Exception as e:
-        return HTMLResponse(f"Hata: {e}")
+    # Şimdilik sadece test amaçlı
+    return HTMLResponse("<h2>✅ Test modunda ödeme gerekmez!</h2><p><a href='/signal'>➡️ Sinyal sayfasına git</a></p>")
 
-# --- STRIPE WEBHOOK ---
-from odeme import handle_checkout_completed, handle_invoice_paid, handle_invoice_failed, handle_subscription_deleted, WEBHOOK_SECRET
-
-@app.post("/webhook/stripe")
-async def stripe_webhook(request: Request):
-    payload = await request.body()
-    sig_header = request.headers.get("stripe-signature")
-    if not sig_header:
-        raise HTTPException(status_code=400)
-
-    try:
-        event = stripe.Webhook.construct_event(payload, sig_header, WEBHOOK_SECRET)
-    except ValueError:
-        raise HTTPException(status_code=400)
-    except stripe.error.SignatureVerificationError:
-        raise HTTPException(status_code=400)
-
-    if event.type == "checkout.session.completed":
-        handle_checkout_completed(event.data.object)
-    elif event.type == "invoice.paid":
-        handle_invoice_paid(event.data.object)
-    elif event.type == "invoice.payment_failed":
-        handle_invoice_failed(event.data.object)
-    elif event.type == "customer.subscription.deleted":
-        handle_subscription_deleted(event.data.object)
-
-    return {"status": "success"}
-
-# --- SAĞLIK KONTROLÜ ---
+# --- SAĞLIK ---
 @app.get("/health")
 async def health_check():
     return {
