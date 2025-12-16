@@ -380,13 +380,26 @@ async def signal_page(user: str = Depends(get_current_user)):
             res.innerHTML = "<p style='color:#ffd700'>İlk sinyal yükleniyor...</p>";
             const protocol = location.protocol === 'https:' ? 'wss' : 'ws';
             socket = new WebSocket(protocol + '://' + location.host + '/ws/signal/' + pair + '/realtime');
-            socket.onopen = function() { status.textContent = "✅ AKIŞ AÇIK!"; status.style.color = "#00ff88"; };
+            socket.onopen = function() {
+                status.textContent = "✅ GERÇEK ZAMANLI AKIŞ AÇIK!";
+                status.style.color = "#00ff88";
+            };
             socket.onmessage = function(event) {
                 const data = JSON.parse(event.data);
-                if (data.error) { res.innerHTML = '<p style="color:#ff6666;">❌ ' + data.error + '</p>'; res.classList.add('red'); return; }
-                let colorClass = 'orange', signalColor = '#ffd700';
-                if (data.signal.includes('ALIM') || data.signal.includes('YUKARI')) { colorClass = 'green'; signalColor = '#00ff88'; }
-                else if (data.signal.includes('SATIM') || data.signal.includes('AŞAĞI')) { colorClass = 'red'; signalColor = '#ff4444'; }
+                if (data.error) {
+                    res.innerHTML = '<p style="color:#ff6666; font-size:2.2rem;">❌ Hata:<br>' + data.error + '</p>';
+                    res.classList.add('red');
+                    return;
+                }
+                let colorClass = 'orange';
+                let signalColor = '#ffd700';
+                if (data.signal.includes('ALIM') || data.signal.includes('YUKARI')) {
+                    colorClass = 'green';
+                    signalColor = '#00ff88';
+                } else if (data.signal.includes('SATIM') || data.signal.includes('AŞAĞI')) {
+                    colorClass = 'red';
+                    signalColor = '#ff4444';
+                }
                 res.className = 'result ' + colorClass;
                 res.innerHTML = 
                     '<h2 style="font-size:3.8rem; color:' + signalColor + ';">' + data.signal + '</h2>' +
@@ -395,8 +408,14 @@ async def signal_page(user: str = Depends(get_current_user)):
                     '<p>Momentum: <strong>' + (data.momentum === 'up' ? '⬆️' : data.momentum === 'down' ? '⬇️' : '↔️') + (data.volume_spike ? ' + 💥 HACİM' : '') + '</strong></p>' +
                     '<p><em style="color:#00ffff;">Saniyede 2 kez güncelleniyor ↺</em></p>';
             };
-            socket.onerror = function() { status.textContent = "⚠️ Bağlantı hatası!"; status.style.color = "#ff4444"; };
-            socket.onclose = function() { status.textContent = "❌ BAĞLANTI KESİLDİ"; status.style.color = "#ff6666"; };
+            socket.onerror = function() {
+                status.textContent = "⚠️ Bağlantı hatası!";
+                status.style.color = "#ff4444";
+            };
+            socket.onclose = function() {
+                status.textContent = "❌ BAĞLANTI KESİLDİ";
+                status.style.color = "#ff6666";
+            };
         };
     </script>
 
