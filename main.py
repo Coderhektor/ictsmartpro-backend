@@ -184,10 +184,10 @@ async def websocket_endpoint(websocket: WebSocket, pair: str, timeframe: str, us
     rt_ticker.subscribers[symbol].add(websocket)
     logger.info(f"Ücretli abone: {user_email} → {symbol}")
 
-    try:
+        try:
         price = rt_ticker.tickers.get(symbol, {}).get("price", 0) or 0
         first_signal = await quick_signal(symbol, price)
-       await websocket.send_json(first_signal)
+       await websocket.send_json(first_signal)  # <-- BURADA 7 BOŞLUK VAR!
     except Exception as e:
         logger.warning(f"İlk sinyal hatası: {e}")
 
