@@ -369,7 +369,7 @@ async def signal_page(user: str = Depends(get_current_user)):
 
     <script>
         let socket = null;
-        document.getElementById('form').onsubmit = e => {{
+        document.getElementById('form').onsubmit = e => {
             e.preventDefault();
             if (socket) socket.close();
             const pair = document.getElementById('pair').value.trim().toUpperCase();
@@ -379,27 +379,28 @@ async def signal_page(user: str = Depends(get_current_user)):
             status.style.color = "#00dbde";
             res.innerHTML = "<p style='color:#ffd700'>İlk sinyal yükleniyor...</p>";
             const protocol = location.protocol === 'https:' ? 'wss' : 'ws';
-            socket = new WebSocket(`${{protocol}}://${{location.host}}/ws/signal/${{pair}}/realtime`);
-            socket.onopen = () => {{ status.textContent = "✅ AKIŞ AÇIK!"; status.style.color = "#00ff88"; }};
-            socket.onmessage = event => {{
+            socket = new WebSocket(`${protocol}://${location.host}/ws/signal/${pair}/realtime`);
+            socket.onopen = () => { status.textContent = "✅ AKIŞ AÇIK!"; status.style.color = "#00ff88"; };
+            socket.onmessage = event => {
                 const data = JSON.parse(event.data);
-                if (data.error) {{ res.innerHTML = `<p style="color:#ff6666;">❌ ${{data.error}}</p>`; res.classList.add('red'); return; }}
+                if (data.error) { res.innerHTML = `<p style="color:#ff6666;">❌ ${data.error}</p>`; res.classList.add('red'); return; }
                 let colorClass = 'orange', signalColor = '#ffd700';
-                if (data.signal.includes('ALIM') || data.signal.includes('YUKARI')) {{ colorClass = 'green'; signalColor = '#00ff88'; }}
-                else if (data.signal.includes('SATIM') || data.signal.includes('AŞAĞI')) {{ colorClass = 'red'; signalColor = '#ff4444'; }}
+                if (data.signal.includes('ALIM') || data.signal.includes('YUKARI')) { colorClass = 'green'; signalColor = '#00ff88'; }
+                else if (data.signal.includes('SATIM') || data.signal.includes('AŞAĞI')) { colorClass = 'red'; signalColor = '#ff4444'; }
                 res.className = 'result ' + colorClass;
                 res.innerHTML = `
-                    <h2 style="font-size:3.8rem; color:${{signalColor}};">${{data.signal}}</h2>
-                    <p><strong>${{data.pair}}</strong> — <em>${{data.last_update}}</em></p>
-                    <p>Fiyat: <strong>$${data.current_price}}</strong></p>
-                    <p>Momentum: <strong>${{data.momentum === 'up' ? '⬆️' : data.momentum === 'down' ? '⬇️' : '↔️'}} ${{data.volume_spike ? ' + 💥 HACİM' : ''}}</strong></p>
+                    <h2 style="font-size:3.8rem; color:${signalColor};">${data.signal}</h2>
+                    <p><strong>${data.pair}</strong> — <em>${data.last_update}</em></p>
+                    <p>Fiyat: <strong>$${data.current_price}</strong></p>
+                    <p>Momentum: <strong>${data.momentum === 'up' ? '⬆️' : data.momentum === 'down' ? '⬇️' : '↔️'} ${data.volume_spike ? ' + 💥 HACİM' : ''}</strong></p>
                     <p><em style="color:#00ffff;">Saniyede 2 kez güncelleniyor ↺</em></p>
                 `;
-            }};
-            socket.onerror = () => {{ status.textContent = "⚠️ Bağlantı hatası!"; status.style.color = "#ff4444"; }};
-            socket.onclose = () => {{ status.textContent = "❌ BAĞLANTI KESİLDİ"; status.style.color = "#ff6666"; }};
-        }};
-    </script>
+            };
+            socket.onerror = () => { status.textContent = "⚠️ Bağlantı hatası!"; status.style.color = "#ff4444"; };
+            socket.onclose = () => { status.textContent = "❌ BAĞLANTI KESİLDİ"; status.style.color = "#ff6666"; };
+        };
+    </script>  
+
 </body>
 </html>"""
 
