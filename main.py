@@ -365,43 +365,31 @@ async def home(request: Request):
     <script>
         const protocol = location.protocol === 'https:' ? 'wss' : 'ws';
         const ws = new WebSocket(protocol + '://' + location.host + '/ws/pump_radar');
-        ws.onmessage = function(e) {{
+        ws.onmessage = function(e) {
             const data = JSON.parse(e.data);
-            document.getElementById('update').innerHTML = `Son Güncelleme: <strong>${{data.last_update}}</strong>`;
+            document.getElementById('update').innerHTML = `Son Güncelleme: <strong>${data.last_update}</strong>`;
 
             const tbody = document.getElementById('table-body');
-            if (!data.top_gainers || data.top_gainers.length === 0) {{
+            if (!data.top_gainers || data.top_gainers.length === 0) {
                 tbody.innerHTML = '<tr><td colspan="4" style="padding:100px;color:#ffd700">😴 Şu anda pump yok</td></tr>';
                 return;
-            }}
+            }
 
             tbody.innerHTML = data.top_gainers.map((coin, index) => `
                 <tr>
-                    <td>#${{index + 1}}</td>
-                    <td><strong>${{coin.symbol}}</strong></td>
-                    <td>$${Number(coin.price).toFixed(4)}</td>
-                    <td class="${{coin.change > 0 ? 'green' : 'red'}}">
-                        ${{coin.change > 0 ? '+' : ''}}${{coin.change.toFixed(2)}}%
+                    <td>#${index + 1}</td>
+                    <td><strong>${coin.symbol}</strong></td>
+                    <td>$${coin.price.toFixed(4)}</td>
+                    <td class="${coin.change > 0 ? 'green' : 'red'}">
+                        ${coin.change > 0 ? '+' : ''}${coin.change.toFixed(2)}%
                     </td>
                 </tr>
             `).join('');
-        }};
+        };
 
         ws.onopen = () => console.log("Pump radar WebSocket bağlı");
         ws.onerror = () => document.getElementById('update').innerHTML = "<span style='color:#ff4444'>Bağlantı hatası</span>";
     </script>
 </body>
 </html>"""
-
-# --- GİRİŞ, TEK COİN, TÜM COİNLER, ABONELİK (önceki gibi, değişmedi)
-# ==============================
-# 🚀 RAILWAY & PRODUCTION ENTRY POINT
-# ==============================
- 
-# python web server
-if __name__ == '__main__':
-    app.run(debug=True, port=os.getenv("PORT", default=5000))
-    
-# __name__ == "__main__" BLOĞU YOK — Railway kendi çalıştırıyor
-
 
