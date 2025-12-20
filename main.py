@@ -393,5 +393,13 @@ async def home(request: Request):
 </html>"""
 
 # --- GİRİŞ, TEK COİN, TÜM COİNLER, ABONELİK (önceki gibi, değişmedi)
-
+# ==============================
+# 🚀 RAILWAY & PRODUCTION ENTRY POINT
+# ==============================
+if __name__ == "__main__":
+    import uvicorn
+    import os
+    port = int(os.getenv("PORT", 8000))
+    uvicorn.run(app, host="0.0.0.0", port=port, log_level="info")
 # __name__ == "__main__" BLOĞU YOK — Railway kendi çalıştırıyor
+
