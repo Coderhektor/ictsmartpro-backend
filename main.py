@@ -329,36 +329,36 @@ async def home(request: Request):
     """ if user else '<a href="/abonelik" class="btn">🔒 Premium Abonelik Al</a>'
 
     # JS'yi ayrı string olarak tanımla — Python f-string ile çakışma yok
-    js_script = """
-    <script>
-        const protocol = location.protocol === 'https:' ? 'wss' : 'ws';
-        const ws = new WebSocket(protocol + '://' + location.host + '/ws/pump_radar');
-        ws.onmessage = function(e) {
-            const data = JSON.parse(e.data);
-            document.getElementById('update').innerHTML = `Son Güncelleme: <strong>${data.last_update}</strong>`;
+   js_script = """
+<script>
+    const protocol = location.protocol === 'https:' ? 'wss' : 'ws';
+    const ws = new WebSocket(protocol + '://' + location.host + '/ws/pump_radar');
+    ws.onmessage = function(e) {
+        const data = JSON.parse(e.data);
+        document.getElementById('update').innerHTML = `Son Güncelleme: <strong>${data.last_update}</strong>`;
 
-            const tbody = document.getElementById('table-body');
-            if (!data.top_gainers || data.top_gainers.length === 0) {
-                tbody.innerHTML = '<tr><td colspan="4" style="padding:100px;color:#ffd700">😴 Şu anda pump yok</td></tr>';
-                return;
-            }
+        const tbody = document.getElementById('table-body');
+        if (!data.top_gainers || data.top_gainers.length === 0) {
+            tbody.innerHTML = '<tr><td colspan="4" style="padding:100px;color:#ffd700">😴 Şu anda pump yok</td></tr>';
+            return;
+        }
 
-            tbody.innerHTML = data.top_gainers.map((coin, index) => `
-                <tr>
-                    <td>#${index + 1}</td>
-                    <td><strong>${coin.symbol}</strong></td>
-                    <td>$${coin.price.toFixed(4)}</td>
-                    <td class="${coin.change > 0 ? 'green' : 'red'}">
-                        ${coin.change > 0 ? '+' : ''}${coin.change.toFixed(2)}%
-                    </td>
-                </tr>
-            `).join('');
-        };
+        tbody.innerHTML = data.top_gainers.map((coin, index) => `
+            <tr>
+                <td>#${index + 1}</td>
+                <td><strong>${coin.symbol}</strong></td>
+                <td>$${coin.price.toFixed(4)}</td>
+                <td class="${coin.change > 0 ? 'green' : 'red'}">
+                    ${coin.change > 0 ? '+' : ''}${coin.change.toFixed(2)}%
+                </td>
+            </tr>
+        `).join('');
+    };
 
-        ws.onopen = () => console.log("Pump radar WebSocket bağlı");
-        ws.onerror = () => document.getElementById('update').innerHTML = "<span style='color:#ff4444'>Bağlantı hatası</span>";
-    </script>
-    """
+    ws.onopen = () => console.log("Pump radar WebSocket bağlı");
+    ws.onerror = () => document.getElementById('update').innerHTML = "<span style='color:#ff4444'>Bağlantı hatası</span>";
+</script>
+"""
 
     html = f"""<!DOCTYPE html>
 <html lang="tr">
@@ -559,5 +559,6 @@ async def abonelik():
     <p style="font-size:1.5rem">Şu anda test modunda herkes ücretsiz erişim sağlayabilir!</p>
     <a href="/login" style="padding:20px 30px;background:#00dbde;color:#000;border-radius:20px;text-decoration:none;font-size:1.8rem;margin-top:30px;display:inline-block">Giriş Yap ve Başla</a>
     </div>"""
+
 
 
