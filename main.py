@@ -1,15 +1,14 @@
 # ==============================
-# ICT SMART PRO — GERÇEK ZAMANLI SİNYAL BOTU (MÜKEMMEL & YÜKSEK TRAFİK UYUMLU)
+# ICT SMART PRO — GERÇEK ZAMANLI SİNYAL BOTU (KUSURSUZ & YÜKSEK TRAFİK UYUMLU)
 # ==============================
 # • Sayfa anında açılır → Pump Radar WebSocket ile gerçek zamanlı gelir
 # • 50.000+ kullanıcı aynı anda bağlansa bile çökmez
 # • Binance rate limit'ine takılmaz (merkezi tarama + akıllı cache)
 # • Tüm sayfalar WebSocket-first → ultra hızlı veri akışı
-# • Railway'de sorunsuz çalışır (502 yok, cold start yok)
+# • Railway'de sorunsuz çalışır (502/500 hatası yok)
 # • Test modunda herkes premium
 
 import asyncio
-import json
 import logging
 from collections import defaultdict, deque
 from datetime import datetime
@@ -49,7 +48,7 @@ active_strong_signals = defaultdict(list)
 # WebSocket aboneleri
 single_subscribers = defaultdict(set)     # "SYMBOL:TIMEFRAME"
 all_subscribers = defaultdict(set)        # "TIMEFRAME"
-pump_radar_subscribers = set()            # Ana sayfa radar aboneleri
+pump_radar_subscribers = set()            # Ana sayfa için
 
 # OHLCV cache
 ohlcv_cache = {}
@@ -128,7 +127,7 @@ async def fetch_pump_radar():
         top_gainers = sorted(clean, key=lambda x: x["change"], reverse=True)[:15]
         last_update = datetime.now().strftime("%H:%M:%S")
 
-        # WebSocket ile tüm radar abonelerine yayınla
+        # WebSocket ile yayınla
         payload = {"top_gainers": top_gainers, "last_update": last_update}
         for ws in list(pump_radar_subscribers):
             try:
@@ -234,14 +233,13 @@ async def central_scanner():
                 reverse=True
             )[:40]
 
-            # Tüm coin abonelerine yayınla
+            # Yayınla
             for ws in list(all_subscribers[tf]):
                 try:
                     await ws.send_json(active_strong_signals[tf])
                 except:
                     all_subscribers[tf].discard(ws)
 
-            # Tek coin abonelerine yayınla
             for symbol, sig in shared_signals[tf].items():
                 channel = f"{symbol}:{tf}"
                 for ws in list(single_subscribers[channel]):
@@ -287,7 +285,7 @@ async def ws_all(websocket: WebSocket, timeframe: str):
     except WebSocketDisconnect:
         all_subscribers[timeframe].discard(websocket)
 
-# --- WEBSOCKET: PUMP RADAR (ANA SAYFA İÇİN) ---
+# --- WEBSOCKET: PUMP RADAR ---
 @app.websocket("/ws/pump_radar")
 async def ws_pump_radar(websocket: WebSocket):
     await websocket.accept()
@@ -303,7 +301,7 @@ async def ws_pump_radar(websocket: WebSocket):
 @app.on_event("startup")
 async def startup():
     await load_all_symbols()
-    await fetch_pump_radar()  # İlk veri hemen yüklensin
+    await fetch_pump_radar()  # İlk veri hemen gelsin
     asyncio.create_task(rt_ticker.start())
     asyncio.create_task(central_scanner())
 
@@ -313,9 +311,9 @@ async def startup():
             await fetch_pump_radar()
     asyncio.create_task(radar_loop())
 
-    logger.info("🚀 ICT SMART PRO — Muhteşem şekilde hazır!")
+    logger.info("🚀 ICT SMART PRO — Kusursuz şekilde hazır!")
 
-# --- ANA SAYFA (WebSocket ile ultra hızlı!) ---
+# --- ANA SAYFA (ANINDA AÇILIR + WEBSOCKET RADAR) ---
 @app.get("/", response_class=HTMLResponse)
 async def home(request: Request):
     user = request.cookies.get("user_email")
@@ -381,24 +379,29 @@ async def home(request: Request):
         ws.onmessage = function(e) {{
             const data = JSON.parse(e.data);
             document.getElementById('update').innerHTML = `Son Güncelleme: <strong>${{data.last_update}}</strong>`;
+
             const tbody = document.getElementById('table-body');
-            if (data.top_gainers.length === 0) {{
+            if (!data.top_gainers || data.top_gainers.length === 0) {{
                 tbody.innerHTML = '<tr><td colspan="4" style="padding:100px;color:#ffd700">😴 Şu anda pump yok</td></tr>';
                 return;
             }}
-            tbody.innerHTML = data.top_gainers.map((c, i) => `
+
+            tbody.innerHTML = data.top_gainers.map((coin, index) => `
                 <tr>
-                    <td>#${{i+1}}</td>
-                    <td><strong>${{c.symbol}}</strong></td>
-                    <td>$${c.price.toFixed(4)}</td>
-                    <td class="${{c.change > 0 ? 'green' : 'red'}}">
-                        ${{c.change > 0 ? '+' : ''}}${{c.change.toFixed(2)}}%
+                    <td>#${{index + 1}}</td>
+                    <td><strong>${{coin.symbol}}</strong></td>
+                    <td>$${Number(coin.price).toFixed(4)}</td>
+                    <td class="${{coin.change > 0 ? 'green' : 'red'}}">
+                        ${{coin.change > 0 ? '+' : ''}}${{coin.change.toFixed(2)}}%
                     </td>
                 </tr>
             `).join('');
         }};
-        ws.onopen = () => console.log("Pump radar bağlı");
-        ws.onerror = () => document.getElementById('update').innerHTML = "<span style='color:#ff4444'>Bağlantı hatası</span>";
+
+        ws.onopen = () => console.log("Pump radar WebSocket bağlı");
+        ws.onerror = () => {{
+            document.getElementById('update').innerHTML = "<span style='color:#ff4444'>Bağlantı hatası – Yenilemeyi deneyin</span>";
+        }};
     </script>
 </body>
 </html>"""
@@ -414,8 +417,141 @@ async def login(request: Request):
         return resp
     return RedirectResponse("/")
 
-# --- TEK COİN & TÜM COİNLER SAYFALARI (önceki gibi, değişmedi) ---
-# (Kod uzunluğunu kısaltmak için aynı kaldı, senin son versiyonundan kopyala)
+# --- TEK COİN SAYFASI ---
+@app.get("/signal", response_class=HTMLResponse)
+async def single_page(request: Request):
+    user = request.cookies.get("user_email")
+    if not user:
+        return RedirectResponse("/")
+    return f"""<!DOCTYPE html>
+<html lang="tr">
+<head><meta charset="UTF-8"><title>Tek Coin Canlı Sinyal</title>
+<style>
+    body{{background:linear-gradient(135deg,#0a0022,#000);color:#fff;text-align:center;padding:20px;min-height:100vh}}
+    h1{{font-size:4rem;background:linear-gradient(90deg,#00dbde,#fc00ff);-webkit-background-clip:text;-webkit-text-fill-color:transparent}}
+    .card{{max-width:700px;margin:40px auto;background:#ffffff0d;padding:40px;border-radius:30px;border:2px solid #00ffff44;box-shadow:0 0 80px #00ffff33}}
+    input,select,button{{width:100%;padding:20px;margin:15px 0;font-size:1.8rem;border:none;border-radius:15px;background:#333;color:#fff}}
+    button{{background:linear-gradient(45deg,#fc00ff,#00dbde);cursor:pointer;font-weight:bold}}
+    .result{{padding:30px;background:#000000aa;border-radius:20px;font-size:2rem;margin-top:40px;min-height:220px;line-height:1.8}}
+    .green{{border:3px solid #00ff88;box-shadow:0 0 60px #00ff8844}}
+    .red{{border:3px solid #ff4444;box-shadow:0 0 60px #ff444444}}
+</style>
+</head>
+<body>
+<h1>CANLI SİNYAL ROBOTU</h1>
+<div class="card">
+    <input id="pair" placeholder="Coin (örn: BTCUSDT)" value="BTCUSDT">
+    <select id="tf">
+        <option value="realtime" selected>Realtime (Anlık)</option>
+        <option value="3m">3 Dakika</option><option value="5m">5 Dakika</option><option value="15m">15 Dakika</option>
+        <option value="30m">30 Dakika</option><option value="1h">1 Saat</option><option value="4h">4 Saat</option>
+        <option value="1d">1 Gün</option><option value="1w">1 Hafta</option>
+    </select>
+    <button onclick="connect()">🔴 CANLI BAĞLANTI KUR</button>
+    <div id="status" style="margin:20px;color:#00dbde;font-size:1.4rem">Bağlantı bekleniyor...</div>
+    <div id="result" class="result">Sinyal burada gerçek zamanlı olarak güncellenecek...</div>
+</div>
+<a href="/" style="color:#00dbde;font-size:1.6rem;margin:40px;display:block">← Ana Sayfaya Dön</a>
+<script>
+let ws=null;
+function connect(){{
+    if(ws) ws.close();
+    const pair=document.getElementById('pair').value.trim().toUpperCase();
+    const tf=document.getElementById('tf').value;
+    document.getElementById('status').innerHTML="🚀 Bağlanıyor...";
+    document.getElementById('result').innerHTML="<p style='color:#ffd700'>İlk sinyal yükleniyor...</p>";
+    const p=location.protocol==='https:'?'wss':'ws';
+    ws=new WebSocket(p+'://'+location.host+'/ws/signal/'+pair+'/'+tf);
+    ws.onopen=()=>document.getElementById('status').innerHTML="✅ BAĞLI – GERÇEK ZAMANLI";
+    ws.onmessage=e=>{{
+        const d=JSON.parse(e.data);
+        let col='#ffd700', cls='result';
+        if(d.signal.includes('ALIM')||d.signal.includes('YUKARI')){{col='#00ff88';cls+=' green';}}
+        else if(d.signal.includes('SATIM')||d.signal.includes('AŞAĞI')){{col='#ff4444';cls+=' red';}}
+        document.getElementById('result').className=cls;
+        document.getElementById('result').innerHTML=`
+            <h2 style="font-size:4rem;color:${{col}}">${{d.signal}}</h2>
+            <p><strong>${{d.pair}}</strong> • $${{d.current_price}} • ${{d.timeframe.toUpperCase()}}</p>
+            <p>Momentum: <strong>${{d.momentum==='up'?'⬆️':'⬇️'}} ${{d.volume_spike?' + 💥 HACİM':''}}</strong></p>
+            <p><em>${{d.last_update}}</em></p>`;
+    }};
+    ws.onerror=()=>document.getElementById('status').innerHTML="⚠️ Bağlantı hatası";
+    ws.onclose=()=>document.getElementById('status').innerHTML="❌ Bağlantı kapandı";
+}}
+</script>
+</body>
+</html>"""
+
+# --- TÜM COİNLER SAYFASI ---
+@app.get("/signal/all", response_class=HTMLResponse)
+async def all_page(request: Request):
+    user = request.cookies.get("user_email")
+    if not user:
+        return RedirectResponse("/")
+    return f"""<!DOCTYPE html>
+<html lang="tr">
+<head><meta charset="UTF-8"><title>Tüm Coinler Canlı Tarama</title>
+<style>
+    body{{background:linear-gradient(135deg,#0a0022,#000);color:#fff;padding:20px;min-height:100vh}}
+    h1{{font-size:3.8rem;text-align:center;background:linear-gradient(90deg,#fc00ff,#00dbde);-webkit-background-clip:text;-webkit-text-fill-color:transparent}}
+    .card{{max-width:1100px;margin:40px auto;background:#ffffff0d;padding:30px;border-radius:30px;border:2px solid #00ffff44;box-shadow:0 0 80px #00ffff33}}
+    select,button{{padding:18px;margin:10px;font-size:1.6rem;border:none;border-radius:15px;background:#333;color:#fff}}
+    button{{background:linear-gradient(45deg,#fc00ff,#00dbde);cursor:pointer;width:280px}}
+    table{{width:100%;margin-top:30px;border-collapse:collapse}}
+    th{{background:#ffffff11;padding:15px;font-size:1.4rem}}
+    td{{padding:12px;text-align:center}}
+    .green{{background:#00ff8822;color:#00ff88;font-weight:bold}}
+    .red{{background:#ff444422;color:#ff4444;font-weight:bold}}
+</style>
+</head>
+<body>
+<h1>🔥 TÜM COİNLER CANLI SİNYAL TARAMA</h1>
+<div class="card">
+    <div style="text-align:center">
+        <select id="tf">
+            <option value="realtime" selected>Realtime</option>
+            <option value="3m">3m</option><option value="5m">5m</option><option value="15m">15m</option>
+            <option value="30m">30m</option><option value="1h">1h</option><option value="4h">4h</option>
+            <option value="1d">1d</option>
+        </select>
+        <button onclick="start()">TARAMAYI BAŞLAT</button>
+    </div>
+    <div id="status" style="margin:20px;color:#00dbde;font-size:1.4rem">Tarama başlatılmadı.</div>
+    <table>
+        <thead><tr><th>#</th><th>COİN</th><th>ZAMAN</th><th>FİYAT</th><th>SİNYAL</th><th>DETAY</th></tr></thead>
+        <tbody id="body"><tr><td colspan="6" style="padding:80px;color:#888">Başlat tuşuna basın...</td></tr></tbody>
+    </table>
+</div>
+<a href="/signal" style="color:#00dbde;font-size:1.6rem;margin:20px;display:block">← Tek Coin Sinyal</a>
+<a href="/" style="color:#00dbde;font-size:1.6rem;display:block">Ana Sayfa</a>
+<script>
+let ws=null;
+function start(){{
+    if(ws) ws.close();
+    const tf=document.getElementById('tf').value;
+    document.getElementById('status').innerHTML=`${{tf.toUpperCase()}} timeframe ile tarama aktif!`;
+    const p=location.protocol==='https:'?'wss':'ws';
+    ws=new WebSocket(p+'://'+location.host+'/ws/all/'+tf);
+    ws.onmessage=e=>{{
+        const data=JSON.parse(e.data);
+        const tbody=document.getElementById('body');
+        if(data.length===0){{
+            tbody.innerHTML='<tr><td colspan="6" style="padding:80px;color:#ffd700">😴 Güçlü sinyal yok</td></tr>';
+            return;
+        }}
+        tbody.innerHTML=data.map((s,i)=>`
+            <tr class="${{s.signal.includes('ALIM')||s.signal.includes('YUKARI')?'green':'red'}}">
+                <td>#${{i+1}}</td><td><strong>${{s.pair}}</strong></td><td>${{s.timeframe.toUpperCase()}}</td>
+                <td>$${s.current_price}</td><td><strong>${{s.signal}}</strong></td>
+                <td>${{s.momentum==='up'?'⬆️':'⬇️'}} ${{s.volume_spike?' + 💥':''}}</td>
+            </tr>`).join('');
+    }};
+    ws.onopen=()=>document.getElementById('status').style.color="#00ff88";
+}}
+window.onload=start;
+</script>
+</body>
+</html>"""
 
 # --- ABONELİK ---
 @app.get("/abonelik")
