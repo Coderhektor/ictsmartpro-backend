@@ -7,7 +7,7 @@
 # • Tüm sayfalar WebSocket-first → ultra hızlı veri akışı
 # • Railway'de sorunsuz çalışır (502/500 hatası yok)
 # • Test modunda herkes premium
-
+import json  # 👈 EKSİK!
 import asyncio
 import logging
 from collections import defaultdict, deque
@@ -561,3 +561,4 @@ async def abonelik():
     <p style="font-size:1.5rem">Şu anda test modunda herkes ücretsiz erişim sağlayabilir!</p>
     <a href="/login" style="padding:20px 30px;background:#00dbde;color:#000;border-radius:20px;text-decoration:none;font-size:1.8rem;margin-top:30px;display:inline-block">Giriş Yap ve Başla</a>
     </div>"""
+
