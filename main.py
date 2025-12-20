@@ -398,7 +398,10 @@ async def home(request: Request):
 # 🚀 RAILWAY & PRODUCTION ENTRY POINT
 # ==============================
  
-
+# python web server
+if __name__ == '__main__':
+    app.run(debug=True, port=os.getenv("PORT", default=5000))
     
 # __name__ == "__main__" BLOĞU YOK — Railway kendi çalıştırıyor
+
 
