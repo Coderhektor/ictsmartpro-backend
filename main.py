@@ -562,7 +562,4 @@ async def abonelik():
     <a href="/login" style="padding:20px 30px;background:#00dbde;color:#000;border-radius:20px;text-decoration:none;font-size:1.8rem;margin-top:30px;display:inline-block">Giriş Yap ve Başla</a>
     </div>"""
 
-if __name__ == "__main__":
-    import uvicorn
-    port = int(__import__('os').getenv("PORT", 8000))
-    uvicorn.run(app, host="0.0.0.0", port=port, log_level="info")
+
