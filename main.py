@@ -467,11 +467,11 @@ function connect(){{
         if(d.signal.includes('ALIM')||d.signal.includes('YUKARI')){{col='#00ff88';cls+=' green';}}
         else if(d.signal.includes('SATIM')||d.signal.includes('AŞAĞI')){{col='#ff4444';cls+=' red';}}
         document.getElementById('result').className=cls;
-        document.getElementById('result').innerHTML=`
-            <h2 style="font-size:4rem;color:${{col}}">${{d.signal}}</h2>
-            <p><strong>${{d.pair}}</strong> • $${{d.current_price}} • ${{d.timeframe.toUpperCase()}}</p>
-            <p>Momentum: <strong>${{d.momentum==='up'?'⬆️':'⬇️'}} ${{d.volume_spike?' + 💥 HACİM':''}}</strong></p>
-            <p><em>${{d.last_update}}</em></p>`;
+      document.getElementById('result').innerHTML=`
+    <h2 style="font-size:4rem;color:${col}">${d.signal}</h2>
+    <p><strong>${d.pair}</strong> • $${d.current_price} • ${d.timeframe.toUpperCase()}</p>
+    <p>Momentum: <strong>${d.momentum==='up'?'⬆️':'⬇️'} ${d.volume_spike?' + 💥 HACİM':''}</strong></p>
+    <p><em>${d.last_update}</em></p>`;
     }};
     ws.onerror=()=>document.getElementById('status').innerHTML="⚠️ Bağlantı hatası";
     ws.onclose=()=>document.getElementById('status').innerHTML="❌ Bağlantı kapandı";
@@ -559,3 +559,4 @@ async def abonelik():
     <p style="font-size:1.5rem">Şu anda test modunda herkes ücretsiz erişim sağlayabilir!</p>
     <a href="/login" style="padding:20px 30px;background:#00dbde;color:#000;border-radius:20px;text-decoration:none;font-size:1.8rem;margin-top:30px;display:inline-block">Giriş Yap ve Başla</a>
     </div>"""
+
