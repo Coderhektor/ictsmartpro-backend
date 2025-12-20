@@ -1,11 +1,12 @@
 # ==============================
-# ICT SMART PRO — GERÇEK ZAMANLI SİNYAL BOTU (YÜKSEK TRAFİK İÇİN OPTİMİZE)
+# ICT SMART PRO — GERÇEK ZAMANLI SİNYAL BOTU (YÜKSEK TRAFİK & RAILWAY UYUMLU)
 # ==============================
 # • 50.000+ kullanıcı aynı anda bağlansa bile çökmez
 # • Binance API rate limit'ine takılmaz (merkezi tarama)
 # • Kullanıcı istediği coini seçer → anında sinyal alır
-# • Tüm coin tarama sayfası gerçek zamanlı broadcast ile çalışır
-# • Redis YOK, tamamen in-memory broadcast
+# • Tüm coin tarama gerçek zamanlı broadcast
+# • Redis yok, tamamen in-memory
+# • Railway'de sorunsuz çalışır (502 hatası düzeltildi)
 
 import asyncio
 import json
@@ -15,11 +16,10 @@ from datetime import datetime
 
 import ccxt
 import httpx
-import websockets  # websocket bağlantısı için
-from fastapi import FastAPI, WebSocket, WebSocketDisconnect, Request, Depends
+import websockets
+from fastapi import FastAPI, WebSocket, WebSocketDisconnect, Request
 from fastapi.responses import HTMLResponse, RedirectResponse
 from fastapi.staticfiles import StaticFiles
-from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
 
 # --- LOGGING ---
 logging.basicConfig(level=logging.INFO, format="%(asctime)s | %(levelname)s | %(message)s")
@@ -39,38 +39,32 @@ all_usdt_symbols = []
 
 # Merkezi sinyal cache: timeframe → symbol → sinyal dict
 shared_signals = {
-    "realtime": {},
-    "3m": {}, "5m": {}, "15m": {}, "30m": {},
+    "realtime": {}, "3m": {}, "5m": {}, "15m": {}, "30m": {},
     "1h": {}, "4h": {}, "1d": {}, "1w": {}
 }
 
-# Güçlü sinyaller (tüm coin tarama için): timeframe → list
-active_strong_signals = defaultdict(list)
+# Güçlü sinyaller listesi (tüm coin tarama için)
+active_strong_signals = defaultdict(list)  # timeframe → list
 
 # WebSocket aboneleri
-single_subscribers = defaultdict(set)   # "SYMBOL:TIMEFRAME" → set(websockets)
-all_subscribers = defaultdict(set)      # "TIMEFRAME" → set(websockets)
+single_subscribers = defaultdict(set)   # "SYMBOL:TIMEFRAME" → set
+all_subscribers = defaultdict(set)      # "TIMEFRAME" → set
 
 # OHLCV cache
-ohlcv_cache = {}
+ohlcv_cache = {}  # key: f"{symbol}_{timeframe}" → {"data": [...], "ts": timestamp}
 CACHE_TTL = 25
 
-# Basit auth (test modunda)
-async def get_current_user(request: Request):
-    email = request.cookies.get("user_email")
-    if not email:
-        return None
-    return email.lower()
-
-# --- REAL-TIME TRADE STREAM ---
+# --- REAL-TIME TRADE STREAM (popüler coinler) ---
 class RealTimeTicker:
     def __init__(self):
         self.tickers = {}
 
     async def start(self):
-        symbols = ["BTCUSDT","ETHUSDT","BNBUSDT","SOLUSDT","XRPUSDT","ADAUSDT","DOGEUSDT",
-                   "PEPEUSDT","SHIBUSDT","AVAXUSDT","TRXUSDT","LINKUSDT","DOTUSDT",
-                   "MATICUSDT","LTCUSDT"]
+        symbols = [
+            "BTCUSDT","ETHUSDT","BNBUSDT","SOLUSDT","XRPUSDT","ADAUSDT","DOGEUSDT",
+            "PEPEUSDT","SHIBUSDT","AVAXUSDT","TRXUSDT","LINKUSDT","DOTUSDT",
+            "MATICUSDT","LTCUSDT"
+        ]
         streams = "/".join([f"{s.lower()}@trade" for s in symbols])
         url = f"wss://stream.binance.com:9443/stream?streams={streams}"
 
@@ -119,11 +113,18 @@ async def fetch_pump_radar():
         for item in data:
             if not item["symbol"].endswith("USDT"):
                 continue
-            price = float(item["lastPrice"])
-            change = float(item["priceChangePercent"])
-            volume = float(item["quoteVolume"])
-            if volume >= 500_000:
-                clean.append({"symbol": item["symbol"][:-4] + "/USDT", "price": price, "change": change})
+            try:
+                price = float(item["lastPrice"])
+                change = float(item["priceChangePercent"])
+                volume = float(item["quoteVolume"])
+                if volume >= 500_000:
+                    clean.append({
+                        "symbol": item["symbol"][:-4] + "/USDT",
+                        "price": price,
+                        "change": change
+                    })
+            except:
+                continue
         top_gainers = sorted(clean, key=lambda x: x["change"], reverse=True)[:15]
         last_update = datetime.now().strftime("%H:%M:%S")
     except Exception as e:
@@ -134,9 +135,13 @@ async def load_all_symbols():
     global all_usdt_symbols
     try:
         tickers = exchange.fetch_tickers()
-        all_usdt_symbols = [s.replace("/", "") for s in tickers if s.endswith("/USDT") and tickers[s]["quoteVolume"] > 100_000]
+        all_usdt_symbols = [
+            s.replace("/", "") for s in tickers.keys()
+            if s.endswith("/USDT") and tickers[s]["quoteVolume"] > 100_000
+        ]
         logger.info(f"{len(all_usdt_symbols)} USDT çifti yüklendi")
-    except:
+    except Exception as e:
+        logger.warning(f"Sembol yükleme hatası: {e}")
         all_usdt_symbols = ["BTCUSDT","ETHUSDT","BNBUSDT","SOLUSDT"]
 
 # --- OHLCV CACHE ---
@@ -149,7 +154,8 @@ async def fetch_ohlcv(symbol: str, timeframe: str, limit=50):
         ohlcv = exchange.fetch_ohlcv(symbol[:-4] + "/USDT", timeframe=timeframe, limit=limit)
         ohlcv_cache[key] = {"data": ohlcv, "ts": now}
         return ohlcv
-    except:
+    except Exception as e:
+        logger.warning(f"OHLCV hatası {symbol} {timeframe}: {e}")
         return []
 
 # --- SİNYAL ÜRETİM ---
@@ -194,13 +200,13 @@ async def generate_signal(symbol: str, timeframe: str, current_price: float):
         "last_update": datetime.now().strftime("%H:%M:%S")
     }
 
-# --- MERKEZİ TARAYICI (TÜM COİNLERİ PERİYODİK TARAMA) ---
+# --- MERKEZİ TARAYICI (non-realtime timeframe'ler) ---
 async def central_scanner():
     timeframes = ["3m", "5m", "15m", "30m", "1h", "4h", "1d", "1w"]
     while True:
         for tf in timeframes:
             strong = []
-            for symbol in all_usdt_symbols[:120]:  # rate limit dostu
+            for symbol in all_usdt_symbols[:120]:
                 try:
                     price = rt_ticker.tickers.get(symbol, {}).get("price")
                     if not price:
@@ -214,7 +220,7 @@ async def central_scanner():
                 except:
                     continue
 
-            # Güç sıralaması
+            # Güçlü sinyalleri sırala
             active_strong_signals[tf] = sorted(
                 strong,
                 key=lambda x: 4 if "GÜÇLÜ ALIM" in x["signal"] else -4 if "GÜÇLÜ SATIM" in x["signal"] else 0,
@@ -243,9 +249,9 @@ async def central_scanner():
 @app.websocket("/ws/signal/{pair}/{timeframe}")
 async def ws_single(websocket: WebSocket, pair: str, timeframe: str):
     await websocket.accept()
-    symbol = pair.upper().replace("/", "").replace("-", "")
+    symbol = pair.upper().replace("/", "").replace("-", "").replace(" ", "")
     if not symbol.endswith("USDT"):
-        await websocket.send_json({"error": "Sadece USDT çiftleri"})
+        await websocket.send_json({"error": "Sadece USDT çiftleri desteklenir"})
         await websocket.close()
         return
 
@@ -269,7 +275,6 @@ async def ws_all(websocket: WebSocket, timeframe: str):
     await websocket.accept()
     all_subscribers[timeframe].add(websocket)
 
-    # Mevcut güçlü sinyalleri gönder
     await websocket.send_json(active_strong_signals.get(timeframe, []))
 
     try:
@@ -291,27 +296,29 @@ async def startup():
             await fetch_pump_radar()
     asyncio.create_task(radar_loop())
 
-    logger.info("ICT SMART PRO — Yüksek trafik hazır!")
+    logger.info("ICT SMART PRO — Yüksek trafik & Railway uyumlu!")
 
 # --- ANA SAYFA ---
 @app.get("/", response_class=HTMLResponse)
-async def home(request: Request, user: str = Depends(get_current_user)):
+async def home(request: Request):
+    user = request.cookies.get("user_email")
     user_info = f"<div style='position:fixed;top:15px;left:15px;background:#000000cc;padding:10px 20px;border-radius:20px;color:#00ff88;'>Hoş geldin, {user}</div>" if user else ""
 
     rows = ""
     for i, coin in enumerate(top_gainers, 1):
         glow = "text-shadow:0 0 20px #00ff88;" if coin["change"] > 0 else "text-shadow:0 0 20px #ff0044;"
-        rows += f'<tr><td>#{i}</td><td>{coin["symbol"]}</td><td>${coin["price"]:,.4f}</td><td style="color:{"#00ff88" if coin["change"]>0 else "#ff4444"};{glow}">{"+" if coin["change"]>0 else ""}{coin["change"]:.2f}%</td></tr>'
+        sign = "+" if coin["change"] > 0 else ""
+        rows += f'<tr><td>#{i}</td><td>{coin["symbol"]}</td><td>${coin["price"]:.4f}</td><td style="color:{"#00ff88" if coin["change"]>0 else "#ff4444"};{glow}">{sign}{coin["change"]:.2f}%</td></tr>'
 
     buttons = """
-    <a href="/signal" class="btn">Tek Coin Canlı Sinyal</a>
-    <a href="/signal/all" class="btn" style="margin-top:20px;">Tüm Coinleri Tara</a>
-    """ if user else '<a href="/abonelik" class="btn">Premium Abonelik Al</a>'
+    <a href="/signal" class="btn">🚀 Tek Coin Canlı Sinyal</a>
+    <a href="/signal/all" class="btn" style="margin-top:20px;">🔥 Tüm Coinleri Tara</a>
+    """ if user else '<a href="/abonelik" class="btn">🔒 Premium Abonelik Al</a>'
 
     login_form = """
     <div style="position:fixed;top:15px;right:15px;background:#000000cc;padding:15px;border-radius:20px;">
         <form method="post" action="/login">
-            <input type="email" name="email" placeholder="E-posta" required style="padding:10px;border:none;border-radius:10px;background:#333;color:#fff;">
+            <input type="email" name="email" placeholder="E-posta ile giriş" required style="padding:10px;border:none;border-radius:10px;background:#333;color:#fff;">
             <button type="submit" style="padding:10px 20px;background:#00dbde;color:#000;border:none;border-radius:10px;margin-left:8px;">Giriş</button>
         </form>
         <div style="margin-top:8px;text-align:center;"><a href="/abonelik" style="color:#00ffff;font-size:0.9rem;">Yeni Abonelik</a></div>
@@ -319,33 +326,41 @@ async def home(request: Request, user: str = Depends(get_current_user)):
     """ if not user else ""
 
     return f"""<!DOCTYPE html>
-<html lang="tr"><head><meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1">
-<title>ICT SMART PRO</title>
-<style>
-    body{{background:linear-gradient(135deg,#0a0022,#1a0033,#000);color:#fff;font-family:sans-serif;min-height:100vh;margin:0}}
-    .container{{max-width:1200px;margin:auto;padding:20px}}
-    h1{{font-size:4rem;text-align:center;background:linear-gradient(90deg,#00dbde,#fc00ff); -webkit-background-clip:text; -webkit-text-fill-color:transparent;}}
-    table{{width:100%;border-collapse:separate;border-spacing:0 12px;margin:30px 0}}
-    th{{background:#ffffff11;padding:18px}}
-    tr{{background:#ffffff08}}
-    .btn{{display:block;width:90%;max-width:500px;margin:20px auto;padding:22px;font-size:2rem;background:linear-gradient(45deg,#fc00ff,#00dbde);color:#fff;text-align:center;border-radius:50px;text-decoration:none;box-shadow:0 0 60px #ff00ff88}}
-</style></head>
+<html lang="tr">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width,initial-scale=1">
+    <title>ICT SMART PRO</title>
+    <style>
+        body{{background:linear-gradient(135deg,#0a0022,#1a0033,#000);color:#fff;font-family:sans-serif;min-height:100vh;margin:0}}
+        .container{{max-width:1200px;margin:auto;padding:20px}}
+        h1{{font-size:4.5rem;text-align:center;background:linear-gradient(90deg,#00dbde,#fc00ff,#00dbde);-webkit-background-clip:text;-webkit-text-fill-color:transparent;animation:g 8s infinite}}
+        @keyframes g{{0%{{background-position:0%}}100%{{background-position:200%}}}}
+        table{{width:100%;border-collapse:separate;border-spacing:0 12px;margin:30px 0}}
+        th{{background:#ffffff11;padding:18px;font-size:1.5rem}}
+        tr{{background:#ffffff08;transition:.4s}}
+        tr:hover{{transform:scale(1.02);box-shadow:0 15px 40px #00ffff44}}
+        .btn{{display:block;width:90%;max-width:500px;margin:20px auto;padding:22px;font-size:2rem;background:linear-gradient(45deg,#fc00ff,#00dbde);color:#fff;text-align:center;border-radius:50px;text-decoration:none;box-shadow:0 0 60px #ff00ff88;transition:.3s}}
+        .btn:hover{{transform:scale(1.08)}}
+    </style>
+</head>
 <body>
-{user_info}
-{login_form}
-<div class="container">
-    <h1>ICT SMART PRO</h1>
-    <div style="text-align:center;color:#00ffff;margin:20px">Son Güncelleme: {last_update}</div>
-    <table><thead><tr><th>SIRA</th><th>COİN</th><th>FİYAT</th><th>24S DEĞİŞİM</th></tr></thead><tbody>{rows}</tbody></table>
-    {buttons}
-</div>
-</body></html>"""
+    {user_info}
+    {login_form}
+    <div class="container">
+        <h1>ICT SMART PRO</h1>
+        <div style="text-align:center;color:#00ffff;margin:20px">Son Güncelleme: <strong>{last_update}</strong></div>
+        <table><thead><tr><th>SIRA</th><th>COİN</th><th>FİYAT</th><th>24S DEĞİŞİM</th></tr></thead><tbody>{rows or "<tr><td colspan='4' style='padding:80px;color:#ff4444'>Veri yükleniyor...</td></tr>"}</tbody></table>
+        {buttons}
+    </div>
+</body>
+</html>"""
 
 # --- GİRİŞ ---
 @app.post("/login")
 async def login(request: Request):
     form = await request.form()
-    email = form.get("email","").strip().lower()
+    email = form.get("email", "").strip().lower()
     if email:
         resp = RedirectResponse("/", status_code=303)
         resp.set_cookie("user_email", email, max_age=30*24*3600, httponly=True)
@@ -354,80 +369,93 @@ async def login(request: Request):
 
 # --- TEK COİN SAYFASI ---
 @app.get("/signal", response_class=HTMLResponse)
-async def single_page(user: str = Depends(get_current_user)):
+async def single_page(request: Request):
+    user = request.cookies.get("user_email")
     if not user:
         return RedirectResponse("/")
     return """<!DOCTYPE html>
-<html lang="tr"><head><meta charset="UTF-8"><title>Tek Coin Sinyal</title>
+<html lang="tr">
+<head><meta charset="UTF-8"><title>Tek Coin Canlı Sinyal</title>
 <style>
-    body{{background:linear-gradient(135deg,#0a0022,#000);color:#fff;text-align:center;padding:20px}}
+    body{{background:linear-gradient(135deg,#0a0022,#000);color:#fff;text-align:center;padding:20px;min-height:100vh}}
+    h1{{font-size:4rem;background:linear-gradient(90deg,#00dbde,#fc00ff);-webkit-background-clip:text;-webkit-text-fill-color:transparent}}
     .card{{max-width:700px;margin:40px auto;background:#ffffff0d;padding:40px;border-radius:30px;border:2px solid #00ffff44;box-shadow:0 0 80px #00ffff33}}
     input,select,button{{width:100%;padding:20px;margin:15px 0;font-size:1.8rem;border:none;border-radius:15px;background:#333;color:#fff}}
-    button{{background:linear-gradient(45deg,#fc00ff,#00dbde);cursor:pointer}}
-    .result{{padding:30px;background:#000000aa;border-radius:20px;font-size:2rem;margin-top:40px}}
+    button{{background:linear-gradient(45deg,#fc00ff,#00dbde);cursor:pointer;font-weight:bold}}
+    .result{{padding:30px;background:#000000aa;border-radius:20px;font-size:2rem;margin-top:40px;min-height:220px;line-height:1.8}}
     .green{{border:3px solid #00ff88;box-shadow:0 0 60px #00ff8844}}
     .red{{border:3px solid #ff4444;box-shadow:0 0 60px #ff444444}}
-</style></head>
+</style>
+</head>
 <body>
-<h1 style="font-size:4rem;background:linear-gradient(90deg,#00dbde,#fc00ff);-webkit-background-clip:text;-webkit-text-fill-color:transparent;">CANLI SİNYAL</h1>
+<h1>CANLI SİNYAL ROBOTU</h1>
 <div class="card">
     <input id="pair" placeholder="Coin (örn: BTCUSDT)" value="BTCUSDT">
     <select id="tf">
-        <option value="realtime" selected>Realtime</option>
-        <option value="3m">3m</option><option value="5m">5m</option><option value="15m">15m</option>
-        <option value="30m">30m</option><option value="1h">1h</option><option value="4h">4h</option>
-        <option value="1d">1d</option><option value="1w">1w</option>
+        <option value="realtime" selected>Realtime (Anlık)</option>
+        <option value="3m">3 Dakika</option><option value="5m">5 Dakika</option><option value="15m">15 Dakika</option>
+        <option value="30m">30 Dakika</option><option value="1h">1 Saat</option><option value="4h">4 Saat</option>
+        <option value="1d">1 Gün</option><option value="1w">1 Hafta</option>
     </select>
-    <button onclick="connect()">BAĞLAN</button>
-    <div id="status" style="margin:20px;color:#00dbde">Hazır</div>
-    <div id="result" class="result">Sinyal burada görünecek...</div>
+    <button onclick="connect()">🔴 CANLI BAĞLANTI KUR</button>
+    <div id="status" style="margin:20px;color:#00dbde;font-size:1.4rem">Bağlantı bekleniyor...</div>
+    <div id="result" class="result">Sinyal burada gerçek zamanlı olarak güncellenecek...</div>
 </div>
+<a href="/" style="color:#00dbde;font-size:1.6rem;margin:40px;display:block">← Ana Sayfaya Dön</a>
 <script>
 let ws=null;
 function connect(){
     if(ws) ws.close();
     const pair=document.getElementById('pair').value.trim().toUpperCase();
     const tf=document.getElementById('tf').value;
-    document.getElementById('status').innerHTML="Bağlanıyor...";
-    const p = location.protocol==='https:'?'wss':'ws';
+    document.getElementById('status').innerHTML="🚀 Bağlanıyor...";
+    document.getElementById('result').innerHTML="<p style='color:#ffd700'>İlk sinyal yükleniyor...</p>";
+    const p=location.protocol==='https:'?'wss':'ws';
     ws=new WebSocket(p+'://'+location.host+'/ws/signal/'+pair+'/'+tf);
-    ws.onopen=()=>document.getElementById('status').innerHTML="BAĞLI";
+    ws.onopen=()=>document.getElementById('status').innerHTML="✅ BAĞLI – GERÇEK ZAMANLI";
     ws.onmessage=e=>{
         const d=JSON.parse(e.data);
         let col='#ffd700', cls='result';
         if(d.signal.includes('ALIM')||d.signal.includes('YUKARI')){col='#00ff88';cls+=' green';}
         else if(d.signal.includes('SATIM')||d.signal.includes('AŞAĞI')){col='#ff4444';cls+=' red';}
         document.getElementById('result').className=cls;
-        document.getElementById('result').innerHTML=`<h2 style="font-size:4rem;color:${col}">${d.signal}</h2>
-        <p><strong>${d.pair}</strong> • $${d.current_price} • ${d.timeframe.toUpperCase()}</p>
-        <p>Momentum: ${d.momentum==='up'?'⬆️':'⬇️'} ${d.volume_spike?' + 💥':''}</p>
-        <p><em>${d.last_update}</em></p>`;
+        document.getElementById('result').innerHTML=`
+            <h2 style="font-size:4rem;color:${col}">${d.signal}</h2>
+            <p><strong>${d.pair}</strong> • $${d.current_price} • ${d.timeframe.toUpperCase()}</p>
+            <p>Momentum: <strong>${d.momentum==='up'?'⬆️':'⬇️'} ${d.volume_spike?' + 💥 HACİM':''}</strong></p>
+            <p><em>${d.last_update}</em></p>`;
     };
+    ws.onerror=()=>document.getElementById('status').innerHTML="⚠️ Bağlantı hatası";
+    ws.onclose=()=>document.getElementById('status').innerHTML="❌ Bağlantı kapandı";
 }
 </script>
-</body></html>"""
+</body>
+</html>"""
 
 # --- TÜM COİNLER SAYFASI ---
 @app.get("/signal/all", response_class=HTMLResponse)
-async def all_page(user: str = Depends(get_current_user)):
+async def all_page(request: Request):
+    user = request.cookies.get("user_email")
     if not user:
         return RedirectResponse("/")
     return """<!DOCTYPE html>
-<html lang="tr"><head><meta charset="UTF-8"><title>Tüm Coinler Tarama</title>
+<html lang="tr">
+<head><meta charset="UTF-8"><title>Tüm Coinler Canlı Tarama</title>
 <style>
-    body{{background:linear-gradient(135deg,#0a0022,#000);color:#fff;padding:20px}}
-    h1{{font-size:3.8rem;text-align:center;background:linear-gradient(90deg,#fc00ff,#00dbde);-webkit-background-clip:text;-webkit-text-fill-color:transparent;}}
+    body{{background:linear-gradient(135deg,#0a0022,#000);color:#fff;padding:20px;min-height:100vh}}
+    h1{{font-size:3.8rem;text-align:center;background:linear-gradient(90deg,#fc00ff,#00dbde);-webkit-background-clip:text;-webkit-text-fill-color:transparent}}
     .card{{max-width:1100px;margin:40px auto;background:#ffffff0d;padding:30px;border-radius:30px;border:2px solid #00ffff44;box-shadow:0 0 80px #00ffff33}}
     select,button{{padding:18px;margin:10px;font-size:1.6rem;border:none;border-radius:15px;background:#333;color:#fff}}
     button{{background:linear-gradient(45deg,#fc00ff,#00dbde);cursor:pointer;width:280px}}
     table{{width:100%;margin-top:30px;border-collapse:collapse}}
-    th{{background:#ffffff11;padding:15px}}
+    th{{background:#ffffff11;padding:15px;font-size:1.4rem}}
     td{{padding:12px;text-align:center}}
     .green{{background:#00ff8822;color:#00ff88;font-weight:bold}}
     .red{{background:#ff444422;color:#ff4444;font-weight:bold}}
-</style></head>
+</style>
+</head>
 <body>
-<h1>🔥 TÜM COİNLER CANLI TARAMA</h1>
+<h1>🔥 TÜM COİNLER CANLI SİNYAL TARAMA</h1>
 <div class="card">
     <div style="text-align:center">
         <select id="tf">
@@ -436,25 +464,29 @@ async def all_page(user: str = Depends(get_current_user)):
             <option value="30m">30m</option><option value="1h">1h</option><option value="4h">4h</option>
             <option value="1d">1d</option>
         </select>
-        <button onclick="start()">BAŞLAT</button>
+        <button onclick="start()">TARAMAYI BAŞLAT</button>
     </div>
-    <div id="status" style="margin:20px;color:#00dbde;font-size:1.4rem">Başlatın...</div>
-    <table><thead><tr><th>#</th><th>COİN</th><th>ZAMAN</th><th>FİYAT</th><th>SİNYAL</th><th>DETAY</th></tr></thead>
-    <tbody id="body"><tr><td colspan="6" style="padding:80px;color:#888">Tarama başlatın...</td></tr></tbody></table>
+    <div id="status" style="margin:20px;color:#00dbde;font-size:1.4rem">Tarama başlatılmadı.</div>
+    <table>
+        <thead><tr><th>#</th><th>COİN</th><th>ZAMAN</th><th>FİYAT</th><th>SİNYAL</th><th>DETAY</th></tr></thead>
+        <tbody id="body"><tr><td colspan="6" style="padding:80px;color:#888">Başlat tuşuna basın...</td></tr></tbody>
+    </table>
 </div>
+<a href="/signal" style="color:#00dbde;font-size:1.6rem;margin:20px;display:block">← Tek Coin Sinyal</a>
+<a href="/" style="color:#00dbde;font-size:1.6rem;display:block">Ana Sayfa</a>
 <script>
 let ws=null;
 function start(){
     if(ws) ws.close();
     const tf=document.getElementById('tf').value;
-    document.getElementById('status').innerHTML=`${tf.toUpperCase()} tarama aktif`;
+    document.getElementById('status').innerHTML=`${tf.toUpperCase()} timeframe ile tarama aktif!`;
     const p=location.protocol==='https:'?'wss':'ws';
     ws=new WebSocket(p+'://'+location.host+'/ws/all/'+tf);
     ws.onmessage=e=>{
         const data=JSON.parse(e.data);
         const tbody=document.getElementById('body');
         if(data.length===0){
-            tbody.innerHTML='<tr><td colspan="6" style="padding:80px;color:#ffd700">Güçlü sinyal yok</td></tr>';
+            tbody.innerHTML='<tr><td colspan="6" style="padding:80px;color:#ffd700">😴 Güçlü sinyal yok</td></tr>';
             return;
         }
         tbody.innerHTML=data.map((s,i)=>`
@@ -464,12 +496,18 @@ function start(){
                 <td>${s.momentum==='up'?'⬆️':'⬇️'} ${s.volume_spike?' + 💥':''}</td>
             </tr>`).join('');
     };
+    ws.onopen=()=>document.getElementById('status').style.color="#00ff88";
 }
 window.onload=start;
 </script>
-</body></html>"""
+</body>
+</html>"""
 
-# --- ABONELİK (TEST) ---
+# --- ABONELİK (TEST MODU) ---
 @app.get("/abonelik")
 async def abonelik():
-    return "<h1 style='color:#fff;text-align:center;padding:100px;background:#000'>Test modunda herkes erişebilir!<br><a href='/' style='color:#00dbde'>Ana sayfaya dön</a></h1>"
+    return """<h1 style="color:#fff;text-align:center;padding:100px;background:#000;font-family:sans-serif">
+    🚀 Premium Abonelik<br><br>
+    <p style="font-size:1.4rem">Şu anda test modunda herkes ücretsiz erişim sağlayabilir!</p><br>
+    <a href="/" style="padding:20px;background:#00dbde;color:#000;text-decoration:none;border-radius:20px;font-size:1.5rem">Ana Sayfaya Dön</a>
+    </h1>"""
