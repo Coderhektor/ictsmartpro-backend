@@ -11,3 +11,5 @@ sqlalchemy
 psycopg2-binary
 stripe
 python-multipart   # <--- BU EKLENDİ, ZORUNLU!
+ 
+ 
