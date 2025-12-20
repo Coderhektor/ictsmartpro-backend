@@ -402,4 +402,3 @@ async def home(request: Request):
     
 # __name__ == "__main__" BLOĞU YOK — Railway kendi çalıştırıyor
 
-
