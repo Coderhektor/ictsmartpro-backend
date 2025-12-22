@@ -90,7 +90,7 @@ class RealTimeTicker:
         while self.running:
             try:
                 async with websockets.connect(
-                    url, ping_interval=20, ping_timeout=10, timeout=30
+                    url, ping_interval=20, ping_timeout=10, timeout=10
                 ) as ws:
                     logger.info("✅ Realtime trade stream aktif (10 coin)")
                     while self.running:
@@ -177,37 +177,56 @@ async def fetch_pump_radar():
 # --- SEMBOL YÜKLE (ASYNC & GÜVENLİ) ---
 async def load_all_symbols():
     try:
-        # 🌟 En güvenli yöntem: exchangeInfo ile aktif USDT çiftlerini al
         async with httpx.AsyncClient(timeout=10.0) as client:
             r = await client.get("https://api.binance.com/api/v3/exchangeInfo")
             info = r.json()
 
-        # Sadece TRADING durumunda olan USDT çiftlerini al
-        symbols = [
-            s["symbol"] for s in info.get("symbols", [])
-            if s.get("quoteAsset") == "USDT"
-               and s.get("status") == "TRADING"
-               and "SPOT" in s.get("permissions", [])
-        ]
+        # Güvenli filtreleme: None ve eksik verileri atla
+        symbols = []
+        for s in info.get("symbols", []):
+            try:
+                symbol = s.get("symbol")
+                quote = s.get("quoteAsset")
+                status = s.get("status")
+                permissions = s.get("permissions", [])
+                if (
+                    symbol
+                    and isinstance(symbol, str)
+                    and len(symbol) >= 6
+                    and quote == "USDT"
+                    and status == "TRADING"
+                    and "SPOT" in permissions
+                ):
+                    symbols.append(symbol)
+            except Exception:
+                continue
 
-        # Hacim sıralaması için tickers al (rate limit dikkatli!)
+        # symbols içinde None veya boşluk varsa temizle
+        symbols = [s for s in symbols if s and isinstance(s, str) and s.endswith("USDT")]
+
+        if not symbols:
+            raise ValueError("Geçerli USDT sembolü bulunamadı")
+
+        # Ticker’ları güvenli al
         try:
-            tickers = await state.exchange.fetch_tickers(symbols[:200])  # max 200
-            # quoteVolume güvenli erişim
+            tickers = await state.exchange.fetch_tickers(symbols[:200])
             symbol_volume = []
             for sym in symbols:
                 ticker = tickers.get(sym)
-                if ticker:
-                    vol = ticker.get("quoteVolume", 0)
-                    if vol and vol > 100_000:  # min 100k USDT hacim
+                if not ticker:
+                    continue
+                try:
+                    vol = float(ticker.get("quoteVolume", 0))
+                    if vol > 100_000:
                         symbol_volume.append((sym, vol))
+                except (TypeError, ValueError):
+                    continue
 
-            # Hacme göre sırala, ilk 100'ü al
             symbol_volume.sort(key=lambda x: x[1], reverse=True)
             state.all_usdt_symbols = [sym for sym, _ in symbol_volume[:100]]
+
         except Exception as e:
             logger.warning(f"Ticker sıralama hatası: {e}. Varsayılan 20 coin kullanılacak.")
-            # Varsayılan popüler coin listesi
             state.all_usdt_symbols = [
                 "BTCUSDT", "ETHUSDT", "BNBUSDT", "SOLUSDT", "XRPUSDT",
                 "ADAUSDT", "DOGEUSDT", "AVAXUSDT", "MATICUSDT", "LINKUSDT",
@@ -216,10 +235,10 @@ async def load_all_symbols():
             ]
 
         logger.info(f"✅ {len(state.all_usdt_symbols)} USDT çifti yüklendi")
+
     except Exception as e:
         logger.error(f"Sembol yükleme hatası: {e}")
         state.all_usdt_symbols = ["BTCUSDT", "ETHUSDT", "BNBUSDT", "SOLUSDT"]
-
 
 # --- OHLCV CACHE (ASYNC & RATE-LIMIT SAFE) ---
 async def fetch_ohlcv(symbol: str, timeframe: str, limit=30):
@@ -713,3 +732,4 @@ if __name__ == "__main__":
         timeout_keep_alive=30,
         limit_concurrency=100,
     )
+
