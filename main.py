@@ -423,20 +423,53 @@ async def single_page(request: Request):
     user = request.cookies.get("user_email")
     if not user:
         return RedirectResponse("/")
-    return f"""<!DOCTYPE html>
+
+    # JS'yi ayrı tanımla (f-string dışı)
+    js_script = """
+<script>
+let ws=null;
+function connect(){
+    if(ws) ws.close();
+    const pair=document.getElementById('pair').value.trim().toUpperCase();
+    const tf=document.getElementById('tf').value;
+    document.getElementById('status').innerHTML="🚀 Bağlanıyor...";
+    document.getElementById('result').innerHTML="<p style='color:#ffd700'>İlk sinyal yükleniyor...</p>";
+    const p=location.protocol==='https:'?'wss':'ws';
+    ws=new WebSocket(p+'://'+location.host+'/ws/signal/'+pair+'/'+tf);
+    ws.onopen=()=>document.getElementById('status').innerHTML="✅ BAĞLI – GERÇEK ZAMANLI";
+    ws.onmessage=e=>{
+        const d=JSON.parse(e.data);
+        let col='#ffd700', cls='result';
+        if(d.signal.includes('ALIM')||d.signal.includes('YUKARI')){col='#00ff88';cls+=' green';}
+        else if(d.signal.includes('SATIM')||d.signal.includes('AŞAĞI')){col='#ff4444';cls+=' red';}
+        document.getElementById('result').className=cls;
+        document.getElementById('result').innerHTML=`
+    <h2 style="font-size:4rem;color:${col}">${d.signal}</h2>
+    <p><strong>${d.pair}</strong> • $${d.current_price} • ${d.timeframe.toUpperCase()}</p>
+    <p>Momentum: <strong>${d.momentum==='up'?'⬆️':'⬇️'} ${d.volume_spike?' + 💥 HACİM':''}</strong></p>
+    <p><em>${d.last_update}</em></p>`;
+    };
+    ws.onerror=()=>document.getElementById('status').innerHTML="⚠️ Bağlantı hatası";
+    ws.onclose=()=>document.getElementById('status').innerHTML="❌ Bağlantı kapandı";
+}
+</script>
+"""
+
+    # HTML'yi normal string olarak (f-string olmadan)
+    html_body = """<!DOCTYPE html>
 <html lang="tr">
 <head>
     <meta charset="UTF-8">
     <title>Tek Coin Canlı Sinyal</title>
     <style>
-        body{{background:linear-gradient(135deg,#0a0022,#000);color:#fff;text-align:center;padding:20px;min-height:100vh}}
-        h1{{font-size:4rem;background:linear-gradient(90deg,#00dbde,#fc00ff);-webkit-background-clip:text;-webkit-text-fill-color:transparent}}
-        .card{{max-width:700px;margin:40px auto;background:#ffffff0d;padding:40px;border-radius:30px;border:2px solid #00ffff44;box-shadow:0 0 80px #00ffff33}}
-        input,select,button{{width:100%;padding:20px;margin:15px 0;font-size:1.8rem;border:none;border-radius:15px;background:#333;color:#fff}}
-        button{{background:linear-gradient(45deg,#fc00ff,#00dbde);cursor:pointer;font-weight:bold}}
-        .result{{padding:30px;background:#000000aa;border-radius:20px;font-size:2rem;margin-top:40px;min-height:220px;line-height:1.8}}
-        .green{{border:3px solid #00ff88;box-shadow:0 0 60px #00ff8844}}
-        .red{{border:3px solid #ff4444;box-shadow:0 0 60px #ff444444}}
+        body{background:linear-gradient(135deg,#0a0022,#000);color:#fff;text-align:center;padding:20px;min-height:100vh}
+        h1{font-size:4rem;background:linear-gradient(90deg,#00dbde,#fc00ff);-webkit-background-clip:text;-webkit-text-fill-color:transparent}
+        .card{max-width:700px;margin:40px auto;background:#ffffff0d;padding:40px;border-radius:30px;border:2px solid #00ffff44;box-shadow:0 0 80px #00ffff33}
+        input,select,button{width:100%;padding:20px;margin:15px 0;font-size:1.8rem;border:none;border-radius:15px;background:#333;color:#fff}
+        button{background:linear-gradient(45deg,#fc00ff,#00dbde);cursor:pointer;font-weight:bold}
+        .result{padding:30px;background:#000000aa;border-radius:20px;font-size:2rem;margin-top:40px;min-height:220px;line-height:1.8}
+        .green{border:3px solid #00ff88;box-shadow:0 0 60px #00ff8844}
+        .red{border:3px solid #ff4444;box-shadow:0 0 60px #ff444444}
     </style>
 </head>
 <body>
@@ -453,7 +486,11 @@ async def single_page(request: Request):
     <div id="result" class="result">Sinyal burada gerçek zamanlı olarak güncellenecek...</div>
 </div>
 <a href="/" style="color:#00dbde;font-size:1.6rem;margin:40px;display:block">← Ana Sayfaya Dön</a>
-<script>
+""" + js_script + """
+</body>
+</html>"""
+
+    return HTMLResponse(content=html_body)
 let ws=null;
 function connect(){{
     if(ws) ws.close();
@@ -574,3 +611,4 @@ async def abonelik():
     <a href="/" style="padding:20px 40px;background:#00dbde;color:#000;border-radius:30px;text-decoration:none;font-size:2rem;display:inline-block;margin-top:30px;">Ana Sayfaya Dön</a>
 </body>
 </html>"""
+
