@@ -308,7 +308,7 @@ async def startup():
 
     logger.info("🚀 ICT SMART PRO — Kusursuz şekilde hazır!")
 
-# --- ANA SAYFA (KUSURSUZ — JS Python ile çakışmıyor) ---
+# --- ANA SAYFA ---
 @app.get("/", response_class=HTMLResponse)
 async def home(request: Request):
     user = request.cookies.get("user_email")
@@ -328,8 +328,6 @@ async def home(request: Request):
     <a href="/signal/all" class="btn" style="margin-top:20px;">🔥 Tüm Coinleri Tara</a>
     """ if user else '<a href="/abonelik" class="btn">🔒 Premium Abonelik Al</a>'
 
-    # JS'yi ayrı string olarak tanımla — Python f-string ile çakışma yok
-     # JS'yi ayrı string olarak tanımla — Python f-string ile çakışma yok
     js_script = """
 <script>
     const protocol = location.protocol === 'https:' ? 'wss' : 'ws';
@@ -360,7 +358,6 @@ async def home(request: Request):
     ws.onerror = () => document.getElementById('update').innerHTML = "<span style='color:#ff4444'>Bağlantı hatası</span>";
 </script>
 """
-
 
     html = f"""<!DOCTYPE html>
 <html lang="tr">
@@ -417,7 +414,7 @@ async def login(request: Request):
         return resp
     return RedirectResponse("/")
 
-# --- TEK COİN SAYFASI ---
+# --- TEK COİN SAYFASI (DÜZELTİLDİ) ---
 @app.get("/signal", response_class=HTMLResponse)
 async def single_page(request: Request):
     user = request.cookies.get("user_email")
@@ -444,8 +441,7 @@ async def single_page(request: Request):
     <select id="tf">
         <option value="realtime" selected>Realtime (Anlık)</option>
         <option value="3m">3 Dakika</option><option value="5m">5 Dakika</option><option value="15m">15 Dakika</option>
-        <option value="30m">30 Dakika</option><option value="1h">1 Saat</option><option value="4h">4 Saat</option>
-        <option value="1d">1 Gün</option><option value="1w">1 Hafta</option>
+        <option value="30m">30 Dakika</option><option value="1h">1 Saat</option><option value="4h">4 Saat</option><option value="1d">1 Gün</option><option value="1w">1 Hafta</option>
     </select>
     <button onclick="connect()">🔴 CANLI BAĞLANTI KUR</button>
     <div id="status" style="margin:20px;color:#00dbde;font-size:1.4rem">Bağlantı bekleniyor...</div>
@@ -469,10 +465,10 @@ function connect(){{
         if(d.signal.includes('ALIM')||d.signal.includes('YUKARI')){{col='#00ff88';cls+=' green';}}
         else if(d.signal.includes('SATIM')||d.signal.includes('AŞAĞI')){{col='#ff4444';cls+=' red';}}
         document.getElementById('result').className=cls;
-      document.getElementById('result').innerHTML=`
+        document.getElementById('result').innerHTML=`
     <h2 style="font-size:4rem;color:${col}">${d.signal}</h2>
     <p><strong>${d.pair}</strong> • $${d.current_price} • ${d.timeframe.toUpperCase()}</p>
-    <p>Momentum: <strong>${d.momentum==='up'?'⬆️':'⬇️'} ${d.volume_spike?' + 💥 HACİM':''}</strong></p>
+    <p>Momentum: <strong>${{d.momentum==='up'?'⬆️':'⬇️'}} ${{d.volume_spike?' + 💥 HACİM':''}}</strong></p>
     <p><em>${d.last_update}</em></p>`;
     }};
     ws.onerror=()=>document.getElementById('status').innerHTML="⚠️ Bağlantı hatası";
@@ -482,7 +478,7 @@ function connect(){{
 </body>
 </html>"""
 
-# --- TÜM COİNLER SAYFASI ---
+# --- TÜM COİNLER SAYFASI (DÜZELTİLDİ) ---
 @app.get("/signal/all", response_class=HTMLResponse)
 async def all_page(request: Request):
     user = request.cookies.get("user_email")
@@ -511,8 +507,7 @@ async def all_page(request: Request):
         <select id="tf">
             <option value="realtime" selected>Realtime</option>
             <option value="3m">3m</option><option value="5m">5m</option><option value="15m">15m</option>
-            <option value="30m">30m</option><option value="1h">1h</option><option value="4h">4h</option>
-            <option value="1d">1d</option>
+            <option value="30m">30m</option><option value="1h">1h</option><option value="4h">4h</option><option value="1d">1d</option>
         </select>
         <button onclick="start()">TARAMAYI BAŞLAT</button>
     </div>
@@ -559,7 +554,5 @@ async def abonelik():
     return """<div style="text-align:center;padding:100px;background:#000;color:#fff;font-family:sans-serif">
     <h1 style="font-size:3rem">🚀 Premium Abonelik</h1>
     <p style="font-size:1.5rem">Şu anda test modunda herkes ücretsiz erişim sağlayabilir!</p>
-    <a href="/login" style="padding:20px 30px;background:#00dbde;color:#000;border-radius:20px;text-decoration:none;font-size:1.8rem;margin-top:30px;display:inline-block">Giriş Yap ve Başla</a>
+    <a href="/" style="padding:20px 30px;background:#00dbde;color:#000;border-radius:20px;text-decoration:none;font-size:1.8rem;margin-top:30px;display:inline-block">Ana Sayfaya Dön</a>
     </div>"""
-
-
