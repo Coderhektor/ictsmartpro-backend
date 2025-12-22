@@ -1,18 +1,14 @@
 # ==============================
-# ICT SMART PRO — GERÇEK ZAMANLI SİNYAL BOTU (RAILWAY'DE KUSURSUZ ÇALIŞIR)
+# ICT SMART PRO — DÜZELTİLMİŞ VERSİYON
 # ==============================
-# • Sayfa anında açılır → Pump Radar WebSocket ile gerçek zamanlı
-# • Yüksek concurrency → 50.000+ kullanıcı destekler
-# • Binance rate limit'e takılmaz (cache + enableRateLimit)
-# • WebSocket-first tasarım → ultra hızlı
-# • Railway'de 502/500 yok → Hypercorn ile dual-stack bind
-# • Test modunda herkes premium
 
 import asyncio
 import json
 import logging
+import time
 from collections import defaultdict, deque
 from datetime import datetime
+from typing import Dict, Set
 
 import ccxt
 import httpx
@@ -20,101 +16,116 @@ import websockets
 from fastapi import FastAPI, WebSocket, WebSocketDisconnect, Request
 from fastapi.responses import HTMLResponse, RedirectResponse
 from fastapi.staticfiles import StaticFiles
+from contextlib import asynccontextmanager
 
 # --- LOGGING ---
 logging.basicConfig(level=logging.INFO, format="%(asctime)s | %(levelname)s | %(message)s")
 logger = logging.getLogger("ictsmartpro")
 
-# --- FASTAPI ---
-app = FastAPI()
-app.mount("/assets", StaticFiles(directory=".", html=False), name="assets")
+# --- LIFESPAN MANAGEMENT ---
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    # Startup
+    logger.info("🚀 Uygulama başlatılıyor...")
+    await initialize_app()
+    yield
+    # Shutdown
+    logger.info("🛑 Uygulama kapatılıyor...")
+    await cleanup()
 
-# --- GLOBAL EXCEPTION HANDLER (app tanımlandıktan SONRA) ---
-@app.exception_handler(Exception)
-async def global_exception_handler(request: Request, exc: Exception):
-    logger.error(f"Unhandled exception: {exc}", exc_info=True)
-    return HTMLResponse(
-        content="<h1 style='color:#ff4444;text-align:center;padding:100px;background:#000'>Sunucu Hatası 😔</h1>"
-                "<p style='text-align:center;color:#fff'>Bir hata oluştu, lütfen daha sonra tekrar deneyin.</p>",
-        status_code=500
-    )
+app = FastAPI(lifespan=lifespan)
+
+# Static dosyalar için geçici çözüm - Railway uyumlu
+try:
+    app.mount("/static", StaticFiles(directory="static"), name="static")
+except:
+    logger.warning("Static dizini bulunamadı, devre dışı bırakıldı")
 
 # --- GLOBALS ---
-top_gainers = []
-last_update = "Başlatılıyor..."
-exchange = ccxt.binance({'enableRateLimit': True})
-exchange.load_markets()
+class GlobalState:
+    def __init__(self):
+        self.top_gainers = []
+        self.last_update = "Başlatılıyor..."
+        self.exchange = ccxt.binance({
+            'enableRateLimit': True,
+            'timeout': 30000,
+            'rateLimit': 1200
+        })
+        self.all_usdt_symbols = []
+        self.shared_signals = {
+            "realtime": {}, "3m": {}, "5m": {}, "15m": {}, "30m": {},
+            "1h": {}, "4h": {}, "1d": {}, "1w": {}
+        }
+        self.active_strong_signals = defaultdict(list)
+        self.single_subscribers = defaultdict(set)
+        self.all_subscribers = defaultdict(set)
+        self.pump_radar_subscribers = set()
+        self.ohlcv_cache = {}
+        self.rt_ticker = None
+        self.tasks = []
 
-all_usdt_symbols = []
+state = GlobalState()
 
-shared_signals = {
-    "realtime": {}, "3m": {}, "5m": {}, "15m": {}, "30m": {},
-    "1h": {}, "4h": {}, "1d": {}, "1w": {}
-}
-
-active_strong_signals = defaultdict(list)
-
-single_subscribers = defaultdict(set)
-all_subscribers = defaultdict(set)
-pump_radar_subscribers = set()
-
-ohlcv_cache = {}
-CACHE_TTL = 25
-
-# --- REAL-TIME TRADE STREAM ---
+# --- REAL-TIME TRADE STREAM (Optimized) ---
 class RealTimeTicker:
     def __init__(self):
         self.tickers = {}
-
+        self.running = True
+        
     async def start(self):
+        # Sadece en popüler 10 coin'i izle
         symbols = [
-            "BTCUSDT", "ETHUSDT", "BNBUSDT", "SOLUSDT", "XRPUSDT", "ADAUSDT", "DOGEUSDT",
-            "PEPEUSDT", "SHIBUSDT", "AVAXUSDT", "TRXUSDT", "LINKUSDT", "DOTUSDT",
-            "MATICUSDT", "LTCUSDT"
+            "BTCUSDT", "ETHUSDT", "BNBUSDT", "SOLUSDT", "XRPUSDT",
+            "ADAUSDT", "DOGEUSDT", "SHIBUSDT", "AVAXUSDT", "TRXUSDT"
         ]
-        streams = "/".join([f"{s.lower()}@trade" for s in symbols])
-        url = f"wss://stream.binance.com:9443/stream?streams={streams}"
-
-        while True:
+        
+        while self.running:
             try:
-                async with websockets.connect(url, ping_interval=20) as ws:
+                streams = "/".join([f"{s.lower()}@trade" for s in symbols])
+                url = f"wss://stream.binance.com:9443/stream?streams={streams}"
+                
+                async with websockets.connect(url, ping_interval=30, ping_timeout=10) as ws:
                     logger.info("✅ Binance trade stream aktif")
-                    while True:
-                        msg = await ws.recv()
-                        data = json.loads(msg)["data"]
-                        if data["e"] != "trade":
+                    async for message in ws:
+                        if not self.running:
+                            break
+                        try:
+                            data = json.loads(message)["data"]
+                            if data["e"] != "trade":
+                                continue
+                                
+                            symbol = data["s"]
+                            price = float(data["p"])
+                            
+                            if symbol not in self.tickers:
+                                self.tickers[symbol] = {
+                                    "price": price,
+                                    "trades": deque(maxlen=50)
+                                }
+                            self.tickers[symbol]["price"] = price
+                            self.tickers[symbol]["trades"].append({
+                                "time": data["T"],
+                                "price": price,
+                                "qty": float(data["q"])
+                            })
+                        except Exception as e:
+                            logger.debug(f"Trade parse error: {e}")
                             continue
-                        symbol = data["s"]
-                        price = float(data["p"])
-                        qty = float(data["q"])
-
-                        if symbol not in self.tickers:
-                            self.tickers[symbol] = {"price": price, "trades": deque(maxlen=100)}
-                        self.tickers[symbol]["price"] = price
-                        self.tickers[symbol]["trades"].append((data["T"], price, qty))
-
-                        sig = await generate_signal(symbol, "realtime", price)
-                        if sig:
-                            shared_signals["realtime"][symbol] = sig
-                            channel = f"{symbol}:realtime"
-                            for client in list(single_subscribers[channel]):
-                                try:
-                                    await client.send_json(sig)
-                                except:
-                                    single_subscribers[channel].discard(client)
             except Exception as e:
                 logger.warning(f"Trade stream koptu: {e}")
-                await asyncio.sleep(5)
+                if self.running:
+                    await asyncio.sleep(5)
+                    
+    async def stop(self):
+        self.running = False
 
-rt_ticker = RealTimeTicker()
-
-# --- PUMP RADAR ---
+# --- PUMP RADAR (Optimized) ---
 async def fetch_pump_radar():
-    global top_gainers, last_update
     try:
-        async with httpx.AsyncClient() as client:
+        async with httpx.AsyncClient(timeout=10.0) as client:
             r = await client.get("https://api.binance.com/api/v3/ticker/24hr")
             data = r.json()
+        
         clean = []
         for item in data:
             if not item["symbol"].endswith("USDT"):
@@ -123,492 +134,503 @@ async def fetch_pump_radar():
                 price = float(item["lastPrice"])
                 change = float(item["priceChangePercent"])
                 volume = float(item["quoteVolume"])
-                if volume >= 500_000:
+                if volume >= 100_000 and change != 0:
                     clean.append({
                         "symbol": item["symbol"][:-4] + "/USDT",
                         "price": price,
-                        "change": change
+                        "change": change,
+                        "volume": volume
                     })
             except:
                 continue
-        top_gainers = sorted(clean, key=lambda x: x["change"], reverse=True)[:15]
-        last_update = datetime.now().strftime("%H:%M:%S")
-
-        payload = {"top_gainers": top_gainers, "last_update": last_update}
-        for ws in list(pump_radar_subscribers):
+        
+        state.top_gainers = sorted(clean, key=lambda x: abs(x["change"]), reverse=True)[:10]
+        state.last_update = datetime.now().strftime("%H:%M:%S")
+        
+        # Sadece aktif bağlantılara gönder
+        disconnected = set()
+        payload = {"top_gainers": state.top_gainers, "last_update": state.last_update}
+        
+        for ws in state.pump_radar_subscribers:
             try:
                 await ws.send_json(payload)
             except:
-                pump_radar_subscribers.discard(ws)
+                disconnected.add(ws)
+        
+        for ws in disconnected:
+            state.pump_radar_subscribers.discard(ws)
+            
     except Exception as e:
         logger.error(f"Pump radar hatası: {e}")
 
-# --- SEMBOL YÜKLE ---
+# --- SEMBOL YÜKLE (Optimized) ---
 async def load_all_symbols():
-    global all_usdt_symbols
     try:
-        tickers = exchange.fetch_tickers()
-        all_usdt_symbols = [
+        # Sadece ilk 100 popüler sembol
+        tickers = state.exchange.fetch_tickers()
+        state.all_usdt_symbols = [
             s.replace("/", "") for s in tickers.keys()
-            if s.endswith("/USDT") and tickers[s]["quoteVolume"] > 100_000
-        ]
-        logger.info(f"{len(all_usdt_symbols)} USDT çifti yüklendi")
+            if s.endswith("/USDT") and tickers[s]["quoteVolume"] > 500_000
+        ][:100]  # Limit to 100 symbols
+        
+        logger.info(f"{len(state.all_usdt_symbols)} USDT çifti yüklendi")
     except Exception as e:
         logger.warning(f"Sembol yükleme hatası: {e}")
-        all_usdt_symbols = ["BTCUSDT", "ETHUSDT", "BNBUSDT", "SOLUSDT"]
+        state.all_usdt_symbols = ["BTCUSDT", "ETHUSDT", "BNBUSDT", "SOLUSDT"]
 
-# --- OHLCV CACHE ---
-async def fetch_ohlcv(symbol: str, timeframe: str, limit=50):
+# --- OHLCV CACHE (Optimized) ---
+async def fetch_ohlcv(symbol: str, timeframe: str, limit=30):
     key = f"{symbol}_{timeframe}"
-    now = datetime.now().timestamp()
-    if key in ohlcv_cache and now - ohlcv_cache[key]["ts"] < CACHE_TTL:
-        return ohlcv_cache[key]["data"]
+    now = time.time()
+    
+    if key in state.ohlcv_cache and now - state.ohlcv_cache[key]["ts"] < 30:
+        return state.ohlcv_cache[key]["data"]
+    
     try:
-        ohlcv = exchange.fetch_ohlcv(symbol[:-4] + "/USDT", timeframe=timeframe, limit=limit)
-        ohlcv_cache[key] = {"data": ohlcv, "ts": now}
+        ohlcv = state.exchange.fetch_ohlcv(
+            symbol[:-4] + "/USDT", 
+            timeframe=timeframe, 
+            limit=min(limit, 30)
+        )
+        state.ohlcv_cache[key] = {"data": ohlcv, "ts": now}
         return ohlcv
     except Exception as e:
-        logger.warning(f"OHLCV hatası {symbol} {timeframe}: {e}")
+        logger.debug(f"OHLCV hatası {symbol} {timeframe}: {e}")
         return []
 
-# --- SİNYAL ÜRETİM ---
+# --- SİNYAL ÜRETİM (Optimized) ---
 async def generate_signal(symbol: str, timeframe: str, current_price: float):
-    if timeframe == "realtime":
-        trades = rt_ticker.tickers.get(symbol, {}).get("trades", deque())
-        if len(trades) < 10:
+    try:
+        if timeframe == "realtime":
+            ticker_data = state.rt_ticker.tickers.get(symbol) if state.rt_ticker else None
+            if not ticker_data or len(ticker_data["trades"]) < 5:
+                return None
+            prices = [t["price"] for t in list(ticker_data["trades"])[-5:]]
+            vols = [t["qty"] for t in list(ticker_data["trades"])[-10:]]
+        else:
+            ohlcv = await fetch_ohlcv(symbol, timeframe, 15)
+            if len(ohlcv) < 5:
+                return None
+            prices = [c[4] for c in ohlcv[-5:]]
+            vols = [c[5] for c in ohlcv[-10:]]
+        
+        if len(prices) < 2:
             return None
-        prices = [t[1] for t in list(trades)[-10:]]
-        vols = [t[2] for t in list(trades)[-20:]]
-    else:
-        ohlcv = await fetch_ohlcv(symbol, timeframe)
-        if len(ohlcv) < 10:
+            
+        up_moves = sum(1 for i in range(1, len(prices)) if prices[i] > prices[i-1])
+        down_moves = len(prices) - 1 - up_moves
+        
+        avg_vol = sum(vols) / len(vols) if vols else 1
+        last_vol = vols[-1] if vols else 0
+        volume_spike = last_vol > avg_vol * 1.5
+        
+        if up_moves >= 4 and volume_spike:
+            signal_text = "💥 GÜÇLÜ ALIM!"
+        elif up_moves >= 3:
+            signal_text = "📈 YUKARI MOMENTUM"
+        elif down_moves >= 4 and volume_spike:
+            signal_text = "🔥 GÜÇLÜ SATIM!"
+        elif down_moves >= 3:
+            signal_text = "📉 AŞAĞI MOMENTUM"
+        else:
             return None
-        prices = [c[4] for c in ohlcv[-10:]]
-        vols = [c[5] for c in ohlcv[-20:]]
-
-    up_moves = sum(1 for i in range(1, len(prices)) if prices[i] > prices[i-1])
-    down_moves = len(prices) - 1 - up_moves
-    avg_vol = sum(vols) / len(vols) if vols else 1
-    last_vol = vols[-1] if vols else 0
-    volume_spike = last_vol > avg_vol * 1.8
-
-    if up_moves >= 7 and volume_spike:
-        signal_text = "💥 GÜÇLÜ ALIM!"
-    elif up_moves >= 6:
-        signal_text = "📈 YUKARI MOMENTUM"
-    elif down_moves >= 7 and volume_spike:
-        signal_text = "🔥 GÜÇLÜ SATIM!"
-    elif down_moves >= 6:
-        signal_text = "📉 AŞAĞI MOMENTUM"
-    else:
+        
+        return {
+            "pair": f"{symbol[:-4]}/USDT",
+            "timeframe": timeframe,
+            "current_price": round(current_price, 6 if current_price < 1 else 4),
+            "signal": signal_text,
+            "momentum": "up" if up_moves > down_moves else "down",
+            "volume_spike": volume_spike,
+            "last_update": datetime.now().strftime("%H:%M:%S")
+        }
+    except Exception as e:
+        logger.debug(f"Signal generation error {symbol}: {e}")
         return None
 
-    return {
-        "pair": f"{symbol[:-4]}/USDT",
-        "timeframe": timeframe,
-        "current_price": round(current_price, 6 if current_price < 1 else 4),
-        "signal": signal_text,
-        "momentum": "up" if up_moves > down_moves else "down",
-        "volume_spike": volume_spike,
-        "last_update": datetime.now().strftime("%H:%M:%S")
-    }
-
-# --- MERKEZİ TARAYICI ---
+# --- MERKEZİ TARAYICI (Optimized) ---
 async def central_scanner():
-    timeframes = ["3m", "5m", "15m", "30m", "1h", "4h", "1d", "1w"]
+    timeframes = ["3m", "5m", "15m", "30m", "1h"]
+    
     while True:
-        for tf in timeframes:
-            strong = []
-            for symbol in all_usdt_symbols[:150]:
-                try:
-                    price = rt_ticker.tickers.get(symbol, {}).get("price")
-                    if not price:
-                        price = exchange.fetch_ticker(symbol)["last"]
-                    sig = await generate_signal(symbol, tf, price)
-                    if sig:
-                        shared_signals[tf][symbol] = sig
-                        strong.append(sig)
-                    else:
-                        shared_signals[tf].pop(symbol, None)
-                except:
-                    continue
-
-            active_strong_signals[tf] = sorted(
-                strong,
-                key=lambda x: 4 if "GÜÇLÜ ALIM" in x["signal"] else -4 if "GÜÇLÜ SATIM" in x["signal"] else 0,
-                reverse=True
-            )[:40]
-
-            for ws in list(all_subscribers[tf]):
-                try:
-                    await ws.send_json(active_strong_signals[tf])
-                except:
-                    all_subscribers[tf].discard(ws)
-
-            for symbol, sig in shared_signals[tf].items():
-                channel = f"{symbol}:{tf}"
-                for ws in list(single_subscribers[channel]):
+        try:
+            for tf in timeframes:
+                strong_signals = []
+                symbols_to_check = state.all_usdt_symbols[:30]  # Sadece ilk 30
+                
+                for symbol in symbols_to_check:
                     try:
-                        await ws.send_json(sig)
+                        # Fiyat al
+                        price = None
+                        if state.rt_ticker:
+                            ticker_data = state.rt_ticker.tickers.get(symbol)
+                            if ticker_data:
+                                price = ticker_data["price"]
+                        
+                        if not price:
+                            ticker = state.exchange.fetch_ticker(symbol)
+                            price = ticker["last"]
+                        
+                        # Sinyal üret
+                        sig = await generate_signal(symbol, tf, price)
+                        if sig:
+                            state.shared_signals[tf][symbol] = sig
+                            strong_signals.append(sig)
+                        else:
+                            state.shared_signals[tf].pop(symbol, None)
+                            
+                    except Exception as e:
+                        logger.debug(f"Scanner error {symbol}: {e}")
+                        continue
+                
+                # Sırala ve sınırla
+                state.active_strong_signals[tf] = sorted(
+                    strong_signals,
+                    key=lambda x: ("GÜÇLÜ" in x["signal"], "ALIM" in x["signal"]),
+                    reverse=True
+                )[:15]
+                
+                # Abonelere gönder
+                disconnected = set()
+                for ws in state.all_subscribers[tf]:
+                    try:
+                        await ws.send_json(state.active_strong_signals[tf][:10])
                     except:
-                        single_subscribers[channel].discard(ws)
+                        disconnected.add(ws)
+                
+                for ws in disconnected:
+                    state.all_subscribers[tf].discard(ws)
+                
+                # Single subscribers
+                for symbol, sig in state.shared_signals[tf].items():
+                    channel = f"{symbol}:{tf}"
+                    disconnected = set()
+                    for ws in state.single_subscribers[channel]:
+                        try:
+                            await ws.send_json(sig)
+                        except:
+                            disconnected.add(ws)
+                    
+                    for ws in disconnected:
+                        state.single_subscribers[channel].discard(ws)
+            
+            await asyncio.sleep(10)  # 10 saniyede bir tarama
+            
+        except Exception as e:
+            logger.error(f"Scanner error: {e}")
+            await asyncio.sleep(5)
 
-        await asyncio.sleep(20)
+# --- WEBSOCKET CONNECTION MANAGER ---
+class ConnectionManager:
+    async def connect(self, websocket: WebSocket, channel: str = None):
+        await websocket.accept()
+        return websocket
+    
+    def disconnect(self, websocket: WebSocket, channel: str = None):
+        if channel and channel in state.single_subscribers:
+            state.single_subscribers[channel].discard(websocket)
+        
+        # Tüm subscriber listelerinden kaldır
+        for tf in state.all_subscribers:
+            state.all_subscribers[tf].discard(websocket)
+        
+        state.pump_radar_subscribers.discard(websocket)
 
-# --- WEBSOCKET HANDLERS ---
+manager = ConnectionManager()
+
+# --- WEBSOCKET ENDPOINTS ---
 @app.websocket("/ws/signal/{pair}/{timeframe}")
 async def ws_single(websocket: WebSocket, pair: str, timeframe: str):
-    await websocket.accept()
     symbol = pair.upper().replace("/", "").replace("-", "").replace(" ", "")
     if not symbol.endswith("USDT"):
-        await websocket.send_json({"error": "Sadece USDT çiftleri desteklenir"})
-        await websocket.close()
+        try:
+            await websocket.accept()
+            await websocket.send_json({"error": "Sadece USDT çiftleri desteklenir"})
+            await websocket.close()
+        except:
+            pass
         return
-
+    
+    await manager.connect(websocket)
     channel = f"{symbol}:{timeframe}"
-    single_subscribers[channel].add(websocket)
-
-    sig = shared_signals.get(timeframe, {}).get(symbol)
+    state.single_subscribers[channel].add(websocket)
+    
+    # İlk sinyali gönder
+    sig = state.shared_signals.get(timeframe, {}).get(symbol)
     if sig:
-        await websocket.send_json(sig)
-
+        try:
+            await websocket.send_json(sig)
+        except:
+            pass
+    
     try:
         while True:
-            await asyncio.sleep(1)
+            # Sadece bağlantıyı açık tut
+            await websocket.receive_text()
     except WebSocketDisconnect:
-        single_subscribers[channel].discard(websocket)
+        manager.disconnect(websocket, channel)
+    except Exception:
+        manager.disconnect(websocket, channel)
 
 @app.websocket("/ws/all/{timeframe}")
 async def ws_all(websocket: WebSocket, timeframe: str):
-    await websocket.accept()
-    all_subscribers[timeframe].add(websocket)
-    await websocket.send_json(active_strong_signals.get(timeframe, []))
+    await manager.connect(websocket)
+    state.all_subscribers[timeframe].add(websocket)
+    
+    # İlk veriyi gönder
+    try:
+        await websocket.send_json(state.active_strong_signals.get(timeframe, [])[:10])
+    except:
+        pass
+    
     try:
         while True:
-            await asyncio.sleep(1)
+            await websocket.receive_text()
     except WebSocketDisconnect:
-        all_subscribers[timeframe].discard(websocket)
+        manager.disconnect(websocket)
+    except Exception:
+        manager.disconnect(websocket)
 
 @app.websocket("/ws/pump_radar")
 async def ws_pump_radar(websocket: WebSocket):
-    await websocket.accept()
-    pump_radar_subscribers.add(websocket)
-    await websocket.send_json({"top_gainers": top_gainers, "last_update": last_update})
+    await manager.connect(websocket)
+    state.pump_radar_subscribers.add(websocket)
+    
+    # İlk veriyi gönder
+    try:
+        await websocket.send_json({
+            "top_gainers": state.top_gainers, 
+            "last_update": state.last_update
+        })
+    except:
+        pass
+    
     try:
         while True:
-            await asyncio.sleep(1)
+            await websocket.receive_text()
     except WebSocketDisconnect:
-        pump_radar_subscribers.discard(websocket)
+        manager.disconnect(websocket)
+    except Exception:
+        manager.disconnect(websocket)
 
-# --- STARTUP ---
-@app.on_event("startup")
-async def startup():
-    await load_all_symbols()
-    await fetch_pump_radar()
-    asyncio.create_task(rt_ticker.start())
-    asyncio.create_task(central_scanner())
+# --- INITIALIZATION ---
+async def initialize_app():
+    """Uygulamayı başlat"""
+    try:
+        # Önce exchange'i yükle
+        state.exchange.load_markets()
+        
+        # Sembolleri yükle
+        await load_all_symbols()
+        
+        # Pump radar başlangıç verisi
+        await fetch_pump_radar()
+        
+        # Real-time ticker başlat
+        state.rt_ticker = RealTimeTicker()
+        ticker_task = asyncio.create_task(state.rt_ticker.start())
+        state.tasks.append(ticker_task)
+        
+        # Scanner başlat
+        scanner_task = asyncio.create_task(central_scanner())
+        state.tasks.append(scanner_task)
+        
+        # Pump radar güncelleme
+        async def radar_updater():
+            while True:
+                await asyncio.sleep(45)
+                await fetch_pump_radar()
+        
+        radar_task = asyncio.create_task(radar_updater())
+        state.tasks.append(radar_task)
+        
+        logger.info("✅ ICT SMART PRO — Başarıyla başlatıldı!")
+        
+    except Exception as e:
+        logger.error(f"❌ Başlatma hatası: {e}")
+        raise
 
-    async def radar_loop():
-        while True:
-            await asyncio.sleep(30)
-            await fetch_pump_radar()
-    asyncio.create_task(radar_loop())
+async def cleanup():
+    """Uygulamayı temizle"""
+    if state.rt_ticker:
+        await state.rt_ticker.stop()
+    
+    for task in state.tasks:
+        task.cancel()
+    
+    # Tüm WebSocket bağlantılarını kapat
+    for channel in list(state.single_subscribers.keys()):
+        for ws in state.single_subscribers[channel]:
+            try:
+                await ws.close()
+            except:
+                pass
+        state.single_subscribers[channel].clear()
+    
+    for tf in state.all_subscribers:
+        for ws in state.all_subscribers[tf]:
+            try:
+                await ws.close()
+            except:
+                pass
+        state.all_subscribers[tf].clear()
+    
+    for ws in state.pump_radar_subscribers:
+        try:
+            await ws.close()
+        except:
+            pass
+    state.pump_radar_subscribers.clear()
 
-    logger.info("🚀 ICT SMART PRO — Kusursuz şekilde hazır!")
+# --- GLOBAL EXCEPTION HANDLER ---
+@app.exception_handler(Exception)
+async def global_exception_handler(request: Request, exc: Exception):
+    logger.error(f"Unhandled exception: {exc}", exc_info=False)
+    return HTMLResponse(
+        content="""<h1 style='color:#ff4444;text-align:center;padding:100px;background:#000'>
+                    Sunucu Hatası 😔</h1>
+                    <p style='text-align:center;color:#fff'>
+                    Lütfen birkaç dakika sonra tekrar deneyin.</p>""",
+        status_code=500
+    )
 
-# --- ANA SAYFA ---
+# --- ANA SAYFA (Optimized) ---
 @app.get("/", response_class=HTMLResponse)
 async def home(request: Request):
-    user = request.cookies.get("user_email")
-    user_info = f"<div style='position:fixed;top:15px;left:15px;background:#000000cc;padding:10px 20px;border-radius:20px;color:#00ff88;font-size:1.2rem;'>Hoş geldin, {user or 'Misafir'}</div>" if user else ""
+    # Ana sayfa HTML'i - Railway için optimize edilmiş
+    html_content = """
+    <!DOCTYPE html>
+    <html lang="tr">
+    <head>
+        <meta charset="UTF-8">
+        <meta name="viewport" content="width=device-width,initial-scale=1">
+        <title>ICT SMART PRO</title>
+        <style>
+            body{background:#0a0022;color:#fff;font-family:sans-serif;margin:0;min-height:100vh}
+            .container{max-width:1200px;margin:auto;padding:20px}
+            h1{font-size:3rem;text-align:center;color:#00dbde;margin:30px 0}
+            .update{text-align:center;color:#00ffff;margin:20px;font-size:1.2rem}
+            table{width:100%;border-collapse:collapse;margin:20px 0}
+            th{background:#ffffff11;padding:15px}
+            td{padding:12px;text-align:center}
+            .green{color:#00ff88}
+            .red{color:#ff4444}
+            .btn{display:block;width:300px;margin:20px auto;padding:15px;
+                 background:#00dbde;color:#000;text-align:center;
+                 border-radius:25px;text-decoration:none;font-weight:bold}
+        </style>
+    </head>
+    <body>
+        <div class="container">
+            <h1>ICT SMART PRO</h1>
+            <div class="update" id="update">Yükleniyor...</div>
+            <table>
+                <thead><tr><th>SIRA</th><th>COİN</th><th>FİYAT</th><th>24S DEĞİŞİM</th></tr></thead>
+                <tbody id="table-body">
+                    <tr><td colspan="4">Veriler yükleniyor...</td></tr>
+                </tbody>
+            </table>
+            <a href="/signal" class="btn">🚀 Tek Coin Sinyal</a>
+            <a href="/signal/all" class="btn">🔥 Tüm Coinler</a>
+        </div>
+        <script>
+            const ws = new WebSocket((location.protocol === 'https:' ? 'wss' : 'ws') 
+                                     + '://' + location.host + '/ws/pump_radar');
+            ws.onmessage = (e) => {
+                const data = JSON.parse(e.data);
+                document.getElementById('update').innerHTML = 
+                    `Son Güncelleme: <strong>${data.last_update}</strong>`;
+                
+                const tbody = document.getElementById('table-body');
+                if (!data.top_gainers || data.top_gainers.length === 0) {
+                    tbody.innerHTML = '<tr><td colspan="4">Veri yok</td></tr>';
+                    return;
+                }
+                
+                tbody.innerHTML = data.top_gainers.map((coin, i) => `
+                    <tr>
+                        <td>#${i+1}</td>
+                        <td><strong>${coin.symbol}</strong></td>
+                        <td>$${coin.price.toFixed(coin.price < 1 ? 6 : 4)}</td>
+                        <td class="${coin.change > 0 ? 'green' : 'red'}">
+                            ${coin.change > 0 ? '+' : ''}${coin.change.toFixed(2)}%
+                        </td>
+                    </tr>
+                `).join('');
+            };
+            ws.onerror = () => {
+                document.getElementById('update').innerHTML = 
+                    '<span style="color:#ff4444">Bağlantı hatası</span>';
+            };
+        </script>
+    </body>
+    </html>
+    """
+    return HTMLResponse(content=html_content)
 
-    login_form = """
-    <div style="position:fixed;top:15px;right:15px;background:#000000cc;padding:15px;border-radius:20px;">
-        <form method="post" action="/login">
-            <input type="email" name="email" placeholder="E-posta ile giriş" required style="padding:10px;border:none;border-radius:10px;background:#333;color:#fff;width:200px;">
-            <button type="submit" style="padding:10px 20px;background:#00dbde;color:#000;border:none;border-radius:10px;margin-left:8px;">Giriş</button>
-        </form>
-    </div>
-    """ if not user else ""
-
-    buttons = """
-    <a href="/signal" class="btn">🚀 Tek Coin Canlı Sinyal</a>
-    <a href="/signal/all" class="btn" style="margin-top:20px;">🔥 Tüm Coinleri Tara</a>
-    """ if user else '<a href="/abonelik" class="btn">🔒 Premium Abonelik Al</a>'
-
-    js_script = """
-<script>
-    const protocol = location.protocol === 'https:' ? 'wss' : 'ws';
-    const ws = new WebSocket(protocol + '://' + location.host + '/ws/pump_radar');
-    ws.onmessage = function(e) {
-        const data = JSON.parse(e.data);
-        document.getElementById('update').innerHTML = `Son Güncelleme: <strong>${data.last_update}</strong>`;
-        const tbody = document.getElementById('table-body');
-        if (!data.top_gainers || data.top_gainers.length === 0) {
-            tbody.innerHTML = '<tr><td colspan="4" style="padding:100px;color:#ffd700">😴 Şu anda pump yok</td></tr>';
-            return;
-        }
-        tbody.innerHTML = data.top_gainers.map((coin, index) => `
-            <tr>
-                <td>#${index + 1}</td>
-                <td><strong>${coin.symbol}</strong></td>
-                <td>$${coin.price.toFixed(4)}</td>
-                <td class="${coin.change > 0 ? 'green' : 'red'}">
-                    ${coin.change > 0 ? '+' : ''}${coin.change.toFixed(2)}%
-                </td>
-            </tr>
-        `).join('');
-    };
-    ws.onopen = () => console.log("Pump radar WebSocket bağlı");
-    ws.onerror = () => document.getElementById('update').innerHTML = "<span style='color:#ff4444'>Bağlantı hatası</span>";
-</script>
-"""
-
-    return f"""<!DOCTYPE html>
-<html lang="tr">
-<head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width,initial-scale=1">
-    <title>ICT SMART PRO</title>
-    <style>
-        body{{background:linear-gradient(135deg,#0a0022,#1a0033,#000);color:#fff;font-family:sans-serif;min-height:100vh;margin:0}}
-        .container{{max-width:1200px;margin:auto;padding:20px}}
-        h1{{font-size:5rem;text-align:center;background:linear-gradient(90deg,#00dbde,#fc00ff,#00dbde);-webkit-background-clip:text;-webkit-text-fill-color:transparent;animation:g 8s infinite}}
-        @keyframes g{{0%{{background-position:0%}}100%{{background-position:200%}}}}
-        .update{{text-align:center;color:#00ffff;margin:30px;font-size:1.8rem}}
-        table{{width:100%;border-collapse:separate;border-spacing:0 12px;margin:30px 0}}
-        th{{background:#ffffff11;padding:20px;font-size:1.6rem}}
-        tr{{background:#ffffff08;transition:.4s}}
-        tr:hover{{transform:scale(1.02);box-shadow:0 15px 40px #00ffff44}}
-        .green{{color:#00ff88;text-shadow:0 0 20px #00ff88}}
-        .red{{color:#ff4444;text-shadow:0 0 20px #ff4444}}
-        .btn{{display:block;width:90%;max-width:500px;margin:20px auto;padding:25px;font-size:2.2rem;background:linear-gradient(45deg,#fc00ff,#00dbde);color:#fff;text-align:center;border-radius:50px;text-decoration:none;box-shadow:0 0 60px #ff00ff88;transition:.3s}}
-        .btn:hover{{transform:scale(1.08);box-shadow:0 0 100px #ff00ff}}
-        .loading{{color:#00ffff;animation:pulse 2s infinite}}
-        @keyframes pulse{{0%,100%{{opacity:0.6}}50%{{opacity:1}}}}
-    </style>
-</head>
-<body>
-    {user_info}
-    {login_form}
-    <div class="container">
-        <h1>ICT SMART PRO</h1>
-        <div class="update" id="update">Veri yükleniyor... <span class="loading">●●●</span></div>
-        <table>
-            <thead><tr><th>SIRA</th><th>COİN</th><th>FİYAT</th><th>24S DEĞİŞİM</th></tr></thead>
-            <tbody id="table-body">
-                <tr><td colspan="4" style="padding:100px;font-size:2rem;color:#888">Pump radar gerçek zamanlı yükleniyor...</td></tr>
-            </tbody>
-        </table>
-        {buttons}
-    </div>
-    {js_script}
-</body>
-</html>"""
-
-# --- GİRİŞ ---
-@app.post("/login")
-async def login(request: Request):
-    form = await request.form()
-    email = form.get("email", "").strip().lower()
-    if email:
-        resp = RedirectResponse("/", status_code=303)
-        resp.set_cookie("user_email", email, max_age=30*24*3600, httponly=True)
-        return resp
+# --- GİRİŞ SAYFASI ---
+@app.get("/login")
+async def login_page():
     return RedirectResponse("/")
 
 # --- TEK COİN SAYFASI ---
-@app.get("/signal", response_class=HTMLResponse)
-async def single_page(request: Request):
-    user = request.cookies.get("user_email")
-    if not user:
-        return RedirectResponse("/")
+@app.get("/signal")
+async def signal_page():
+    html_content = """
+    <!DOCTYPE html>
+    <html>
+    <head>
+        <meta charset="UTF-8">
+        <title>Tek Coin Sinyal</title>
+        <style>
+            body{background:#0a0022;color:#fff;text-align:center;padding:20px}
+            .card{max-width:500px;margin:50px auto;background:#fff1;padding:30px;border-radius:20px}
+            input,select,button{width:100%;padding:15px;margin:10px 0;border-radius:10px}
+            button{background:#00dbde;color:#000;font-weight:bold}
+        </style>
+    </head>
+    <body>
+        <div class="card">
+            <h2>Tek Coin Sinyal</h2>
+            <input id="pair" placeholder="BTCUSDT" value="BTCUSDT">
+            <select id="tf">
+                <option value="realtime">Realtime</option>
+                <option value="3m">3m</option>
+                <option value="5m">5m</option>
+            </select>
+            <button onclick="connect()">Bağlan</button>
+            <div id="result"></div>
+        </div>
+        <script>
+            let ws = null;
+            function connect() {
+                if(ws) ws.close();
+                const pair = document.getElementById('pair').value.toUpperCase();
+                const tf = document.getElementById('tf').value;
+                ws = new WebSocket(`ws://${location.host}/ws/signal/${pair}/${tf}`);
+                ws.onmessage = (e) => {
+                    const data = JSON.parse(e.data);
+                    document.getElementById('result').innerHTML = 
+                        `<h3>${data.signal}</h3><p>${data.pair} - $${data.current_price}</p>`;
+                };
+            }
+        </script>
+    </body>
+    </html>
+    """
+    return HTMLResponse(content=html_content)
 
-    # JS'yi ayrı tanımla (f-string dışı)
-    js_script = """
-<script>
-let ws=null;
-function connect(){
-    if(ws) ws.close();
-    const pair=document.getElementById('pair').value.trim().toUpperCase();
-    const tf=document.getElementById('tf').value;
-    document.getElementById('status').innerHTML="🚀 Bağlanıyor...";
-    document.getElementById('result').innerHTML="<p style='color:#ffd700'>İlk sinyal yükleniyor...</p>";
-    const p=location.protocol==='https:'?'wss':'ws';
-    ws=new WebSocket(p+'://'+location.host+'/ws/signal/'+pair+'/'+tf);
-    ws.onopen=()=>document.getElementById('status').innerHTML="✅ BAĞLI – GERÇEK ZAMANLI";
-    ws.onmessage=e=>{
-        const d=JSON.parse(e.data);
-        let col='#ffd700', cls='result';
-        if(d.signal.includes('ALIM')||d.signal.includes('YUKARI')){col='#00ff88';cls+=' green';}
-        else if(d.signal.includes('SATIM')||d.signal.includes('AŞAĞI')){col='#ff4444';cls+=' red';}
-        document.getElementById('result').className=cls;
-        document.getElementById('result').innerHTML=`
-    <h2 style="font-size:4rem;color:${col}">${d.signal}</h2>
-    <p><strong>${d.pair}</strong> • $${d.current_price} • ${d.timeframe.toUpperCase()}</p>
-    <p>Momentum: <strong>${d.momentum==='up'?'⬆️':'⬇️'} ${d.volume_spike?' + 💥 HACİM':''}</strong></p>
-    <p><em>${d.last_update}</em></p>`;
-    };
-    ws.onerror=()=>document.getElementById('status').innerHTML="⚠️ Bağlantı hatası";
-    ws.onclose=()=>document.getElementById('status').innerHTML="❌ Bağlantı kapandı";
-}
-</script>
-"""
+# Railway için gerekli: root path'i dinle
+@app.get("/health")
+async def health_check():
+    return {"status": "healthy", "timestamp": datetime.now().isoformat()}
 
-    # HTML'yi normal string olarak (f-string olmadan)
-    html_body = """<!DOCTYPE html>
-<html lang="tr">
-<head>
-    <meta charset="UTF-8">
-    <title>Tek Coin Canlı Sinyal</title>
-    <style>
-        body{background:linear-gradient(135deg,#0a0022,#000);color:#fff;text-align:center;padding:20px;min-height:100vh}
-        h1{font-size:4rem;background:linear-gradient(90deg,#00dbde,#fc00ff);-webkit-background-clip:text;-webkit-text-fill-color:transparent}
-        .card{max-width:700px;margin:40px auto;background:#ffffff0d;padding:40px;border-radius:30px;border:2px solid #00ffff44;box-shadow:0 0 80px #00ffff33}
-        input,select,button{width:100%;padding:20px;margin:15px 0;font-size:1.8rem;border:none;border-radius:15px;background:#333;color:#fff}
-        button{background:linear-gradient(45deg,#fc00ff,#00dbde);cursor:pointer;font-weight:bold}
-        .result{padding:30px;background:#000000aa;border-radius:20px;font-size:2rem;margin-top:40px;min-height:220px;line-height:1.8}
-        .green{border:3px solid #00ff88;box-shadow:0 0 60px #00ff8844}
-        .red{border:3px solid #ff4444;box-shadow:0 0 60px #ff444444}
-    </style>
-</head>
-<body>
-<h1>CANLI SİNYAL ROBOTU</h1>
-<div class="card">
-    <input id="pair" placeholder="Coin (örn: BTCUSDT)" value="BTCUSDT">
-    <select id="tf">
-        <option value="realtime" selected>Realtime (Anlık)</option>
-        <option value="3m">3 Dakika</option><option value="5m">5 Dakika</option><option value="15m">15 Dakika</option>
-        <option value="30m">30 Dakika</option><option value="1h">1 Saat</option><option value="4h">4 Saat</option><option value="1d">1 Gün</option><option value="1w">1 Hafta</option>
-    </select>
-    <button onclick="connect()">🔴 CANLI BAĞLANTI KUR</button>
-    <div id="status" style="margin:20px;color:#00dbde;font-size:1.4rem">Bağlantı bekleniyor...</div>
-    <div id="result" class="result">Sinyal burada gerçek zamanlı olarak güncellenecek...</div>
-</div>
-<a href="/" style="color:#00dbde;font-size:1.6rem;margin:40px;display:block">← Ana Sayfaya Dön</a>
-""" + js_script + """
-</body>
-</html>"""
-
-    return HTMLResponse(content=html_body)
-let ws=null;
-function connect(){{
-    if(ws) ws.close();
-    const pair=document.getElementById('pair').value.trim().toUpperCase();
-    const tf=document.getElementById('tf').value;
-    document.getElementById('status').innerHTML="🚀 Bağlanıyor...";
-    document.getElementById('result').innerHTML="<p style='color:#ffd700'>İlk sinyal yükleniyor...</p>";
-    const p=location.protocol==='https:'?'wss':'ws';
-    ws=new WebSocket(p+'://'+location.host+'/ws/signal/'+pair+'/'+tf);
-    ws.onopen=()=>document.getElementById('status').innerHTML="✅ BAĞLI – GERÇEK ZAMANLI";
-    ws.onmessage=e=>{{
-        const d=JSON.parse(e.data);
-        let col='#ffd700', cls='result';
-        if(d.signal.includes('ALIM')||d.signal.includes('YUKARI')){{col='#00ff88';cls+=' green';}}
-        else if(d.signal.includes('SATIM')||d.signal.includes('AŞAĞI')){{col='#ff4444';cls+=' red';}}
-        document.getElementById('result').className=cls;
-        document.getElementById('result').innerHTML=`
-    <h2 style="font-size:4rem;color:${col}">${d.signal}</h2>
-    <p><strong>${d.pair}</strong> • $${d.current_price} • ${d.timeframe.toUpperCase()}</p>
-    <p>Momentum: <strong>${d.momentum==='up'?'⬆️':'⬇️'} ${d.volume_spike?' + 💥 HACİM':''}</strong></p>
-    <p><em>${d.last_update}</em></p>`;
-    }};
-    ws.onerror=()=>document.getElementById('status').innerHTML="⚠️ Bağlantı hatası";
-    ws.onclose=()=>document.getElementById('status').innerHTML="❌ Bağlantı kapandı";
-}}
-</script>
-</body>
-</html>"""
-
-# --- TÜM COİNLER SAYFASI ---
-@app.get("/signal/all", response_class=HTMLResponse)
-async def all_page(request: Request):
-    user = request.cookies.get("user_email")
-    if not user:
-        return RedirectResponse("/")
-    return f"""<!DOCTYPE html>
-<html lang="tr">
-<head>
-    <meta charset="UTF-8">
-    <title>Tüm Coinler Canlı Tarama</title>
-    <style>
-        body{{background:linear-gradient(135deg,#0a0022,#000);color:#fff;padding:20px;min-height:100vh}}
-        h1{{font-size:3.8rem;text-align:center;background:linear-gradient(90deg,#fc00ff,#00dbde);-webkit-background-clip:text;-webkit-text-fill-color:transparent}}
-        .card{{max-width:1100px;margin:40px auto;background:#ffffff0d;padding:30px;border-radius:30px;border:2px solid #00ffff44;box-shadow:0 0 80px #00ffff33}}
-        select,button{{padding:18px;margin:10px;font-size:1.6rem;border:none;border-radius:15px;background:#333;color:#fff}}
-        button{{background:linear-gradient(45deg,#fc00ff,#00dbde);cursor:pointer;width:280px}}
-        table{{width:100%;margin-top:30px;border-collapse:collapse}}
-        th{{background:#ffffff11;padding:15px;font-size:1.4rem}}
-        td{{padding:12px;text-align:center}}
-        .green{{background:#00ff8822;color:#00ff88;font-weight:bold}}
-        .red{{background:#ff444422;color:#ff4444;font-weight:bold}}
-    </style>
-</head>
-<body>
-<h1>🔥 TÜM COİNLER CANLI SİNYAL TARAMA</h1>
-<div class="card">
-    <div style="text-align:center">
-        <select id="tf">
-            <option value="realtime" selected>Realtime</option>
-            <option value="3m">3m</option><option value="5m">5m</option><option value="15m">15m</option>
-            <option value="30m">30m</option><option value="1h">1h</option><option value="4h">4h</option><option value="1d">1d</option>
-        </select>
-        <button onclick="start()">TARAMAYI BAŞLAT</button>
-    </div>
-    <div id="status" style="margin:20px;color:#00dbde;font-size:1.4rem">Tarama başlatılmadı.</div>
-    <table>
-        <thead><tr><th>#</th><th>COİN</th><th>ZAMAN</th><th>FİYAT</th><th>SİNYAL</th><th>DETAY</th></tr></thead>
-        <tbody id="body"><tr><td colspan="6" style="padding:80px;color:#888">Başlat tuşuna basın...</td></tr></tbody>
-    </table>
-</div>
-<a href="/signal" style="color:#00dbde;font-size:1.6rem;margin:20px;display:block">← Tek Coin Sinyal</a>
-<a href="/" style="color:#00dbde;font-size:1.6rem;display:block">Ana Sayfa</a>
-<script>
-let ws=null;
-function start(){{
-    if(ws) ws.close();
-    const tf=document.getElementById('tf').value;
-    document.getElementById('status').innerHTML=`${tf.toUpperCase()} timeframe ile tarama aktif!`;
-    const p=location.protocol==='https:'?'wss':'ws';
-    ws=new WebSocket(p+'://'+location.host+'/ws/all/'+tf);
-    ws.onmessage=e=>{{
-        const data=JSON.parse(e.data);
-        const tbody=document.getElementById('body');
-        if(data.length===0){{
-            tbody.innerHTML='<tr><td colspan="6" style="padding:80px;color:#ffd700">😴 Güçlü sinyal yok</td></tr>';
-            return;
-        }}
-        tbody.innerHTML=data.map((s,i)=>`
-            <tr class="${s.signal.includes('ALIM')||s.signal.includes('YUKARI')?'green':'red'}">
-                <td>#${i+1}</td><td><strong>${s.pair}</strong></td><td>${s.timeframe.toUpperCase()}</td>
-                <td>$${s.current_price}</td><td><strong>${s.signal}</strong></td>
-                <td>${s.momentum==='up'?'⬆️':'⬇️'} ${s.volume_spike?' + 💥':''}</td>
-            </tr>`).join('');
-    }};
-    ws.onopen=()=>document.getElementById('status').style.color="#00ff88";
-}}
-window.onload=start;
-</script>
-</body>
-</html>"""
-
-# --- ABONELİK SAYFASI ---
-@app.get("/abonelik", response_class=HTMLResponse)
-async def abonelik():
-    return """<!DOCTYPE html>
-<html lang="tr">
-<head>
-    <meta charset="UTF-8">
-    <title>Premium Abonelik</title>
-    <style>
-        body{{background:linear-gradient(135deg,#0a0022,#000);color:#fff;font-family:sans-serif;text-align:center;padding:100px;min-height:100vh}}
-        h1{{font-size:3.5rem;background:linear-gradient(90deg,#fc00ff,#00dbde);-webkit-background-clip:text;-webkit-text-fill-color:transparent}}
-    </style>
-</head>
-<body>
-    <h1>🚀 Premium Abonelik</h1>
-    <p style="font-size:1.8rem;margin:50px">Şu anda test modunda olduğundan <strong>herkes ücretsiz</strong> tüm özelliklere erişebilir!</p>
-    <a href="/" style="padding:20px 40px;background:#00dbde;color:#000;border-radius:30px;text-decoration:none;font-size:2rem;display:inline-block;margin-top:30px;">Ana Sayfaya Dön</a>
-</body>
-</html>"""
-
+if __name__ == "__main__":
+    import uvicorn
+    uvicorn.run(
+        app, 
+        host="0.0.0.0", 
+        port=8000,
+        timeout_keep_alive=30,
+        limit_concurrency=100
+    )
