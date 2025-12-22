@@ -556,3 +556,6 @@ async def abonelik():
     <p style="font-size:1.5rem">Şu anda test modunda herkes ücretsiz erişim sağlayabilir!</p>
     <a href="/" style="padding:20px 30px;background:#00dbde;color:#000;border-radius:20px;text-decoration:none;font-size:1.8rem;margin-top:30px;display:inline-block">Ana Sayfaya Dön</a>
     </div>"""
+
+import logging
+logging.info("Uvicorn startup tamamlandı, server dinleniyor!")
