@@ -90,7 +90,7 @@ class RealTimeTicker:
         while self.running:
             try:
                 async with websockets.connect(
-                    url, ping_interval=20, ping_timeout=10, timeout=10
+                    url, ping_interval=20, ping_timeout=10
                 ) as ws:
                     logger.info("✅ Realtime trade stream aktif (10 coin)")
                     while self.running:
@@ -732,4 +732,5 @@ if __name__ == "__main__":
         timeout_keep_alive=30,
         limit_concurrency=100,
     )
+
 
