@@ -6,7 +6,7 @@
 # • Rate limit korumalı
 # • Lifespan manager ile temiz başlatma/kapatma
 # • Herkes premium (test modu)
-
+import os
 import asyncio
 import json
 import logging
@@ -823,3 +823,4 @@ async def create_checkout():
         cancel_url="https://ictsmartpro.ai/abonelik",
     )
     return {"url": session.url}
+
