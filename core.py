@@ -164,7 +164,7 @@ async def signal_producer():
         logger.info(f"Tarama tamam: {signals_found} sinyal, {elapsed:.1f}s sürdü")
 
         # 4 saniyede bir tam tarama (canlı hissi için ideal)
-        await asyncio.sleep(max(1.0, 4.0 - elapsed))
+        await asyncio.sleep(max(1.0, 2.0 - elapsed))
 # ========== INIT ==========
 async def initialize():
     try:
