@@ -1,4 +1,4 @@
-# core.py — GERÇEK SİNYAL + PUMP RADAR ÇALIŞIR VERSİYON
+# core.py — GIRINTI HATASIZ, CANLI SİNYAL ÇALIŞIR VERSİYON
 
 import asyncio
 import logging
@@ -39,6 +39,7 @@ async def broadcast_worker():
                 tf, sym = payload["timeframe"], payload["symbol"]
                 channel = f"{sym}:{tf}"
 
+                # Tek coin aboneler
                 dead_ws = set()
                 for ws in single_subscribers[channel]:
                     try:
@@ -47,6 +48,7 @@ async def broadcast_worker():
                         dead_ws.add(ws)
                 single_subscribers[channel] -= dead_ws
 
+                # Tüm coin aboneler
                 dead_ws = set()
                 for ws in all_subscribers[tf]:
                     try:
@@ -73,11 +75,10 @@ async def broadcast_worker():
         except Exception as e:
             logger.error(f"Broadcast worker hatası: {e}")
 
-# ========== GERÇEK SİNYAL + PUMP RADAR ==========
+# ========== SİNYAL VE PUMP RADAR ÜRETİCİ ==========
 async def signal_producer():
     logger.info("🌀 Sinyal ve pump radar üretici başladı")
 
-    # Gerekli import'lar (burada yap ki hata olursa logda görünsün)
     try:
         from indicators import generate_ict_signal
         from utils import all_usdt_symbols, fetch_ohlcv, exchange
@@ -124,7 +125,7 @@ async def signal_producer():
             strong.sort(key=lambda x: -x.get("score", 0))
             active_strong_signals[tf] = strong[:15]
 
-        # PUMP RADAR (GERÇEK VERİ)
+        # PUMP RADAR
         try:
             logger.info("Pump radar verisi çekiliyor...")
             tickers = await exchange.fetch_tickers()
@@ -150,22 +151,22 @@ async def signal_producer():
             }
 
             await signal_queue.put(("pump_radar", payload))
-            logger.info(f"✅ Pump radar güncellendi: {len(top10)} coin")
+            logger.info(f"✅ Pump radar güncellendi: {len(top10)} coin bulundu")
 
         except Exception as e:
-            logger.error(f"Pump radar çekme hatası: {e}")
-            # Hata olsa bile boş liste gönder (sayfa donmasın)
+            logger.error(f"Pump radar hatası: {e}")
             await signal_queue.put(("pump_radar", {
                 "top_gainers": [],
-                "last_update": "Hata - Yeniden deneniyor..."
+                "last_update": "Bağlantı hatası"
             }))
 
-                elapsed = asyncio.get_event_loop().time() - start_time
-        logger.info(f"Tarama tamam: {signals_found} sinyal, {elapsed:.1f}s sürdü")
+        elapsed = asyncio.get_event_loop().time() - start_time
+        logger.info(f"Tarama tamamlandı: {signals_found} sinyal bulundu, {elapsed:.1f}s sürdü")
 
-        # 4 saniyede bir tam tarama (canlı hissi için ideal)
-        await asyncio.sleep(max(1.0, 2.0 - elapsed))
-# ========== INIT ==========
+        # 4 saniyede bir tarama (canlı hissi için)
+        await asyncio.sleep(max(1.0, 4.0 - elapsed))
+
+# ========== INIT & CLEANUP ==========
 async def initialize():
     try:
         from utils import load_all_symbols
@@ -176,7 +177,7 @@ async def initialize():
 
     asyncio.create_task(broadcast_worker())
     asyncio.create_task(signal_producer())
-    logger.info("✅ Tüm görevler başlatıldı")
+    logger.info("✅ Tüm arka plan görevleri başlatıldı")
 
 async def cleanup():
     logger.info("🛑 Uygulama kapanıyor...")
