@@ -126,7 +126,7 @@ async def realtime_price_stream():
 
 # ==================== SIGNAL PRODUCER ====================
 async def signal_producer():
-    logger.info("🌀 Sinyal üretici başladı (5m, 15m, 1h)")
+    logger.info("🌀 Sinyal üretici başladı (genişletilmiş timeframes)")
 
     try:
         from indicators import generate_ict_signal
@@ -135,8 +135,8 @@ async def signal_producer():
         logger.error(f"Import hatası: {e}")
         return
 
-    # ✅ DÜZELTİLDİ: Sadece Binance-destekli timeframe'ler
-    timeframes = ["5m", "15m", "1h"]  # "1m", "4h", "1D" → riskli veya yanlış formatlı
+    # ✅ DÜZELTİLDİ: Binance destekli timeframe'ler (45m atlandı, desteklenmiyor)
+    timeframes = ["1m", "3m", "5m", "15m", "30m", "1h", "4h", "1d", "1w"]
     await asyncio.sleep(8)
 
     while True:
@@ -144,7 +144,7 @@ async def signal_producer():
         signals_found = 0
 
         for tf in timeframes:
-            for symbol in all_usdt_symbols[:60]:
+            for symbol in all_usdt_symbols[:50]:  # Limit düşürüldü (performans için)
                 try:
                     ohlcv = await fetch_ohlcv(symbol, tf, limit=200)
                     if len(ohlcv) < 100:
@@ -165,7 +165,7 @@ async def signal_producer():
                 except Exception as e:
                     logger.debug(f"Sinyal atlandı ({symbol}/{tf}): {e}")
 
-        # Pump radar
+        # Pump radar (değişmedi)
         try:
             symbols_for_radar = all_usdt_symbols[:100]
             from utils import exchange
@@ -194,7 +194,7 @@ async def signal_producer():
 
         elapsed = asyncio.get_event_loop().time() - start
         logger.info(f"✅ {signals_found} sinyal | {elapsed:.1f}s")
-        await asyncio.sleep(max(2.0, 5.0 - elapsed))
+        await asyncio.sleep(max(5.0, 10.0 - elapsed))  # Sleep artırıldı (daha fazla tf için)
 
 # ==================== INIT & CLEANUP ====================
 async def initialize():
