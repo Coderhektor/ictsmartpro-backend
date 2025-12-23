@@ -1,4 +1,4 @@
-# main.py — TEMİZ VERSİYON, 1 DAKİKA DAHİL, CANLI SİNYAL HAZIR
+# main.py — BAŞTAN YAZILMIŞ, 1M DAHİL, CANLI SİNYAL ÇALIŞIR
 
 import os
 import logging
