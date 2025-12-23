@@ -108,9 +108,9 @@ async def signal_producer():
                     ohlcv = await fetch_ohlcv(symbol, tf, limit=200)
                     if len(ohlcv) < 100:
                         continue
-
-                    df = pd.DataFrame(ohlcv)
-                    signal = generate_ict_signal(df, symbol, tf)
+ df = pd.DataFrame(ohlcv, columns=['timestamp', 'open', 'high', 'low', 'close', 'volume'])
+ df['timestamp'] = df['timestamp'].astype('int64')
+ signal = generate_ict_signal(df, symbol, tf)
 
                     if signal and signal.get("score", 0) >= 85:
                         shared_signals[tf][symbol] = signal
