@@ -39,6 +39,8 @@ app = FastAPI(lifespan=lifespan)
 
 # ==================== WEBSOCKET HANDLERS ====================
 
+# main.py içindeki websocket fonksiyonlarından sadece abonelik kısmı kalacak — veri gönderimi BROADCAST WORKER'a devrediliyor:
+
 @app.websocket("/ws/signal/{pair}/{timeframe}")
 async def ws_signal(websocket: WebSocket, pair: str, timeframe: str):
     await websocket.accept()
@@ -51,13 +53,13 @@ async def ws_signal(websocket: WebSocket, pair: str, timeframe: str):
     channel = f"{symbol}:{timeframe}"
     single_subscribers[channel].add(websocket)
 
+    # İlk sinyal gönderimi (varsa)
     sig = shared_signals.get(timeframe, {}).get(symbol)
     if sig:
         await websocket.send_json(sig)
 
     try:
-        while True:
-            await asyncio.sleep(1)
+        await websocket.receive()  # Sadece bağlantı açık kalması için — veri işlemiyor
     except WebSocketDisconnect:
         single_subscribers[channel].discard(websocket)
 
@@ -409,3 +411,4 @@ async def health():
             len(pump_radar_subscribers)
         )
     }
+
