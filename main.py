@@ -176,7 +176,6 @@ async def login(request: Request):
         return resp
     return RedirectResponse("/")
 
-
 @app.get("/signal", response_class=HTMLResponse)
 async def signal(request: Request):
     user = request.cookies.get("user_email")
@@ -186,63 +185,130 @@ async def signal(request: Request):
 <html lang="tr">
 <head>
     <meta charset="UTF-8">
-    <title>Tek Coin Canlı Sinyal</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>CANLI SİNYAL + GRAFİK | ICT SMART PRO</title>
     <style>
-        body{background:linear-gradient(135deg,#0a0022,#000);color:#fff;text-align:center;padding:20px;min-height:100vh}
-        h1{font-size:4rem;background:linear-gradient(90deg,#00dbde,#fc00ff);-webkit-background-clip:text;-webkit-text-fill-color:transparent}
-        .card{max-width:700px;margin:40px auto;background:#ffffff0d;padding:40px;border-radius:30px;border:2px solid #00ffff44;box-shadow:0 0 80px #00ffff33}
-        input,select,button{width:100%;padding:20px;margin:15px 0;font-size:1.8rem;border:none;border-radius:15px;background:#333;color:#fff}
+        body{background:linear-gradient(135deg,#0a0022,#000);color:#fff;font-family:sans-serif;margin:0;padding:0}
+        .container{padding:20px}
+        h1{text-align:center;font-size:3.8rem;background:linear-gradient(90deg,#00dbde,#fc00ff);-webkit-background-clip:text;-webkit-text-fill-color:transparent;margin-bottom:20px}
+        .controls{max-width:800px;margin:20px auto;text-align:center}
+        input,select,button{width:100%;padding:18px;margin:10px 0;font-size:1.6rem;border:none;border-radius:15px;background:#333;color:#fff}
         button{background:linear-gradient(45deg,#fc00ff,#00dbde);cursor:pointer;font-weight:bold}
-        .result{padding:30px;background:#000000aa;border-radius:20px;font-size:2rem;margin-top:40px;min-height:220px;line-height:1.8}
-        .green{border:3px solid #00ff88;box-shadow:0 0 60px #00ff8844}
-        .red{border:3px solid #ff4444;box-shadow:0 0 60px #ff444444}
+        #status{color:#00dbde;font-size:1.4rem;margin:15px}
+        #result{padding:25px;background:#000000aa;border-radius:20px;font-size:1.8rem;margin:20px 0;min-height:180px;line-height:1.6}
+        #chart{height:60vh;width:100%;max-width:1200px;margin:20px auto;border-radius:15px;overflow:hidden;box-shadow:0 10px 40px #00ffff33}
+        .green{border:2px solid #00ff88;box-shadow:0 0 40px #00ff8833}
+        .red{border:2px solid #ff4444;box-shadow:0 0 40px #ff444433}
+        .footer{color:#888;text-align:center;margin-top:30px}
     </style>
 </head>
 <body>
-    <h1>CANLI SİNYAL ROBOTU</h1>
-    <div class="card">
-        <input id="pair" placeholder="Coin (örn: BTCUSDT)" value="BTCUSDT">
-        <select id="tf">
-            <option value="realtime" selected>Realtime (Anlık)</option>
-            <option value="3m">3 Dakika</option><option value="5m">5 Dakika</option><option value="15m">15 Dakika</option>
-            <option value="30m">30 Dakika</option><option value="1h">1 Saat</option><option value="4h">4 Saat</option>
-            <option value="1d">1 Gün</option><option value="1w">1 Hafta</option>
-        </select>
-        <button onclick="connect()">🔴 CANLI BAĞLANTI KUR</button>
-        <div id="status" style="margin:20px;color:#00dbde;font-size:1.4rem">Bağlantı bekleniyor...</div>
+    <div class="container">
+        <h1>📊 CANLI SİNYAL + GRAFİK</h1>
+        
+        <div class="controls">
+            <input id="pair" placeholder="Coin (örn: BTCUSDT)" value="BTCUSDT">
+            <select id="tf">
+                <option value="realtime">Realtime (Anlık)</option>
+                <option value="3m">3 Dakika</option><option value="5m">5 Dakika</option><option value="15m">15 Dakika</option>
+                <option value="1h">1 Saat</option><option value="4h">4 Saat</option><option value="1d">1 Gün</option>
+            </select>
+            <button onclick="connect()">🔴 CANLI BAĞLANTI KUR</button>
+            <div id="status">Bağlantı bekleniyor...</div>
+        </div>
+
         <div id="result" class="result">Sinyal burada gerçek zamanlı olarak güncellenecek...</div>
+
+        <!-- 📈 TRADINGVIEW WIDGET -->
+        <div id="chart">
+            <div id="tradingview_widget"></div>
+        </div>
+
+        <a href="/" class="footer">← Ana Sayfaya Dön</a>
     </div>
-    <a href="/" style="color:#00dbde;font-size:1.6rem;margin:40px;display:block">← Ana Sayfaya Dön</a>
-    <script>
-        let ws = null;
+
+    <!-- TradingView Widget Kodu (Dinamik) -->
+    <script type="text/javascript">
+        let tvWidget = null;
+
+        function createTradingViewWidget(symbol = "BINANCE:BTCUSDT", interval = "60") {
+            if (tvWidget) {
+                tvWidget.remove();
+            }
+            new TradingView.widget({
+                "autosize": true,
+                "symbol": symbol,
+                "interval": interval,  // 60 = 1h, 300 = 5m vs.
+                "timezone": "Etc/UTC",
+                "theme": "dark",
+                "style": "1",  // 1 = Modern, 2 = Classic
+                "locale": "tr",
+                "toolbar_bg": "#131722",
+                "enable_publishing": false,
+                "hide_side_toolbar": false,
+                "allow_symbol_change": true,
+                "container_id": "tradingview_widget",
+                "studies": [
+                    "RSI@tv-basicstudies",
+                    "MAExp@tv-basicstudies"
+                ],
+                "overrides": {
+                    "paneProperties.background": "#0a0022",
+                    "paneProperties.vertGridProperties.color": "#1a1a3a",
+                    "paneProperties.horzGridProperties.color": "#1a1a3a"
+                }
+            });
+        }
+
+        // Varsayılan: BTCUSDT 1h
+        document.addEventListener("DOMContentLoaded", () => {
+            createTradingViewWidget("BINANCE:BTCUSDT", "60");
+        });
+
+        // TF → TradingView interval mapping
+        const tfMap = {
+            "3m": "3", "5m": "5", "15m": "15", "30m": "30",
+            "1h": "60", "4h": "240", "1d": "1D", "realtime": "60"
+        };
+
         function connect() {
-            if (ws) ws.close();
             const pair = document.getElementById('pair').value.trim().toUpperCase();
             const tf = document.getElementById('tf').value;
-            document.getElementById('status').innerHTML = "🚀 Bağlanıyor...";
-            document.getElementById('result').innerHTML = "<p style='color:#ffd700'>İlk sinyal yükleniyor...</p>";
+            
+            // Symbol format: "BINANCE:XRPUSDT"
+            const tvSymbol = "BINANCE:" + (pair.endsWith("USDT") ? pair : pair + "USDT");
+            const tvInterval = tfMap[tf] || "60";
+
+            // Widget'i güncelle
+            createTradingViewWidget(tvSymbol, tvInterval);
+
+            // WebSocket bağlantısı
+            if (window.ws) window.ws.close();
             const p = location.protocol === 'https:' ? 'wss' : 'ws';
-            ws = new WebSocket(p + '://' + location.host + '/ws/signal/' + pair + '/' + tf);
-            ws.onopen = () => document.getElementById('status').innerHTML = "✅ BAĞLI – GERÇEK ZAMANLI";
+            window.ws = new WebSocket(p + '://' + location.host + '/ws/signal/' + pair + '/' + tf);
+            
+            ws.onopen = () => document.getElementById('status').innerHTML = "✅ CANLI – GRAFİK & SİNYAL AKTİF";
             ws.onmessage = e => {
                 const d = JSON.parse(e.data);
-                let col = '#ffd700', cls = 'result';
-                if (d.signal.includes('ALIM') || d.signal.includes('YUKARI')) { col = '#00ff88'; cls += ' green'; }
-                else if (d.signal.includes('SATIM') || d.signal.includes('AŞAĞI')) { col = '#ff4444'; cls += ' red'; }
+                let cls = 'result', col = '#ffd700';
+                if (d.signal.includes('ALIM')) { cls += ' green'; col = '#00ff88'; }
+                else if (d.signal.includes('SATIM')) { cls += ' red'; col = '#ff4444'; }
                 document.getElementById('result').className = cls;
                 document.getElementById('result').innerHTML = `
-                    <h2 style="font-size:4rem;color:${col}">${d.signal}</h2>
+                    <h2 style="font-size:3.2rem;color:${col}">${d.signal}</h2>
                     <p><strong>${d.pair}</strong> • $${d.current_price} • ${d.timeframe.toUpperCase()}</p>
-                    <p>Momentum: <strong>${d.momentum === 'up' ? '⬆️' : '⬇️'} ${d.volume_spike ? ' + 💥 HACİM' : ''}</strong></p>
-                    <p><em>${d.last_update}</em></p>`;
+                    <p>Momentum: <strong>${d.momentum === 'up' ? '⬆️' : '⬇️'}</strong> | Skor: <strong>${d.score}/100</strong></p>
+                    <p><em>${d.last_update}</em> | ${d.killzone} • ${d.triggers}</p>`;
             };
             ws.onerror = () => document.getElementById('status').innerHTML = "⚠️ Bağlantı hatası";
             ws.onclose = () => document.getElementById('status').innerHTML = "❌ Bağlantı kapandı";
         }
     </script>
+
+    <!-- TradingView Widget Script (CDN) -->
+    <script type="text/javascript" src="https://s3.tradingview.com/tv.js  "></script>
 </body>
 </html>"""
-
 
 @app.get("/signal/all", response_class=HTMLResponse)
 async def signal_all(request: Request):
@@ -411,4 +477,5 @@ async def health():
             len(pump_radar_subscribers)
         )
     }
+
 
