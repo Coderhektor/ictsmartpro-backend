@@ -24,7 +24,6 @@ from utils import all_usdt_symbols
 logging.basicConfig(level=logging.INFO, format="%(asctime)s | %(levelname)s | %(message)s")
 logger = logging.getLogger("ictsmartpro")
 
-
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     logger.info("🚀 Uygulama başlatılıyor...")
@@ -33,14 +32,9 @@ async def lifespan(app: FastAPI):
     logger.info("🛑 Uygulama kapatılıyor...")
     await cleanup()
 
-
 app = FastAPI(lifespan=lifespan)
 
-
 # ==================== WEBSOCKET HANDLERS ====================
-
-# main.py içindeki websocket fonksiyonlarından sadece abonelik kısmı kalacak — veri gönderimi BROADCAST WORKER'a devrediliyor:
-
 @app.websocket("/ws/signal/{pair}/{timeframe}")
 async def ws_signal(websocket: WebSocket, pair: str, timeframe: str):
     await websocket.accept()
@@ -53,25 +47,18 @@ async def ws_signal(websocket: WebSocket, pair: str, timeframe: str):
     channel = f"{symbol}:{timeframe}"
     single_subscribers[channel].add(websocket)
 
-    # İlk sinyal gönderimi (varsa)
+    # Varsa mevcut sinyali hemen gönder
     sig = shared_signals.get(timeframe, {}).get(symbol)
     if sig:
         await websocket.send_json(sig)
 
     try:
-        await websocket.receive()  # Sadece bağlantı açık kalması için — veri işlemiyor
+        await websocket.receive()  # Bağlantıyı açık tut
     except WebSocketDisconnect:
         single_subscribers[channel].discard(websocket)
 
-
 @app.websocket("/ws/all/{timeframe}")
 async def ws_all(websocket: WebSocket, timeframe: str):
-    if timeframe not in shared_signals:
-        await websocket.accept()
-        await websocket.send_json({"error": "Geçersiz timeframe"})
-        await websocket.close()
-        return
-
     await websocket.accept()
     all_subscribers[timeframe].add(websocket)
     await websocket.send_json(active_strong_signals.get(timeframe, []))
@@ -81,7 +68,6 @@ async def ws_all(websocket: WebSocket, timeframe: str):
             await asyncio.sleep(1)
     except WebSocketDisconnect:
         all_subscribers[timeframe].discard(websocket)
-
 
 @app.websocket("/ws/pump_radar")
 async def ws_pump(websocket: WebSocket):
@@ -95,9 +81,7 @@ async def ws_pump(websocket: WebSocket):
     except WebSocketDisconnect:
         pump_radar_subscribers.discard(websocket)
 
-
 # ==================== HTML PAGES ====================
-
 @app.get("/", response_class=HTMLResponse)
 async def home(request: Request):
     user = request.cookies.get("user_email") or "Misafir"
@@ -165,7 +149,6 @@ async def home(request: Request):
 </body>
 </html>"""
 
-
 @app.post("/login")
 async def login(request: Request):
     form = await request.form()
@@ -209,9 +192,11 @@ async def signal(request: Request):
         <div class="controls">
             <input id="pair" placeholder="Coin (örn: BTCUSDT)" value="BTCUSDT">
             <select id="tf">
-                <option value="realtime">Realtime (Anlık)</option>
-                <option value="3m">3 Dakika</option><option value="5m">5 Dakika</option><option value="15m">15 Dakika</option>
-                <option value="1h">1 Saat</option><option value="4h">4 Saat</option><option value="1d">1 Gün</option>
+                <option value="5m">5 Dakika</option>
+                <option value="15m">15 Dakika</option>
+                <option value="1h">1 Saat</option>
+                <option value="4h">4 Saat</option>
+                <option value="1d">1 Gün</option>
             </select>
             <button onclick="connect()">🔴 CANLI BAĞLANTI KUR</button>
             <div id="status">Bağlantı bekleniyor...</div>
@@ -219,7 +204,6 @@ async def signal(request: Request):
 
         <div id="result" class="result">Sinyal burada gerçek zamanlı olarak güncellenecek...</div>
 
-        <!-- 📈 TRADINGVIEW WIDGET -->
         <div id="chart">
             <div id="tradingview_widget"></div>
         </div>
@@ -227,242 +211,88 @@ async def signal(request: Request):
         <a href="/" class="footer">← Ana Sayfaya Dön</a>
     </div>
 
-    <!-- TradingView Widget Kodu (Dinamik) -->
     <script type="text/javascript">
         let tvWidget = null;
+        let currentWs = null;
 
         function createTradingViewWidget(symbol = "BINANCE:BTCUSDT", interval = "60") {
-            if (tvWidget) {
-                tvWidget.remove();
-            }
-            new TradingView.widget({
+            if (tvWidget) tvWidget.remove();
+            tvWidget = new TradingView.widget({
                 "autosize": true,
                 "symbol": symbol,
-                "interval": interval,  // 60 = 1h, 300 = 5m vs.
+                "interval": interval,
                 "timezone": "Etc/UTC",
                 "theme": "dark",
-                "style": "1",  // 1 = Modern, 2 = Classic
+                "style": "1",
                 "locale": "tr",
                 "toolbar_bg": "#131722",
                 "enable_publishing": false,
                 "hide_side_toolbar": false,
                 "allow_symbol_change": true,
                 "container_id": "tradingview_widget",
-                "studies": [
-                    "RSI@tv-basicstudies",
-                    "MAExp@tv-basicstudies"
-                ],
-                "overrides": {
-                    "paneProperties.background": "#0a0022",
-                    "paneProperties.vertGridProperties.color": "#1a1a3a",
-                    "paneProperties.horzGridProperties.color": "#1a1a3a"
-                }
+                "studies": ["RSI@tv-basicstudies", "MAExp@tv-basicstudies"]
             });
         }
 
-        // Varsayılan: BTCUSDT 1h
         document.addEventListener("DOMContentLoaded", () => {
             createTradingViewWidget("BINANCE:BTCUSDT", "60");
         });
 
-        // TF → TradingView interval mapping
-        const tfMap = {
-            "3m": "3", "5m": "5", "15m": "15", "30m": "30",
-            "1h": "60", "4h": "240", "1d": "1D", "realtime": "60"
-        };
+        const tfMap = {"5m": "5", "15m": "15", "1h": "60", "4h": "240", "1d": "D"};
 
         function connect() {
             const pair = document.getElementById('pair').value.trim().toUpperCase();
             const tf = document.getElementById('tf').value;
-            
-            // Symbol format: "BINANCE:XRPUSDT"
+
             const tvSymbol = "BINANCE:" + (pair.endsWith("USDT") ? pair : pair + "USDT");
             const tvInterval = tfMap[tf] || "60";
-
-            // Widget'i güncelle
             createTradingViewWidget(tvSymbol, tvInterval);
 
-            // WebSocket bağlantısı
-            if (window.ws) window.ws.close();
+            if (currentWs) currentWs.close();
+
             const p = location.protocol === 'https:' ? 'wss' : 'ws';
-            window.ws = new WebSocket(p + '://' + location.host + '/ws/signal/' + pair + '/' + tf);
-            
-            ws.onopen = () => document.getElementById('status').innerHTML = "✅ CANLI – GRAFİK & SİNYAL AKTİF";
-            ws.onmessage = e => {
+            currentWs = new WebSocket(p + '://' + location.host + '/ws/signal/' + pair + '/' + tf);
+
+            currentWs.onopen = () => {
+                document.getElementById('status').innerHTML = "✅ CANLI BAĞLANTI AKTİF – SİNYAL BEKLENİYOR";
+                document.getElementById('status').style.color = "#00ff88";
+            };
+
+            currentWs.onmessage = e => {
                 const d = JSON.parse(e.data);
-                let cls = 'result', col = '#ffd700';
-                if (d.signal.includes('ALIM')) { cls += ' green'; col = '#00ff88'; }
-                else if (d.signal.includes('SATIM')) { cls += ' red'; col = '#ff4444'; }
+                let cls = 'result';
+                let col = '#ffd700';
+
+                if (d.signal && d.signal.includes('ALIM')) {
+                    cls += ' green';
+                    col = '#00ff88';
+                } else if (d.signal && d.signal.includes('SATIM')) {
+                    cls += ' red';
+                    col = '#ff4444';
+                }
+
                 document.getElementById('result').className = cls;
                 document.getElementById('result').innerHTML = `
-                    <h2 style="font-size:3.2rem;color:${col}">${d.signal}</h2>
-                    <p><strong>${d.pair}</strong> • $${d.current_price} • ${d.timeframe.toUpperCase()}</p>
-                    <p>Momentum: <strong>${d.momentum === 'up' ? '⬆️' : '⬇️'}</strong> | Skor: <strong>${d.score}/100</strong></p>
-                    <p><em>${d.last_update}</em> | ${d.killzone} • ${d.triggers}</p>`;
+                    <h2 style="font-size:3.2rem;color:${col}">${d.signal || 'SİNYAL YOK'}</h2>
+                    <p><strong>${d.pair || pair}</strong> • $${d.current_price || '?'} • ${d.timeframe?.toUpperCase() || tf.toUpperCase()}</p>
+                    <p>Momentum: <strong>${d.momentum === 'up' ? '⬆️ YUKARI' : '⬇️ AŞAĞI'}</strong> | Skor: <strong>${d.score || 0}/100</strong>${d.volume_spike ? ' | 💥 HACİM PATLAMASI' : ''}</p>
+                    <p><em>${d.last_update || 'Bekleniyor...'}</em> | ${d.killzone || 'Normal'} • ${d.triggers || 'Standart'}</p>`;
             };
-            ws.onerror = () => document.getElementById('status').innerHTML = "⚠️ Bağlantı hatası";
-            ws.onclose = () => document.getElementById('status').innerHTML = "❌ Bağlantı kapandı";
+
+            currentWs.onerror = () => {
+                document.getElementById('status').innerHTML = "⚠️ Bağlantı hatası";
+                document.getElementById('status').style.color = "#ff4444";
+            };
+
+            currentWs.onclose = () => {
+                document.getElementById('status').innerHTML = "❌ Bağlantı kapandı – Yeniden bağlanmak için butona bas";
+                document.getElementById('status').style.color = "#ff4444";
+            };
         }
     </script>
-
-    <!-- TradingView Widget Script (CDN) -->
-    <script type="text/javascript" src="https://s3.tradingview.com/tv.js  "></script>
+    <script type="text/javascript" src="https://s3.tradingview.com/tv.js"></script>
 </body>
 </html>"""
-
-@app.get("/signal/all", response_class=HTMLResponse)
-async def signal_all(request: Request):
-    user = request.cookies.get("user_email")
-    if not user:
-        return RedirectResponse("/")
-    return """<!DOCTYPE html>
-<html lang="tr">
-<head>
-    <meta charset="UTF-8">
-    <title>Tüm Coinler Canlı Tarama</title>
-    <style>
-        body{background:linear-gradient(135deg,#0a0022,#000);color:#fff;padding:20px;min-height:100vh}
-        h1{font-size:3.8rem;text-align:center;background:linear-gradient(90deg,#fc00ff,#00dbde);-webkit-background-clip:text;-webkit-text-fill-color:transparent}
-        .card{max-width:1100px;margin:40px auto;background:#ffffff0d;padding:30px;border-radius:30px;border:2px solid #00ffff44;box-shadow:0 0 80px #00ffff33}
-        select,button{padding:18px;margin:10px;font-size:1.6rem;border:none;border-radius:15px;background:#333;color:#fff}
-        button{background:linear-gradient(45deg,#fc00ff,#00dbde);cursor:pointer;width:280px}
-        table{width:100%;margin-top:30px;border-collapse:collapse}
-        th{background:#ffffff11;padding:15px;font-size:1.4rem}
-        td{padding:12px;text-align:center}
-        .green{background:#00ff8822;color:#00ff88;font-weight:bold}
-        .red{background:#ff444422;color:#ff4444;font-weight:bold}
-    </style>
-</head>
-<body>
-    <h1>🔥 TÜM COİNLER CANLI SİNYAL TARAMA</h1>
-    <div class="card">
-        <div style="text-align:center">
-            <select id="tf">
-                <option value="realtime" selected>Realtime</option>
-                <option value="3m">3m</option><option value="5m">5m</option><option value="15m">15m</option>
-                <option value="30m">30m</option><option value="1h">1h</option><option value="4h">4h</option>
-                <option value="1d">1d</option>
-            </select>
-            <button onclick="start()">TARAMAYI BAŞLAT</button>
-        </div>
-        <div id="status" style="margin:20px;color:#00dbde;font-size:1.4rem">Tarama başlatılmadı.</div>
-        <table>
-            <thead><tr><th>#</th><th>COİN</th><th>ZAMAN</th><th>FİYAT</th><th>SİNYAL</th><th>DETAY</th></tr></thead>
-            <tbody id="body">
-                <tr><td colspan="6" style="padding:80px;color:#888">Başlat tuşuna basın...</td></tr>
-            </tbody>
-        </table>
-    </div>
-    <a href="/signal" style="color:#00dbde;font-size:1.6rem;margin:20px;display:block">← Tek Coin Sinyal</a>
-    <a href="/" style="color:#00dbde;font-size:1.6rem;display:block">Ana Sayfa</a>
-    <script>
-        let ws = null;
-        function start() {
-            if (ws) ws.close();
-            const tf = document.getElementById('tf').value;
-            document.getElementById('status').innerHTML = `${tf.toUpperCase()} timeframe ile tarama aktif!`;
-            const p = location.protocol === 'https:' ? 'wss' : 'ws';
-            ws = new WebSocket(p + '://' + location.host + '/ws/all/' + tf);
-            ws.onmessage = e => {
-                const data = JSON.parse(e.data);
-                const tbody = document.getElementById('body');
-                if (data.length === 0) {
-                    tbody.innerHTML = '<tr><td colspan="6" style="padding:80px;color:#ffd700">😴 Güçlü sinyal yok</td></tr>';
-                    return;
-                }
-                tbody.innerHTML = data.map((s, i) => `
-                    <tr class="${s.signal.includes('ALIM') || s.signal.includes('YUKARI') ? 'green' : 'red'}">
-                        <td>#${i+1}</td><td><strong>${s.pair}</strong></td><td>${s.timeframe.toUpperCase()}</td>
-                        <td>$${s.current_price}</td><td><strong>${s.signal}</strong></td>
-                        <td>${s.momentum === 'up' ? '⬆️' : '⬇️'} ${s.volume_spike ? ' + 💥' : ''}</td>
-                    </tr>`).join('');
-            };
-            ws.onopen = () => document.getElementById('status').style.color = "#00ff88";
-        }
-        window.onload = start;
-    </script>
-</body>
-</html>"""
-
-
-@app.get("/abonelik", response_class=HTMLResponse)
-async def abonelik():
-    return """<!DOCTYPE html>
-<html lang="tr">
-<head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1">
-    <title>🚀 Premium Abonelik | ICT SMART PRO</title>
-    <style>
-        body {background: linear-gradient(135deg, #0a0022, #000);color: #fff;font-family: 'Segoe UI', sans-serif;margin: 0;padding: 0;min-height: 100vh;}
-        .container {max-width: 1200px;margin: auto;padding: 40px 20px;text-align: center;}
-        h1 {font-size: 4.2rem;background: linear-gradient(90deg, #00dbde, #fc00ff, #00dbde);-webkit-background-clip: text;-webkit-text-fill-color: transparent;margin-bottom: 10px;}
-        .subtitle {font-size: 1.6rem;color: #aaa;margin-bottom: 50px;}
-        .plans {display: flex;flex-wrap: wrap;justify-content: center;gap: 30px;margin: 50px 0;}
-        .plan {background: #ffffff0a;border: 2px solid #00ffff33;border-radius: 25px;padding: 40px 30px;width: 350px;transition: all 0.4s ease;box-shadow: 0 10px 40px rgba(0, 219, 222, 0.1);}
-        .plan:hover {transform: translateY(-10px);box-shadow: 0 20px 60px rgba(0, 219, 222, 0.3);border-color: #00dbde;}
-        .plan.pro {background: linear-gradient(135deg, #111, #222);border-color: #00dbde;box-shadow: 0 0 60px #00dbde55;position: relative;}
-        .plan.pro::before {content: "🔥 EN POPÜLER";position: absolute;top: -15px;left: 50%;transform: translateX(-50%);background: #ff4444;color: white;padding: 5px 20px;border-radius: 30px;font-size: 0.9rem;font-weight: bold;}
-        .plan h2 {font-size: 2.2rem;margin: 0 0 20px;color: #00dbde;}
-        .price {font-size: 3.2rem;font-weight: bold;margin: 20px 0;}
-        .price span {font-size: 1.2rem;color: #888;}
-        .features {list-style: none;padding: 0;text-align: left;margin: 30px 0;}
-        .features li {padding: 12px 0;font-size: 1.3rem;display: flex;align-items: center;}
-        .features li::before {content: "✓";color: #00ff88;font-weight: bold;margin-right: 12px;font-size: 1.4rem;}
-        .btn {display: inline-block;width: 100%;padding: 20px;font-size: 1.6rem;font-weight: bold;color: #000;background: linear-gradient(45deg, #fc00ff, #00dbde);border: none;border-radius: 50px;cursor: pointer;text-decoration: none;margin-top: 20px;transition: 0.3s;box-shadow: 0 0 30px #00dbde66;}
-        .btn:hover {transform: scale(1.05);box-shadow: 0 0 50px #00dbdeaa;}
-        .btn-free {background: linear-gradient(45deg, #444, #666);}
-        .badge {display: inline-block;background: #ff4444;color: white;padding: 5px 15px;border-radius: 20px;font-size: 1.1rem;margin-top: 15px;}
-        .footer-note {margin-top: 60px;color: #777;font-size: 1.1rem;}
-        .footer-note a {color: #00dbde;text-decoration: none;}
-        @media (max-width: 768px) {.plans {flex-direction: column;align-items: center;} h1 {font-size: 3rem;}}
-    </style>
-</head>
-<body>
-    <div class="container">
-        <h1>🚀 PREMIUM ABONELİK</h1>
-        <p class="subtitle">Profesyonel trader'lar için geliştirilmiş, %90+ doğruluk oranlı sinyal sistemi</p>
-        <div class="plans">
-            <div class="plan">
-                <h2>🆓 ÜCRETSİZ</h2>
-                <div class="price">₺0 <span>/ ay</span></div>
-                <ul class="features">
-                    <li>5 coin desteği</li>
-                    <li>Realtime trade verisi (10 coin)</li>
-                    <li>Pump radar (24h değişim)</li>
-                    <li>5m ve 15m timeframe</li>
-                    <li>Temel momentum sinyalleri</li>
-                </ul>
-                <a href="/" class="btn btn-free">✅ Hemen Başla</a>
-                <div class="badge">Test modunda aktif</div>
-            </div>
-            <div class="plan pro">
-                <h2>💎 PREMIUM</h2>
-                <div class="price">₺299 <span>/ ay</span></div>
-                <ul class="features">
-                    <li><strong>150+ coin desteği</strong></li>
-                    <li><strong>Realtime arbitrage sinyalleri</strong></li>
-                    <li><strong>3m, 5m, 15m, 1h, 4h, 1d</strong></li>
-                    <li><strong>Hacim patlaması tespiti</strong></li>
-                    <li><strong>Telegram anlık bildirim</strong></li>
-                    <li><strong>PDF günlük rapor</strong></li>
-                    <li><strong>Öncelikli destek</strong></li>
-                </ul>
-                <a href="#" onclick="alert('Stripe entegrasyonu hazır! Ödeme sistemi yakında aktif olacak.'); return false;" class="btn">
-                    🔒 Abonelik Satın Al
-                </a>
-                <div class="badge">En çok tercih edilen</div>
-            </div>
-        </div>
-        <div class="footer-note">
-            📌 Şu anda <strong>tüm kullanıcılar test modunda ücretsiz olarak Premium özelliklere erişebiliyor.</strong><br>
-            Gerçek ödeme sistemi yakında devreye girecek. Hazır olduğunda sizi bilgilendireceğiz!<br>
-            Sorularınız için: <a href="mailto:huseyin.yilmaz1034@gmail.com">huseyin.yilmaz1034@gmail.com</a>
-        </div>
-    </div>
-</body>
-</html>"""
-
 
 @app.get("/health")
 async def health():
@@ -470,12 +300,6 @@ async def health():
         "status": "healthy",
         "time": datetime.now().isoformat(),
         "symbols": len(all_usdt_symbols),
-        "rt_coins": len(rt_ticker["tickers"]),
-        "ws_total": (
-            sum(len(v) for v in single_subscribers.values()) +
-            sum(len(v) for v in all_subscribers.values()) +
-            len(pump_radar_subscribers)
-        )
+        "rt_coins": len(rt_ticker.get("tickers", {})),
+        "ws_total": sum(len(v) for v in single_subscribers.values()) + sum(len(v) for v in all_subscribers.values()) + len(pump_radar_subscribers)
     }
-
-
