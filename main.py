@@ -1,4 +1,4 @@
-# main.py
+# main.py — GÜNCELLENMİŞ VERSİYON: Mobil uyumlu, veri akışı haberleri, sinyal anında gösterim 🚀
 import os
 import asyncio
 import logging
@@ -124,21 +124,21 @@ async def home(request: Request):
 <html lang="tr">
 <head>
     <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width,initial-scale=1">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
     <title>ICT SMART PRO</title>
     <style>
-        body{{background:linear-gradient(135deg,#0a0022,#1a0033,#000);color:#fff;font-family:sans-serif;min-height:100vh;margin:0}}
-        .container{{max-width:1200px;margin:auto;padding:20px}}
-        h1{{font-size:5rem;text-align:center;background:linear-gradient(90deg,#00dbde,#fc00ff,#00dbde);-webkit-background-clip:text;-webkit-text-fill-color:transparent;animation:g 8s infinite}}
+        body{{background:linear-gradient(135deg,#0a0022,#1a0033,#000);color:#fff;font-family:sans-serif;min-height:100vh;margin:0;display:flex;flex-direction:column}}
+        .container{{max-width:1200px;margin:auto;padding:20px;flex:1}}
+        h1{{font-size:clamp(2rem, 5vw, 5rem);text-align:center;background:linear-gradient(90deg,#00dbde,#fc00ff,#00dbde);-webkit-background-clip:text;-webkit-text-fill-color:transparent;animation:g 8s infinite}}
         @keyframes g{{0%{{background-position:0%}}100%{{background-position:200%}}}}
-        .update{{text-align:center;color:#00ffff;margin:30px;font-size:1.8rem}}
+        .update{{text-align:center;color:#00ffff;margin:30px;font-size:clamp(1rem, 3vw, 1.8rem)}}
         table{{width:100%;border-collapse:separate;border-spacing:0 12px;margin:30px 0}}
-        th{{background:#ffffff11;padding:20px;font-size:1.6rem}}
+        th{{background:#ffffff11;padding:clamp(10px, 2vw, 20px);font-size:clamp(1rem, 2.5vw, 1.6rem)}}
         tr{{background:#ffffff08;transition:.4s}}
         tr:hover{{transform:scale(1.02);box-shadow:0 15px 40px #00ffff44}}
         .green{{color:#00ff88;text-shadow:0 0 20px #00ff88}}
         .red{{color:#ff4444;text-shadow:0 0 20px #ff4444}}
-        .btn{{display:block;width:90%;max-width:500px;margin:20px auto;padding:25px;font-size:2.2rem;
+        .btn{{display:block;width:90%;max-width:500px;margin:20px auto;padding:clamp(15px, 3vw, 25px);font-size:clamp(1.2rem, 4vw, 2.2rem);
             background:linear-gradient(45deg,#fc00ff,#00dbde);color:#fff;text-align:center;border-radius:50px;
             text-decoration:none;box-shadow:0 0 60px #ff00ff88;transition:.3s}}
         .btn:hover{{transform:scale(1.08);box-shadow:0 0 100px #ff00ff}}
@@ -148,14 +148,14 @@ async def home(request: Request):
 </head>
 <body>
     <div style='position:fixed;top:15px;left:15px;background:#000000cc;padding:10px 20px;border-radius:20px;
-        color:#00ff88;font-size:1.2rem;'>Hoş geldin, {user}</div>
+        color:#00ff88;font-size:clamp(0.8rem, 2vw, 1.2rem);'>Hoş geldin, {user}</div>
     <div class="container">
         <h1>ICT SMART PRO</h1>
         <div class="update" id="update">Veri yükleniyor... <span class="loading">●●●</span></div>
         <table>
             <thead><tr><th>SIRA</th><th>COİN</th><th>FİYAT</th><th>24S DEĞİŞİM</th></tr></thead>
             <tbody id="table-body">
-                <tr><td colspan="4" style="padding:100px;font-size:2rem;color:#888">Pump radar gerçek zamanlı yükleniyor...</td></tr>
+                <tr><td colspan="4" style="padding:clamp(50px, 10vw, 100px);font-size:clamp(1rem, 3vw, 2rem);color:#888">Pump radar gerçek zamanlı yükleniyor...</td></tr>
             </tbody>
         </table>
         <a href="/signal" class="btn">🚀 Tek Coin Canlı Sinyal + Grafik</a>
@@ -169,7 +169,7 @@ async def home(request: Request):
             document.getElementById('update').innerHTML = `Son Güncelleme: <strong>${{d.last_update}}</strong>`;
             const t = document.getElementById('table-body');
             if (!d.top_gainers || d.top_gainers.length === 0) {{
-                t.innerHTML = '<tr><td colspan="4" style="padding:100px;color:#ffd700">😴 Şu anda pump yok</td></tr>';
+                t.innerHTML = '<tr><td colspan="4" style="padding:clamp(50px, 10vw, 100px);color:#ffd700">😴 Şu anda pump yok</td></tr>';
                 return;
             }}
             t.innerHTML = d.top_gainers.map((c, i) => `
@@ -194,22 +194,23 @@ async def signal(request: Request):
 <html lang="tr">
 <head>
     <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
     <title>📊 CANLI SİNYAL + GRAFİK | ICT SMART PRO</title>
     <style>
-        body{background:linear-gradient(135deg,#0a0022,#000);color:#fff;font-family:sans-serif;margin:0;padding:0}
-        .container{padding:15px}
-        h1{text-align:center;font-size:3.2rem;background:linear-gradient(90deg,#00dbde,#fc00ff);-webkit-background-clip:text;-webkit-text-fill-color:transparent;margin:15px 0}
-        .controls{max-width:750px;margin:15px auto;text-align:center}
-        input,select,button{width:100%;padding:16px;margin:8px 0;font-size:1.5rem;border:none;border-radius:12px;background:#333;color:#fff}
-        button{background:linear-gradient(45deg,#fc00ff,#00dbde);cursor:pointer;font-weight:bold}
-        #status{color:#00dbde;font-size:1.3rem;margin:12px}
-        #result{padding:20px;background:#000000aa;border-radius:18px;font-size:1.6rem;margin:15px 0;min-height:160px;line-height:1.6}
-        #chart{height:55vh;width:100%;max-width:1100px;margin:15px auto;border-radius:12px;overflow:hidden;box-shadow:0 8px 30px #00ffff33}
-        #ai-box{background:#0d0033;border-radius:15px;padding:18px;margin-top:15px}
-        .green{border-left:4px solid #00ff88}
-        .red{border-left:4px solid #ff4444}
-        .footer{text-align:center;color:#888;margin-top:20px}
+        body{{background:linear-gradient(135deg,#0a0022,#000);color:#fff;font-family:sans-serif;margin:0;padding:0;overflow-x:hidden;display:flex;flex-direction:column}}
+        .container{{padding:15px;position:relative;flex:1}}
+        h1{{text-align:center;font-size:clamp(2rem, 5vw, 3.2rem);background:linear-gradient(90deg,#00dbde,#fc00ff);-webkit-background-clip:text;-webkit-text-fill-color:transparent;margin:15px 0}}
+        .controls{{max-width:750px;margin:15px auto;text-align:center}}
+        input,select,button{{width:100%;padding:clamp(10px, 3vw, 16px);margin:8px 0;font-size:clamp(1rem, 3vw, 1.5rem);border:none;border-radius:12px;background:#333;color:#fff}}
+        button{{background:linear-gradient(45deg,#fc00ff,#00dbde);cursor:pointer;font-weight:bold}}
+        #status{{color:#00dbde;font-size:clamp(0.8rem, 2.5vw, 1.3rem);margin:12px}}
+        #result{{padding:20px;background:#000000aa;border-radius:18px;font-size:clamp(1rem, 3vw, 1.6rem);margin:15px 0;min-height:160px;line-height:1.6;text-align:center}}
+        #chart{{height:clamp(40vh, 60vh, 70vh);width:100%;max-width:1100px;margin:20px auto;border-radius:12px;overflow:hidden;box-shadow:0 8px 30px #00ffff33;position:relative}}
+        #tradingview_widget{{height:100% !important;width:100% !important;position:absolute;top:0;left:0}}
+        #ai-box{{background:#0d0033;border-radius:15px;padding:18px;margin-top:15px}}
+        .green{{border-left:4px solid #00ff88;background:#00ff880f}}
+        .red{{border-left:4px solid #ff4444;background:#ff44440f}}
+        .footer{{text-align:center;color:#888;margin-top:20px}}
     </style>
 </head>
 <body>
@@ -233,7 +234,7 @@ async def signal(request: Request):
             <div id="status">Bağlantı bekleniyor...</div>
         </div>
 
-        <div id="result" class="result">Sinyal burada anında güncellenecek...</div>
+        <div id="result">🔴 CANLI BAĞLANTI KUR butonuna basarak veri akışını başlatın</div>
 
         <!-- 📈 TRADINGVIEW CHART -->
         <div id="chart">
@@ -252,11 +253,17 @@ async def signal(request: Request):
     <script>
         let ws = null;
         let tvWidget = null;
+        let hasReceivedSignal = false;
 
         // TradingView Widget
         function createTVWidget(symbol = "BINANCE:BTCUSDT", interval = "5") {
-            if (tvWidget) tvWidget.remove();
-            new TradingView.widget({
+            if (tvWidget) {
+                tvWidget.remove();
+                tvWidget = null;
+            }
+            tvWidget = new TradingView.widget({
+                "width": "100%",
+                "height": "100%",
                 "autosize": true,
                 "symbol": symbol,
                 "interval": interval,
@@ -279,7 +286,7 @@ async def signal(request: Request):
             createTVWidget("BINANCE:BTCUSDT", "5");
         });
 
-        // TF → interval mapping (güncellendi)
+        // TF → interval mapping
         const tfIntervalMap = {
             "1m": "1", "3m": "3", "5m": "5", "15m": "15", "30m": "30",
             "1h": "60", "4h": "240", "1d": "D", "1w": "W"
@@ -301,30 +308,39 @@ async def signal(request: Request):
             ws = new WebSocket(p + '://' + location.host + '/ws/signal/' + symbol + '/' + tf);
 
             ws.onopen = () => {
-                document.getElementById('status').innerHTML = "✅ CANLI – Sinyal & Grafik Aktif";
+                document.getElementById('status').innerHTML = "✅ Veri akışı başladı! 🚀 Sinyal bekleniyor...";
+                document.getElementById('result').innerHTML = '<p style="color:#00ffff">🔄 Veri aktarılıyor... Sinyal taraması devam ediyor!</p>';
+                hasReceivedSignal = false;
             };
 
             ws.onmessage = (e) => {
                 const d = JSON.parse(e.data);
+                hasReceivedSignal = true;
+                document.getElementById('status').innerHTML = "✅ Sinyal alındı! 📈 Veri akışı devam ediyor.";
+
                 const resultDiv = document.getElementById('result');
-                
-                let cls = 'result', col = '#ffd700';
+                let cls = '', col = '#ffd700';
                 if (d.signal && d.signal.includes('ALIM')) { 
-                    cls += ' green'; col = '#00ff88'; 
+                    cls = 'green'; col = '#00ff88'; 
                 } else if (d.signal && d.signal.includes('SATIM')) { 
-                    cls += ' red'; col = '#ff4444'; 
+                    cls = 'red'; col = '#ff4444'; 
                 }
 
                 resultDiv.className = cls;
                 resultDiv.innerHTML = `
-                    <h2 style="font-size:2.8rem;color:${col};margin:0">${d.signal || 'Sinyal Yükleniyor...'}</h2>
-                    <p><strong>${d.pair || symbol.replace('USDT','/USDT')}</strong> • $${d.current_price || '?'} • ${d.timeframe || tf}</p>
+                    <h2 style="font-size:clamp(1.5rem, 4vw, 2.8rem);color:${col};margin:0">${d.signal || 'Sinyal Yükleniyor...'}</h2>
+                    <p><strong>${d.pair || symbol.replace('USDT','/USDT')}</strong> • $${d.current_price || '?'}</p>
                     <p>Skor: <strong>${d.score || '?'} / 100</strong> | ${d.killzone || ''} | ${d.last_update || ''}</p>
                     <p><small>${d.triggers || ''}</small></p>`;
             };
 
-            ws.onerror = () => document.getElementById('status').innerHTML = "⚠️ Bağlantı hatası";
-            ws.onclose = () => document.getElementById('status').innerHTML = "❌ Bağlantı kapandı";
+            ws.onerror = () => document.getElementById('status').innerHTML = "⚠️ Bağlantı hatası – Yeniden dene!";
+            ws.onclose = () => {
+                document.getElementById('status').innerHTML = "❌ Bağlantı kapandı";
+                if (!hasReceivedSignal) {
+                    document.getElementById('result').innerHTML = '<p style="color:#ffd700">😴 Şu an güçlü sinyal yok – Tarama devam ediyor!</p>';
+                }
+            };
         }
     </script>
     <script src="https://s3.tradingview.com/tv.js"></script>
@@ -338,20 +354,23 @@ async def signal_all(request: Request):
     if not user:
         return RedirectResponse("/")
     return """<!DOCTYPE html>
-<html>
-<head><meta charset="utf-8"><title>Tüm Coinler Canlı Tarama</title>
-<style>
-body{background:linear-gradient(135deg,#0a0022,#000);color:#fff;padding:20px}
-.container{max-width:1200px;margin:auto}
-h1{text-align:center;font-size:3.6rem;background:linear-gradient(90deg,#fc00ff,#00dbde);-webkit-background-clip:text;-webkit-text-fill-color:transparent}
-.card{background:#00000088;border-radius:20px;padding:25px;margin:25px 0}
-table{width:100%;border-collapse:collapse;margin-top:20px}
-th,td{padding:12px;text-align:left;border-bottom:1px solid #333}
-th{background:#00ffff22}
-.green{color:#00ff88}
-.red{color:#ff4444}
-select{width:100%;padding:16px;margin:8px 0;font-size:1.5rem;border:none;border-radius:12px;background:#333;color:#fff}
-</style>
+<html lang="tr">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>Tüm Coinler Canlı Tarama</title>
+    <style>
+        body{{background:linear-gradient(135deg,#0a0022,#000);color:#fff;padding:20px;font-family:sans-serif;margin:0;display:flex;flex-direction:column}}
+        .container{{max-width:1200px;margin:auto;flex:1}}
+        h1{{text-align:center;font-size:clamp(2rem, 5vw, 3.6rem);background:linear-gradient(90deg,#fc00ff,#00dbde);-webkit-background-clip:text;-webkit-text-fill-color:transparent}}
+        .card{{background:#00000088;border-radius:20px;padding:clamp(15px, 4vw, 25px);margin:25px 0}}
+        table{{width:100%;border-collapse:collapse;margin-top:20px}}
+        th,td{{padding:clamp(8px, 2vw, 12px);text-align:left;border-bottom:1px solid #333;font-size:clamp(0.8rem, 2vw, 1rem)}}
+        th{{background:#00ffff22}}
+        .green{{color:#00ff88}}
+        .red{{color:#ff4444}}
+        select{{width:100%;padding:clamp(10px, 3vw, 16px);margin:8px 0;font-size:clamp(1rem, 3vw, 1.5rem);border:none;border-radius:12px;background:#333;color:#fff}}
+    </style>
 </head>
 <body>
 <div class="container">
@@ -373,7 +392,7 @@ select{width:100%;padding:16px;margin:8px 0;font-size:1.5rem;border:none;border-
         <table id="sig-table">
             <thead><tr><th>COİN</th><th>ZAMAN</th><th>FİYAT</th><th>SİNYAL</th><th>SKOR</th><th>TRİGGER</th></tr></thead>
             <tbody id="table-body">
-                <tr><td colspan="6" style="padding:60px;color:#888">İlk sinyal 5-10 sn içinde gelecek...</td></tr>
+                <tr><td colspan="6" style="padding:clamp(30px, 8vw, 60px);color:#888">İlk sinyal 5-10 sn içinde gelecek...</td></tr>
             </tbody>
         </table>
     </div>
@@ -391,10 +410,14 @@ function connect() {
 
     const tbody = document.getElementById('table-body');
 
+    ws.onopen = () => {
+        tbody.innerHTML = '<tr><td colspan="6" style="padding:clamp(30px, 8vw, 60px);color:#00ffff">✅ Veri akışı başladı! 🚀 Sinyaller taranıyor...</td></tr>';
+    };
+
     ws.onmessage = e => {
         const signals = JSON.parse(e.data);
         if (!Array.isArray(signals) || signals.length === 0) {
-            tbody.innerHTML = '<tr><td colspan="6" style="padding:60px;color:#ffd700">😴 Şu an güçlü sinyal yok</td></tr>';
+            tbody.innerHTML = '<tr><td colspan="6" style="padding:clamp(30px, 8vw, 60px);color:#ffd700">😴 Şu an güçlü sinyal yok</td></tr>';
             return;
         }
         tbody.innerHTML = signals.map((s, i) => `
@@ -459,8 +482,7 @@ async def login(request: Request):
 
 @app.get("/abonelik", response_class=HTMLResponse)
 async def abonelik():
-    return """<!-- Önceki abonelik HTML’i olduğu gibi kalır — uzun olduğu için kısalttım -->
-    <h1 style='text-align:center;color:#00dbde'>🚀 Premium Abonelik</h1>
+    return """<h1 style='text-align:center;color:#00dbde'>🚀 Premium Abonelik</h1>
     <p style='text-align:center'>Stripe entegrasyonu yakında!</p>
     <div style='text-align:center;margin:40px'>
         <a href="/" style="color:#00dbde">&larr; Ana Sayfaya Dön</a>
