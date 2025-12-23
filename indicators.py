@@ -148,16 +148,16 @@ def generate_ict_signal(df: pd.DataFrame, symbol: str, timeframe: str) -> Option
     killzone_name = "London" if london_kz.iloc[i] else "New York" if ny_kz.iloc[i] else "Normal"
 
     pair = symbol.replace("USDT", "/USDT") if symbol.endswith("USDT") else symbol
-
-    return {
-        "pair": pair,
-        "timeframe": timeframe,
-        "current_price": round(current_price, 6 if current_price < 1 else 4),
-        "signal": signal_text,
-        "momentum": momentum,
-        "last_update": datetime.utcnow().strftime("%H:%M:%S UTC"),
-        "score": round(normalized_score, 1),
-        "killzone": killzone_name,
-        "triggers": " | ".join(triggers) if triggers else "RSI6 + Momentum",
-        "strength": "ÇOK YÜKSEK" if abs(score) > 100 else "YÜKSEK"
-    }
+return {
+    "pair": pair,
+    "timeframe": timeframe,
+    "current_price": round(current_price, 6 if current_price < 1 else 4),
+    "signal": signal_text,
+    "momentum": momentum,
+    "last_update": datetime.utcnow().strftime("%H:%M:%S UTC"),
+    "score": round(normalized_score, 1),
+    "killzone": killzone_name,
+    "triggers": " | ".join(triggers) if triggers else "RSI6 + Momentum",
+    "strength": "ÇOK YÜKSEK" if abs(score) > 100 else "YÜKSEK",
+    "volume_spike": False  # <--- TAM BURAYA EKLE
+}
