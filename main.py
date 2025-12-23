@@ -1,4 +1,4 @@
-# core.py — SON VERSİYON, GIRINTI HATASIZ, 1M DAHİL, CANLI SİNYAL ÇALIŞIR
+# core.py — BAŞTAN YAZILMIŞ, SORUNSUZ, 1M DAHİL, CANLI SİNYAL ÇALIŞIR
 
 import asyncio
 import logging
@@ -36,22 +36,25 @@ async def broadcast_worker():
             msg_type, payload = await signal_queue.get()
 
             if msg_type == "signal":
-                tf, sym = payload["timeframe"], payload["symbol"]
+                tf = payload["timeframe"]
+                sym = payload["symbol"]
                 channel = f"{sym}:{tf}"
 
+                # Tek coin aboneler
                 dead_ws = set()
                 for ws in single_subscribers[channel]:
                     try:
                         await ws.send_json(payload["signal"])
-                    except:
+                    except Exception:
                         dead_ws.add(ws)
                 single_subscribers[channel] -= dead_ws
 
+                # Tüm coin aboneler
                 dead_ws = set()
                 for ws in all_subscribers[tf]:
                     try:
                         await ws.send_json(active_strong_signals[tf])
-                    except:
+                    except Exception:
                         dead_ws.add(ws)
                 all_subscribers[tf] -= dead_ws
 
@@ -64,7 +67,7 @@ async def broadcast_worker():
                 for ws in pump_radar_subscribers:
                     try:
                         await ws.send_json(payload)
-                    except:
+                    except Exception:
                         dead_ws.add(ws)
                 pump_radar_subscribers -= dead_ws
 
@@ -72,6 +75,7 @@ async def broadcast_worker():
 
         except Exception as e:
             logger.error(f"Broadcast worker hatası: {e}")
+            await asyncio.sleep(0.1)
 
 # ========== SİNYAL VE PUMP RADAR ÜRETİCİ ==========
 async def signal_producer():
@@ -86,12 +90,13 @@ async def signal_producer():
         return
 
     timeframes = ["1m", "5m", "15m", "1h"]  # 1 dakika dahil
-    await asyncio.sleep(8)  # sembollerin yüklenmesini bekle
+    await asyncio.sleep(8)  # sembol yüklenmesini bekle
 
     while True:
         start_time = asyncio.get_event_loop().time()
         signals_found = 0
 
+        # SİNYAL ÜRETİMİ
         for tf in timeframes:
             for symbol in all_usdt_symbols[:50]:  # rate limit için 50 coin
                 try:
@@ -158,9 +163,9 @@ async def signal_producer():
             }))
 
         elapsed = asyncio.get_event_loop().time() - start_time
-        logger.info(f"Tarama tamamlandı: {signals_found} sinyal, {elapsed:.1f}s sürdü")
+        logger.info(f"Tarama tamamlandı: {signals_found} sinyal bulundu, {elapsed:.1f}s sürdü")
 
-        # 4 saniyede bir tarama
+        # 4 saniyede bir tarama (canlı hissi için)
         await asyncio.sleep(max(1.0, 4.0 - elapsed))
 
 # ========== INIT & CLEANUP ==========
