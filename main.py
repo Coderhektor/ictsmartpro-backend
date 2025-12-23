@@ -197,7 +197,7 @@ async def signal(request: Request):
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
     <title>📊 CANLI SİNYAL + GRAFİK | ICT SMART PRO</title>
     <style>
-        body{{background:linear-gradient(135deg,#0a0022,#000);color:#fff;font-family:sans-serif;margin:0;padding:0;overflow-x:hidden;display:flex;flex-direction:column}}
+        body{{background:linear-gradient(135deg,#0a0022,#1a0033,#000);color:#fff;font-family:sans-serif;margin:0;padding:0;overflow-x:hidden;display:flex;flex-direction:column}}
         .container{{padding:15px;position:relative;flex:1}}
         h1{{text-align:center;font-size:clamp(2rem, 5vw, 3.2rem);background:linear-gradient(90deg,#00dbde,#fc00ff);-webkit-background-clip:text;-webkit-text-fill-color:transparent;margin:15px 0}}
         .controls{{max-width:750px;margin:15px auto;text-align:center}}
@@ -360,7 +360,7 @@ async def signal_all(request: Request):
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
     <title>Tüm Coinler Canlı Tarama</title>
     <style>
-        body{{background:linear-gradient(135deg,#0a0022,#000);color:#fff;padding:20px;font-family:sans-serif;margin:0;display:flex;flex-direction:column}}
+        body{{background:linear-gradient(135deg,#0a0022,#1a0033,#000);color:#fff;padding:20px;font-family:sans-serif;margin:0;display:flex;flex-direction:column}}
         .container{{max-width:1200px;margin:auto;flex:1}}
         h1{{text-align:center;font-size:clamp(2rem, 5vw, 3.6rem);background:linear-gradient(90deg,#fc00ff,#00dbde);-webkit-background-clip:text;-webkit-text-fill-color:transparent}}
         .card{{background:#00000088;border-radius:20px;padding:clamp(15px, 4vw, 25px);margin:25px 0}}
