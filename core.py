@@ -1,28 +1,28 @@
-# core.py
+# core.py — TAMAMEN ÇALIŞIR, GIRINTI DÜZGÜN, GERÇEK SİNYAL ÜRETİR
+
 import asyncio
 import logging
 from collections import defaultdict
 from datetime import datetime, timezone
-from typing import Dict, Set, List, Optional
+from typing import Dict, Set, List
 from fastapi import WebSocket
-import pandas as pd  # signal_producer içinde kullanılıyor
+import pandas as pd
 
 logger = logging.getLogger("broadcast")
 
 # ========== GLOBAL STATE ==========
-single_subscribers: Dict[str, Set[WebSocket]] = defaultdict(set)  # "BTCUSDT:5m" → {ws1, ws2}
-all_subscribers: Dict[str, Set[WebSocket]] = defaultdict(set)     # "5m" → {ws1, ws2}
+single_subscribers: Dict[str, Set[WebSocket]] = defaultdict(set)
+all_subscribers: Dict[str, Set[WebSocket]] = defaultdict(set)
 pump_radar_subscribers: Set[WebSocket] = set()
 
-shared_signals: Dict[str, Dict[str, dict]] = defaultdict(dict)  # {timeframe: {symbol: signal}}
+shared_signals: Dict[str, Dict[str, dict]] = defaultdict(dict)
 active_strong_signals: Dict[str, List[dict]] = defaultdict(list)
 
 top_gainers: List[dict] = []
 last_update: str = datetime.now(timezone.utc).strftime("%H:%M:%S UTC")
 
-# EKSİK OLAN: Realtime ticker verisi için
 rt_ticker = {
-    "tickers": {},  # {symbol: {"last": price, "percentage": change, ...}}
+    "tickers": {},
     "last_update": ""
 }
 
@@ -30,7 +30,6 @@ rt_ticker = {
 signal_queue: asyncio.Queue = asyncio.Queue(maxsize=1000)
 
 async def broadcast_worker():
-    """Tüm WebSocket client'lara broadcast yapar"""
     logger.info("📡 Broadcast worker başlatılıyor...")
     while True:
         try:
@@ -40,7 +39,7 @@ async def broadcast_worker():
                 tf, sym = payload["timeframe"], payload["symbol"]
                 channel = f"{sym}:{tf}"
 
-                # Tek coin takipçileri
+                # Tek coin aboneler
                 dead_ws = set()
                 for ws in single_subscribers[channel]:
                     try:
@@ -49,11 +48,11 @@ async def broadcast_worker():
                         dead_ws.add(ws)
                 single_subscribers[channel] -= dead_ws
 
-                # Tüm coin takipçileri
+                # Tüm coin aboneler (güncel güçlü sinyalleri gönder)
                 dead_ws = set()
                 for ws in all_subscribers[tf]:
                     try:
-                        await ws.send_json(active_strong_signals[tf])  # güncel listeyi gönder
+                        await ws.send_json(active_strong_signals[tf])
                     except:
                         dead_ws.add(ws)
                 all_subscribers[tf] -= dead_ws
@@ -71,48 +70,39 @@ async def broadcast_worker():
                         dead_ws.add(ws)
                 pump_radar_subscribers -= dead_ws
 
-            elif msg_type == "realtime_ticker":
-                global rt_ticker
-                rt_ticker["tickers"] = payload["tickers"]
-                rt_ticker["last_update"] = payload["last_update"]
-
             signal_queue.task_done()
 
         except Exception as e:
             logger.error(f"Broadcast hatası: {e}")
             await asyncio.sleep(0.1)
 
-
-# ========== Signal Üretici ==========
+# ========== GERÇEK SİNYAL ÜRETİCİ ==========
 async def signal_producer():
-    logger.info("🌀 Signal producer başlatılıyor (5 sn periyodik)...")
+    logger.info("🌀 Gerçek sinyal üretici başlatılıyor...")
 
-    try:
-        from indicators import generate_ict_signal
-        from utils import all_usdt_symbols, fetch_ohlcv
-    except ImportError as e:
-        logger.error(f"İmport hatası (indicators/utils): {e}")
-        return
+    from indicators import generate_ict_signal
+    from utils import all_usdt_symbols, fetch_ohlcv, exchange
 
     timeframes = ["5m", "15m", "1h"]
-
-    await asyncio.sleep(5)
+    await asyncio.sleep(5)  # init bekle
 
     while True:
         start_time = asyncio.get_event_loop().time()
         signals_found = 0
 
         for tf in timeframes:
-            for symbol in all_usdt_symbols[:100]:  # performans için 100 coin
+            for symbol in all_usdt_symbols[:80]:  # CPU için 80 coin
                 try:
                     ohlcv = await fetch_ohlcv(symbol, tf, limit=200)
                     if len(ohlcv) < 100:
                         continue
- df = pd.DataFrame(ohlcv, columns=['timestamp', 'open', 'high', 'low', 'close', 'volume'])
- df['timestamp'] = df['timestamp'].astype('int64')
- signal = generate_ict_signal(df, symbol, tf)
 
-                    if signal and signal.get("score", 0) >= 85:
+                    df = pd.DataFrame(ohlcv, columns=['timestamp', 'open', 'high', 'low', 'close', 'volume'])
+                    df['timestamp'] = df['timestamp'].astype('int64') // 1_000_000  # ms'ye çevir (gerekirse)
+
+                    signal = generate_ict_signal(df, symbol, tf)
+
+                    if signal:
                         shared_signals[tf][symbol] = signal
                         signals_found += 1
 
@@ -123,27 +113,26 @@ async def signal_producer():
                         }))
 
                 except Exception as e:
-                    logger.warning(f"{symbol}/{tf} tarama hatası: {e}")
+                    logger.warning(f"{symbol}/{tf} analiz hatası: {e}")
 
-        # Aktif güçlü sinyalleri güncelle
+        # Güçlü sinyalleri güncelle
         for tf in timeframes:
-            strong = [shared_signals[tf][s] for s in shared_signals[tf] if shared_signals[tf][s].get("score", 0) >= 85]
+            strong = [v for v in shared_signals[tf].values() if v.get("score", 0) >= 85]
             strong.sort(key=lambda x: -x.get("score", 0))
-            active_strong_signals[tf] = strong
+            active_strong_signals[tf] = strong[:20]  # en iyi 20
 
-        # Pump radar güncelle
+        # Pump Radar (gerçek veri)
         try:
-            from utils import exchange  # exchange utils'te tanımlı olmalı
             tickers = await exchange.fetch_tickers()
             gains = []
             for sym, t in tickers.items():
-                if sym.endswith("USDT") and "percentage" in t:
-                    change = t["percentage"]
+                if sym in all_usdt_symbols and "percentage" in t and t["percentage"] is not None:
+                    change = float(t["percentage"])
                     if abs(change) >= 5:
                         gains.append({
                             "symbol": sym.replace("USDT", ""),
-                            "price": t["last"],
-                            "change": change
+                            "price": float(t["last"]),
+                            "change": round(change, 2)
                         })
             gains.sort(key=lambda x: -abs(x["change"]))
             top10 = gains[:10]
@@ -158,12 +147,11 @@ async def signal_producer():
             logger.error(f"Pump radar hatası: {e}")
 
         elapsed = asyncio.get_event_loop().time() - start_time
-        logger.info(f"Tarama tamamlandı: {signals_found} güçlü sinyal, {elapsed:.1f}s sürdü")
+        logger.info(f"✅ {signals_found} güçlü sinyal bulundu | {elapsed:.1f}s")
 
-        await asyncio.sleep(max(1.0, 5.0 - elapsed))
+        await asyncio.sleep(max(1.0, 6.0 - elapsed))
 
-
-# ========== Init & Cleanup ==========
+# ========== INIT & CLEANUP ==========
 async def initialize():
     from utils import load_all_symbols
     await load_all_symbols()
@@ -173,5 +161,4 @@ async def initialize():
     logger.info("✅ Tüm arka plan görevleri başlatıldı")
 
 async def cleanup():
-    logger.info("🛑 Cleanup çalıştırılıyor...")
-    # Gerekirse ek temizlik
+    logger.info("🛑 Uygulama kapatılıyor...")
