@@ -192,6 +192,7 @@ async def signal(request: Request):
         <div class="controls">
             <input id="pair" placeholder="Coin (örn: BTCUSDT)" value="BTCUSDT">
             <select id="tf">
+                <option value="1m">1 Dakika</option>
                 <option value="5m">5 Dakika</option>
                 <option value="15m">15 Dakika</option>
                 <option value="1h">1 Saat</option>
@@ -303,3 +304,4 @@ async def health():
         "rt_coins": len(rt_ticker.get("tickers", {})),
         "ws_total": sum(len(v) for v in single_subscribers.values()) + sum(len(v) for v in all_subscribers.values()) + len(pump_radar_subscribers)
     }
+
