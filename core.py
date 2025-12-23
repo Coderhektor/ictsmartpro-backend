@@ -160,11 +160,11 @@ async def signal_producer():
                 "last_update": "Hata - Yeniden deneniyor..."
             }))
 
-        elapsed = asyncio.get_event_loop().time() - start_time
+                elapsed = asyncio.get_event_loop().time() - start_time
         logger.info(f"Tarama tamam: {signals_found} sinyal, {elapsed:.1f}s sürdü")
 
-        await asyncio.sleep(max(3.0, 8.0 - elapsed))  # 8 saniyede bir tarama
-
+        # 4 saniyede bir tam tarama (canlı hissi için ideal)
+        await asyncio.sleep(max(1.0, 4.0 - elapsed))
 # ========== INIT ==========
 async def initialize():
     try:
