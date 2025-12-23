@@ -1,4 +1,4 @@
-# indicators.py — GÜNCEL VERSİYON (pd.DataFrame kabul etsin + hata önleme)
+# indicators.py — DÜZELTİLMİŞ VE CANLI SİNYAL ÜRETECEK VERSİYON
 
 import pandas as pd
 import numpy as np
@@ -11,7 +11,7 @@ SMA50_LENGTH = 50
 RSI_OB_LEVEL = 70
 CRT_RANGE_MULTIPLIER = 1.5
 CRT_LOOKBACK = 5
-SIGNAL_STRENGTH = 50
+SIGNAL_STRENGTH = 60  # Biraz düşürdük ki sinyal gelsin
 
 LONDON_KILLZONE_START_UTC = 7
 LONDON_KILLZONE_END_UTC = 10
@@ -32,38 +32,35 @@ def rsi(series: pd.Series, period: int) -> pd.Series:
     return rsi_vals
 
 def generate_ict_signal(df: pd.DataFrame, symbol: str, timeframe: str) -> Optional[Dict[str, Any]]:
-    """
-    df: pandas DataFrame with columns: ['open', 'high', 'low', 'close', 'volume'] and datetime index (or 'timestamp')
-    """
     if len(df) < 100:
         return None
 
-    # Sütun isimlerini garantiye al
-    df = df[['open', 'high', 'low', 'close', 'volume']].copy()
-    o, h, l, c = df['open'].values, df['high'].values, df['low'].values, df['close'].values
-
-    # Heikin-Ashi
-    ha_close = (o + h + l + c) / 4
-    ha_open = np.empty_like(ha_close)
-    ha_open[0] = (o[0] + c[0]) / 2
-    for i in range(1, len(ha_open)):
-        ha_open[i] = (ha_open[i-1] + ha_close[i-1]) / 2
-
-    ha_high = np.maximum.reduce([h, ha_open, ha_close])
-    ha_low = np.minimum.reduce([l, ha_open, ha_close])
-
-    # Zaman (UTC saat)
-    if df.index.name == 'timestamp' or 'timestamp' in df.columns:
-        hours = pd.to_datetime(df.index if df.index.name else df['timestamp'], unit='ms', utc=True).hour
+    # Timestamp'i datetime index yap
+    if 'timestamp' in df.columns:
+        df = df.set_index('timestamp')
+        df.index = pd.to_datetime(df.index, unit='ms', utc=True)
     else:
-        hours = pd.to_datetime(df.index, utc=True).hour
+        df.index = pd.to_datetime(df.index, utc=True)
 
+    df = df[['open', 'high', 'low', 'close', 'volume']].copy()
+
+    # Heikin-Ashi hesapla (pandas Series ile)
+    ha_close = (df['open'] + df['high'] + df['low'] + df['close']) / 4
+    ha_open = (df['open'].shift(1) + df['close'].shift(1)) / 2
+    ha_open.iloc[0] = (df['open'].iloc[0] + df['close'].iloc[0]) / 2
+    ha_open = ha_open.fillna(method='bfill')
+
+    ha_high = pd.concat([df['high'], ha_open, ha_close], axis=1).max(axis=1)
+    ha_low = pd.concat([df['low'], ha_open, ha_close], axis=1).min(axis=1)
+
+    # Killzone (UTC saat)
+    hours = df.index.hour
     london_kz = (hours >= LONDON_KILLZONE_START_UTC) & (hours < LONDON_KILLZONE_END_UTC)
     ny_kz = (hours >= NY_KILLZONE_START_UTC) & (hours < NY_KILLZONE_END_UTC)
     in_killzone = london_kz | ny_kz
 
-    # RSI6 & SMA50
-    rsi6 = rsi(pd.Series(ha_close), RSI6_LENGTH)
+    # RSI6 ve SMA50
+    rsi6 = rsi(ha_close, RSI6_LENGTH)
     sma50 = rsi6.rolling(SMA50_LENGTH).mean()
 
     rsi6_crossover = (rsi6 > sma50) & (rsi6.shift(1) <= sma50.shift(1))
@@ -71,93 +68,98 @@ def generate_ict_signal(df: pd.DataFrame, symbol: str, timeframe: str) -> Option
 
     # CRT
     ha_range = ha_high - ha_low
-    avg_range = pd.Series(ha_range).rolling(CRT_LOOKBACK).mean()
-    narrow_prev = ha_range.shift(1) < (avg_range.shift(1) / CRT_RANGE_MULTIPLIER)
+    avg_range = ha_range.rolling(CRT_LOOKBACK).mean()
+    narrow_prev = ha_range.shift(1) < (avg_range.shift(1) * CRT_RANGE_MULTIPLIER)
     wide_now = ha_range > (avg_range * CRT_RANGE_MULTIPLIER)
 
-    crt_buy = narrow_prev & wide_now & (ha_close > ha_open) & (ha_close > np.roll(ha_high, 1))
-    crt_sell = narrow_prev & wide_now & (ha_close < ha_open) & (ha_close < np.roll(ha_low, 1))
+    crt_buy = narrow_prev & wide_now & (ha_close > ha_open) & (ha_close > df['high'].shift(1))
+    crt_sell = narrow_prev & wide_now & (ha_close < ha_open) & (ha_close < df['low'].shift(1))
 
-    # Momentum (senin kuralın)
-    mom_buy = (c > np.roll(c, 1)) & (c > np.roll(c, 2))
-    mom_sell = (c < np.roll(c, 1)) & (c < np.roll(c, 2))
+    # Diğer patternler
+    mom_buy = (df['close'] > df['close'].shift(1)) & (df['close'] > df['close'].shift(2))
+    mom_sell = (df['close'] < df['close'].shift(1)) & (df['close'] < df['close'].shift(2))
 
-    # FVG, Engulfing, Pin Bar vs.
-    fvg_up = (np.roll(l, 1) > np.roll(h, -1)) & (c > o)
-    fvg_down = (np.roll(h, 1) < np.roll(l, -1)) & (c < o)
+    fvg_up = (df['low'].shift(1) > df['high'].shift(-1)) & (df['close'] > df['open'])
+    fvg_down = (df['high'].shift(1) < df['low'].shift(-1)) & (df['close'] < df['open'])
 
-    bullish_engulfing = (np.roll(c, 1) < np.roll(o, 1)) & (o < np.roll(c, 1)) & (c > np.roll(o, 1))
-    bearish_engulfing = (np.roll(c, 1) > np.roll(o, 1)) & (o > np.roll(c, 1)) & (c < np.roll(o, 1))
+    bullish_engulfing = (df['close'].shift(1) < df['open'].shift(1)) & (df['open'] < df['close'].shift(1)) & (df['close'] > df['open'].shift(1))
+    bearish_engulfing = (df['close'].shift(1) > df['open'].shift(1)) & (df['open'] > df['close'].shift(1)) & (df['close'] < df['open'].shift(1))
 
-    body = np.abs(c - o)
-    lower_wick = np.minimum(o, c) - l
-    upper_wick = h - np.maximum(o, c)
-    total_range = h - l + 1e-8
+    body = (df['close'] - df['open']).abs()
+    lower_wick = df[['open', 'close']].min(axis=1) - df['low']
+    upper_wick = df['high'] - df[['open', 'close']].max(axis=1)
+    total_range = df['high'] - df['low'] + 1e-8
 
     bullish_pin = (lower_wick > 2 * body) & (upper_wick < body)
     bearish_pin = (upper_wick > 2 * body) & (lower_wick < body)
 
-    displacement_up = (c - o) > total_range * 0.8
-    displacement_down = (o - c) > total_range * 0.8
+    displacement_up = (df['close'] - df['open']) > (total_range * 0.8)
+    displacement_down = (df['open'] - df['close']) > (total_range * 0.8)
 
-    # Skor (son mum)
-    i = -1
+    # Son mum için skor
     score = 0
+    last = -1
 
-    score += 35 if rsi6_crossover.iloc[i] else 0
-    score -= 35 if rsi6_crossunder.iloc[i] else 0
-    score += 15 if rsi6.iloc[i] > RSI_OB_LEVEL else 0
+    if rsi6_crossover.iloc[last]: score += 35
+    if rsi6_crossunder.iloc[last]: score -= 35
+    if rsi6.iloc[last] > RSI_OB_LEVEL: score += 15
 
-    score += 40 if crt_buy[i] else 0
-    score -= 40 if crt_sell[i] else 0
+    if crt_buy.iloc[last]: score += 40
+    if crt_sell.iloc[last]: score -= 40
 
-    score += 30 if fvg_up[i] else 0
-    score -= 30 if fvg_down[i] else 0
+    if fvg_up.iloc[last]: score += 30
+    if fvg_down.iloc[last]: score -= 30
 
-    score += 25 if bullish_engulfing[i] else 0
-    score -= 25 if bearish_engulfing[i] else 0
-    score += 20 if bullish_pin[i] else 0
-    score -= 20 if bearish_pin[i] else 0
-    score += 25 if displacement_up[i] else 0
-    score -= 25 if displacement_down[i] else 0
-    score += 25 if mom_buy[i] else 0
-    score -= 25 if mom_sell[i] else 0
+    if bullish_engulfing.iloc[last]: score += 25
+    if bearish_engulfing.iloc[last]: score -= 25
 
-    score += 25 if in_killzone.iloc[i] else 0
-    score += 15 if london_kz.iloc[i] else 0
+    if bullish_pin.iloc[last]: score += 20
+    if bearish_pin.iloc[last]: score -= 20
 
-    normalized_score = min(100, max(0, (score + 150) / 3))
+    if displacement_up.iloc[last]: score += 25
+    if displacement_down.iloc[last]: score -= 25
+
+    if mom_buy.iloc[last]: score += 25
+    if mom_sell.iloc[last]: score -= 25
+
+    if in_killzone.iloc[last]: score += 25
+    if london_kz.iloc[last]: score += 15
+
+    # Daha dengeli skor
+    normalized_score = min(100, max(0, score + 100))  # 0-200 arası skoru 0-100 yap
 
     if normalized_score < SIGNAL_STRENGTH:
         return None
 
-    current_price = float(c[i])
-    signal_text = "🚀 ICT GÜÇLÜ ALIM SİNYALİ" if score > 80 else "🔥 ICT GÜÇLÜ SATIM SİNYALİ"
-    momentum = "up" if score > 0 else "down"
+    current_price = float(df['close'].iloc[-1])
+    signal_text = "🚀 ICT GÜÇLÜ ALIM SİNYALİ" if score > 0 else "🔥 ICT GÜÇLÜ SATIM SİNYALİ"
 
     triggers = []
-    if fvg_up[i]: triggers.append("FVG↑")
-    if crt_buy[i]: triggers.append("CRT Alım")
-    if bullish_engulfing[i]: triggers.append("Engulfing↑")
-    if bullish_pin[i]: triggers.append("Pin Bar↑")
-    if displacement_up[i]: triggers.append("Displacement↑")
-    if mom_buy[i]: triggers.append("Momentum↑")
-    if crt_sell[i]: triggers.append("CRT Satım")
-    if fvg_down[i]: triggers.append("FVG↓")
+    if crt_buy.iloc[last]: triggers.append("CRT Alım")
+    if crt_sell.iloc[last]: triggers.append("CRT Satım")
+    if fvg_up.iloc[last]: triggers.append("FVG↑")
+    if fvg_down.iloc[last]: triggers.append("FVG↓")
+    if bullish_engulfing.iloc[last]: triggers.append("Engulfing↑")
+    if bearish_engulfing.iloc[last]: triggers.append("Engulfing↓")
+    if bullish_pin.iloc[last]: triggers.append("Pin Bar↑")
+    if bearish_pin.iloc[last]: triggers.append("Pin Bar↓")
+    if displacement_up.iloc[last]: triggers.append("Displacement↑")
+    if displacement_down.iloc[last]: triggers.append("Displacement↓")
+    if mom_buy.iloc[last]: triggers.append("Momentum↑")
+    if mom_sell.iloc[last]: triggers.append("Momentum↓")
 
-    killzone_name = "London" if london_kz.iloc[i] else "New York" if ny_kz.iloc[i] else "Normal"
+    killzone_name = "London" if london_kz.iloc[last] else "New York" if ny_kz.iloc[last] else "Normal"
 
-    pair = symbol.replace("USDT", "/USDT") if symbol.endswith("USDT") else symbol
-return {
-    "pair": pair,
-    "timeframe": timeframe,
-    "current_price": round(current_price, 6 if current_price < 1 else 4),
-    "signal": signal_text,
-    "momentum": momentum,
-    "last_update": datetime.utcnow().strftime("%H:%M:%S UTC"),
-    "score": round(normalized_score, 1),
-    "killzone": killzone_name,
-    "triggers": " | ".join(triggers) if triggers else "RSI6 + Momentum",
-    "strength": "ÇOK YÜKSEK" if abs(score) > 100 else "YÜKSEK",
-    "volume_spike": False  # <--- TAM BURAYA EKLE
-}
+    pair = symbol.replace("USDT", "/USDT")
+
+    return {
+        "pair": pair,
+        "timeframe": timeframe.upper(),
+        "current_price": round(current_price, 6 if current_price < 1 else 4),
+        "signal": signal_text,
+        "score": round(normalized_score, 1),
+        "last_update": datetime.utcnow().strftime("%H:%M:%S UTC"),
+        "killzone": killzone_name,
+        "triggers": " | ".join(triggers) if triggers else "RSI6 + SMA50",
+        "strength": "ÇOK YÜKSEK" if normalized_score >= 85 else "YÜKSEK"
+    }
