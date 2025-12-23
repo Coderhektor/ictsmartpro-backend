@@ -87,7 +87,7 @@ async def signal_producer():
         logger.error(f"Import hatası: {e}")
         return
 
-    timeframes = ["5m", "15m", "1h"]
+      timeframes = ["1m", "5m", "15m", "1h","4h","1D"]  # 1 dakika eklendi
     await asyncio.sleep(8)  # sembollerin yüklenmesini bekle
 
     while True:
