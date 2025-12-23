@@ -1,4 +1,5 @@
-# main.py
+# main.py — TEMİZ VERSİYON, 1 DAKİKA DAHİL, CANLI SİNYAL HAZIR
+
 import os
 import logging
 from datetime import datetime
@@ -47,13 +48,12 @@ async def ws_signal(websocket: WebSocket, pair: str, timeframe: str):
     channel = f"{symbol}:{timeframe}"
     single_subscribers[channel].add(websocket)
 
-    # Varsa mevcut sinyali hemen gönder
     sig = shared_signals.get(timeframe, {}).get(symbol)
     if sig:
         await websocket.send_json(sig)
 
     try:
-        await websocket.receive()  # Bağlantıyı açık tut
+        await websocket.receive()
     except WebSocketDisconnect:
         single_subscribers[channel].discard(websocket)
 
@@ -62,7 +62,6 @@ async def ws_all(websocket: WebSocket, timeframe: str):
     await websocket.accept()
     all_subscribers[timeframe].add(websocket)
     await websocket.send_json(active_strong_signals.get(timeframe, []))
-
     try:
         while True:
             await asyncio.sleep(1)
@@ -74,7 +73,6 @@ async def ws_pump(websocket: WebSocket):
     await websocket.accept()
     pump_radar_subscribers.add(websocket)
     await websocket.send_json({"top_gainers": top_gainers, "last_update": last_update})
-
     try:
         while True:
             await asyncio.sleep(1)
@@ -103,17 +101,14 @@ async def home(request: Request):
         tr:hover{{transform:scale(1.02);box-shadow:0 15px 40px #00ffff44}}
         .green{{color:#00ff88;text-shadow:0 0 20px #00ff88}}
         .red{{color:#ff4444;text-shadow:0 0 20px #ff4444}}
-        .btn{{display:block;width:90%;max-width:500px;margin:20px auto;padding:25px;font-size:2.2rem;
-            background:linear-gradient(45deg,#fc00ff,#00dbde);color:#fff;text-align:center;border-radius:50px;
-            text-decoration:none;box-shadow:0 0 60px #ff00ff88;transition:.3s}}
+        .btn{{display:block;width:90%;max-width:500px;margin:20px auto;padding:25px;font-size:2.2rem;background:linear-gradient(45deg,#fc00ff,#00dbde);color:#fff;text-align:center;border-radius:50px;text-decoration:none;box-shadow:0 0 60px #ff00ff88;transition:.3s}}
         .btn:hover{{transform:scale(1.08);box-shadow:0 0 100px #ff00ff}}
         .loading{{color:#00ffff;animation:pulse 2s infinite}}
         @keyframes pulse{{0%,100%{{opacity:0.6}}50%{{opacity:1}}}}
     </style>
 </head>
 <body>
-    <div style='position:fixed;top:15px;left:15px;background:#000000cc;padding:10px 20px;border-radius:20px;
-        color:#00ff88;font-size:1.2rem;'>Hoş geldin, {user}</div>
+    <div style='position:fixed;top:15px;left:15px;background:#000000cc;padding:10px 20px;border-radius:20px;color:#00ff88;font-size:1.2rem;'>Hoş geldin, {user}</div>
     <div class="container">
         <h1>ICT SMART PRO</h1>
         <div class="update" id="update">Veri yükleniyor... <span class="loading">●●●</span></div>
@@ -149,16 +144,6 @@ async def home(request: Request):
 </body>
 </html>"""
 
-@app.post("/login")
-async def login(request: Request):
-    form = await request.form()
-    email = form.get("email", "").strip().lower()
-    if email:
-        resp = RedirectResponse("/", status_code=303)
-        resp.set_cookie("user_email", email, max_age=30*24*3600, httponly=True)
-        return resp
-    return RedirectResponse("/")
-
 @app.get("/signal", response_class=HTMLResponse)
 async def signal(request: Request):
     user = request.cookies.get("user_email")
@@ -188,12 +173,11 @@ async def signal(request: Request):
 <body>
     <div class="container">
         <h1>📊 CANLI SİNYAL + GRAFİK</h1>
-        
         <div class="controls">
             <input id="pair" placeholder="Coin (örn: BTCUSDT)" value="BTCUSDT">
             <select id="tf">
                 <option value="1m">1 Dakika</option>
-                <option value="5m">5 Dakika</option>
+                <option value="5m" selected>5 Dakika</option>
                 <option value="15m">15 Dakika</option>
                 <option value="1h">1 Saat</option>
                 <option value="4h">4 Saat</option>
@@ -202,13 +186,8 @@ async def signal(request: Request):
             <button onclick="connect()">🔴 CANLI BAĞLANTI KUR</button>
             <div id="status">Bağlantı bekleniyor...</div>
         </div>
-
         <div id="result" class="result">Sinyal burada gerçek zamanlı olarak güncellenecek...</div>
-
-        <div id="chart">
-            <div id="tradingview_widget"></div>
-        </div>
-
+        <div id="chart"><div id="tradingview_widget"></div></div>
         <a href="/" class="footer">← Ana Sayfaya Dön</a>
     </div>
 
@@ -216,7 +195,7 @@ async def signal(request: Request):
         let tvWidget = null;
         let currentWs = null;
 
-        function createTradingViewWidget(symbol = "BINANCE:BTCUSDT", interval = "60") {
+        function createTradingViewWidget(symbol = "BINANCE:BTCUSDT", interval = "5") {
             if (tvWidget) tvWidget.remove();
             tvWidget = new TradingView.widget({
                 "autosize": true,
@@ -236,17 +215,26 @@ async def signal(request: Request):
         }
 
         document.addEventListener("DOMContentLoaded", () => {
-            createTradingViewWidget("BINANCE:BTCUSDT", "60");
+            createTradingViewWidget("BINANCE:BTCUSDT", "5");
         });
 
-        const tfMap = {"5m": "5", "15m": "15", "1h": "60", "4h": "240", "1d": "D"};
+        // 1 DAKİKA DAHİL TF MAP
+        const tfMap = {
+            "1m": "1",
+            "5m": "5",
+            "15m": "15",
+            "1h": "60",
+            "4h": "240",
+            "1d": "D"
+        };
 
         function connect() {
             const pair = document.getElementById('pair').value.trim().toUpperCase();
             const tf = document.getElementById('tf').value;
 
             const tvSymbol = "BINANCE:" + (pair.endsWith("USDT") ? pair : pair + "USDT");
-            const tvInterval = tfMap[tf] || "60";
+            const tvInterval = tfMap[tf] || "5";
+
             createTradingViewWidget(tvSymbol, tvInterval);
 
             if (currentWs) currentWs.close();
@@ -274,8 +262,8 @@ async def signal(request: Request):
 
                 document.getElementById('result').className = cls;
                 document.getElementById('result').innerHTML = `
-                    <h2 style="font-size:3.2rem;color:${col}">${d.signal || 'SİNYAL YOK'}</h2>
-                    <p><strong>${d.pair || pair}</strong> • $${d.current_price || '?'} • ${d.timeframe?.toUpperCase() || tf.toUpperCase()}</p>
+                    <h2 style="font-size:3.2rem;color:${col}">${d.signal || 'GÜÇLÜ SİNYAL YOK'}</h2>
+                    <p><strong>${d.pair || pair}</strong> • $${d.current_price || '?'} • ${tf.toUpperCase()}</p>
                     <p>Momentum: <strong>${d.momentum === 'up' ? '⬆️ YUKARI' : '⬇️ AŞAĞI'}</strong> | Skor: <strong>${d.score || 0}/100</strong>${d.volume_spike ? ' | 💥 HACİM PATLAMASI' : ''}</p>
                     <p><em>${d.last_update || 'Bekleniyor...'}</em> | ${d.killzone || 'Normal'} • ${d.triggers || 'Standart'}</p>`;
             };
@@ -286,7 +274,7 @@ async def signal(request: Request):
             };
 
             currentWs.onclose = () => {
-                document.getElementById('status').innerHTML = "❌ Bağlantı kapandı – Yeniden bağlanmak için butona bas";
+                document.getElementById('status').innerHTML = "❌ Bağlantı kapandı – Yeniden bağlan";
                 document.getElementById('status').style.color = "#ff4444";
             };
         }
@@ -302,6 +290,9 @@ async def health():
         "time": datetime.now().isoformat(),
         "symbols": len(all_usdt_symbols),
         "rt_coins": len(rt_ticker.get("tickers", {})),
-        "ws_total": sum(len(v) for v in single_subscribers.values()) + sum(len(v) for v in all_subscribers.values()) + len(pump_radar_subscribers)
+        "ws_total": (
+            sum(len(v) for v in single_subscribers.values()) +
+            sum(len(v) for v in all_subscribers.values()) +
+            len(pump_radar_subscribers)
+        )
     }
-
