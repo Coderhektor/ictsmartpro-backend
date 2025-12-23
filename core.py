@@ -1,4 +1,4 @@
-# core.py — TAMAMEN ÇALIŞIR, GIRINTI DÜZGÜN, GERÇEK SİNYAL ÜRETİR
+# core.py — GERÇEK SİNYAL + PUMP RADAR ÇALIŞIR VERSİYON
 
 import asyncio
 import logging
@@ -19,7 +19,7 @@ shared_signals: Dict[str, Dict[str, dict]] = defaultdict(dict)
 active_strong_signals: Dict[str, List[dict]] = defaultdict(list)
 
 top_gainers: List[dict] = []
-last_update: str = datetime.now(timezone.utc).strftime("%H:%M:%S UTC")
+last_update: str = "Yükleniyor..."
 
 rt_ticker = {
     "tickers": {},
@@ -30,7 +30,7 @@ rt_ticker = {
 signal_queue: asyncio.Queue = asyncio.Queue(maxsize=1000)
 
 async def broadcast_worker():
-    logger.info("📡 Broadcast worker başlatılıyor...")
+    logger.info("📡 Broadcast worker başladı")
     while True:
         try:
             msg_type, payload = await signal_queue.get()
@@ -39,7 +39,6 @@ async def broadcast_worker():
                 tf, sym = payload["timeframe"], payload["symbol"]
                 channel = f"{sym}:{tf}"
 
-                # Tek coin aboneler
                 dead_ws = set()
                 for ws in single_subscribers[channel]:
                     try:
@@ -48,7 +47,6 @@ async def broadcast_worker():
                         dead_ws.add(ws)
                 single_subscribers[channel] -= dead_ws
 
-                # Tüm coin aboneler (güncel güçlü sinyalleri gönder)
                 dead_ws = set()
                 for ws in all_subscribers[tf]:
                     try:
@@ -73,32 +71,37 @@ async def broadcast_worker():
             signal_queue.task_done()
 
         except Exception as e:
-            logger.error(f"Broadcast hatası: {e}")
-            await asyncio.sleep(0.1)
+            logger.error(f"Broadcast worker hatası: {e}")
 
-# ========== GERÇEK SİNYAL ÜRETİCİ ==========
+# ========== GERÇEK SİNYAL + PUMP RADAR ==========
 async def signal_producer():
-    logger.info("🌀 Gerçek sinyal üretici başlatılıyor...")
+    logger.info("🌀 Sinyal ve pump radar üretici başladı")
 
-    from indicators import generate_ict_signal
-    from utils import all_usdt_symbols, fetch_ohlcv, exchange
+    # Gerekli import'lar (burada yap ki hata olursa logda görünsün)
+    try:
+        from indicators import generate_ict_signal
+        from utils import all_usdt_symbols, fetch_ohlcv, exchange
+        logger.info("✅ indicators ve utils başarıyla yüklendi")
+    except Exception as e:
+        logger.error(f"Import hatası: {e}")
+        return
 
     timeframes = ["5m", "15m", "1h"]
-    await asyncio.sleep(5)  # init bekle
+    await asyncio.sleep(8)  # sembollerin yüklenmesini bekle
 
     while True:
         start_time = asyncio.get_event_loop().time()
         signals_found = 0
 
+        # SİNYAL ÜRETİMİ
         for tf in timeframes:
-            for symbol in all_usdt_symbols[:80]:  # CPU için 80 coin
+            for symbol in all_usdt_symbols[:60]:  # rate limit için 60 coin
                 try:
                     ohlcv = await fetch_ohlcv(symbol, tf, limit=200)
                     if len(ohlcv) < 100:
                         continue
 
                     df = pd.DataFrame(ohlcv, columns=['timestamp', 'open', 'high', 'low', 'close', 'volume'])
-                    df['timestamp'] = df['timestamp'].astype('int64') // 1_000_000  # ms'ye çevir (gerekirse)
 
                     signal = generate_ict_signal(df, symbol, tf)
 
@@ -113,20 +116,23 @@ async def signal_producer():
                         }))
 
                 except Exception as e:
-                    logger.warning(f"{symbol}/{tf} analiz hatası: {e}")
+                    logger.warning(f"Sinyal hatası ({symbol}/{tf}): {e}")
 
         # Güçlü sinyalleri güncelle
         for tf in timeframes:
             strong = [v for v in shared_signals[tf].values() if v.get("score", 0) >= 85]
             strong.sort(key=lambda x: -x.get("score", 0))
-            active_strong_signals[tf] = strong[:20]  # en iyi 20
+            active_strong_signals[tf] = strong[:15]
 
-        # Pump Radar (gerçek veri)
+        # PUMP RADAR (GERÇEK VERİ)
         try:
+            logger.info("Pump radar verisi çekiliyor...")
             tickers = await exchange.fetch_tickers()
             gains = []
-            for sym, t in tickers.items():
-                if sym in all_usdt_symbols and "percentage" in t and t["percentage"] is not None:
+
+            for sym in all_usdt_symbols[:100]:
+                t = tickers.get(sym)
+                if t and t.get("percentage") is not None:
                     change = float(t["percentage"])
                     if abs(change) >= 5:
                         gains.append({
@@ -134,31 +140,43 @@ async def signal_producer():
                             "price": float(t["last"]),
                             "change": round(change, 2)
                         })
+
             gains.sort(key=lambda x: -abs(x["change"]))
             top10 = gains[:10]
 
-            if top10:
-                await signal_queue.put(("pump_radar", {
-                    "top_gainers": top10,
-                    "last_update": datetime.now(timezone.utc).strftime("%H:%M:%S UTC")
-                }))
+            payload = {
+                "top_gainers": top10,
+                "last_update": datetime.now(timezone.utc).strftime("%H:%M:%S UTC")
+            }
+
+            await signal_queue.put(("pump_radar", payload))
+            logger.info(f"✅ Pump radar güncellendi: {len(top10)} coin")
 
         except Exception as e:
-            logger.error(f"Pump radar hatası: {e}")
+            logger.error(f"Pump radar çekme hatası: {e}")
+            # Hata olsa bile boş liste gönder (sayfa donmasın)
+            await signal_queue.put(("pump_radar", {
+                "top_gainers": [],
+                "last_update": "Hata - Yeniden deneniyor..."
+            }))
 
         elapsed = asyncio.get_event_loop().time() - start_time
-        logger.info(f"✅ {signals_found} güçlü sinyal bulundu | {elapsed:.1f}s")
+        logger.info(f"Tarama tamam: {signals_found} sinyal, {elapsed:.1f}s sürdü")
 
-        await asyncio.sleep(max(1.0, 6.0 - elapsed))
+        await asyncio.sleep(max(3.0, 8.0 - elapsed))  # 8 saniyede bir tarama
 
-# ========== INIT & CLEANUP ==========
+# ========== INIT ==========
 async def initialize():
-    from utils import load_all_symbols
-    await load_all_symbols()
+    try:
+        from utils import load_all_symbols
+        await load_all_symbols()
+        logger.info("✅ Semboller yüklendi")
+    except Exception as e:
+        logger.error(f"Sembol yükleme hatası: {e}")
 
     asyncio.create_task(broadcast_worker())
     asyncio.create_task(signal_producer())
-    logger.info("✅ Tüm arka plan görevleri başlatıldı")
+    logger.info("✅ Tüm görevler başlatıldı")
 
 async def cleanup():
-    logger.info("🛑 Uygulama kapatılıyor...")
+    logger.info("🛑 Uygulama kapanıyor...")
