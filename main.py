@@ -68,7 +68,8 @@ async def ws_signal(websocket: WebSocket, pair: str, timeframe: str):
 
 @app.websocket("/ws/all/{timeframe}")
 async def ws_all(websocket: WebSocket, timeframe: str):
-    if timeframe not in ["5m", "15m", "1h"]:
+    supported_tfs = ["1m", "3m", "5m", "15m", "30m", "1h", "4h", "1d", "1w"]
+    if timeframe not in supported_tfs:
         await websocket.accept()
         await websocket.send_json({"error": "Zaman dilimi desteklenmiyor"})
         await websocket.close()
@@ -218,9 +219,15 @@ async def signal(request: Request):
         <div class="controls">
             <input id="pair" placeholder="Coin (örn: BTCUSDT)" value="BTCUSDT">
             <select id="tf">
-                <option value="5m">5 Dakika</option>
+                <option value="1m">1 Dakika</option>
+                <option value="3m">3 Dakika</option>
+                <option value="5m" selected>5 Dakika</option>
                 <option value="15m">15 Dakika</option>
+                <option value="30m">30 Dakika</option>
                 <option value="1h">1 Saat</option>
+                <option value="4h">4 Saat</option>
+                <option value="1d">1 Gün</option>
+                <option value="1w">1 Hafta</option>
             </select>
             <button onclick="connect()">🔴 CANLI BAĞLANTI KUR</button>
             <div id="status">Bağlantı bekleniyor...</div>
@@ -272,8 +279,11 @@ async def signal(request: Request):
             createTVWidget("BINANCE:BTCUSDT", "5");
         });
 
-        // TF → interval mapping
-        const tfIntervalMap = {"5m": "5", "15m": "15", "1h": "60"};
+        // TF → interval mapping (güncellendi)
+        const tfIntervalMap = {
+            "1m": "1", "3m": "3", "5m": "5", "15m": "15", "30m": "30",
+            "1h": "60", "4h": "240", "1d": "D", "1w": "W"
+        };
 
         function connect() {
             const pair = document.getElementById('pair').value.trim().toUpperCase();
@@ -317,7 +327,7 @@ async def signal(request: Request):
             ws.onclose = () => document.getElementById('status').innerHTML = "❌ Bağlantı kapandı";
         }
     </script>
-    <script src="https://s3.tradingview.com/tv.js  "></script>
+    <script src="https://s3.tradingview.com/tv.js"></script>
 </body>
 </html>"""
 
@@ -340,14 +350,26 @@ th,td{padding:12px;text-align:left;border-bottom:1px solid #333}
 th{background:#00ffff22}
 .green{color:#00ff88}
 .red{color:#ff4444}
+select{width:100%;padding:16px;margin:8px 0;font-size:1.5rem;border:none;border-radius:12px;background:#333;color:#fff}
 </style>
 </head>
 <body>
 <div class="container">
     <h1>🔥 TÜM COİNLER CANLI TARANIYOR</h1>
     <div class="card">
-        <p>🟢 Sistem çalışıyor — 5m, 15m, 1h timeframe'lerde sinyal aranıyor.</p>
-        <p>⏳ Güncelleme sıklığı: <strong>5 saniye</strong></p>
+        <p>🟢 Sistem çalışıyor — Seçilen timeframe'de sinyal aranıyor.</p>
+        <p>⏳ Güncelleme sıklığı: <strong>10 saniye</strong></p>
+        <select id="tf" onchange="connect()">
+            <option value="1m">1 Dakika</option>
+            <option value="3m">3 Dakika</option>
+            <option value="5m" selected>5 Dakika</option>
+            <option value="15m">15 Dakika</option>
+            <option value="30m">30 Dakika</option>
+            <option value="1h">1 Saat</option>
+            <option value="4h">4 Saat</option>
+            <option value="1d">1 Gün</option>
+            <option value="1w">1 Hafta</option>
+        </select>
         <table id="sig-table">
             <thead><tr><th>COİN</th><th>ZAMAN</th><th>FİYAT</th><th>SİNYAL</th><th>SKOR</th><th>TRİGGER</th></tr></thead>
             <tbody id="table-body">
@@ -359,26 +381,36 @@ th{background:#00ffff22}
 </div>
 
 <script>
-const p = location.protocol === 'https:' ? 'wss' : 'ws';
-const ws = new WebSocket(p + '://' + location.host + '/ws/all/5m');
-const tbody = document.getElementById('table-body');
+let ws = null;
 
-ws.onmessage = e => {
-    const signals = JSON.parse(e.data);
-    if (!Array.isArray(signals) || signals.length === 0) {
-        tbody.innerHTML = '<tr><td colspan="6" style="padding:60px;color:#ffd700">😴 Şu an güçlü sinyal yok</td></tr>';
-        return;
-    }
-    tbody.innerHTML = signals.map((s, i) => `
-        <tr>
-            <td><strong>${s.pair}</strong></td>
-            <td>${s.timeframe}</td>
-            <td>$${s.current_price}</td>
-            <td class="${s.signal.includes('ALIM') ? 'green' : 'red'}">${s.signal}</td>
-            <td>${s.score}</td>
-            <td><small>${s.triggers}</small></td>
-        </tr>`).join('');
-};
+function connect() {
+    const tf = document.getElementById('tf').value;
+    if (ws) ws.close();
+    const p = location.protocol === 'https:' ? 'wss' : 'ws';
+    ws = new WebSocket(p + '://' + location.host + '/ws/all/' + tf);
+
+    const tbody = document.getElementById('table-body');
+
+    ws.onmessage = e => {
+        const signals = JSON.parse(e.data);
+        if (!Array.isArray(signals) || signals.length === 0) {
+            tbody.innerHTML = '<tr><td colspan="6" style="padding:60px;color:#ffd700">😴 Şu an güçlü sinyal yok</td></tr>';
+            return;
+        }
+        tbody.innerHTML = signals.map((s, i) => `
+            <tr>
+                <td><strong>${s.pair}</strong></td>
+                <td>${s.timeframe}</td>
+                <td>$${s.current_price}</td>
+                <td class="${s.signal.includes('ALIM') ? 'green' : 'red'}">${s.signal}</td>
+                <td>${s.score}</td>
+                <td><small>${s.triggers}</small></td>
+            </tr>`).join('');
+    };
+}
+
+// Sayfa yüklendiğinde bağlan
+document.addEventListener("DOMContentLoaded", connect);
 </script>
 </body>
 </html>"""
