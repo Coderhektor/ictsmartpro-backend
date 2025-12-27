@@ -64,10 +64,25 @@ async def ws_signal(websocket: WebSocket, pair: str, timeframe: str):
         await websocket.send_json(sig)
 
     try:
-        await websocket.receive()  # bağlantıyı açık tut
-    except WebSocketDisconnect:
-        single_subscribers[channel].discard(websocket)
+        # Heartbeat + keep-alive loop
+        while True:
+            try:
+                # 15 saniyede bir ping/heartbeat gönder
+                await asyncio.wait_for(websocket.send_json({"heartbeat": True}), timeout=1)
+                # Client'dan bir şey bekle (opsiyonel pong), ama asıl amaç bağlantıyı canlı tutmak
+                await asyncio.wait_for(websocket.receive(), timeout=15)
+            except asyncio.TimeoutError:
+                # Timeout olduysa sadece heartbeat gönder, veri bekleme
+                await websocket.send_json({"heartbeat": True, "status": "Bağlantı aktif"})
+            except WebSocketDisconnect:
+                break
+            except Exception:
+                break
 
+            await asyncio.sleep(15)  # Her 15 saniyede bir kontrol
+
+    finally:
+        single_subscribers[channel].discard(websocket)
 
 @app.websocket("/ws/all/{timeframe}")
 async def ws_all(websocket: WebSocket, timeframe: str):
@@ -608,6 +623,7 @@ async def analyze_chart(image_file: UploadFile):
     except Exception as e:
         logger.error(f"AI analiz hatası: {e}")
         raise HTTPException(status_code=500, detail="Analiz sırasında hata oluştu.")
+
 
 
 
