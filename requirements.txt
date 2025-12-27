@@ -12,6 +12,5 @@ psycopg2-binary
 stripe
 python-multipart   # <--- BU EKLENDİ, ZORUNLU!
 hypercorn
- 
-
+openai>=1.0.0
 
