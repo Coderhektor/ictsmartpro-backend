@@ -278,7 +278,7 @@ async def signal(request: Request):
         
         /* Grafik yüksekliğini artırdık → mobil için 65vh, masaüstü için 75vh */
         #chart{
-            height:clamp(65vh, 70vh, 75vh);
+            height:clamp(40vh, 55vh, 60vh);
             width:100%;
             max-width:1100px;
             margin:20px auto;
@@ -581,4 +581,5 @@ async def abonelik():
     <div style='text-align:center;margin:40px'>
         <a href="/" style="color:#00dbde">&larr; Ana Sayfaya Dön</a>
     </div>"""
+
 
