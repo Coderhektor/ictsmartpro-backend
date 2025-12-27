@@ -360,7 +360,7 @@ async def signal(request: Request):
                 const response = await fetch('https://api.openai.com/v1/chat/completions', {
                     method: 'POST',
                     headers: {
-                        'Authorization': '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',
+                        'Authorization':'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',
                         'Content-Type': 'application/json'
                     },
                     body: JSON.stringify({
@@ -550,6 +550,7 @@ async def abonelik():
     <div style='text-align:center;margin:40px'>
         <a href="/" style="color:#00dbde">&larr; Ana Sayfaya Dön</a>
     </div>"""
+
 
 
 
