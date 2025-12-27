@@ -202,12 +202,15 @@ async def signal(request: Request):
             font-family:sans-serif;
             min-height:100vh;
             margin:0;
-            padding-bottom:80px;
+            padding:20px 0;
         }
         .container{
             max-width:1200px;
             margin:auto;
             padding:20px;
+            display:flex;
+            flex-direction:column;
+            gap:25px;
         }
         h1{
             font-size:clamp(2rem,5vw,3.8rem);
@@ -216,18 +219,18 @@ async def signal(request: Request):
             -webkit-background-clip:text;
             -webkit-text-fill-color:transparent;
             animation:g 8s infinite;
-            margin:10px 0 25px;
+            margin:0;
         }
         @keyframes g{0%{background-position:0%}100%{background-position:200%}}
 
         .welcome{
             position:fixed;top:15px;left:15px;background:#000000cc;padding:10px 20px;
-            border-radius:20px;color:#00ff88;font-size:clamp(0.8rem,2vw,1.2rem);z-index:10;
+            border-radius:20px;color:#00ff88;font-size:clamp(0.8rem,2vw,1.2rem);z-index:100;
         }
 
         .controls{
-            background:#ffffff11;border-radius:20px;padding:20px;margin-bottom:20px;
-            text-align:center;box-shadow:0 8px 30px #00000088;
+            background:#ffffff11;border-radius:20px;padding:20px;text-align:center;
+            box-shadow:0 8px 30px #00000088;
         }
         input,select,button{
             width:100%;max-width:500px;padding:clamp(12px,3vw,16px);margin:10px auto;
@@ -239,59 +242,74 @@ async def signal(request: Request):
         }
         button:hover{transform:scale(1.05);box-shadow:0 0 80px #ff00ff88}
 
-        #status{
-            color:#00ffff;font-size:clamp(1rem,3vw,1.5rem);margin:15px 0;text-align:center;
-        }
+        #status{color:#00ffff;font-size:clamp(1rem,3vw,1.5rem);margin:15px 0;text-align:center}
 
-        /* Canlı Fiyat - Büyük ve Göze Çarpan */
-        #live-price{
-            text-align:center;margin:25px 0;
-        }
+        /* Canlı Fiyat */
+        #live-price{text-align:center;margin:20px 0}
         #price-text{
-            font-size:clamp(2.5rem,7vw,4.5rem);
-            font-weight:bold;
+            font-size:clamp(2.8rem,8vw,5rem);font-weight:bold;
             background:linear-gradient(90deg,#00ffff,#ff00ff,#00ffff);
-            -webkit-background-clip:text;
-            -webkit-text-fill-color:transparent;
+            -webkit-background-clip:text;-webkit-text-fill-color:transparent;
             animation:pulseGlow 4s infinite;
         }
         @keyframes pulseGlow{0%,100%{text-shadow:0 0 20px #00ffff88}50%{text-shadow:0 0 50px #ff00ffaa}}
 
         /* Sinyal Kartı */
         #signal-card{
-            background:#000000aa;border-radius:20px;padding:25px;margin:20px 0;
-            text-align:center;box-shadow:0 10px 40px #00ffff22;transition:.5s;min-height:180px;
+            background:#000000aa;border-radius:20px;padding:25px;text-align:center;
+            box-shadow:0 10px 40px #00ffff22;min-height:160px;
         }
         #signal-card.green{border-left:8px solid #00ff88;box-shadow:0 0 40px #00ff8844}
         #signal-card.red{border-left:8px solid #ff4444;box-shadow:0 0 40px #ff444444}
-        #signal-text{font-size:clamp(1.8rem,5vw,3rem);margin:10px 0;}
-        #signal-details{font-size:clamp(1rem,3vw,1.6rem);line-height:1.8;}
+        #signal-text{font-size:clamp(1.8rem,5vw,3rem);margin:10px 0}
+        #signal-details{font-size:clamp(1rem,3vw,1.6rem);line-height:1.8}
 
         /* AI Analiz Kutusu */
         #ai-box{
-            background:#0d0033aa;border-radius:20px;padding:20px;margin:20px 0;
-            border:2px dashed #00dbde;display:none;
+            background:#0d0033aa;border-radius:20px;padding:25px;
+            border:2px solid #00dbde;display:none;
         }
-        #ai-comment{font-size:clamp(1rem,3vw,1.5rem);line-height:1.7;}
+        #ai-comment{font-size:clamp(1.1rem,3.2vw,1.6rem);line-height:1.8;text-align:left}
 
-        /* Grafik - Artık daha küçük ve dengeli */
-        #chart{
-            height:clamp(35vh,40vh,45vh);   /* Eskisinin yarısından az! */
+        /* Grafik Alanı - Başlangıçta küçük, resize edilebilir */
+        .chart-container{
             width:95%;
-            max-width:900px;
+            max-width:1000px;
             margin:30px auto;
             border-radius:20px;
             overflow:hidden;
             box-shadow:0 15px 50px #00ffff44;
+            resize:both; /* Kullanıcı fareyle büyütüp küçültebilir! */
+            min-height:200px;
+            min-width:300px;
+            background:#0a0022;
+            position:relative;
         }
-        #tradingview_widget{height:100%!important;width:100%!important;position:absolute;top:0;left:0}
+        #chart{
+            width:100%;
+            height:300px; /* Başlangıç yüksekliği küçük */
+            position:relative;
+        }
+        #tradingview_widget{
+            height:100%!important;
+            width:100%!important;
+            position:absolute;
+            top:0;left:0;
+        }
 
-        .footer{
-            text-align:center;margin:40px 0 20px;
+        /* Resize köşesinde küçük tutaç */
+        .chart-container::after{
+            content:'↔';
+            position:absolute;
+            bottom:8px;right:10px;
+            font-size:20px;
+            color:#00dbde;
+            opacity:0.6;
+            cursor:se-resize;
         }
-        .footer a{
-            color:#00dbde;font-size:clamp(1rem,3vw,1.6rem);text-decoration:none;margin:0 15px;
-        }
+
+        .footer{text-align:center;margin:40px 0}
+        .footer a{color:#00dbde;font-size:clamp(1rem,3vw,1.6rem);text-decoration:none;margin:0 15px}
         .loading{animation:pulse 2s infinite}
         @keyframes pulse{0%,100%{opacity:0.6}50%{opacity:1}}
     </style>
@@ -319,27 +337,26 @@ async def signal(request: Request):
             <div id="status">Bağlantı bekleniyor... <span class="loading">●●●</span></div>
         </div>
 
-        <!-- CANLİ FİYAT -->
         <div id="live-price">
             <p style="color:#aaa;margin:0 0 10px;font-size:1.2rem;">Canlı Fiyat (TradingView)</p>
             <div id="price-text">Yükleniyor...</div>
         </div>
 
-        <!-- SİNYAL DURUMU KARTI -->
         <div id="signal-card">
             <div id="signal-text" style="color:#ffd700;">🔴 Canlı bağlantı kurun</div>
-            <div id="signal-details">Sinyal taraması başlamadı. Yukarıdan coin seçip bağlanın.</div>
+            <div id="signal-details">Yukarıdan coin ve zaman dilimi seçip bağlanın.</div>
         </div>
 
-        <!-- AI ANALİZ (İleride aktif olacak) -->
         <div id="ai-box">
-            <h3 style="text-align:center;color:#00dbde;margin-top:0">🤖 Yapay Zeka Analizi</h3>
-            <p id="ai-comment">AI yorumu burada görünecek...</p>
+            <h3 style="text-align:center;color:#00dbde;margin-top:0">🤖 Yapay Zeka Teknik Analizi</h3>
+            <p id="ai-comment">Sinyal geldiğinde detaylı teknik analiz burada görünecek...</p>
         </div>
 
-        <!-- GRAFİK - Artık dengeli boyutta -->
-        <div id="chart">
-            <div id="tradingview_widget"></div>
+        <!-- Resize edilebilir grafik alanı -->
+        <div class="chart-container">
+            <div id="chart">
+                <div id="tradingview_widget"></div>
+            </div>
         </div>
 
         <div class="footer">
@@ -433,6 +450,9 @@ async def signal(request: Request):
                     ${d.last_update ? 'Son: ' + d.last_update : ''}<br>
                     <small>${d.triggers || ''}</small>
                 `;
+
+                // AI kutusunu göster (ileride yorum gelecek)
+                document.getElementById('ai-box').style.display = 'block';
             };
 
             ws.onclose = () => {
@@ -587,6 +607,7 @@ async def abonelik():
     <div style='text-align:center;margin:40px'>
         <a href="/" style="color:#00dbde">&larr; Ana Sayfaya Dön</a>
     </div>"""
+
 
 
 
