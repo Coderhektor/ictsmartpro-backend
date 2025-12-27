@@ -1,4 +1,7 @@
 # main.py — GÜNCELLENMİŞ VERSİYON: Mobil uyumlu, veri akışı haberleri, sinyal anında gösterim 🚀
+import base64
+from fastapi import UploadFile, File, HTTPException
+from openai import OpenAI
 import os
 import asyncio
 import logging
@@ -333,7 +336,7 @@ async def signal(request: Request):
             createTVWidget(tvSymbol, interval);
         }
 
-        // GPT-4o VISION İLE GRAFİK ANALİZİ
+        // BACKEND'E GÖNDEREN YENİ ANALİZ FONKSİYONU
         async function analyzeChartWithAI() {
             const btn = document.getElementById('analyze-btn');
             const aiBox = document.getElementById('ai-box');
@@ -342,7 +345,7 @@ async def signal(request: Request):
             btn.disabled = true;
             btn.innerHTML = "🤖 Analiz ediliyor...";
             aiBox.style.display = 'block';
-            aiComment.innerHTML = '<div id="ai-loading">📸 Grafik ekran görüntüsü alınıyor...<br>🧠 GPT-4o analiz yapıyor, lütfen bekleyin (5-15 sn)</div>';
+            aiComment.innerHTML = '<div id="ai-loading">📸 Grafik ekran görüntüsü alınıyor...<br>🧠 Sunucuda GPT-4o analiz yapıyor (10-20 sn)</div>';
 
             if (!tvWidget) {
                 aiComment.innerHTML = "❌ Grafik yüklenmedi. Lütfen coin seçip bekleyin.";
@@ -352,46 +355,28 @@ async def signal(request: Request):
             }
 
             try {
-                // Grafik hazır olunca screenshot al
                 await new Promise(resolve => tvWidget.onChartReady(resolve));
                 const canvas = await tvWidget.takeClientScreenshot();
-                const imageDataURL = canvas.toDataURL('image/png');
+                const blob = await new Promise(resolve => canvas.toBlob(resolve, 'image/png'));
 
-                const response = await fetch('https://api.openai.com/v1/chat/completions', {
+                const formData = new FormData();
+                formData.append('image_file', blob, 'chart.png');
+
+                const response = await fetch('/api/analyze-chart', {
                     method: 'POST',
-                    headers: {
-                        'Authorization':'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',
-                        'Content-Type': 'application/json'
-                    },
-                    body: JSON.stringify({
-                        model: "gpt-4o",
-                        messages: [
-                            {
-                                role: "system",
-                                content: `Sen bir Teknik Analiz Uzmanı'sın. Sadece teknik analiz yaparsın, asla yatırım tavsiyesi vermezsin.
-Supply-Demand zone'ları (fresh/tested/mitigated), RSI divergence, Volume Profile (POC, HVN/LVN), VWAP, Ichimoku, Fibonacci seviyeleri, Elliott Dalga, mum formasyonları gibi araçları kullan.
-Her yorumunun sonunda mutlaka ekle: "Bu bir yatırım tavsiyesi değildir. Yalnızca teknik analiz yorumudur."`
-                            },
-                            {
-                                role: "user",
-                                content: [
-                                    { type: "text", text: "Bu trading grafiğini çok detaylı teknik analiz yap. Şu anki piyasa yapısı, trend yönü, önemli supply/demand zone'lar, RSI divergence, hacim profili, Fibonacci seviyeleri, olası hedefler ve riskler neler? Mum formasyonları var mı? Türkçe olarak sade ama kapsamlı anlat." },
-                                    { type: "image_url", image_url: { url: imageDataURL } }
-                                ]
-                            }
-                        ],
-                        max_tokens: 1200,
-                        temperature: 0.7
-                    })
+                    body: formData
                 });
 
                 const result = await response.json();
-                let analysis = result.choices?.[0]?.message?.content || "Analiz üretilemedi.";
 
-                aiComment.innerHTML = analysis.replace(/\\n/g, '<br>');
+                if (response.ok) {
+                    aiComment.innerHTML = result.analysis.replace(/\\n/g, '<br>');
+                } else {
+                    aiComment.innerHTML = `Hata: ${result.detail || 'Sunucu hatası'}`;
+                }
             } catch (err) {
                 console.error(err);
-                aiComment.innerHTML = "🤖 Analiz sırasında hata oluştu.<br><small>İnternet bağlantınızı kontrol edin veya biraz sonra tekrar deneyin.</small>";
+                aiComment.innerHTML = "🤖 Bağlantı hatası.<br><small>Lütfen tekrar deneyin.</small>";
             } finally {
                 btn.disabled = false;
                 btn.innerHTML = "🤖 GRAFİĞİ GPT-4o İLE ANALİZ ET";
@@ -399,17 +384,46 @@ Her yorumunun sonunda mutlaka ekle: "Bu bir yatırım tavsiyesi değildir. Yaln�
         }
 
         function connect() {
-            // mevcut sinyal bağlantı kodu aynı kalıyor...
             const { symbol, tf } = getCurrentSymbolAndInterval();
             if (ws) ws.close();
             const p = location.protocol === 'https:' ? 'wss' : 'ws';
             ws = new WebSocket(p + '://' + location.host + '/ws/signal/' + symbol + '/' + tf);
-            // ... onopen, onmessage vs. aynı
+
+            ws.onopen = () => {
+                document.getElementById('status').innerHTML = "✅ Canlı sinyal akışı başladı! 🚀";
+                document.getElementById('signal-text').innerHTML = "🔄 Tarama aktif...";
+                document.getElementById('signal-details').innerHTML = "Güçlü sinyal bekleniyor.";
+            };
+
+            ws.onmessage = (e) => {
+                const d = JSON.parse(e.data);
+                const card = document.getElementById('signal-card');
+                const text = document.getElementById('signal-text');
+                const details = document.getElementById('signal-details');
+
+                if (d.signal && d.signal.includes('ALIM')) {
+                    card.className = 'green';
+                    text.style.color = '#00ff88';
+                } else if (d.signal && d.signal.includes('SATIM')) {
+                    card.className = 'red';
+                    text.style.color = '#ff4444';
+                } else {
+                    card.className = '';
+                    text.style.color = '#ffd700';
+                }
+
+                text.innerHTML = d.signal || 'Sinyal bekleniyor...';
+                details.innerHTML = `
+                    <strong>${d.pair || symbol.replace('USDT','/USDT')}</strong><br>
+                    Skor: <strong>${d.score || '?'} / 100</strong> | ${d.killzone || ''}<br>
+                    ${d.last_update ? 'Son: ' + d.last_update : ''}<br>
+                    <small>${d.triggers || ''}</small>
+                `;
+            };
         }
     </script>
 </body>
 </html>"""
-
 #SINYAL SAYFASI 
 @app.get("/signal/all", response_class=HTMLResponse)
 async def signal_all(request: Request):
@@ -552,6 +566,47 @@ async def abonelik():
     </div>"""
 
 
+from openai import OpenAI
+import os
+import base64
+
+# OpenAI client - Railway variable'dan alır
+openai_client = OpenAI(api_key=os.getenv("OPENAI_API_KEY"))
+
+@app.post("/api/analyze-chart")
+async def analyze_chart(image_file: UploadFile):
+    if not openai_client.api_key:
+        raise HTTPException(status_code=503, detail="AI servisi şu an devre dışı.")
+
+    try:
+        contents = await image_file.read()
+        base64_image = base64.b64encode(contents).decode('utf-8')
+        image_data_url = f"data:{image_file.content_type};base64,{base64_image}"
+
+        response = openai_client.chat.completions.create(
+            model="gpt-4o",
+            messages=[
+                {
+                    "role": "system",
+                    "content": "Sen bir Teknik Analiz Uzmanı'sın. Sadece teknik analiz yaparsın, asla yatırım tavsiyesi vermezsin. Supply-Demand zone'ları, RSI divergence, Volume Profile, Fibonacci, Ichimoku, mum formasyonları gibi araçları kullan. Her yorumun sonunda mutlaka ekle: 'Bu bir yatırım tavsiyesi değildir. Yalnızca teknik analiz yorumudur.'"
+                },
+                {
+                    "role": "user",
+                    "content": [
+                        {"type": "text", "text": "Bu trading grafiğini çok detaylı teknik analiz yap. Piyasa yapısı, trend, önemli zone'lar, divergence, hacim, Fibonacci seviyeleri, olası hedefler neler? Türkçe olarak sade ama kapsamlı anlat."},
+                        {"type": "image_url", "image_url": {"url": image_data_url}}
+                    ]
+                }
+            ],
+            max_tokens=1200
+        )
+
+        analysis = response.choices[0].message.content
+        return {"analysis": analysis}
+
+    except Exception as e:
+        logger.error(f"AI analiz hatası: {e}")
+        raise HTTPException(status_code=500, detail="Analiz sırasında hata oluştu.")
 
 
 
