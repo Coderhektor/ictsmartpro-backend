@@ -183,7 +183,8 @@ async def home(request: Request):
     </script>
 </body>
 </html>"""
-@app.get("/signal", response_class=HTMLResponse)
+  #SINYAL SAYFASI
+  @app.get("/signal", response_class=HTMLResponse)
 async def signal(request: Request):
     user = request.cookies.get("user_email")
     if not user:
@@ -197,39 +198,112 @@ async def signal(request: Request):
     <style>
         body{
             background:linear-gradient(135deg,#0a0022,#1a0033,#000);
-            color:#fff;font-family:sans-serif;min-height:100vh;margin:0;display:flex;flex-direction:column
+            color:#fff;
+            font-family:sans-serif;
+            min-height:100vh;
+            margin:0;
+            padding-bottom:80px;
         }
-        .container{max-width:1200px;margin:auto;padding:20px;flex:1;display:flex;flex-direction:column}
-        h1{font-size:clamp(2rem,5vw,4.5rem);text-align:center;background:linear-gradient(90deg,#00dbde,#fc00ff,#00dbde);-webkit-background-clip:text;-webkit-text-fill-color:transparent;animation:g 8s infinite;margin:10px 0 20px}
+        .container{
+            max-width:1200px;
+            margin:auto;
+            padding:20px;
+        }
+        h1{
+            font-size:clamp(2rem,5vw,3.8rem);
+            text-align:center;
+            background:linear-gradient(90deg,#00dbde,#fc00ff,#00dbde);
+            -webkit-background-clip:text;
+            -webkit-text-fill-color:transparent;
+            animation:g 8s infinite;
+            margin:10px 0 25px;
+        }
         @keyframes g{0%{background-position:0%}100%{background-position:200%}}
-        .controls{background:#ffffff11;border-radius:20px;padding:clamp(15px,4vw,25px);margin-bottom:20px;text-align:center;box-shadow:0 8px 30px #00000088}
-        input,select,button{width:100%;max-width:500px;padding:clamp(12px,3vw,18px);margin:8px auto;font-size:clamp(1.1rem,3.5vw,1.8rem);border:none;border-radius:16px;background:#333;color:#fff;display:block}
-        button{background:linear-gradient(45deg,#fc00ff,#00dbde);cursor:pointer;font-weight:bold;box-shadow:0 0 40px #ff00ff44;transition:.3s}
+
+        .welcome{
+            position:fixed;top:15px;left:15px;background:#000000cc;padding:10px 20px;
+            border-radius:20px;color:#00ff88;font-size:clamp(0.8rem,2vw,1.2rem);z-index:10;
+        }
+
+        .controls{
+            background:#ffffff11;border-radius:20px;padding:20px;margin-bottom:20px;
+            text-align:center;box-shadow:0 8px 30px #00000088;
+        }
+        input,select,button{
+            width:100%;max-width:500px;padding:clamp(12px,3vw,16px);margin:10px auto;
+            font-size:clamp(1.1rem,3.5vw,1.6rem);border:none;border-radius:16px;background:#333;color:#fff;display:block;
+        }
+        button{
+            background:linear-gradient(45deg,#fc00ff,#00dbde);cursor:pointer;font-weight:bold;
+            box-shadow:0 0 40px #ff00ff44;transition:.3s;
+        }
         button:hover{transform:scale(1.05);box-shadow:0 0 80px #ff00ff88}
-        #status{color:#00ffff;font-size:clamp(1rem,3vw,1.6rem);margin:15px 0;text-align:center}
-        #live-price{text-align:center;margin:20px 0}
-        #live-price strong{font-size:clamp(2.2rem,6vw,4rem);background:linear-gradient(90deg,#00ffff,#ff00ff); -webkit-background-clip:text;-webkit-text-fill-color:transparent;animation:pulseGlow 3s infinite}
-        @keyframes pulseGlow{0%,100%{text-shadow:0 0 20px #00ffff88}50%{text-shadow:0 0 40px #ff00ffaa}}
-        #result{background:#000000aa;border-radius:20px;padding:clamp(20px,5vw,30px);margin:20px 0;min-height:140px;text-align:center;font-size:clamp(1.1rem,3.5vw,1.8rem);line-height:1.6;box-shadow:0 10px 40px #00ffff22;transition:.4s}
-        .green{border-left:6px solid #00ff88;background:#00ff880f;box-shadow:0 0 30px #00ff8844}
-        .red{border-left:6px solid #ff4444;background:#ff44440f;box-shadow:0 0 30px #ff444444}
-        #chart{height:clamp(65vh,70vh,75vh);width:100%;max-width:1100px;margin:20px auto;border-radius:20px;overflow:hidden;box-shadow:0 15px 60px #00ffff44;flex:1}
+
+        #status{
+            color:#00ffff;font-size:clamp(1rem,3vw,1.5rem);margin:15px 0;text-align:center;
+        }
+
+        /* Canlı Fiyat - Büyük ve Göze Çarpan */
+        #live-price{
+            text-align:center;margin:25px 0;
+        }
+        #price-text{
+            font-size:clamp(2.5rem,7vw,4.5rem);
+            font-weight:bold;
+            background:linear-gradient(90deg,#00ffff,#ff00ff,#00ffff);
+            -webkit-background-clip:text;
+            -webkit-text-fill-color:transparent;
+            animation:pulseGlow 4s infinite;
+        }
+        @keyframes pulseGlow{0%,100%{text-shadow:0 0 20px #00ffff88}50%{text-shadow:0 0 50px #ff00ffaa}}
+
+        /* Sinyal Kartı */
+        #signal-card{
+            background:#000000aa;border-radius:20px;padding:25px;margin:20px 0;
+            text-align:center;box-shadow:0 10px 40px #00ffff22;transition:.5s;min-height:180px;
+        }
+        #signal-card.green{border-left:8px solid #00ff88;box-shadow:0 0 40px #00ff8844}
+        #signal-card.red{border-left:8px solid #ff4444;box-shadow:0 0 40px #ff444444}
+        #signal-text{font-size:clamp(1.8rem,5vw,3rem);margin:10px 0;}
+        #signal-details{font-size:clamp(1rem,3vw,1.6rem);line-height:1.8;}
+
+        /* AI Analiz Kutusu */
+        #ai-box{
+            background:#0d0033aa;border-radius:20px;padding:20px;margin:20px 0;
+            border:2px dashed #00dbde;display:none;
+        }
+        #ai-comment{font-size:clamp(1rem,3vw,1.5rem);line-height:1.7;}
+
+        /* Grafik - Artık daha küçük ve dengeli */
+        #chart{
+            height:clamp(35vh,40vh,45vh);   /* Eskisinin yarısından az! */
+            width:95%;
+            max-width:900px;
+            margin:30px auto;
+            border-radius:20px;
+            overflow:hidden;
+            box-shadow:0 15px 50px #00ffff44;
+        }
         #tradingview_widget{height:100%!important;width:100%!important;position:absolute;top:0;left:0}
-        .footer{text-align:center;margin:30px 0 20px}
-        .footer a{color:#00dbde;font-size:clamp(1rem,3vw,1.6rem);text-decoration:none;margin:0 15px}
-        .loading{animation:pulse 2s infinite}@keyframes pulse{0%,100%{opacity:0.6}50%{opacity:1}}
+
+        .footer{
+            text-align:center;margin:40px 0 20px;
+        }
+        .footer a{
+            color:#00dbde;font-size:clamp(1rem,3vw,1.6rem);text-decoration:none;margin:0 15px;
+        }
+        .loading{animation:pulse 2s infinite}
+        @keyframes pulse{0%,100%{opacity:0.6}50%{opacity:1}}
     </style>
 </head>
 <body>
-    <div style='position:fixed;top:15px;left:15px;background:#000000cc;padding:10px 20px;border-radius:20px;color:#00ff88;font-size:clamp(0.8rem,2vw,1.2rem);'>
-        Hoş geldin, {user}
-    </div>
+    <div class="welcome">Hoş geldin, {user}</div>
 
     <div class="container">
         <h1>📊 CANLI SİNYAL + GRAFİK</h1>
         
         <div class="controls">
-            <input id="pair" placeholder="Coin (örn: BTCUSDT, ETHUSDT)" value="BTCUSDT">
+            <input id="pair" placeholder="Coin (örn: BTCUSDT)" value="BTCUSDT">
             <select id="tf">
                 <option value="1m">1 Dakika</option>
                 <option value="3m">3 Dakika</option>
@@ -245,14 +319,25 @@ async def signal(request: Request):
             <div id="status">Bağlantı bekleniyor... <span class="loading">●●●</span></div>
         </div>
 
-        <!-- CANLI FİYAT (TradingView'dan) -->
+        <!-- CANLİ FİYAT -->
         <div id="live-price">
-            <p style="color:#aaa;margin:5px 0 10px;font-size:clamp(1rem,3vw,1.4rem);">Canlı Fiyat</p>
-            <strong id="price-text">Yükleniyor...</strong>
+            <p style="color:#aaa;margin:0 0 10px;font-size:1.2rem;">Canlı Fiyat (TradingView)</p>
+            <div id="price-text">Yükleniyor...</div>
         </div>
 
-        <div id="result">🔴 CANLI BAĞLANTI KUR butonuna basarak gerçek zamanlı sinyal akışını başlatın</div>
+        <!-- SİNYAL DURUMU KARTI -->
+        <div id="signal-card">
+            <div id="signal-text" style="color:#ffd700;">🔴 Canlı bağlantı kurun</div>
+            <div id="signal-details">Sinyal taraması başlamadı. Yukarıdan coin seçip bağlanın.</div>
+        </div>
 
+        <!-- AI ANALİZ (İleride aktif olacak) -->
+        <div id="ai-box">
+            <h3 style="text-align:center;color:#00dbde;margin-top:0">🤖 Yapay Zeka Analizi</h3>
+            <p id="ai-comment">AI yorumu burada görünecek...</p>
+        </div>
+
+        <!-- GRAFİK - Artık dengeli boyutta -->
         <div id="chart">
             <div id="tradingview_widget"></div>
         </div>
@@ -267,35 +352,23 @@ async def signal(request: Request):
     <script>
         let ws = null;
         let tvWidget = null;
-        let hasReceivedSignal = false;
         let priceUpdateInterval = null;
         let currentTVPrice = null;
+        let hasReceivedSignal = false;
 
         function createTVWidget(symbol = "BINANCE:BTCUSDT", interval = "5") {
-            if (tvWidget) {
-                tvWidget.remove();
-                tvWidget = null;
-            }
+            if (tvWidget) tvWidget.remove();
             tvWidget = new TradingView.widget({
-                "width": "100%",
-                "height": "100%",
-                "autosize": true,
-                "symbol": symbol,
-                "interval": interval,
-                "timezone": "Etc/UTC",
-                "theme": "dark",
-                "style": "1",
-                "locale": "tr",
-                "toolbar_bg": "#131722",
-                "enable_publishing": false,
-                "hide_side_toolbar": false,
-                "allow_symbol_change": false,
-                "container_id": "tradingview_widget",
+                "width": "100%", "height": "100%", "autosize": true,
+                "symbol": symbol, "interval": interval,
+                "timezone": "Etc/UTC", "theme": "dark", "style": "1",
+                "locale": "tr", "toolbar_bg": "#131722",
+                "enable_publishing": false, "hide_side_toolbar": false,
+                "allow_symbol_change": false, "container_id": "tradingview_widget",
                 "studies": ["RSI@tv-basicstudies", "MACD@tv-basicstudies"],
                 "overrides": {"paneProperties.background": "#0a0022"}
             });
 
-            // Grafik hazır olunca fiyatı çekmeye başla
             tvWidget.onChartReady(() => {
                 if (priceUpdateInterval) clearInterval(priceUpdateInterval);
                 priceUpdateInterval = setInterval(async () => {
@@ -304,21 +377,16 @@ async def signal(request: Request):
                         if (price && price !== currentTVPrice) {
                             currentTVPrice = price;
                             document.getElementById('price-text').innerHTML = 
-                                '$' + parseFloat(price).toFixed( (price > 1) ? 2 : 6 );
+                                '$' + parseFloat(price).toFixed(price > 1 ? 2 : 6);
                         }
-                    } catch (e) { /* hata olursa sessiz kal */ }
-                }, 1500); // 1.5 saniyede bir güncelle
+                    } catch(e) {}
+                }, 1500);
             });
         }
 
-        document.addEventListener("DOMContentLoaded", () => {
-            createTVWidget("BINANCE:BTCUSDT", "5");
-        });
+        document.addEventListener("DOMContentLoaded", () => createTVWidget());
 
-        const tfIntervalMap = {
-            "1m":"1","3m":"3","5m":"5","15m":"15","30m":"30",
-            "1h":"60","4h":"240","1d":"D","1w":"W"
-        };
+        const tfIntervalMap = {"1m":"1","3m":"3","5m":"5","15m":"15","30m":"30","1h":"60","4h":"240","1d":"D","1w":"W"};
 
         function connect() {
             const pair = document.getElementById('pair').value.trim().toUpperCase();
@@ -334,34 +402,43 @@ async def signal(request: Request):
             ws = new WebSocket(p + '://' + location.host + '/ws/signal/' + symbol + '/' + tf);
 
             ws.onopen = () => {
-                document.getElementById('status').innerHTML = "✅ Veri akışı başladı! 🚀 Sinyal bekleniyor...";
-                document.getElementById('result').innerHTML = '<p style="color:#00ffff">🔄 Tarama aktif – Güçlü sinyal bekleniyor!</p>';
+                document.getElementById('status').innerHTML = "✅ Bağlantı kuruldu! Sinyal bekleniyor...";
+                document.getElementById('signal-text').innerHTML = "🔄 Tarama aktif...";
+                document.getElementById('signal-details').innerHTML = "Güçlü sinyal aranıyor.";
                 hasReceivedSignal = false;
             };
 
             ws.onmessage = (e) => {
                 const d = JSON.parse(e.data);
                 hasReceivedSignal = true;
-                document.getElementById('status').innerHTML = "✅ Sinyal alındı! 📈 Canlı takip devam ediyor.";
+                const card = document.getElementById('signal-card');
+                const text = document.getElementById('signal-text');
+                const details = document.getElementById('signal-details');
 
-                const resultDiv = document.getElementById('result');
-                let cls = '', col = '#ffd700';
-                if (d.signal && d.signal.includes('ALIM')) { cls = 'green'; col = '#00ff88'; }
-                else if (d.signal && d.signal.includes('SATIM')) { cls = 'red'; col = '#ff4444'; }
+                if (d.signal && d.signal.includes('ALIM')) {
+                    card.className = 'green';
+                    text.style.color = '#00ff88';
+                } else if (d.signal && d.signal.includes('SATIM')) {
+                    card.className = 'red';
+                    text.style.color = '#ff4444';
+                } else {
+                    card.className = '';
+                    text.style.color = '#ffd700';
+                }
 
-                resultDiv.className = cls;
-                resultDiv.innerHTML = `
-                    <h2 style="font-size:clamp(1.8rem,5vw,3.2rem);color:${col};margin:10px 0">${d.signal || 'Sinyal Bekleniyor...'}</h2>
-                    <p><strong>${d.pair || symbol.replace('USDT','/USDT')}</strong></p>
-                    <p>Skor: <strong>${d.score || '?'} / 100</strong> | ${d.killzone || ''} | ${d.last_update || ''}</p>
-                    <p><small>${d.triggers || ''}</small></p>`;
+                text.innerHTML = d.signal || 'Sinyal bekleniyor...';
+                details.innerHTML = `
+                    <strong>${d.pair || symbol.replace('USDT','/USDT')}</strong><br>
+                    Skor: <strong>${d.score || '?'} / 100</strong> | ${d.killzone || ''}<br>
+                    ${d.last_update ? 'Son: ' + d.last_update : ''}<br>
+                    <small>${d.triggers || ''}</small>
+                `;
             };
 
-            ws.onerror = () => document.getElementById('status').innerHTML = "⚠️ Bağlantı hatası – Yeniden deneyin!";
             ws.onclose = () => {
-                document.getElementById('status').innerHTML = "❌ Bağlantı kapandı";
                 if (!hasReceivedSignal) {
-                    document.getElementById('result').innerHTML = '<p style="color:#ffd700">😴 Şu an güçlü sinyal yok – Tarama devam ediyor!</p>';
+                    document.getElementById('signal-text').innerHTML = "😴 Güçlü sinyal yok";
+                    document.getElementById('signal-details').innerHTML = "Tarama devam ediyor...";
                 }
                 if (priceUpdateInterval) clearInterval(priceUpdateInterval);
             };
@@ -370,6 +447,7 @@ async def signal(request: Request):
 </body>
 </html>"""
 
+  #SINYAL SAYFASI 
 @app.get("/signal/all", response_class=HTMLResponse)
 async def signal_all(request: Request):
     user = request.cookies.get("user_email")
@@ -509,6 +587,7 @@ async def abonelik():
     <div style='text-align:center;margin:40px'>
         <a href="/" style="color:#00dbde">&larr; Ana Sayfaya Dön</a>
     </div>"""
+
 
 
 
