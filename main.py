@@ -183,8 +183,8 @@ async def home(request: Request):
     </script>
 </body>
 </html>"""
-  #SINYAL SAYFASI
-  @app.get("/signal", response_class=HTMLResponse)
+#SINYAL SAYFASI
+@app.get("/signal", response_class=HTMLResponse)
 async def signal(request: Request):
     user = request.cookies.get("user_email")
     if not user:
@@ -587,6 +587,7 @@ async def abonelik():
     <div style='text-align:center;margin:40px'>
         <a href="/" style="color:#00dbde">&larr; Ana Sayfaya Dön</a>
     </div>"""
+
 
 
 
