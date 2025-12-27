@@ -105,18 +105,20 @@ async def ws_pump(websocket: WebSocket):
         pump_radar_subscribers.discard(websocket)
 
 
-@app.websocket("/ws/realtime_price")
+ @app.websocket("/ws/realtime_price")
 async def ws_realtime_price(websocket: WebSocket):
     await websocket.accept()
     realtime_subscribers.add(websocket)
     try:
         while True:
-            # İlk veriyi gönder
-            await websocket.send_json(rt_ticker["tickers"])
-            await asyncio.sleep(5)  # güncelleme frekansı
+            # rt_ticker'ın tamamını gönder (tickers + last_update)
+            await websocket.send_json({
+                "tickers": rt_ticker["tickers"],
+                "last_update": rt_ticker["last_update"]
+            })
+            await asyncio.sleep(5)
     except WebSocketDisconnect:
         realtime_subscribers.discard(websocket)
-
 
 # ==================== HTML SAYFALAR ====================
 
@@ -607,6 +609,7 @@ async def analyze_chart(image_file: UploadFile):
     except Exception as e:
         logger.error(f"AI analiz hatası: {e}")
         raise HTTPException(status_code=500, detail="Analiz sırasında hata oluştu.")
+
 
 
 
