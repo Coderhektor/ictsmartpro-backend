@@ -104,8 +104,7 @@ async def ws_pump(websocket: WebSocket):
     except WebSocketDisconnect:
         pump_radar_subscribers.discard(websocket)
 
-
- @app.websocket("/ws/realtime_price")
+@app.websocket("/ws/realtime_price")
 async def ws_realtime_price(websocket: WebSocket):
     await websocket.accept()
     realtime_subscribers.add(websocket)
@@ -609,6 +608,7 @@ async def analyze_chart(image_file: UploadFile):
     except Exception as e:
         logger.error(f"AI analiz hatası: {e}")
         raise HTTPException(status_code=500, detail="Analiz sırasında hata oluştu.")
+
 
 
 
