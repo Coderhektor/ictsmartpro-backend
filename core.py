@@ -115,7 +115,10 @@ async def realtime_price_stream():
                     for sym in symbols if sym in tickers
                 }
                 rt_ticker["last_update"] = datetime.now(timezone.utc).strftime("%H:%M:%S UTC")
-                await signal_queue.put(("realtime_price", rt_ticker["tickers"]))
+                await signal_queue.put(("realtime_price", {
+    "tickers": rt_ticker["tickers"],
+    "last_update": rt_ticker["last_update"]
+}))
                 await asyncio.sleep(1.0)
             except Exception as e:
                 logger.warning(f"Realtime fiyat hatası: {e}")
