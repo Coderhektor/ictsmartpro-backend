@@ -422,120 +422,76 @@ async def signal(request: Request):
 </script>
 </body>
 </html>"""
-
 @app.post("/api/analyze-chart")
 async def analyze_chart(request: Request):
-    if not openai_client.api_key:
-        raise HTTPException(503, detail="AI servisi devre dışı")
-
     try:
         body = await request.json()
         symbol = body.get("symbol", "BTCUSDT").upper()
         timeframe = body.get("timeframe", "5m")
 
-        if not binance_client:
-            raise HTTPException(500, "Binance bağlantısı yok")
+        # Veri çek
+        klines = await binance_client.get_klines(symbol=symbol, interval=timeframe, limit=150)
+        if not klines or len(klines) < 80:
+            raise HTTPException(404, "Veri alınamadı")
 
-        # Binance'ten gerçek veri çek
-        klines = await binance_client.get_klines(
-            symbol=symbol,
-            interval=timeframe,
-            limit=100  # Daha detaylı grafik için
-        )
-
-        if not klines or len(klines) < 50:
-            raise HTTPException(404, detail="Veri alınamadı")
-
-        # Veri işleme
         df = pd.DataFrame(klines, columns=['timestamp', 'open', 'high', 'low', 'close', 'volume', 'close_time', 'quote_volume', 'trades', 'taker_buy_base', 'taker_buy_quote', 'ignore'])
         df['close'] = pd.to_numeric(df['close'])
         df['open'] = pd.to_numeric(df['open'])
         df['high'] = pd.to_numeric(df['high'])
         df['low'] = pd.to_numeric(df['low'])
-        df['volume'] = pd.to_numeric(df['volume'])
 
-        # Matplotlib ile profesyonel grafik çiz
+        # indicators.py'den sinyal al
+        from indicators import generate_ict_signal
+        signal = generate_ict_signal(df, symbol, timeframe)
+
+        # Grafik çiz
         plt.style.use('dark_background')
-        fig, (ax1, ax2) = plt.subplots(2, 1, figsize=(14, 10), gridspec_kw={'height_ratios': [4, 1]}, facecolor='#0a0022')
+        fig, ax = plt.subplots(figsize=(12, 7), facecolor='#0a0022')
+        colors = ['#00ff88' if c >= o else '#ff4444' for o, c in zip(df['open'], df['close'])]
+        ax.bar(df.index, df['close'] - df['open'], bottom=df['open'], color=colors, width=0.8)
+        ax.plot(df.index, df['high'], color='white', alpha=0.3, linewidth=0.5)
+        ax.plot(df.index, df['low'], color='white', alpha=0.3, linewidth=0.5)
 
-        # Mumlar
-        colors = ['#00ff88' if close >= open else '#ff4444' for open, close in zip(df['open'], df['close'])]
-        ax1.bar(df.index, df['close'] - df['open'], bottom=df['open'], color=colors, width=0.6)
-        ax1.bar(df.index, df['high'] - df['low'], bottom=df['low'], color=colors, alpha=0.3, width=0.1)
+        ax.set_title(f"{symbol} - {timeframe.upper()} | ICT Analiz Sistemi", color='#00dbde', fontsize=16)
+        ax.grid(True, alpha=0.2)
 
-        ax1.set_title(f"{symbol} - {timeframe.upper()} | ICT Teknik Analiz", color='#00dbde', fontsize=16)
-        ax1.set_ylabel("Fiyat (USDT)", color='white')
-        ax1.grid(True, alpha=0.3, color='#333333')
-
-        # Hacim
-        ax2.bar(df.index, df['volume'], color='#00dbde', alpha=0.7)
-        ax2.set_ylabel("Hacim", color='white')
-        ax2.grid(True, alpha=0.3, color='#333333')
-
-        plt.tight_layout()
-
-        # PNG'ye çevir
         buf = io.BytesIO()
-        plt.savefig(buf, format='png', dpi=200, bbox_inches='tight', facecolor='#0a0022')
+        plt.savefig(buf, format='png', dpi=150, bbox_inches='tight', facecolor='#0a0022')
         plt.close(fig)
         buf.seek(0)
+        b64 = base64.b64encode(buf.read()).decode()
+        chart_url = f"data:image/png;base64,{b64}"
 
-        base64_image = base64.b64encode(buf.read()).decode('utf-8')
-        image_data_url = f"data:image/png;base64,{base64_image}"
+        # Kendi yorum motorumuz
+        if not signal:
+            analysis = f"{symbol} {timeframe} grafiğinde şu an güçlü bir ICT sinyali tespit edilmedi. Piyasa range içinde veya sinyal kriterleri sağlanmıyor. Gözlem devam ediyor."
+        else:
+            strength = signal.get("strength", "YÜKSEK")
+            triggers = signal.get("triggers", "")
+            score = signal.get("score", 0)
+            killzone = signal.get("killzone", "Normal")
 
-        # === SENİN MUHTEŞEM PROMPTUN ===
-        system_prompt = """
-Sen dünyanın en iyi Teknik Analiz Uzmanı'sın. Sadece teknik analiz yaparsın, asla yatırım tavsiyesi vermezsin.
+            analysis = f"""
+{symbol} {timeframe} zaman diliminde <strong>{signal['signal']}</strong> tespit edildi!
 
-Analizinde MUTLAKA şu unsurları sırayla incele ve detaylı yorumla:
+📊 Skor: <strong>{score}/100</strong> ({strength})
+🕐 Killzone: <strong>{killzone}</strong>
+🎯 Tetikleyen Unsurlar: {triggers or "RSI6 + SMA50 kesişimi"}
 
-1. Piyasa Yapısı (Market Structure)
-   - Trend yönü, HH/HL - LH/LL, BOS, CHOCH
+Piyasa yapısında önemli bir hareket gözlemleniyor. Teknik seviyeler yakından takip edilmeli.
 
-2. Supply & Demand Zone'lar
-   - Fresh, Tested, Mitigated
-   - Proximal/Distal seviyeler
+Bu bir yatırım tavsiyesi değildir. Yalnızca teknik analiz yorumudur.
+            """.strip()
 
-3. Order Blocks & FVG
-   - Bullish/Bearish OB, FVG filled/unfilled
-
-4. Hacim & Volume Profile
-   - POC, HVN, LVN, hacim patlamaları
-
-5. VWAP, RSI Divergence, Fibonacci, Ichimoku
-   - Tüm confluence'ları belirt
-
-6. Mum Formasyonları & Displacement
-
-7. Olası teknik hedefler ve risk bölgeleri
-
-Türkçe, profesyonel ama anlaşılır dil kullan.
-Her analizinin sonuna mutlaka ekle:
-'Bu bir yatırım tavsiyesi değildir. Yalnızca teknik analiz yorumudur.'
-        """
-
-        response = openai_client.chat.completions.create(
-            model="gpt-4o",
-            messages=[
-                {"role": "system", "content": system_prompt},
-                {
-                    "role": "user",
-                    "content": [
-                        {"type": "text", "text": f"{symbol} {timeframe} grafiğini yukarıdaki kurallara göre detaylı analiz et."},
-                        {"type": "image_url", "image_url": {"url": image_data_url}}
-                    ]
-                }
-            ],
-            max_tokens=1500,
-            temperature=0.3
-        )
-
-        analysis = response.choices[0].message.content.strip()
-        return {"analysis": analysis}
+        return {
+            "analysis": analysis,
+            "chart_image": chart_url,
+            "signal_data": signal or {}
+        }
 
     except Exception as e:
-        logger.error(f"AI analiz hatası: {e}")
-        raise HTTPException(500, detail="Analiz yapılamadı. Lütfen tekrar deneyin.")
+        logger.error(f"Analiz hatası: {e}")
+        raise HTTPException(500, "Analiz yapılamadı")
 
 @app.get("/health")
 async def health():
@@ -592,6 +548,7 @@ async def login(request: Request):
         resp.set_cookie("user_email", email, max_age=2592000, httponly=True, samesite="lax")
         return resp
     return RedirectResponse("/login")
+
 
 
 
