@@ -425,28 +425,116 @@ async def signal(request: Request):
 
 @app.post("/api/analyze-chart")
 async def analyze_chart(image_file: UploadFile = File(...)):
+    """
+    TradingView widget'ından alınan gerçek grafik screenshot'ını GPT-4o ile analiz eder.
+    ICT / Smart Money Concept odaklı, son derece detaylı teknik analiz üretir.
+    """
     if not openai_client.api_key:
-        raise HTTPException(503, detail="AI servisi devre dışı")
+        raise HTTPException(status_code=503, detail="AI servisi şu anda devre dışı.")
+
     try:
+        # Screenshot'ı oku ve base64'e çevir
         contents = await image_file.read()
-        b64 = base64.b64encode(contents).decode()
-        data_url = f"data:{image_file.content_type};base64,{b64}"
+        if len(contents) == 0:
+            raise HTTPException(status_code=400, detail="Gönderilen grafik boş.")
+        
+        b64_image = base64.b64encode(contents).decode('utf-8')
+        image_data_url = f"data:{image_file.content_type};base64,{b64_image}"
 
-        resp = openai_client.chat.completions.create(
-            model="gpt-4o",
+        # === MUHTEŞEM TEKNİK ANALİZ PROMPTU ===
+        system_prompt = """
+Sen dünyanın en iyi Teknik Analiz Uzmanı'sın. Sadece grafik analizi yaparsın, asla yatırım tavsiyesi vermezsin.
+
+Analizinde MUTLAKA şu unsurları sırayla incele ve detaylı yorumla:
+
+1. Piyasa Yapısı (Market Structure)
+   - Trend yönü: Bullish / Bearish / Range / Consolidation
+   - Higher Highs & Higher Lows / Lower Highs & Lower Lows
+   - Break of Structure (BOS), Change of Character (CHOCH)
+   - Liquidity grab bölgeleri
+
+2. Supply & Demand Zone'lar
+   - Fresh (Untested), Tested, Mitigated/Broken zone'lar
+   - Demand Zone: Rally → Base → Drop yapısı
+   - Supply Zone: Drop → Base → Rally yapısı
+   - Proximal ve Distal seviyeleri belirt
+   - Zone içinde oluşan mum formasyonları
+
+3. Order Blocks & Fair Value Gaps (FVG)
+   - Bullish/Bearish Order Block
+   - FVG oluşumu ve dolumu (filled/unfilled)
+   - Imbalance bölgeleri
+
+4. Hacim & Volume Profile
+   - POC (Point of Control), HVN (High Volume Node), LVN (Low Volume Node)
+   - Hacim artışı/azalışı, delta davranışı
+   - VWAP konumu (fiyat VWAP üstünde mi altında mı?)
+
+5. RSI & Divergence
+   - Regular ve Hidden divergence (bullish/bearish)
+   - Overbought/Oversold seviyeleri
+
+6. Fibonacci Seviyeleri
+   - Retracement (0.382, 0.5, 0.618, 0.786)
+   - Extension (1.272, 1.618)
+   - Confluence bölgeleri (Fib + Zone + POC)
+
+7. Ichimoku Cloud
+   - Kumo (bulut) kalınlığı ve twist
+   - Tenkan/Kijun kesişimi
+   - Chikou Span konumu
+   - Fiyatın kumo ile ilişkisi
+
+8. Mum Formasyonları & Displacement
+   - Engulfing, Pin Bar, Inside Bar, Morning/Evening Star
+   - Displacement mumları (güçlü momentum)
+
+9. Elliott Dalga Sayımı (eğer net görünüyorsa)
+   - Mevcut dalga sayısı ve olası tamamlanma
+
+10. Confluence & Olası Senaryolar
+    - Birden fazla indikatörün kesiştiği güçlü bölgeler
+    - Potansiyel entry, stop ve target zone'ları (sadece teknik olarak)
+
+Türkçe, sade ama son derece kapsamlı ve profesyonel bir dil kullan.
+Zone'ları tarif ederken "düşükten yükseğe dikdörtgen alan" gibi net ifadeler kullan.
+Her analizinin EN SONUNA mutlaka şu cümleyi ekle:
+
+'Bu bir yatırım tavsiyesi değildir. Yalnızca teknik analiz yorumudur.'
+        """
+
+        user_prompt = "Yukarıdaki trading grafiğini tüm detaylarıyla analiz et. Sırayla piyasa yapısı, zone'lar, order block, FVG, hacim, VWAP, RSI divergence, Fibonacci, Ichimoku ve mum formasyonlarını incele. Olası teknik hedefleri ve confluence bölgelerini belirt."
+
+        # GPT-4o Vision çağrısı
+        response = openai_client.chat.completions.create(
+            model="gpt-4o",  # Vision için en güçlü model
             messages=[
-                {"role": "system", "content": "Sen profesyonel bir teknik analiz uzmanısın. Sadece grafik analizi yap, asla tavsiye verme. Her yorumun sonunda 'Bu yatırım tavsiyesi değildir.' yaz."},
-                {"role": "user", "content": [
-                    {"type": "text", "text": "Bu grafiği detaylı analiz et: trend, zone'lar, divergence, hacim, Fibonacci, Ichimoku, mum formasyonları, olası hedefler. Türkçe yaz."},
-                    {"type": "image_url", "image_url": {"url": data_url}}
-                ]}
+                {
+                    "role": "system",
+                    "content": system_prompt.strip()
+                },
+                {
+                    "role": "user",
+                    "content": [
+                        {"type": "text", "text": user_prompt},
+                        {
+                            "type": "image_url",
+                            "image_url": {"url": image_data_url}
+                        }
+                    ]
+                }
             ],
-            max_tokens=1200
+            max_tokens=1800,      # Detaylı analiz için yeterli alan
+            temperature=0.3       # Tutarlı ve profesyonel sonuçlar için düşük sıcaklık
         )
-        return {"analysis": resp.choices[0].message.content}
+
+        analysis_text = response.choices[0].message.content.strip()
+
+        return {"analysis": analysis_text}
+
     except Exception as e:
-        logger.error(f"AI Hatası: {e}")
-        raise HTTPException(500, detail="Analiz hatası")
+        logger.error(f"GPT-4o analiz hatası: {e}")
+        raise HTTPException(status_code=500, detail="Grafik analizi sırasında bir hata oluştu. Lütfen tekrar deneyin.")
 
 @app.get("/health")
 async def health():
@@ -503,6 +591,7 @@ async def login(request: Request):
         resp.set_cookie("user_email", email, max_age=2592000, httponly=True, samesite="lax")
         return resp
     return RedirectResponse("/login")
+
 
 
 
