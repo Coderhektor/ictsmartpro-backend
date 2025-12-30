@@ -457,7 +457,7 @@ async def signal(request: Request):
     return HTMLResponse(content=html_content)
 
 # ==================== API ENDPOINTS ====================
-
+# main.py - DÜZELTİLMİŞ analyze_chart fonksiyonu
 @app.post("/api/analyze-chart")
 async def analyze_chart(request: Request):
     try:
@@ -490,80 +490,170 @@ async def analyze_chart(request: Request):
             ccxt_symbol = symbol.replace('USDT', '/USDT')
             
             # Binance client'ı ile veri çek
+            logger.info(f"{ccxt_symbol} için {interval} verisi çekiliyor...")
             klines = await binance_client.fetch_ohlcv(
                 ccxt_symbol, 
                 timeframe=interval, 
-                limit=100
+                limit=150  # indicators.py 100 mum istiyor, biraz fazla çekiyoruz
             )
             
-            if not klines or len(klines) < 50:
+            logger.info(f"{len(klines)} mum verisi alındı")
+            
+            if not klines or len(klines) < 100:
                 return JSONResponse({
-                    "analysis": f"❌ {symbol} için yeterli veri bulunamadı.",
+                    "analysis": f"❌ {symbol} için yeterli veri bulunamadı. (En az 100 mum gerekli, alınan: {len(klines) if klines else 0})",
                     "success": False
                 })
             
         except Exception as e:
-            logger.error(f"Binance veri hatası: {e}")
+            logger.error(f"Binance veri hatası: {e}", exc_info=True)
             return JSONResponse({
                 "analysis": f"❌ Veri alınamadı: {str(e)[:100]}",
                 "success": False
             })
         
-        # DataFrame oluştur
-        df = pd.DataFrame(klines[:100])
-        if len(df.columns) >= 5:
-            df = df[[0, 1, 2, 3, 4]]
-            df.columns = ['timestamp', 'open', 'high', 'low', 'close']
+        # DataFrame oluştur - indicators.py formatına göre
+        # Binance OHLCV formatı: [timestamp, open, high, low, close, volume]
+        df = pd.DataFrame(klines)
+        
+        # indicators.py formatına uygun hale getir
+        if len(df.columns) >= 6:
+            # İlk 6 sütunu al: timestamp, open, high, low, close, volume
+            df = df.iloc[:100, :6]  # Son 100 mum'u al
+            df.columns = ['timestamp', 'open', 'high', 'low', 'close', 'volume']
         else:
-            df.columns = ['timestamp', 'open', 'high', 'low', 'close'][:len(df.columns)]
+            # Eğer volume yoksa
+            df = df.iloc[:100, :5]
+            df.columns = ['timestamp', 'open', 'high', 'low', 'close']
+        
+        logger.info(f"DataFrame hazır: {df.shape}, columns: {df.columns.tolist()}")
         
         # Sayısal verilere çevir
-        for col in ['open', 'high', 'low', 'close']:
+        for col in ['open', 'high', 'low', 'close', 'volume']:
             if col in df.columns:
                 df[col] = pd.to_numeric(df[col], errors='coerce')
+        
+        # NaN değerleri temizle
+        df = df.dropna(subset=['open', 'high', 'low', 'close'])
+        
+        if len(df) < 100:
+            logger.warning(f"{symbol}: Sadece {len(df)} mum temizlendi, 100 gerekli")
+            return JSONResponse({
+                "analysis": f"❌ {symbol} için temiz veri yetersiz. (Kalan: {len(df)} mum, 100 gerekli)",
+                "success": False
+            })
         
         # Sinyal üret (indicators.py'den)
         signal = None
         try:
+            # Mevcut indicators.py formatına göre çağır
             from indicators import generate_ict_signal
-            signal = generate_ict_signal(df, symbol, timeframe)
-        except ImportError:
-            logger.warning("indicators modülü bulunamadı, demo sinyal üretiliyor")
+            
+            # DataFrame'i indicators.py formatına uygun hale getir
+            # 'timestamp' sütununu index yap
+            df_for_indicators = df.copy()
+            
+            # indicators.py'nin beklediği formata çevir
+            signal = generate_ict_signal(df_for_indicators, symbol, timeframe)
+            
+            if not signal:
+                logger.info(f"{symbol}/{timeframe}: indicators.py sinyal üretemedi")
+                # Fallback: basit sinyal üret
+                last_price = df['close'].iloc[-1]
+                prev_price = df['close'].iloc[-2]
+                change = ((last_price - prev_price) / prev_price * 100) if prev_price else 0
+                
+                signal = {
+                    "pair": symbol.replace("USDT", "/USDT"),
+                    "timeframe": timeframe.upper(),
+                    "current_price": round(last_price, 4),
+                    "signal": "ALIM" if change > 0 else "SATIM",
+                    "score": min(abs(int(change * 10)), 95),
+                    "last_update": datetime.utcnow().strftime("%H:%M:%S UTC"),
+                    "killzone": "Normal",
+                    "triggers": f"Fiyat değişimi: {change:.2f}%",
+                    "strength": "YÜKSEK" if abs(change) > 1 else "ORTA"
+                }
+                
+        except ImportError as e:
+            logger.error(f"indicators modülü import hatası: {e}")
             # Demo sinyal
             last_price = df['close'].iloc[-1] if not df.empty else 0
             prev_price = df['close'].iloc[-2] if len(df) > 1 else last_price
             change = ((last_price - prev_price) / prev_price * 100) if prev_price else 0
             
             signal = {
+                "pair": symbol.replace("USDT", "/USDT"),
+                "timeframe": timeframe.upper(),
+                "current_price": round(last_price, 4),
                 "signal": "ALIM" if change > 0 else "SATIM",
                 "score": min(abs(int(change * 10)), 95),
-                "strength": "YÜKSEK" if abs(change) > 1 else "ORTA",
+                "last_update": datetime.utcnow().strftime("%H:%M:%S UTC"),
                 "killzone": "LONDRA" if "12:00" in timeframe else "NEWYORK",
                 "triggers": "Demo: " + ("Yükseliş" if change > 0 else "Düşüş") + " eğilimi",
-                "pair": symbol,
-                "last_update": datetime.now().strftime("%H:%M:%S")
+                "strength": "YÜKSEK" if abs(change) > 1 else "ORTA"
+            }
+        except Exception as e:
+            logger.error(f"Sinyal üretim hatası: {e}", exc_info=True)
+            # Hata durumunda basit sinyal
+            last_price = df['close'].iloc[-1] if not df.empty else 0
+            signal = {
+                "pair": symbol.replace("USDT", "/USDT"),
+                "timeframe": timeframe.upper(),
+                "current_price": round(last_price, 4),
+                "signal": "BEKLE",
+                "score": 50,
+                "last_update": datetime.utcnow().strftime("%H:%M:%S UTC"),
+                "killzone": "Normal",
+                "triggers": "Hata: " + str(e)[:50],
+                "strength": "DÜŞÜK"
             }
         
-        # Kendi yorum motorumuz
+        # Analiz metnini oluştur
         if not signal:
-            analysis = f"{symbol} {timeframe} grafiğinde şu an güçlü bir ICT sinyali tespit edilmedi. Piyasa range içinde veya sinyal kriterleri sağlanmıyor. Gözlem devam ediyor."
+            analysis = f"""🔍 {symbol} {timeframe} Grafik Analizi
+
+📊 Durum: <strong>Sinyal tespit edilemedi</strong>
+🤔 Sebep: Piyasa range içinde veya sinyal kriterleri sağlanmıyor.
+
+💡 Tavsiye: 
+• Daha uzun zaman dilimlerini deneyin (1h, 4h)
+• Farklı coin'leri kontrol edin
+• Piyasa volatilitesini bekleyin
+
+⚠️ Bu bir yatırım tavsiyesi değildir."""
         else:
             strength = signal.get("strength", "YÜKSEK")
             triggers = signal.get("triggers", "")
             score = signal.get("score", 0)
             killzone = signal.get("killzone", "Normal")
+            current_price = signal.get("current_price", "N/A")
+            signal_text = signal.get("signal", "BEKLE")
 
-            analysis = f"""
-{symbol} {timeframe} zaman diliminde <strong>{signal['signal']}</strong> tespit edildi!
+            analysis = f"""🔍 {symbol} {timeframe} Grafik Analizi
+
+🎯 SİNYAL: <strong>{signal_text}</strong>
 
 📊 Skor: <strong>{score}/100</strong> ({strength})
+💰 Fiyat: <strong>${current_price}</strong>
 🕐 Killzone: <strong>{killzone}</strong>
-🎯 Tetikleyen Unsurlar: {triggers or "RSI6 + SMA50 kesişimi"}
 
-Piyasa yapısında önemli bir hareket gözlemleniyor. Teknik seviyeler yakından takip edilmeli.
+🎯 Tetikleyenler: 
+{triggers}
 
-Bu bir yatırım tavsiyesi değildir. Yalnızca teknik analiz yorumudur.
-            """.strip()
+📈 Teknik Analiz:
+{signal_text.replace('🚀', '').replace('🔥', '').strip()} sinyali tespit edildi.
+
+ICT (Inner Circle Trader) stratejisine göre:
+• RSI6 ve SMA50 analizi yapıldı
+• Killzone ({killzone}) içinde işlem sinyali
+• Skor: {score}/100 ({strength.lower()} güven)
+
+💡 Öneri:
+{signal_text} sinyali alındı ancak kendi araştırmanızı yapın.
+
+⚠️ Uyarı: Bu bir yatırım tavsiyesi değildir. 
+Yalnızca teknik analiz yorumudur."""
 
         return JSONResponse({
             "analysis": analysis,
@@ -574,11 +664,19 @@ Bu bir yatırım tavsiyesi değildir. Yalnızca teknik analiz yorumudur.
     except Exception as e:
         logger.error(f"Analiz hatası: {e}", exc_info=True)
         return JSONResponse({
-            "analysis": f"❌ Analiz sırasında hata: {str(e)[:100]}",
+            "analysis": f"""❌ Analiz sırasında hata oluştu:
+
+Hata: {str(e)[:150]}
+
+Lütfen:
+1. Coin adını kontrol edin (örn: BTCUSDT)
+2. Zaman dilimini değiştirin
+3. Sayfayı yenileyin
+
+Sorun devam ederse teknik destek ile iletişime geçin.""",
             "success": False,
             "detail": str(e)
         }, status_code=500)
-
 # ==================== VISITOR STATS API ====================
 
 @app.get("/api/visitor-stats")
@@ -758,3 +856,4 @@ async def login(request: Request):
 if __name__ == "__main__":
     import uvicorn
     uvicorn.run(app, host="0.0.0.0", port=8000)
+
