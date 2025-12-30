@@ -14,5 +14,9 @@ python-multipart   # <--- BU EKLENDİ, ZORUNLU!
 hypercorn
 openai>=1.0.0
 python-multipart
+python-binance
+matplotlib
+pillow
+
 
 
