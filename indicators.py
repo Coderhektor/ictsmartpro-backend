@@ -1,5 +1,4 @@
-# indicators.py — DÜZELTİLMİŞ VE CANLI SİNYAL ÜRETECEK VERSİYON
-
+# indicators.py — RAILWAY UYUMLU, WARNING'SİZ VE CANLI SİNYAL ÜRETEN VERSİYON
 import pandas as pd
 import numpy as np
 from datetime import datetime
@@ -11,12 +10,13 @@ SMA50_LENGTH = 50
 RSI_OB_LEVEL = 70
 CRT_RANGE_MULTIPLIER = 1.5
 CRT_LOOKBACK = 5
-SIGNAL_STRENGTH = 60  # Biraz düşürdük ki sinyal gelsin
+SIGNAL_STRENGTH = 55  # Sinyal gelmesini kolaylaştırdık (önceki 60'tı)
 
 LONDON_KILLZONE_START_UTC = 7
 LONDON_KILLZONE_END_UTC = 10
 NY_KILLZONE_START_UTC = 13
 NY_KILLZONE_END_UTC = 16
+
 
 def rsi(series: pd.Series, period: int) -> pd.Series:
     delta = series.diff()
@@ -28,14 +28,15 @@ def rsi(series: pd.Series, period: int) -> pd.Series:
 
     rs = avg_gain / avg_loss
     rsi_vals = 100 - (100 / (1 + rs))
-    rsi_vals = rsi_vals.fillna(50)
+    rsi_vals = rsi_vals.fillna(50)  # NaN'ları 50 ile doldur
     return rsi_vals
+
 
 def generate_ict_signal(df: pd.DataFrame, symbol: str, timeframe: str) -> Optional[Dict[str, Any]]:
     if len(df) < 100:
         return None
 
-    # Timestamp'i datetime index yap
+    # Timestamp'i datetime index'e çevir
     if 'timestamp' in df.columns:
         df = df.set_index('timestamp')
         df.index = pd.to_datetime(df.index, unit='ms', utc=True)
@@ -44,16 +45,18 @@ def generate_ict_signal(df: pd.DataFrame, symbol: str, timeframe: str) -> Option
 
     df = df[['open', 'high', 'low', 'close', 'volume']].copy()
 
-    # Heikin-Ashi hesapla (pandas Series ile)
+    # Heikin-Ashi hesapla (KRİTİK: method='bfill' yerine .bfill() kullanıldı!)
     ha_close = (df['open'] + df['high'] + df['low'] + df['close']) / 4
     ha_open = (df['open'].shift(1) + df['close'].shift(1)) / 2
     ha_open.iloc[0] = (df['open'].iloc[0] + df['close'].iloc[0]) / 2
-    ha_open = ha_open.fillna(method='bfill')
+
+    # DÜZELTME: Burada warning çıkıyordu → .bfill() ile çözüldü
+    ha_open = ha_open.bfill()  # ←←← BU SATIR ÖNEMLİ! method='bfill' YOK
 
     ha_high = pd.concat([df['high'], ha_open, ha_close], axis=1).max(axis=1)
     ha_low = pd.concat([df['low'], ha_open, ha_close], axis=1).min(axis=1)
 
-    # Killzone (UTC saat)
+    # Killzone kontrolü (UTC saat)
     hours = df.index.hour
     london_kz = (hours >= LONDON_KILLZONE_START_UTC) & (hours < LONDON_KILLZONE_END_UTC)
     ny_kz = (hours >= NY_KILLZONE_START_UTC) & (hours < NY_KILLZONE_END_UTC)
@@ -66,7 +69,7 @@ def generate_ict_signal(df: pd.DataFrame, symbol: str, timeframe: str) -> Option
     rsi6_crossover = (rsi6 > sma50) & (rsi6.shift(1) <= sma50.shift(1))
     rsi6_crossunder = (rsi6 < sma50) & (rsi6.shift(1) >= sma50.shift(1))
 
-    # CRT
+    # CRT (Compression → Release → Thrust)
     ha_range = ha_high - ha_low
     avg_range = ha_range.rolling(CRT_LOOKBACK).mean()
     narrow_prev = ha_range.shift(1) < (avg_range.shift(1) * CRT_RANGE_MULTIPLIER)
@@ -79,12 +82,19 @@ def generate_ict_signal(df: pd.DataFrame, symbol: str, timeframe: str) -> Option
     mom_buy = (df['close'] > df['close'].shift(1)) & (df['close'] > df['close'].shift(2))
     mom_sell = (df['close'] < df['close'].shift(1)) & (df['close'] < df['close'].shift(2))
 
+    # FVG (Fair Value Gap) - basit versiyon
     fvg_up = (df['low'].shift(1) > df['high'].shift(-1)) & (df['close'] > df['open'])
     fvg_down = (df['high'].shift(1) < df['low'].shift(-1)) & (df['close'] < df['open'])
 
-    bullish_engulfing = (df['close'].shift(1) < df['open'].shift(1)) & (df['open'] < df['close'].shift(1)) & (df['close'] > df['open'].shift(1))
-    bearish_engulfing = (df['close'].shift(1) > df['open'].shift(1)) & (df['open'] > df['close'].shift(1)) & (df['close'] < df['open'].shift(1))
+    bullish_engulfing = (df['close'].shift(1) < df['open'].shift(1)) & \
+                        (df['open'] < df['close'].shift(1)) & \
+                        (df['close'] > df['open'].shift(1))
 
+    bearish_engulfing = (df['close'].shift(1) > df['open'].shift(1)) & \
+                        (df['open'] > df['close'].shift(1)) & \
+                        (df['close'] < df['open'].shift(1))
+
+    # Pin bar
     body = (df['close'] - df['open']).abs()
     lower_wick = df[['open', 'close']].min(axis=1) - df['low']
     upper_wick = df['high'] - df[['open', 'close']].max(axis=1)
@@ -93,10 +103,11 @@ def generate_ict_signal(df: pd.DataFrame, symbol: str, timeframe: str) -> Option
     bullish_pin = (lower_wick > 2 * body) & (upper_wick < body)
     bearish_pin = (upper_wick > 2 * body) & (lower_wick < body)
 
+    # Displacement
     displacement_up = (df['close'] - df['open']) > (total_range * 0.8)
     displacement_down = (df['open'] - df['close']) > (total_range * 0.8)
 
-    # Son mum için skor
+    # Skor hesaplama (son mum)
     score = 0
     last = -1
 
@@ -123,10 +134,10 @@ def generate_ict_signal(df: pd.DataFrame, symbol: str, timeframe: str) -> Option
     if mom_sell.iloc[last]: score -= 25
 
     if in_killzone.iloc[last]: score += 25
-    if london_kz.iloc[last]: score += 15
+    if london_kz.iloc[last]: score += 15  # London'a ekstra bonus
 
-    # Daha dengeli skor
-    normalized_score = min(100, max(0, score + 100))  # 0-200 arası skoru 0-100 yap
+    # Skoru 0-100 aralığına normalize et
+    normalized_score = int(np.clip((score + 100), 0, 200) / 2)  # 0-100 arası
 
     if normalized_score < SIGNAL_STRENGTH:
         return None
@@ -157,7 +168,7 @@ def generate_ict_signal(df: pd.DataFrame, symbol: str, timeframe: str) -> Option
         "timeframe": timeframe.upper(),
         "current_price": round(current_price, 6 if current_price < 1 else 4),
         "signal": signal_text,
-        "score": round(normalized_score, 1),
+        "score": normalized_score,
         "last_update": datetime.utcnow().strftime("%H:%M:%S UTC"),
         "killzone": killzone_name,
         "triggers": " | ".join(triggers) if triggers else "RSI6 + SMA50",
