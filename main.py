@@ -101,56 +101,68 @@ async def ws_realtime_price(websocket: WebSocket):
         realtime_subscribers.discard(websocket)
 
 # ==================== PAGES ====================
-
 @app.get("/", response_class=HTMLResponse)
 async def home(request: Request):
     user = request.cookies.get("user_email") or "Misafir"
-    return f"""<!DOCTYPE html>
-<html lang="tr"><head><meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1.0,maximum-scale=1.0,user-scalable=no">
-<title>ICT SMART PRO</title>
-<style>
-    body{{background:linear-gradient(135deg,#0a0022,#1a0033,#000);color:#fff;font-family:sans-serif;margin:0;display:flex;flex-direction:column;min-height:100vh}}
-    .container{{max-width:1200px;margin:auto;padding:20px;flex:1}}
-    h1{{font-size:clamp(2rem,5vw,5rem);text-align:center;background:linear-gradient(90deg,#00dbde,#fc00ff,#00dbde);-webkit-background-clip:text;-webkit-text-fill-color:transparent;animation:g 8s infinite}}
-    @keyframes g{{0%{{background-position:0}}100%{{background-position:200%}}}}
-    .update{{text-align:center;color:#00ffff;margin:30px;font-size:clamp(1rem,3vw,1.8rem)}}
-    table{{width:100%;border-collapse:separate;border-spacing:0 12px}}
-    th{{background:#ffffff11;padding:15px;font-size:clamp(1rem,2.5vw,1.6rem)}}
-    tr{{background:#ffffff08;transition:.3s}}
-    tr:hover{{transform:scale(1.02);box-shadow:0 15px 40px #00ffff44}}
-    .green{{color:#00ff88}}
-    .red{{color:#ff4444}}
-    .btn{{display:block;width:90%;max-width:500px;margin:20px auto;padding:20px;font-size:clamp(1.2rem,4vw,2.2rem);background:linear-gradient(45deg,#fc00ff,#00dbde);color:#fff;border-radius:50px;text-align:center;text-decoration:none;box-shadow:0 0 60px #ff00ff88;transition:.3s}}
-    .btn:hover{{transform:scale(1.08)}}
-</style>
+    return """<!DOCTYPE html>
+<html lang="tr">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>ICT SMART PRO</title>
+    <style>
+        body{background:linear-gradient(135deg,#0a0022,#1a0033,#000);color:#fff;font-family:sans-serif;min-height:100vh;margin:0;display:flex;flex-direction:column}
+        .container{max-width:1200px;margin:auto;padding:20px;flex:1}
+        h1{font-size:clamp(2rem, 5vw, 5rem);text-align:center;background:linear-gradient(90deg,#00dbde,#fc00ff,#00dbde);-webkit-background-clip:text;-webkit-text-fill-color:transparent;animation:g 8s infinite}
+        @keyframes g{0%{background-position:0%}100%{background-position:200%}}
+        .update{text-align:center;color:#00ffff;margin:30px;font-size:clamp(1rem, 3vw, 1.8rem)}
+        table{width:100%;border-collapse:separate;border-spacing:0 12px;margin:30px 0}
+        th{background:#ffffff11;padding:clamp(10px, 2vw, 20px);font-size:clamp(1rem, 2.5vw, 1.6rem)}
+        tr{background:#ffffff08;transition:.4s}
+        tr:hover{transform:scale(1.02);box-shadow:0 15px 40px #00ffff44}
+        .green{color:#00ff88;text-shadow:0 0 20px #00ff88}
+        .red{color:#ff4444;text-shadow:0 0 20px #ff4444}
+        .btn{display:block;width:90%;max-width:500px;margin:20px auto;padding:clamp(15px, 3vw, 25px);font-size:clamp(1.2rem, 4vw, 2.2rem);
+            background:linear-gradient(45deg,#fc00ff,#00dbde);color:#fff;text-align:center;border-radius:50px;
+            text-decoration:none;box-shadow:0 0 60px #ff00ff88;transition:.3s}
+        .btn:hover{transform:scale(1.08);box-shadow:0 0 100px #ff00ff}
+    </style>
 </head>
 <body>
-<div style="position:fixed;top:15px;left:15px;background:#000000cc;padding:10px 20px;border-radius:20px;color:#00ff88">Hoş geldin, {user}</div>
-<div class="container">
-    <h1>ICT SMART PRO</h1>
-    <div class="update" id="update">Veri yükleniyor...</div>
-    <table><thead><tr><th>SIRA</th><th>COİN</th><th>FİYAT</th><th>24S DEĞİŞİM</th></tr></thead>
-    <tbody id="table-body"><tr><td colspan="4" style="padding:80px;color:#888">Pump radar yükleniyor...</td></tr></tbody></table>
-    <a href="/signal" class="btn">🚀 Tek Coin Canlı Sinyal + Grafik</a>
-    <a href="/signal/all" class="btn">🔥 Tüm Coinleri Tara</a>
-</div>
-<script>
-    const ws = new WebSocket((location.protocol==='https:'?'wss':'ws')+'://'+location.host+'/ws/pump_radar');
-    ws.onmessage = e => {
-        const d = JSON.parse(e.data);
-        document.getElementById('update').innerHTML = `Son Güncelleme: <strong>${d.last_update||'Şimdi'}</strong>`;
-        const t = document.getElementById('table-body');
-        if (!d.top_gainers || d.top_gainers.length===0) {
-            t.innerHTML = '<tr><td colspan="4" style="padding:80px;color:#ffd700">😴 Şu anda pump yok</td></tr>';
-            return;
-        }
-        t.innerHTML = d.top_gainers.map((c,i)=>`
-            <tr><td>#${i+1}</td><td><strong>${c.symbol}</strong></td>
-            <td>$${c.price.toFixed(4)}</td>
-            <td class="${c.change>0?'green':'red'}">${c.change>0?'+' : ''}${c.change.toFixed(2)}%</td></tr>`).join('');
-    };
-</script>
-</body></html>"""
+    <div style='position:fixed;top:15px;left:15px;background:#000000cc;padding:10px 20px;border-radius:20px;color:#00ff88;font-size:clamp(0.8rem, 2vw, 1.2rem);'>Hoş geldin, {user}</div>
+    <div class="container">
+        <h1>ICT SMART PRO</h1>
+        <div class="update" id="update">Veri yükleniyor...</div>
+        <table>
+            <thead><tr><th>SIRA</th><th>COİN</th><th>FİYAT</th><th>24S DEĞİŞİM</th></tr></thead>
+            <tbody id="table-body">
+                <tr><td colspan="4" style="padding:80px;color:#888">Pump radar yükleniyor...</td></tr>
+            </tbody>
+        </table>
+        <a href="/signal" class="btn">🚀 Tek Coin Canlı Sinyal + Grafik</a>
+        <a href="/signal/all" class="btn">🔥 Tüm Coinleri Tara</a>
+    </div>
+    <script>
+        const ws = new WebSocket((location.protocol === 'https:' ? 'wss' : 'ws') + '://' + location.host + '/ws/pump_radar');
+        ws.onmessage = function(e) {{
+            const d = JSON.parse(e.data);
+            document.getElementById('update').innerHTML = `Son Güncelleme: <strong>${{d.last_update || 'Şimdi'}}</strong>`;
+            const t = document.getElementById('table-body');
+            if (!d.top_gainers || d.top_gainers.length === 0) {{
+                t.innerHTML = '<tr><td colspan="4" style="padding:80px;color:#ffd700">😴 Şu anda pump yok</td></tr>';
+                return;
+            }}
+            t.innerHTML = d.top_gainers.map((c, i) => `
+                <tr>
+                    <td>#${{i+1}}</td>
+                    <td><strong>${{c.symbol}}</strong></td>
+                    <td>$${{c.price.toFixed(4)}}</td>
+                    <td class="${{c.change > 0 ? 'green' : 'red'}}">${{c.change > 0 ? '+' : ''}}${{c.change.toFixed(2)}}%</td>
+                </tr>`).join('');
+        }};
+    </script>
+</body>
+</html>"""
 
 @app.get("/signal", response_class=HTMLResponse)
 async def signal(request: Request):
@@ -359,3 +371,4 @@ async def login(request: Request):
         resp.set_cookie("user_email", email, max_age=2592000, httponly=True, samesite="lax")
         return resp
     return RedirectResponse("/login")
+
