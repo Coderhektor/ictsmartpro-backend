@@ -31,30 +31,69 @@ def rsi(series: pd.Series, period: int) -> pd.Series:
     rsi_vals = rsi_vals.fillna(50)  # NaN'ları 50 ile doldur
     return rsi_vals
 
-
+# indicators.py - KÜÇÜK DÜZELTME
 def generate_ict_signal(df: pd.DataFrame, symbol: str, timeframe: str) -> Optional[Dict[str, Any]]:
     if len(df) < 100:
         return None
 
     # Timestamp'i datetime index'e çevir
     if 'timestamp' in df.columns:
-        df = df.set_index('timestamp')
-        df.index = pd.to_datetime(df.index, unit='ms', utc=True)
+        # Eğer timestamp milisaniye cinsinden ise
+        if df['timestamp'].dtype in [np.int64, np.float64]:
+            df = df.set_index('timestamp')
+            df.index = pd.to_datetime(df.index, unit='ms', utc=True)
+        else:
+            df = df.set_index('timestamp')
+            df.index = pd.to_datetime(df.index, utc=True)
     else:
-        df.index = pd.to_datetime(df.index, utc=True)
+        # Index zaten datetime olabilir
+        try:
+            df.index = pd.to_datetime(df.index, utc=True)
+        except:
+            # Index'i resetle ve timestamp sütunu oluştur
+            df = df.reset_index()
+            if 'timestamp' in df.columns:
+                df = df.set_index('timestamp')
+                df.index = pd.to_datetime(df.index, unit='ms', utc=True)
+            else:
+                # Yeni timestamp oluştur
+                df['timestamp'] = pd.date_range(end=pd.Timestamp.now(), periods=len(df), freq='1min')
+                df = df.set_index('timestamp')
 
+    # Gerekli sütunları kontrol et
+    required_cols = ['open', 'high', 'low', 'close']
+    for col in required_cols:
+        if col not in df.columns:
+            logger.error(f"{symbol}: {col} sütunu eksik")
+            return None
+    
+    # Volume sütunu opsiyonel, yoksa ekle
+    if 'volume' not in df.columns:
+        df['volume'] = 0
+    
     df = df[['open', 'high', 'low', 'close', 'volume']].copy()
-
-    # Heikin-Ashi hesapla (KRİTİK: method='bfill' yerine .bfill() kullanıldı!)
+    
+    # Sayısal verilere çevir
+    for col in df.columns:
+        df[col] = pd.to_numeric(df[col], errors='coerce')
+    
+    # NaN değerleri forward fill ile doldur
+    df = df.fillna(method='ffill').fillna(method='bfill')
+    
+    # Heikin-Ashi hesapla
     ha_close = (df['open'] + df['high'] + df['low'] + df['close']) / 4
-    ha_open = (df['open'].shift(1) + df['close'].shift(1)) / 2
+    
+    # Heikin-Ashi open için özel işlem
+    ha_open = pd.Series(index=df.index, dtype=float)
     ha_open.iloc[0] = (df['open'].iloc[0] + df['close'].iloc[0]) / 2
-
-    # DÜZELTME: Burada warning çıkıyordu → .bfill() ile çözüldü
-    ha_open = ha_open.bfill()  # ←←← BU SATIR ÖNEMLİ! method='bfill' YOK
-
+    
+    for i in range(1, len(df)):
+        ha_open.iloc[i] = (ha_open.iloc[i-1] + ha_close.iloc[i-1]) / 2
+    
     ha_high = pd.concat([df['high'], ha_open, ha_close], axis=1).max(axis=1)
     ha_low = pd.concat([df['low'], ha_open, ha_close], axis=1).min(axis=1)
+    
+ 
 
     # Killzone kontrolü (UTC saat)
     hours = df.index.hour
