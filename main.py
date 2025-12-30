@@ -382,7 +382,11 @@ async def signal(request: Request):
             const form = new FormData();
             form.append('image_file', blob, 'chart.png');
 
-            const res = await fetch('/api/analyze-chart', {method: 'POST', body: form});
+           const res = await fetch('/api/analyze-chart', {
+        method: 'POST',
+        headers: {'Content-Type': 'application/json'},
+        body: JSON.stringify({ symbol, timeframe })
+    });
             const data = await res.json();
             comment.innerHTML = data.analysis ? data.analysis.replace(/\\n/g, '<br>') : `Hata: ${data.detail || 'Bilinmeyen hata'}`;
         } catch (err) {
@@ -548,6 +552,7 @@ async def login(request: Request):
         resp.set_cookie("user_email", email, max_age=2592000, httponly=True, samesite="lax")
         return resp
     return RedirectResponse("/login")
+
 
 
 
