@@ -1,4 +1,4 @@
-# main.py — DÜZELTİLMİŞ VE ÇALIŞAN VERSİYON
+# main.py — DÜZELTİLMİŞ VERSİYON
 import base64
 import logging
 import io
@@ -15,7 +15,7 @@ from core import (
     initialize, cleanup, single_subscribers, all_subscribers,
     pump_radar_subscribers, realtime_subscribers,
     shared_signals, active_strong_signals, top_gainers, last_update, rt_ticker,
-    binance_client  # core.py'den import ettiğinizden emin olun
+    get_binance_client  # BU SATIR DÜZELTİLDİ
 )
 from utils import all_usdt_symbols
 
@@ -26,7 +26,7 @@ import aiohttp
 logging.basicConfig(level=logging.INFO, format="%(asctime)s | %(levelname)s | %(name)s | %(message)s")
 logger = logging.getLogger("main")
 
-# OpenAI client - opsiyonel, sadece GPT analiz için
+# OpenAI client - opsiyonel
 openai_client = None
 if os.getenv("OPENAI_API_KEY"):
     openai_client = OpenAI(api_key=os.getenv("OPENAI_API_KEY"))
@@ -113,28 +113,28 @@ async def ws_realtime_price(websocket: WebSocket):
 @app.get("/", response_class=HTMLResponse)
 async def home(request: Request):
     user = request.cookies.get("user_email") or "Misafir"
-    return """<!DOCTYPE html>
+    return f"""<!DOCTYPE html>
 <html lang="tr">
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
     <title>ICT SMART PRO</title>
     <style>
-        body{background:linear-gradient(135deg,#0a0022,#1a0033,#000);color:#fff;font-family:sans-serif;min-height:100vh;margin:0;display:flex;flex-direction:column}
-        .container{max-width:1200px;margin:auto;padding:20px;flex:1}
-        h1{font-size:clamp(2rem, 5vw, 5rem);text-align:center;background:linear-gradient(90deg,#00dbde,#fc00ff,#00dbde);-webkit-background-clip:text;-webkit-text-fill-color:transparent;animation:g 8s infinite}
-        @keyframes g{0%{background-position:0%}100%{background-position:200%}}
-        .update{text-align:center;color:#00ffff;margin:30px;font-size:clamp(1rem, 3vw, 1.8rem)}
-        table{width:100%;border-collapse:separate;border-spacing:0 12px;margin:30px 0}
-        th{background:#ffffff11;padding:clamp(10px, 2vw, 20px);font-size:clamp(1rem, 2.5vw, 1.6rem)}
-        tr{background:#ffffff08;transition:.4s}
-        tr:hover{transform:scale(1.02);box-shadow:0 15px 40px #00ffff44}
-        .green{color:#00ff88;text-shadow:0 0 20px #00ff88}
-        .red{color:#ff4444;text-shadow:0 0 20px #ff4444}
-        .btn{display:block;width:90%;max-width:500px;margin:20px auto;padding:clamp(15px, 3vw, 25px);font-size:clamp(1.2rem, 4vw, 2.2rem);
+        body{{background:linear-gradient(135deg,#0a0022,#1a0033,#000);color:#fff;font-family:sans-serif;min-height:100vh;margin:0;display:flex;flex-direction:column}}
+        .container{{max-width:1200px;margin:auto;padding:20px;flex:1}}
+        h1{{font-size:clamp(2rem, 5vw, 5rem);text-align:center;background:linear-gradient(90deg,#00dbde,#fc00ff,#00dbde);-webkit-background-clip:text;-webkit-text-fill-color:transparent;animation:g 8s infinite}}
+        @keyframes g{{0%{{background-position:0%}}100%{{background-position:200%}}}}
+        .update{{text-align:center;color:#00ffff;margin:30px;font-size:clamp(1rem, 3vw, 1.8rem)}}
+        table{{width:100%;border-collapse:separate;border-spacing:0 12px;margin:30px 0}}
+        th{{background:#ffffff11;padding:clamp(10px, 2vw, 20px);font-size:clamp(1rem, 2.5vw, 1.6rem)}}
+        tr{{background:#ffffff08;transition:.4s}}
+        tr:hover{{transform:scale(1.02);box-shadow:0 15px 40px #00ffff44}}
+        .green{{color:#00ff88;text-shadow:0 0 20px #00ff88}}
+        .red{{color:#ff4444;text-shadow:0 0 20px #ff4444}}
+        .btn{{display:block;width:90%;max-width:500px;margin:20px auto;padding:clamp(15px, 3vw, 25px);font-size:clamp(1.2rem, 4vw, 2.2rem);
             background:linear-gradient(45deg,#fc00ff,#00dbde);color:#fff;text-align:center;border-radius:50px;
-            text-decoration:none;box-shadow:0 0 60px #ff00ff88;transition:.3s}
-        .btn:hover{transform:scale(1.08);box-shadow:0 0 100px #ff00ff}
+            text-decoration:none;box-shadow:0 0 60px #ff00ff88;transition:.3s}}
+        .btn:hover{{transform:scale(1.08);box-shadow:0 0 100px #ff00ff}}
     </style>
 </head>
 <body>
@@ -171,7 +171,7 @@ async def home(request: Request):
         }};
     </script>
 </body>
-</html>""".format(user=user)
+</html>"""
 
 @app.get("/signal", response_class=HTMLResponse)
 async def signal(request: Request):
@@ -273,25 +273,6 @@ async def signal(request: Request):
     document.getElementById('pair').addEventListener('change', createWidget);
     document.getElementById('tf').addEventListener('change', createWidget);
 
-    // TradingView screenshot alma fonksiyonu
-    function getTradingViewScreenshot() {{
-        return new Promise((resolve) => {{
-            if (tvWidget && tvWidget.takeClientScreenshot) {{
-                tvWidget.takeClientScreenshot().then(resolve);
-            }} else {{
-                // Fallback: Canvas'dan al
-                setTimeout(() => {{
-                    const canvas = document.querySelector('.chart-container canvas');
-                    if (canvas) {{
-                        resolve(canvas);
-                    }} else {{
-                        resolve(null);
-                    }}
-                }}, 1000);
-            }}
-        }});
-    }}
-
     async function analyzeChartWithAI() {{
         const btn = document.getElementById('analyze-btn');
         const box = document.getElementById('ai-box');
@@ -379,6 +360,15 @@ async def analyze_chart(request: Request):
         
         logger.info(f"Analiz için veri çekiliyor: {symbol} {timeframe}")
         
+        # Binance client'ını al
+        binance_client = get_binance_client()  # DÜZELTME: Bu satır değişti
+        
+        if not binance_client:
+            return JSONResponse({
+                "analysis": "❌ Binance bağlantısı kurulamadı. Lütfen daha sonra tekrar deneyin.",
+                "success": False
+            })
+        
         # Binance'ten veri çek
         try:
             # Binance API formatına çevir
@@ -389,54 +379,33 @@ async def analyze_chart(request: Request):
             
             interval = interval_map.get(timeframe, "5m")
             
-            # Binance client'ını kullanarak veri çek
-            # NOT: core.py'de binance_client tanımlı olmalı
-            klines = await binance_client.get_klines(
-                symbol=symbol, 
-                interval=interval, 
-                limit=150
+            # Format symbol for ccxt
+            ccxt_symbol = symbol.replace('USDT', '/USDT')
+            
+            # Binance client'ı ile veri çek
+            klines = await binance_client.fetch_ohlcv(
+                ccxt_symbol, 
+                timeframe=interval, 
+                limit=100
             )
             
-            if not klines or len(klines) < 80:
-                # Fallback: Binance API'ye direk istek
-                import aiohttp
-                async with aiohttp.ClientSession() as session:
-                    url = f"https://api.binance.com/api/v3/klines"
-                    params = {
-                        "symbol": symbol,
-                        "interval": interval,
-                        "limit": 150
-                    }
-                    async with session.get(url, params=params) as resp:
-                        if resp.status == 200:
-                            klines = await resp.json()
-                        else:
-                            raise HTTPException(404, "Veri alınamadı")
+            if not klines or len(klines) < 50:
+                return JSONResponse({
+                    "analysis": f"❌ {symbol} için yeterli veri bulunamadı.",
+                    "success": False
+                })
             
         except Exception as e:
             logger.error(f"Binance veri hatası: {e}")
-            # Demo veri oluştur (test için)
-            import numpy as np
-            base_price = 50000 if "BTC" in symbol else 100
-            timestamps = [datetime.now().timestamp() - i*300 for i in range(150)]
-            prices = base_price + np.cumsum(np.random.randn(150) * 0.01 * base_price)
-            klines = []
-            for i in range(150):
-                high = prices[i] * (1 + abs(np.random.randn() * 0.02))
-                low = prices[i] * (1 - abs(np.random.randn() * 0.02))
-                klines.append([
-                    int(timestamps[i] * 1000),
-                    str(prices[i] * 0.99),
-                    str(high),
-                    str(low),
-                    str(prices[i]),
-                    "1000"
-                ])
+            return JSONResponse({
+                "analysis": f"❌ Veri alınamadı: {str(e)[:100]}",
+                "success": False
+            })
         
         # DataFrame oluştur
-        df = pd.DataFrame(klines[:100])  # İlk 100 mum
+        df = pd.DataFrame(klines[:100])
         if len(df.columns) >= 5:
-            df = df[[0, 1, 2, 3, 4]]  # timestamp, open, high, low, close
+            df = df[[0, 1, 2, 3, 4]]
             df.columns = ['timestamp', 'open', 'high', 'low', 'close']
         else:
             df.columns = ['timestamp', 'open', 'high', 'low', 'close'][:len(df.columns)]
