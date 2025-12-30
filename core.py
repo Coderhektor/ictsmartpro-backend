@@ -105,47 +105,31 @@ async def broadcast_worker():
 
 # ==================== REALTIME PRICE STREAM ====================
 async def realtime_price_stream():
-    try:
-        from utils import all_usdt_symbols, exchange
+    sources = ["binance", "coingecko", "bybit"]  # Gelecekte ekleyebiliriz
+    symbols = [s for s in all_usdt_symbols[:50] if s.endswith("USDT")]
 
-        # Performans için sadece en popüler 20-30 coin
-        symbols = [s for s in all_usdt_symbols[:30] if s.endswith("USDT")]
-        if not symbols:
-            logger.warning("all_usdt_symbols boş! Realtime fiyat çalışmayacak.")
-            return
+    while True:
+        try:
+            # Önce Binance dene
+            tickers = await exchange.fetch_tickers(symbols)  # ccxt binance
+            updated = {}
+            for sym in symbols:
+                if sym in tickers and tickers[sym]:
+                    data = tickers[sym]
+                    updated[sym] = {
+                        "price": float(data.get("last", 0)),
+                        "change": float(data.get("percentage", 0))
+                    }
+            if updated:
+                rt_ticker["tickers"] = updated
+                rt_ticker["last_update"] = datetime.now(timezone.utc).strftime("%H:%M:%S")
+            
+            await signal_queue.put(("realtime_price", rt_ticker.copy()))
 
-        logger.info(f"✅ Realtime fiyat akışı başladı: {len(symbols)} coin")
+        except Exception as e:
+            logger.warning(f"Fiyat akışı hatası: {e}")
 
-        while True:
-            try:
-                tickers = await exchange.fetch_tickers(symbols)
-                updated_tickers = {}
-                for sym in symbols:
-                    if sym in tickers and tickers[sym]:
-                        data = tickers[sym]
-                        updated_tickers[sym] = {
-                            "last": float(data.get("last", 0)),
-                            "change": float(data.get("percentage", 0)),
-                            "timestamp": int(datetime.now(timezone.utc).timestamp() * 1000)
-                        }
-
-                rt_ticker["tickers"] = updated_tickers
-                rt_ticker["last_update"] = datetime.now(timezone.utc).strftime("%H:%M:%S UTC")
-
-                await signal_queue.put(("realtime_price", {
-                    "tickers": rt_ticker["tickers"],
-                    "last_update": rt_ticker["last_update"]
-                }))
-
-                await asyncio.sleep(1.5)  # Rate limit için güvenli
-
-            except Exception as e:
-                logger.warning(f"Realtime fiyat çekme hatası: {e}")
-                await asyncio.sleep(5)
-
-    except Exception as e:
-        logger.error(f"Realtime stream başlatma hatası: {e}")
-
+        await asyncio.sleep(3)  # 3 saniyede bir güncelle
 
 # ==================== SIGNAL PRODUCER ====================
 async def signal_producer():
