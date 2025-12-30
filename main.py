@@ -101,6 +101,109 @@ async def ws_realtime_price(websocket: WebSocket):
         realtime_subscribers.discard(websocket)
 
 # ==================== PAGES ====================
+# main.py — TAMAMEN ÇALIŞAN VERSİYON: Widget + Screenshot → GPT-4o Analiz + Canlı Sinyal
+import base64
+import logging
+from datetime import datetime
+from contextlib import asynccontextmanager
+from typing import Optional
+
+
+from fastapi.responses import HTMLResponse, RedirectResponse, JSONResponse
+from fastapi import FastAPI, WebSocket, WebSocketDisconnect, Request, Response, UploadFile, File
+from core import (
+    initialize, cleanup, single_subscribers, all_subscribers,
+    pump_radar_subscribers, realtime_subscribers,
+    shared_signals, active_strong_signals, top_gainers, last_update, rt_ticker
+)
+from utils import all_usdt_symbols
+
+from openai import OpenAI
+import os
+
+logging.basicConfig(level=logging.INFO, format="%(asctime)s | %(levelname)s | %(name)s | %(message)s")
+logger = logging.getLogger("main")
+
+openai_client = OpenAI(api_key=os.getenv("OPENAI_API_KEY"))
+
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    logger.info("🚀 Uygulama başlatılıyor...")
+    await initialize()
+    yield
+    logger.info("🛑 Uygulama kapatılıyor...")
+    await cleanup()
+
+app = FastAPI(lifespan=lifespan, title="ICT SMART PRO", version="3.0 - STABLE")
+
+# ==================== WEBSOCKETS ====================
+
+@app.websocket("/ws/signal/{pair}/{timeframe}")
+async def ws_signal(websocket: WebSocket, pair: str, timeframe: str):
+    await websocket.accept()
+    symbol = pair.upper().replace("/", "").replace("-", "").strip()
+    if not symbol.endswith("USDT"):
+        symbol += "USDT"
+    channel = f"{symbol}:{timeframe}"
+    single_subscribers[channel].add(websocket)
+
+    sig = shared_signals.get(timeframe, {}).get(symbol)
+    if sig:
+        await websocket.send_json(sig)
+
+    try:
+        while True:
+            await asyncio.sleep(15)
+            await websocket.send_json({"heartbeat": True})
+    except WebSocketDisconnect:
+        pass
+    finally:
+        single_subscribers[channel].discard(websocket)
+
+@app.websocket("/ws/all/{timeframe}")
+async def ws_all(websocket: WebSocket, timeframe: str):
+    supported = ["1m","3m","5m","15m","30m","1h","4h","1d","1w"]
+    if timeframe not in supported:
+        await websocket.close(code=1008)
+        return
+    await websocket.accept()
+    all_subscribers[timeframe].add(websocket)
+    await websocket.send_json(active_strong_signals.get(timeframe, []))
+
+    try:
+        while True:
+            await asyncio.sleep(30)
+            await websocket.send_json({"ping": True})
+    except WebSocketDisconnect:
+        all_subscribers[timeframe].discard(websocket)
+
+@app.websocket("/ws/pump_radar")
+async def ws_pump(websocket: WebSocket):
+    await websocket.accept()
+    pump_radar_subscribers.add(websocket)
+    await websocket.send_json({"top_gainers": top_gainers, "last_update": last_update})
+    try:
+        while True:
+            await asyncio.sleep(20)
+            await websocket.send_json({"ping": True})
+    except WebSocketDisconnect:
+        pump_radar_subscribers.discard(websocket)
+
+@app.websocket("/ws/realtime_price")
+async def ws_realtime_price(websocket: WebSocket):
+    await websocket.accept()
+    realtime_subscribers.add(websocket)
+    try:
+        while True:
+            await websocket.send_json({
+                "tickers": rt_ticker["tickers"],
+                "last_update": rt_ticker["last_update"]
+            })
+            await asyncio.sleep(5)
+    except WebSocketDisconnect:
+        realtime_subscribers.discard(websocket)
+
+# ==================== PAGES ====================
 @app.get("/", response_class=HTMLResponse)
 async def home(request: Request):
     user = request.cookies.get("user_email") or "Misafir"
@@ -371,5 +474,35 @@ async def login(request: Request):
         resp.set_cookie("user_email", email, max_age=2592000, httponly=True, samesite="lax")
         return resp
     return RedirectResponse("/login")
+
+
+
+@app.get("/health")
+async def health():
+    return {
+        "status": "ok",
+        "symbols": len(all_usdt_symbols),
+        "realtime_coins": len(rt_ticker["tickers"]),
+        "strong_5m": len(active_strong_signals.get("5m", []))
+    }
+
+@app.get("/login", response_class=HTMLResponse)
+async def login_page():
+    return """<form method="post" style="max-width:400px;margin:100px auto;text-align:center;background:#0a0022;padding:40px;border-radius:20px">
+    <h2 style="color:#00dbde">Giriş Yap</h2>
+    <input name="email" type="email" placeholder="E-posta" required style="width:100%;padding:15px;margin:10px 0;border-radius:12px;border:none">
+    <button type="submit" style="width:100%;padding:15px;background:linear-gradient(45deg,#fc00ff,#00dbde);border:none;border-radius:12px;color:white;font-weight:bold">Giriş Yap</button>
+    </form>"""
+
+@app.post("/login")
+async def login(request: Request):
+    form = await request.form()
+    email = form.get("email", "").strip().lower()
+    if "@" in email:
+        resp = RedirectResponse("/", status_code=303)
+        resp.set_cookie("user_email", email, max_age=2592000, httponly=True, samesite="lax")
+        return resp
+    return RedirectResponse("/login")
+
 
 
