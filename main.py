@@ -424,117 +424,118 @@ async def signal(request: Request):
 </html>"""
 
 @app.post("/api/analyze-chart")
-async def analyze_chart(image_file: UploadFile = File(...)):
-    """
-    TradingView widget'ından alınan gerçek grafik screenshot'ını GPT-4o ile analiz eder.
-    ICT / Smart Money Concept odaklı, son derece detaylı teknik analiz üretir.
-    """
+async def analyze_chart(request: Request):
     if not openai_client.api_key:
-        raise HTTPException(status_code=503, detail="AI servisi şu anda devre dışı.")
+        raise HTTPException(503, detail="AI servisi devre dışı")
 
     try:
-        # Screenshot'ı oku ve base64'e çevir
-        contents = await image_file.read()
-        if len(contents) == 0:
-            raise HTTPException(status_code=400, detail="Gönderilen grafik boş.")
-        
-        b64_image = base64.b64encode(contents).decode('utf-8')
-        image_data_url = f"data:{image_file.content_type};base64,{b64_image}"
+        body = await request.json()
+        symbol = body.get("symbol", "BTCUSDT").upper()
+        timeframe = body.get("timeframe", "5m")
 
-        # === MUHTEŞEM TEKNİK ANALİZ PROMPTU ===
+        if not binance_client:
+            raise HTTPException(500, "Binance bağlantısı yok")
+
+        # Binance'ten gerçek veri çek
+        klines = await binance_client.get_klines(
+            symbol=symbol,
+            interval=timeframe,
+            limit=100  # Daha detaylı grafik için
+        )
+
+        if not klines or len(klines) < 50:
+            raise HTTPException(404, detail="Veri alınamadı")
+
+        # Veri işleme
+        df = pd.DataFrame(klines, columns=['timestamp', 'open', 'high', 'low', 'close', 'volume', 'close_time', 'quote_volume', 'trades', 'taker_buy_base', 'taker_buy_quote', 'ignore'])
+        df['close'] = pd.to_numeric(df['close'])
+        df['open'] = pd.to_numeric(df['open'])
+        df['high'] = pd.to_numeric(df['high'])
+        df['low'] = pd.to_numeric(df['low'])
+        df['volume'] = pd.to_numeric(df['volume'])
+
+        # Matplotlib ile profesyonel grafik çiz
+        plt.style.use('dark_background')
+        fig, (ax1, ax2) = plt.subplots(2, 1, figsize=(14, 10), gridspec_kw={'height_ratios': [4, 1]}, facecolor='#0a0022')
+
+        # Mumlar
+        colors = ['#00ff88' if close >= open else '#ff4444' for open, close in zip(df['open'], df['close'])]
+        ax1.bar(df.index, df['close'] - df['open'], bottom=df['open'], color=colors, width=0.6)
+        ax1.bar(df.index, df['high'] - df['low'], bottom=df['low'], color=colors, alpha=0.3, width=0.1)
+
+        ax1.set_title(f"{symbol} - {timeframe.upper()} | ICT Teknik Analiz", color='#00dbde', fontsize=16)
+        ax1.set_ylabel("Fiyat (USDT)", color='white')
+        ax1.grid(True, alpha=0.3, color='#333333')
+
+        # Hacim
+        ax2.bar(df.index, df['volume'], color='#00dbde', alpha=0.7)
+        ax2.set_ylabel("Hacim", color='white')
+        ax2.grid(True, alpha=0.3, color='#333333')
+
+        plt.tight_layout()
+
+        # PNG'ye çevir
+        buf = io.BytesIO()
+        plt.savefig(buf, format='png', dpi=200, bbox_inches='tight', facecolor='#0a0022')
+        plt.close(fig)
+        buf.seek(0)
+
+        base64_image = base64.b64encode(buf.read()).decode('utf-8')
+        image_data_url = f"data:image/png;base64,{base64_image}"
+
+        # === SENİN MUHTEŞEM PROMPTUN ===
         system_prompt = """
-Sen dünyanın en iyi Teknik Analiz Uzmanı'sın. Sadece grafik analizi yaparsın, asla yatırım tavsiyesi vermezsin.
+Sen dünyanın en iyi Teknik Analiz Uzmanı'sın. Sadece teknik analiz yaparsın, asla yatırım tavsiyesi vermezsin.
 
 Analizinde MUTLAKA şu unsurları sırayla incele ve detaylı yorumla:
 
 1. Piyasa Yapısı (Market Structure)
-   - Trend yönü: Bullish / Bearish / Range / Consolidation
-   - Higher Highs & Higher Lows / Lower Highs & Lower Lows
-   - Break of Structure (BOS), Change of Character (CHOCH)
-   - Liquidity grab bölgeleri
+   - Trend yönü, HH/HL - LH/LL, BOS, CHOCH
 
 2. Supply & Demand Zone'lar
-   - Fresh (Untested), Tested, Mitigated/Broken zone'lar
-   - Demand Zone: Rally → Base → Drop yapısı
-   - Supply Zone: Drop → Base → Rally yapısı
-   - Proximal ve Distal seviyeleri belirt
-   - Zone içinde oluşan mum formasyonları
+   - Fresh, Tested, Mitigated
+   - Proximal/Distal seviyeler
 
-3. Order Blocks & Fair Value Gaps (FVG)
-   - Bullish/Bearish Order Block
-   - FVG oluşumu ve dolumu (filled/unfilled)
-   - Imbalance bölgeleri
+3. Order Blocks & FVG
+   - Bullish/Bearish OB, FVG filled/unfilled
 
 4. Hacim & Volume Profile
-   - POC (Point of Control), HVN (High Volume Node), LVN (Low Volume Node)
-   - Hacim artışı/azalışı, delta davranışı
-   - VWAP konumu (fiyat VWAP üstünde mi altında mı?)
+   - POC, HVN, LVN, hacim patlamaları
 
-5. RSI & Divergence
-   - Regular ve Hidden divergence (bullish/bearish)
-   - Overbought/Oversold seviyeleri
+5. VWAP, RSI Divergence, Fibonacci, Ichimoku
+   - Tüm confluence'ları belirt
 
-6. Fibonacci Seviyeleri
-   - Retracement (0.382, 0.5, 0.618, 0.786)
-   - Extension (1.272, 1.618)
-   - Confluence bölgeleri (Fib + Zone + POC)
+6. Mum Formasyonları & Displacement
 
-7. Ichimoku Cloud
-   - Kumo (bulut) kalınlığı ve twist
-   - Tenkan/Kijun kesişimi
-   - Chikou Span konumu
-   - Fiyatın kumo ile ilişkisi
+7. Olası teknik hedefler ve risk bölgeleri
 
-8. Mum Formasyonları & Displacement
-   - Engulfing, Pin Bar, Inside Bar, Morning/Evening Star
-   - Displacement mumları (güçlü momentum)
-
-9. Elliott Dalga Sayımı (eğer net görünüyorsa)
-   - Mevcut dalga sayısı ve olası tamamlanma
-
-10. Confluence & Olası Senaryolar
-    - Birden fazla indikatörün kesiştiği güçlü bölgeler
-    - Potansiyel entry, stop ve target zone'ları (sadece teknik olarak)
-
-Türkçe, sade ama son derece kapsamlı ve profesyonel bir dil kullan.
-Zone'ları tarif ederken "düşükten yükseğe dikdörtgen alan" gibi net ifadeler kullan.
-Her analizinin EN SONUNA mutlaka şu cümleyi ekle:
-
+Türkçe, profesyonel ama anlaşılır dil kullan.
+Her analizinin sonuna mutlaka ekle:
 'Bu bir yatırım tavsiyesi değildir. Yalnızca teknik analiz yorumudur.'
         """
 
-        user_prompt = "Yukarıdaki trading grafiğini tüm detaylarıyla analiz et. Sırayla piyasa yapısı, zone'lar, order block, FVG, hacim, VWAP, RSI divergence, Fibonacci, Ichimoku ve mum formasyonlarını incele. Olası teknik hedefleri ve confluence bölgelerini belirt."
-
-        # GPT-4o Vision çağrısı
         response = openai_client.chat.completions.create(
-            model="gpt-4o",  # Vision için en güçlü model
+            model="gpt-4o",
             messages=[
-                {
-                    "role": "system",
-                    "content": system_prompt.strip()
-                },
+                {"role": "system", "content": system_prompt},
                 {
                     "role": "user",
                     "content": [
-                        {"type": "text", "text": user_prompt},
-                        {
-                            "type": "image_url",
-                            "image_url": {"url": image_data_url}
-                        }
+                        {"type": "text", "text": f"{symbol} {timeframe} grafiğini yukarıdaki kurallara göre detaylı analiz et."},
+                        {"type": "image_url", "image_url": {"url": image_data_url}}
                     ]
                 }
             ],
-            max_tokens=1800,      # Detaylı analiz için yeterli alan
-            temperature=0.3       # Tutarlı ve profesyonel sonuçlar için düşük sıcaklık
+            max_tokens=1500,
+            temperature=0.3
         )
 
-        analysis_text = response.choices[0].message.content.strip()
-
-        return {"analysis": analysis_text}
+        analysis = response.choices[0].message.content.strip()
+        return {"analysis": analysis}
 
     except Exception as e:
-        logger.error(f"GPT-4o analiz hatası: {e}")
-        raise HTTPException(status_code=500, detail="Grafik analizi sırasında bir hata oluştu. Lütfen tekrar deneyin.")
+        logger.error(f"AI analiz hatası: {e}")
+        raise HTTPException(500, detail="Analiz yapılamadı. Lütfen tekrar deneyin.")
 
 @app.get("/health")
 async def health():
@@ -591,6 +592,7 @@ async def login(request: Request):
         resp.set_cookie("user_email", email, max_age=2592000, httponly=True, samesite="lax")
         return resp
     return RedirectResponse("/login")
+
 
 
 
