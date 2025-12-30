@@ -3,7 +3,8 @@ import asyncio
 import logging
 from collections import defaultdict
 from datetime import datetime, timezone
-from typing import Dict, Set, List
+from typing import Dict, Set, List, Optional
+import ccxt.async_support as ccxt_async
 
 from fastapi import WebSocket
 import pandas as pd
@@ -27,9 +28,14 @@ rt_ticker = {
     "last_update": ""
 }
 
+# ==================== BINANCE CLIENT ====================
+exchange: Optional[ccxt_async.binance] = None
+
+# ==================== SYMBOLS ====================
+all_usdt_symbols: List[str] = []
+
 # ==================== BROADCAST QUEUE ====================
 signal_queue: asyncio.Queue = asyncio.Queue(maxsize=500)
-
 
 # ==================== BROADCAST WORKER ====================
 async def broadcast_worker():
@@ -45,37 +51,41 @@ async def broadcast_worker():
                 signal_data = payload["signal"]
 
                 # Tek coin abonelerine gönder
-                dead_ws = set()
-                for ws in single_subscribers[channel].copy():  # .copy() ile güvenli iterasyon
-                    try:
-                        await ws.send_json(signal_data)
-                    except Exception:
-                        dead_ws.add(ws)
-                single_subscribers[channel] -= dead_ws
+                if channel in single_subscribers:
+                    dead_ws = set()
+                    for ws in list(single_subscribers[channel]):  # Listeye çevirerek güvenli iterasyon
+                        try:
+                            await ws.send_json(signal_data)
+                        except Exception:
+                            dead_ws.add(ws)
+                    single_subscribers[channel] -= dead_ws
 
-                # Güçlü sinyalleri güncelle ve tüm coin abonelerine gönder
-                strong_list = [
-                    sig for sig in shared_signals[tf].values()
-                    if sig.get("score", 0) >= 85
-                ]
-                strong_list.sort(key=lambda x: x.get("score", 0), reverse=True)
-                active_strong_signals[tf] = strong_list[:15]
+                # Güçlü sinyalleri güncelle
+                if tf in shared_signals:
+                    strong_list = [
+                        sig for sig in shared_signals[tf].values()
+                        if sig.get("score", 0) >= 85
+                    ]
+                    strong_list.sort(key=lambda x: x.get("score", 0), reverse=True)
+                    active_strong_signals[tf] = strong_list[:15]
 
-                dead_ws = set()
-                for ws in all_subscribers[tf].copy():
-                    try:
-                        await ws.send_json(active_strong_signals[tf])
-                    except Exception:
-                        dead_ws.add(ws)
-                all_subscribers[tf] -= dead_ws
+                    # Tüm coin abonelerine gönder
+                    if tf in all_subscribers:
+                        dead_ws = set()
+                        for ws in list(all_subscribers[tf]):
+                            try:
+                                await ws.send_json(active_strong_signals[tf])
+                            except Exception:
+                                dead_ws.add(ws)
+                        all_subscribers[tf] -= dead_ws
 
             elif msg_type == "pump_radar":
                 global top_gainers, last_update
-                top_gainers = payload["top_gainers"]
-                last_update = payload["last_update"]
+                top_gainers = payload.get("top_gainers", [])
+                last_update = payload.get("last_update", "N/A")
 
                 dead_ws = set()
-                for ws in pump_radar_subscribers.copy():
+                for ws in list(pump_radar_subscribers):
                     try:
                         await ws.send_json(payload)
                     except Exception:
@@ -83,10 +93,8 @@ async def broadcast_worker():
                 pump_radar_subscribers.difference_update(dead_ws)
 
             elif msg_type == "realtime_price":
-                # KRİTİK DÜZELTME: Global değişken ataması olmadan güvenli kullanım
                 dead_ws = set()
-                current_subscribers = realtime_subscribers.copy()  # Anlık kopya al
-                for ws in current_subscribers:
+                for ws in list(realtime_subscribers):
                     try:
                         await ws.send_json(payload)
                     except Exception:
@@ -102,48 +110,139 @@ async def broadcast_worker():
             logger.error(f"Broadcast worker hatası: {e}", exc_info=True)
             await asyncio.sleep(0.1)
 
+# ==================== UTILITY FUNCTIONS ====================
+async def load_all_symbols():
+    """Binance'ten tüm USDT çiftlerini yükle"""
+    global all_usdt_symbols, exchange
+    
+    try:
+        if not exchange:
+            exchange = ccxt_async.binance({
+                'enableRateLimit': True,
+                'rateLimit': 1200,
+                'options': {
+                    'defaultType': 'spot',
+                }
+            })
+        
+        markets = await exchange.load_markets()
+        usdt_pairs = [symbol for symbol in markets 
+                     if symbol.endswith('/USDT') and markets[symbol]['active']]
+        
+        # Clean symbol names (remove /)
+        all_usdt_symbols = [s.replace('/', '') for s in usdt_pairs][:200]  # Limit for performance
+        
+        logger.info(f"✅ {len(all_usdt_symbols)} USDT çifti yüklendi")
+        return all_usdt_symbols
+        
+    except Exception as e:
+        logger.error(f"Symbol yükleme hatası: {e}")
+        # Fallback: hardcoded symbols
+        all_usdt_symbols = [
+            "BTCUSDT", "ETHUSDT", "BNBUSDT", "SOLUSDT", "XRPUSDT",
+            "ADAUSDT", "AVAXUSDT", "DOGEUSDT", "DOTUSDT", "MATICUSDT",
+            "SHIBUSDT", "TRXUSDT", "LTCUSDT", "UNIUSDT", "LINKUSDT"
+        ]
+        return all_usdt_symbols
+
+async def fetch_ohlcv(symbol: str, timeframe: str = "5m", limit: int = 150):
+    """Binance'ten OHLCV verisi çek"""
+    global exchange
+    
+    if not exchange:
+        exchange = ccxt_async.binance({
+            'enableRateLimit': True,
+            'rateLimit': 1200
+        })
+    
+    try:
+        # Format symbol for ccxt (BTCUSDT -> BTC/USDT)
+        formatted_symbol = symbol.replace('USDT', '/USDT')
+        ohlcv = await exchange.fetch_ohlcv(
+            formatted_symbol, 
+            timeframe=timeframe, 
+            limit=limit
+        )
+        return ohlcv
+    except Exception as e:
+        logger.error(f"OHLCV çekme hatası {symbol}: {e}")
+        return []
 
 # ==================== REALTIME PRICE STREAM ====================
 async def realtime_price_stream():
-    sources = ["binance", "coingecko", "bybit"]  # Gelecekte ekleyebiliriz
-    symbols = [s for s in all_usdt_symbols[:50] if s.endswith("USDT")]
-
+    """Gerçek zamanlı fiyat akışı"""
+    global exchange
+    
+    if not exchange:
+        exchange = ccxt_async.binance({
+            'enableRateLimit': True,
+            'rateLimit': 1200
+        })
+    
+    # İzlemek için semboller (ilk 50 tanesi)
+    symbols_to_watch = all_usdt_symbols[:50] if all_usdt_symbols else ["BTCUSDT", "ETHUSDT", "BNBUSDT"]
+    
     while True:
         try:
-            # Önce Binance dene
-            tickers = await exchange.fetch_tickers(symbols)  # ccxt binance
+            if not exchange:
+                await asyncio.sleep(5)
+                continue
+            
+            # Binance ticker verilerini çek
+            formatted_symbols = [s.replace('USDT', '/USDT') for s in symbols_to_watch]
+            tickers = await exchange.fetch_tickers(formatted_symbols)
+            
             updated = {}
-            for sym in symbols:
-                if sym in tickers and tickers[sym]:
-                    data = tickers[sym]
+            for sym in symbols_to_watch:
+                ccxt_sym = sym.replace('USDT', '/USDT')
+                if ccxt_sym in tickers and tickers[ccxt_sym]:
+                    data = tickers[ccxt_sym]
                     updated[sym] = {
-                        "price": float(data.get("last", 0)),
-                        "change": float(data.get("percentage", 0))
+                        "price": float(data.get('last', 0)),
+                        "change": float(data.get('percentage', 0) or 0)
                     }
+            
             if updated:
                 rt_ticker["tickers"] = updated
                 rt_ticker["last_update"] = datetime.now(timezone.utc).strftime("%H:%M:%S")
+                
+                # Broadcast et
+                await signal_queue.put(("realtime_price", rt_ticker.copy()))
             
-            await signal_queue.put(("realtime_price", rt_ticker.copy()))
-
         except Exception as e:
             logger.warning(f"Fiyat akışı hatası: {e}")
-
+            await asyncio.sleep(5)  # Hata durumunda bekle
+            
         await asyncio.sleep(3)  # 3 saniyede bir güncelle
 
 # ==================== SIGNAL PRODUCER ====================
 async def signal_producer():
+    """ICT sinyalleri üret"""
     logger.info("🌀 Sinyal üretici başladı")
 
     try:
         from indicators import generate_ict_signal
-        from utils import all_usdt_symbols, fetch_ohlcv, exchange
+        logger.info("✅ Indicators modülü yüklendi")
     except ImportError as e:
-        logger.error(f"Modül import edilemedi: {e}")
-        return
+        logger.error(f"❌ Indicators modülü yüklenemedi: {e}")
+        # Fallback function
+        def generate_ict_signal(df, symbol, timeframe):
+            last_price = df['close'].iloc[-1] if not df.empty else 0
+            prev_price = df['close'].iloc[-2] if len(df) > 1 else last_price
+            change = ((last_price - prev_price) / prev_price * 100) if prev_price else 0
+            
+            return {
+                "signal": "ALIM" if change > 0 else "SATIM",
+                "score": min(abs(int(change * 10)), 95),
+                "strength": "YÜKSEK" if abs(change) > 1 else "ORTA",
+                "killzone": "LONDRA" if "00:00" in timeframe else "NEWYORK",
+                "triggers": "Demo: " + ("Yükseliş" if change > 0 else "Düşüş") + " eğilimi",
+                "pair": symbol,
+                "last_update": datetime.now().strftime("%H:%M:%S")
+            }
 
-    timeframes = ["1m", "3m", "5m", "15m", "30m", "1h", "4h", "1d"]  # 1w çok yavaş, çıkardım
-    symbols_to_scan = all_usdt_symbols[:40]  # CPU'yu yakmasın diye limit
+    timeframes = ["5m", "15m", "1h", "4h"]  # Railway CPU için optimize edildi
+    symbols_to_scan = all_usdt_symbols[:20] if all_usdt_symbols else ["BTCUSDT", "ETHUSDT"]  # Sınırlı sayıda
 
     await asyncio.sleep(10)  # Sistem yerleşsin
 
@@ -154,11 +253,16 @@ async def signal_producer():
         for tf in timeframes:
             for symbol in symbols_to_scan:
                 try:
-                    ohlcv = await fetch_ohlcv(symbol, tf, limit=150)
-                    if len(ohlcv) < 80:
+                    ohlcv = await fetch_ohlcv(symbol, tf, limit=100)
+                    if len(ohlcv) < 50:
                         continue
 
                     df = pd.DataFrame(ohlcv, columns=["timestamp", "open", "high", "low", "close", "volume"])
+                    
+                    # Sayısal verilere çevir
+                    for col in ["open", "high", "low", "close", "volume"]:
+                        df[col] = pd.to_numeric(df[col], errors='coerce')
+                    
                     df["timestamp"] = pd.to_datetime(df["timestamp"], unit='ms')
 
                     signal = generate_ict_signal(df, symbol, tf)
@@ -174,52 +278,93 @@ async def signal_producer():
 
                 except Exception as e:
                     logger.debug(f"Sinyal hatası {symbol}/{tf}: {e}")
+                    continue
 
-        # Pump Radar Güncelle
+        # Pump Radar Güncelle (daha az sıklıkta)
         try:
-            tickers = await exchange.fetch_tickers(symbols_to_scan)
-            gains = []
-            for sym, data in tickers.items():
-                if data and data.get("percentage") is not None:
-                    change = float(data["percentage"])
-                    if abs(change) >= 4.0:  # %4+ hareket edenler
-                        gains.append({
-                            "symbol": sym.replace("USDT", ""),
-                            "price": float(data.get("last", 0)),
-                            "change": round(change, 2)
-                        })
+            if symbols_to_scan:
+                formatted_symbols = [s.replace('USDT', '/USDT') for s in symbols_to_scan]
+                tickers = await exchange.fetch_tickers(formatted_symbols)
+                gains = []
+                
+                for sym in symbols_to_scan:
+                    ccxt_sym = sym.replace('USDT', '/USDT')
+                    if ccxt_sym in tickers and tickers[ccxt_sym]:
+                        data = tickers[ccxt_sym]
+                        change = float(data.get('percentage', 0) or 0)
+                        if abs(change) >= 3.0:  # %3+ hareket edenler
+                            gains.append({
+                                "symbol": sym.replace("USDT", ""),
+                                "price": float(data.get('last', 0)),
+                                "change": round(change, 2)
+                            })
 
-            gains.sort(key=lambda x: abs(x["change"]), reverse=True)
-            await signal_queue.put(("pump_radar", {
-                "top_gainers": gains[:10],
-                "last_update": datetime.now(timezone.utc).strftime("%H:%M:%S UTC")
-            }))
+                gains.sort(key=lambda x: abs(x["change"]), reverse=True)
+                await signal_queue.put(("pump_radar", {
+                    "top_gainers": gains[:5],  # Daha az sayıda
+                    "last_update": datetime.now(timezone.utc).strftime("%H:%M:%S UTC")
+                }))
 
         except Exception as e:
             logger.error(f"Pump radar hatası: {e}")
 
         elapsed = asyncio.get_event_loop().time() - start_time
         logger.info(f"Scan tamamlandı: {signals_found} sinyal bulundu | {elapsed:.1f}s")
-        await asyncio.sleep(max(8.0, 15.0 - elapsed))  # Railway'de CPU patlamasın
-
+        
+        # Railway CPU için optimize bekleme süresi
+        wait_time = max(10.0, 30.0 - elapsed)  # Minimum 10s, maksimum 30s
+        await asyncio.sleep(wait_time)
 
 # ==================== INIT & CLEANUP ====================
 async def initialize():
+    """Uygulamayı başlat"""
     logger.info("🚀 Core initialize ediliyor...")
+    
     try:
-        from utils import load_all_symbols
+        # Önce sembolleri yükle
         await load_all_symbols()
+        
+        # Exchange client'ı başlat
+        global exchange
+        if not exchange:
+            exchange = ccxt_async.binance({
+                'enableRateLimit': True,
+                'rateLimit': 1200,
+                'options': {
+                    'defaultType': 'spot',
+                }
+            })
+        
+        # Worker'ları başlat
+        asyncio.create_task(broadcast_worker())
+        asyncio.create_task(signal_producer())
+        asyncio.create_task(realtime_price_stream())
+        
+        logger.info("✅ Tüm core servisler başarıyla başlatıldı!")
+        
     except Exception as e:
-        logger.error(f"Symbol yükleme hatası: {e}")
-
-    # Worker'ları başlat
-    asyncio.create_task(broadcast_worker())
-    asyncio.create_task(signal_producer())
-    asyncio.create_task(realtime_price_stream())
-
-    logger.info("✅ Tüm core servisler başarıyla başlatıldı!")
-
+        logger.error(f"❌ Core initialize hatası: {e}", exc_info=True)
+        raise
 
 async def cleanup():
+    """Uygulamayı temizle"""
     logger.info("🛑 Core cleanup yapılıyor...")
-    # Task'lar otomatik kapanır, gerekirse cancel edilebilir
+    
+    global exchange
+    
+    try:
+        # Exchange client'ı kapat
+        if exchange:
+            await exchange.close()
+            exchange = None
+            logger.info("✅ Exchange client kapatıldı")
+            
+    except Exception as e:
+        logger.error(f"Cleanup hatası: {e}")
+    
+    logger.info("✅ Core cleanup tamamlandı")
+
+# ==================== BINANCE CLIENT GETTER ====================
+def get_binance_client():
+    """main.py için binance client getter"""
+    return exchange
