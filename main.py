@@ -1,11 +1,11 @@
-# main.py — DÜZELTİLMİŞ VERSİYON
+# main.py — ZİYARETÇİ SAYAÇLI VERSİYON
 import base64
 import logging
 import io
 import asyncio
 from datetime import datetime
 from contextlib import asynccontextmanager
-from typing import Optional
+from typing import Optional, Dict
 import json
 
 import pandas as pd
@@ -15,7 +15,7 @@ from core import (
     initialize, cleanup, single_subscribers, all_subscribers,
     pump_radar_subscribers, realtime_subscribers,
     shared_signals, active_strong_signals, top_gainers, last_update, rt_ticker,
-    get_binance_client  # BU SATIR DÜZELTİLDİ
+    get_binance_client
 )
 from utils import all_usdt_symbols
 
@@ -31,6 +31,63 @@ openai_client = None
 if os.getenv("OPENAI_API_KEY"):
     openai_client = OpenAI(api_key=os.getenv("OPENAI_API_KEY"))
 
+# ==================== ZİYARETÇİ SAYACI ====================
+class VisitorCounter:
+    def __init__(self):
+        self.total_visits = 0
+        self.active_users = set()
+        self.daily_stats = {}
+        self.page_views = {}
+    
+    def add_visit(self, page: str, user_id: str = None) -> int:
+        """Ziyaretçi ekle ve toplam sayıyı döndür"""
+        self.total_visits += 1
+        
+        # Sayfa görüntüleme sayısını güncelle
+        self.page_views[page] = self.page_views.get(page, 0) + 1
+        
+        # Günlük istatistik
+        today = datetime.now().strftime("%Y-%m-%d")
+        if today not in self.daily_stats:
+            self.daily_stats[today] = {"visits": 0, "unique": set()}
+        
+        self.daily_stats[today]["visits"] += 1
+        
+        if user_id:
+            self.active_users.add(user_id)
+            self.daily_stats[today]["unique"].add(user_id)
+        
+        return self.total_visits
+    
+    def get_stats(self) -> Dict:
+        """İstatistikleri döndür"""
+        today = datetime.now().strftime("%Y-%m-%d")
+        today_stats = self.daily_stats.get(today, {"visits": 0, "unique": set()})
+        
+        return {
+            "total_visits": self.total_visits,
+            "active_users": len(self.active_users),
+            "today_visits": today_stats["visits"],
+            "today_unique": len(today_stats.get("unique", set())),
+            "page_views": self.page_views,
+            "last_updated": datetime.now().strftime("%H:%M:%S")
+        }
+
+# Global ziyaretçi sayacı
+visitor_counter = VisitorCounter()
+
+def get_visitor_stats_html() -> str:
+    """Ziyaretçi istatistiklerini HTML formatında döndür"""
+    stats = visitor_counter.get_stats()
+    
+    return f"""
+    <div style="position:fixed;top:15px;right:15px;background:#000000cc;padding:10px 20px;border-radius:20px;color:#00ff88;font-size:clamp(0.8rem, 2vw, 1.2rem);z-index:1000;">
+        <div>👁️ Toplam: <strong>{stats['total_visits']}</strong></div>
+        <div>🔥 Bugün: <strong>{stats['today_visits']}</strong></div>
+        <div>👥 Aktif: <strong>{stats['active_users']}</strong></div>
+    </div>
+    """
+
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     logger.info("🚀 Uygulama başlatılıyor...")
@@ -40,6 +97,39 @@ async def lifespan(app: FastAPI):
     await cleanup()
 
 app = FastAPI(lifespan=lifespan, title="ICT SMART PRO", version="3.0 - STABLE")
+
+# ==================== MIDDLEWARE FOR VISITOR COUNTING ====================
+@app.middleware("http")
+async def count_visitors(request: Request, call_next):
+    """Her istekte ziyaretçi sayacını güncelle"""
+    # Ziyaretçi ID'sini belirle (cookie veya IP)
+    visitor_id = request.cookies.get("visitor_id")
+    if not visitor_id:
+        # IP adresinden hash oluştur (privacy için)
+        import hashlib
+        ip = request.client.host or "anonymous"
+        visitor_id = hashlib.md5(ip.encode()).hexdigest()[:8]
+    
+    # Sayfa adını al
+    page = request.url.path
+    
+    # Ziyaretçiyi say
+    visitor_counter.add_visit(page, visitor_id)
+    
+    # Yanıtı al
+    response = await call_next(request)
+    
+    # Visitor ID cookie'sini ayarla (1 gün)
+    if not request.cookies.get("visitor_id"):
+        response.set_cookie(
+            "visitor_id", 
+            visitor_id, 
+            max_age=86400,  # 1 gün
+            httponly=True, 
+            samesite="lax"
+        )
+    
+    return response
 
 # ==================== WEBSOCKETS ====================
 
@@ -113,7 +203,11 @@ async def ws_realtime_price(websocket: WebSocket):
 @app.get("/", response_class=HTMLResponse)
 async def home(request: Request):
     user = request.cookies.get("user_email") or "Misafir"
-    return f"""<!DOCTYPE html>
+    
+    # Ziyaretçi istatistikleri HTML'i
+    visitor_stats_html = get_visitor_stats_html()
+    
+    html_content = f"""<!DOCTYPE html>
 <html lang="tr">
 <head>
     <meta charset="UTF-8">
@@ -138,7 +232,10 @@ async def home(request: Request):
     </style>
 </head>
 <body>
-    <div style='position:fixed;top:15px;left:15px;background:#000000cc;padding:10px 20px;border-radius:20px;color:#00ff88;font-size:clamp(0.8rem, 2vw, 1.2rem);'>Hoş geldin, {user}</div>
+    <div style='position:fixed;top:15px;left:15px;background:#000000cc;padding:10px 20px;border-radius:20px;color:#00ff88;font-size:clamp(0.8rem, 2vw, 1.2rem);z-index:1000;'>
+        Hoş geldin, {user}
+    </div>
+    {visitor_stats_html}
     <div class="container">
         <h1>ICT SMART PRO</h1>
         <div class="update" id="update">Veri yükleniyor...</div>
@@ -172,6 +269,8 @@ async def home(request: Request):
     </script>
 </body>
 </html>"""
+    
+    return HTMLResponse(content=html_content)
 
 @app.get("/signal", response_class=HTMLResponse)
 async def signal(request: Request):
@@ -179,7 +278,10 @@ async def signal(request: Request):
     if not user:
         return RedirectResponse("/login")
     
-    return f"""<!DOCTYPE html>
+    # Ziyaretçi istatistikleri HTML'i
+    visitor_stats_html = get_visitor_stats_html()
+    
+    html_content = f"""<!DOCTYPE html>
 <html lang="tr">
 <head>
 <meta charset="UTF-8">
@@ -206,7 +308,10 @@ async def signal(request: Request):
 </style>
 </head>
 <body>
-<div style="position:fixed;top:15px;left:15px;background:#000000cc;padding:10px 20px;border-radius:20px;color:#00ff88;z-index:100">Hoş geldin, {user}</div>
+<div style="position:fixed;top:15px;left:15px;background:#000000cc;padding:10px 20px;border-radius:20px;color:#00ff88;z-index:1000;">
+    Hoş geldin, {user}
+</div>
+{visitor_stats_html}
 <div class="container">
     <h1>📊 CANLI SİNYAL + GRAFİK</h1>
     <div class="controls">
@@ -348,6 +453,8 @@ async def signal(request: Request):
 </script>
 </body>
 </html>"""
+    
+    return HTMLResponse(content=html_content)
 
 # ==================== API ENDPOINTS ====================
 
@@ -361,7 +468,7 @@ async def analyze_chart(request: Request):
         logger.info(f"Analiz için veri çekiliyor: {symbol} {timeframe}")
         
         # Binance client'ını al
-        binance_client = get_binance_client()  # DÜZELTME: Bu satır değişti
+        binance_client = get_binance_client()
         
         if not binance_client:
             return JSONResponse({
@@ -472,6 +579,93 @@ Bu bir yatırım tavsiyesi değildir. Yalnızca teknik analiz yorumudur.
             "detail": str(e)
         }, status_code=500)
 
+# ==================== VISITOR STATS API ====================
+
+@app.get("/api/visitor-stats")
+async def get_visitor_stats():
+    """Ziyaretçi istatistiklerini JSON olarak döndür"""
+    stats = visitor_counter.get_stats()
+    return JSONResponse(stats)
+
+@app.get("/admin/visitor-dashboard")
+async def visitor_dashboard(request: Request):
+    """Yönetici için ziyaretçi dashboard'u"""
+    user = request.cookies.get("user_email")
+    if not user:
+        return RedirectResponse("/login")
+    
+    stats = visitor_counter.get_stats()
+    
+    # Sayfa görüntüleme tablosu
+    page_views_html = ""
+    for page, views in stats['page_views'].items():
+        page_views_html += f"<tr><td>{page}</td><td>{views}</td></tr>"
+    
+    html_content = f"""<!DOCTYPE html>
+<html lang="tr">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Ziyaretçi İstatistikleri | ICT SMART PRO</title>
+    <style>
+        body{{background:linear-gradient(135deg,#0a0022,#1a0033,#000);color:#fff;font-family:sans-serif;padding:20px}}
+        .container{{max-width:1200px;margin:auto}}
+        h1{{color:#00dbde;text-align:center}}
+        .stats-grid{{display:grid;grid-template-columns:repeat(auto-fit, minmax(250px, 1fr));gap:20px;margin:30px 0}}
+        .stat-card{{background:#ffffff11;padding:20px;border-radius:15px;text-align:center}}
+        .stat-card h3{{color:#00ffff;margin-top:0}}
+        .stat-card .number{{font-size:2.5rem;font-weight:bold;color:#00ff88}}
+        table{{width:100%;border-collapse:collapse;margin-top:30px}}
+        th, td{{padding:12px;text-align:left;border-bottom:1px solid #333}}
+        th{{background:#ffffff11;color:#00dbde}}
+        .back-btn{{display:inline-block;margin:20px 0;padding:10px 20px;background:#00dbde;color:#fff;text-decoration:none;border-radius:8px}}
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>📊 Ziyaretçi İstatistikleri</h1>
+        
+        <div class="stats-grid">
+            <div class="stat-card">
+                <h3>Toplam Ziyaret</h3>
+                <div class="number">{stats['total_visits']}</div>
+            </div>
+            <div class="stat-card">
+                <h3>Aktif Kullanıcılar</h3>
+                <div class="number">{stats['active_users']}</div>
+            </div>
+            <div class="stat-card">
+                <h3>Bugünkü Ziyaretler</h3>
+                <div class="number">{stats['today_visits']}</div>
+            </div>
+            <div class="stat-card">
+                <h3>Bugünkü Benzersiz</h3>
+                <div class="number">{stats['today_unique']}</div>
+            </div>
+        </div>
+        
+        <h2>Sayfa Görüntülemeleri</h2>
+        <table>
+            <thead>
+                <tr>
+                    <th>Sayfa</th>
+                    <th>Görüntülenme</th>
+                </tr>
+            </thead>
+            <tbody>
+                {page_views_html}
+            </tbody>
+        </table>
+        
+        <p style="color:#888;margin-top:20px">Son Güncelleme: {stats['last_updated']}</p>
+        
+        <a href="/" class="back-btn">← Ana Sayfaya Dön</a>
+    </div>
+</body>
+</html>"""
+    
+    return HTMLResponse(content=html_content)
+
 # ==================== GPT-4o ANALİZ ENDPOINT ====================
 
 @app.post("/api/gpt-analyze")
@@ -529,12 +723,18 @@ async def gpt_analyze_endpoint(image_file: UploadFile = File(...)):
 
 @app.get("/health")
 async def health():
+    stats = visitor_counter.get_stats()
     return {
         "status": "ok",
         "symbols": len(all_usdt_symbols) if all_usdt_symbols else 0,
         "realtime_coins": len(rt_ticker.get("tickers", [])),
         "strong_5m": len(active_strong_signals.get("5m", [])),
-        "openai_available": openai_client is not None
+        "openai_available": openai_client is not None,
+        "visitor_stats": {
+            "total_visits": stats["total_visits"],
+            "active_users": stats["active_users"],
+            "today_visits": stats["today_visits"]
+        }
     }
 
 @app.get("/login", response_class=HTMLResponse)
