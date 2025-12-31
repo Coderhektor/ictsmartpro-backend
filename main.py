@@ -307,7 +307,7 @@ async def signal(request: Request):
             <div id="tradingview_widget" style="height:500px;width:100%;"></div>
         </div>
     </div>
-<script src="https://s3.tradingview.com/tv.js"></script>
+ <script src="https://s3.tradingview.com/tv.js"></script>
 <script>
     let ws = null;
     let tvWidget = null;
@@ -550,6 +550,7 @@ async def health():
 if __name__ == "__main__":
     import uvicorn
     uvicorn.run("main:app", host="0.0.0.0", port=int(os.getenv("PORT", 8000)), log_level="info")
+
 
 
 
