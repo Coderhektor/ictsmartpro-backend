@@ -349,25 +349,25 @@ async def signal(request: Request):
             const protocol = location.protocol === 'https:' ? 'wss' : 'ws';
             ws = new WebSocket(`${protocol}://${location.host}/ws/signal/${fullSymbol}/${tf}`);
             ws.onopen = () => document.getElementById('status').innerHTML = `✅ Canlı sinyal başladı!`;
-            ws.onmessage = e => {
-                const data = JSON.parse(e.data);
-                if (data.heartbeat) return;
-                const card = document.getElementById('signal-card');
-                const text = document.getElementById('signal-text');
-                const details = document.getElementById('signal-details');
-                text.textContent = data.signal ? data.signal : "NÖTR";
-                details.innerHTML = `
-                    <strong>${data.pair ? data.pair : fullSymbol.replace('USDT','/USDT')}</strong><br>
-                    ⚡ Skor: <strong>${data.score ? data.score : 0}/100</strong><br>
-                    💰 Fiyat: <strong>${data.current_price ? '$' + Number(data.current_price).toFixed(data.current_price >= 1 ? 4 : 6) : '$0.0000'}</strong><br>
-                    🎯 Killzone: <strong>${data.killzone ? data.killzone : 'Normal'}</strong><br>
-                    🕒 ${data.last_update ? data.last_update : 'Şimdi'}<br>
-                    <small>${data.triggers ? data.triggers : 'Analiz ediliyor'}</small>
-                `;
-                card.className = data.signal && (data.signal.includes("ALIM") || data.signal.includes("LONG")) ? "green" : 
-                                 data.signal && (data.signal.includes("SATIM") || data.signal.includes("SHORT")) ? "red" : "";
-                if (data.current_price) updatePriceDisplay(data.current_price);
-            };
+        ws.onmessage = e => {
+    let data = JSON.parse(e.data);
+    if (data.heartbeat) return;
+    let card = document.getElementById('signal-card');
+    let text = document.getElementById('signal-text');
+    let details = document.getElementById('signal-details');
+    text.textContent = data.signal ? data.signal : "NÖTR";
+    details.innerHTML = `
+        <strong>${data.pair ? data.pair : fullSymbol.replace('USDT','/USDT')}</strong><br>
+        ⚡ Skor: <strong>${data.score ? data.score : 0}/100</strong><br>
+        💰 Fiyat: <strong>${data.current_price ? '$' + Number(data.current_price).toFixed(data.current_price >= 1 ? 4 : 6) : '$0.0000'}</strong><br>
+        🎯 Killzone: <strong>${data.killzone ? data.killzone : 'Normal'}</strong><br>
+        🕒 ${data.last_update ? data.last_update : 'Şimdi'}<br>
+        <small>${data.triggers ? data.triggers : 'Analiz ediliyor'}</small>
+    `;
+    card.className = data.signal && (data.signal.includes("ALIM") || data.signal.includes("LONG")) ? "green" : 
+                     data.signal && (data.signal.includes("SATIM") || data.signal.includes("SHORT")) ? "red" : "";
+    if (data.current_price) updatePriceDisplay(data.current_price);
+};
             ws.onclose = () => document.getElementById('status').innerHTML = '🔌 Bağlantı kesildi. Yeniden bağlanılıyor...';
         }
 
@@ -552,3 +552,4 @@ async def health():
 if __name__ == "__main__":
     import uvicorn
     uvicorn.run("main:app", host="0.0.0.0", port=int(os.getenv("PORT", 8000)), log_level="info")
+
