@@ -1250,8 +1250,8 @@ Lütfen:
         }, status_code=500)
 
 # ==================== TÜM COİNLER SAYFASI ====================
-@app.get("/signal/all", response_class=HTMLResponse)
-async def signal_all(request: Request):
+@app.get("/signal", response_class=HTMLResponse)
+async def signal(request: Request):
     user = request.cookies.get("user_email")
     if not user:
         return RedirectResponse("/login")
@@ -1263,100 +1263,207 @@ async def signal_all(request: Request):
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width,initial-scale=1.0,maximum-scale=1.0,user-scalable=no">
-    <title>TÜM COİNLER | ICT SMART PRO</title>
+    <title>CANLI SİNYAL + GRAFİK | ICT SMART PRO</title>
     <style>
+        :root {{
+            --primary: #00dbde;
+            --secondary: #fc00ff;
+            --success: #00ff88;
+            --danger: #ff4444;
+            --warning: #ffd700;
+            --dark-bg: #0a0022;
+        }}
+        
         body {{
-            background: linear-gradient(135deg, #0a0022, #1a0033, #000);
+            background: linear-gradient(135deg, var(--dark-bg), #1a0033, #000);
             color: #fff;
             font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
             margin: 0;
-            padding: 20px 0;
+            padding: 0;
             min-height: 100vh;
         }}
+        
         .container {{
             max-width: 1200px;
-            margin: auto;
+            margin: 0 auto;
             padding: 20px;
+            display: flex;
+            flex-direction: column;
+            gap: 25px;
         }}
+        
         h1 {{
-            font-size: clamp(2rem, 5vw, 3rem);
+            font-size: clamp(2rem, 5vw, 3.5rem);
             text-align: center;
-            background: linear-gradient(90deg, #00dbde, #fc00ff, #00dbde);
+            background: linear-gradient(90deg, var(--primary), var(--secondary), var(--primary));
             -webkit-background-clip: text;
             -webkit-text-fill-color: transparent;
-            margin-bottom: 20px;
+            animation: gradient 8s infinite linear;
+            margin: 10px 0;
         }}
+        
+        @keyframes gradient {{
+            0% {{ background-position: 0%; }}
+            100% {{ background-position: 200%; }}
+        }}
+        
         .controls {{
             background: rgba(255, 255, 255, 0.08);
             border-radius: 20px;
-            padding: 20px;
+            padding: 25px;
             text-align: center;
-            margin: 20px 0;
             backdrop-filter: blur(10px);
+            border: 1px solid rgba(255, 255, 255, 0.1);
         }}
-        select {{
-            width: 90%;
-            max-width: 400px;
-            padding: 15px;
-            margin: 10px;
-            font-size: 1.2rem;
+        
+        .input-group {{
+            display: flex;
+            flex-wrap: wrap;
+            gap: 15px;
+            justify-content: center;
+            margin-bottom: 20px;
+        }}
+        
+        input, select, button {{
+            padding: 16px 20px;
+            font-size: 1.1rem;
             border: none;
             border-radius: 12px;
             background: rgba(255, 255, 255, 0.1);
             color: #fff;
+            min-width: 200px;
+            box-sizing: border-box;
         }}
+        
+        input:focus, select:focus {{
+            outline: 2px solid var(--primary);
+            background: rgba(255, 255, 255, 0.15);
+        }}
+        
+        button {{
+            background: linear-gradient(45deg, var(--secondary), var(--primary));
+            font-weight: bold;
+            cursor: pointer;
+            transition: all 0.3s;
+            min-width: 250px;
+        }}
+        
+        button:hover {{
+            transform: translateY(-2px);
+            box-shadow: 0 5px 20px rgba(252, 0, 255, 0.4);
+        }}
+        
+        #analyze-btn {{
+            background: linear-gradient(45deg, var(--primary), #ff00ff, var(--primary));
+            margin-top: 15px;
+        }}
+        
         #status {{
-            color: #00ffff;
+            color: var(--primary);
             text-align: center;
             margin: 15px;
+            font-size: 1.1rem;
             padding: 10px;
             border-radius: 10px;
             background: rgba(0, 219, 222, 0.1);
         }}
-        table {{
-            width: 100%;
-            border-collapse: collapse;
-            margin: 30px 0;
-            background: rgba(255, 255, 255, 0.05);
-            border-radius: 15px;
-            overflow: hidden;
+        
+        .price-display {{
+            text-align: center;
+            margin: 20px 0;
         }}
-        th {{
-            background: rgba(255, 255, 255, 0.1);
-            padding: 18px 15px;
-            text-align: left;
+        
+        #price-text {{
+            font-size: clamp(3rem, 8vw, 4.5rem);
+            font-weight: bold;
+            background: linear-gradient(90deg, var(--primary), var(--secondary));
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+            margin: 10px 0;
+        }}
+        
+        #signal-card {{
+            background: rgba(0, 0, 0, 0.5);
+            border-radius: 20px;
+            padding: 30px;
+            text-align: center;
+            min-height: 180px;
+            display: flex;
+            flex-direction: column;
+            justify-content: center;
+            transition: all 0.3s;
+            border-left: 6px solid transparent;
+            backdrop-filter: blur(5px);
+        }}
+        
+        #signal-card.green {{ border-left-color: var(--success); }}
+        #signal-card.red {{ border-left-color: var(--danger); }}
+        #signal-card.neutral {{ border-left-color: var(--warning); }}
+        
+        #signal-text {{
+            font-size: clamp(2rem, 5vw, 3rem);
+            margin-bottom: 15px;
+            font-weight: bold;
+        }}
+        
+        #signal-details {{
             font-size: 1.1rem;
+            line-height: 1.6;
+            color: #ccc;
         }}
-        tr {{
-            border-bottom: 1px solid rgba(255, 255, 255, 0.1);
-            transition: background 0.3s;
+        
+        .signal-green {{ color: var(--success); }}
+        .signal-red {{ color: var(--danger); }}
+        .signal-neutral {{ color: var(--warning); }}
+        
+        #ai-box {{
+            background: rgba(13, 0, 51, 0.9);
+            border-radius: 20px;
+            padding: 25px;
+            border: 2px solid var(--primary);
+            display: none;
+            margin-top: 20px;
         }}
-        tr:hover {{
-            background: rgba(0, 219, 222, 0.1);
+        
+        .chart-container {{
+            width: 100%;
+            max-width: 1000px;
+            margin: 30px auto;
+            border-radius: 20px;
+            overflow: hidden;
+            box-shadow: 0 15px 40px rgba(0, 219, 222, 0.2);
+            background: rgba(10, 0, 34, 0.5);
         }}
-        td {{
-            padding: 15px;
+        
+        #tradingview_widget {{
+            height: 500px;
+            width: 100%;
+            border-radius: 20px;
         }}
-        .green {{ color: #00ff88; font-weight: bold; }}
-        .red {{ color: #ff4444; font-weight: bold; }}
+        
         .navigation {{
             text-align: center;
             margin-top: 30px;
+            display: flex;
+            justify-content: center;
+            gap: 30px;
+            flex-wrap: wrap;
         }}
+        
         .nav-link {{
-            color: #00dbde;
+            color: var(--primary);
             text-decoration: none;
-            margin: 0 15px;
-            font-size: 1.1rem;
+            font-size: 1.2rem;
             padding: 10px 20px;
             border-radius: 10px;
             transition: all 0.3s;
-            display: inline-block;
         }}
+        
         .nav-link:hover {{
             background: rgba(0, 219, 222, 0.1);
             transform: translateY(-2px);
         }}
+        
         .user-info {{
             position: fixed;
             top: 15px;
@@ -1364,25 +1471,29 @@ async def signal_all(request: Request):
             background: rgba(0, 0, 0, 0.7);
             padding: 10px 20px;
             border-radius: 20px;
-            color: #00ff88;
+            color: var(--success);
             font-size: clamp(0.8rem, 2vw, 1rem);
             z-index: 1000;
             backdrop-filter: blur(5px);
         }}
-        .loading {{
-            text-align: center;
-            padding: 50px;
-            color: #888;
-            font-size: 1.2rem;
-        }}
+        
         @media (max-width: 768px) {{
-            table {{
-                display: block;
-                overflow-x: auto;
+            .input-group {{
+                flex-direction: column;
+                align-items: center;
             }}
-            th, td {{
-                padding: 12px 8px;
-                font-size: 0.9rem;
+            
+            input, select, button {{
+                width: 100%;
+                max-width: 400px;
+            }}
+            
+            .chart-container {{
+                margin: 15px auto;
+            }}
+            
+            #tradingview_widget {{
+                height: 400px;
             }}
         }}
     </style>
@@ -1393,178 +1504,328 @@ async def signal_all(request: Request):
     </div>
     {visitor_stats_html}
     <div class="container">
-        <h1>🔥 TÜM COİN SİNYALLERİ</h1>
+        <h1>📊 CANLI SİNYAL + GRAFİK</h1>
         
         <div class="controls">
-            <select id="tf" onchange="connect()">
-                <option value="5m" selected>5 Dakika</option>
-                <option value="15m">15 Dakika</option>
-                <option value="1h">1 Saat</option>
-                <option value="4h">4 Saat</option>
-            </select>
-            <div id="status">⏳ Lütfen zaman dilimi seçin</div>
+            <div class="input-group">
+                <input id="pair" placeholder="Coin (örn: BTCUSDT veya BTC)" value="BTCUSDT">
+                <select id="tf">
+                    <option value="5m" selected>5 Dakika</option>
+                    <option value="15m">15 Dakika</option>
+                    <option value="1h">1 Saat</option>
+                    <option value="4h">4 Saat</option>
+                    <option value="1d">1 Gün</option>
+                </select>
+            </div>
+            
+            <button onclick="connect()">📡 CANLI SİNYAL BAĞLANTISI KUR</button>
+            <button id="analyze-btn" onclick="analyzeChartWithAI()">🤖 GRAFİĞİ ANALİZ ET</button>
+            
+            <div id="status">🎯 Lütfen coin ve zaman dilimi seçin</div>
         </div>
         
-        <div id="table-container">
-            <table>
-                <thead>
-                    <tr>
-                        <th>#</th>
-                        <th>COİN</th>
-                        <th>SİNYAL</th>
-                        <th>SKOR</th>
-                        <th>FİYAT</th>
-                        <th>ZAMAN</th>
-                    </tr>
-                </thead>
-                <tbody id="signal-table">
-                    <tr>
-                        <td colspan="6" class="loading">
-                            📡 Sinyal verileri bekleniyor...
-                        </td>
-                    </tr>
-                </tbody>
-            </table>
+        <div class="price-display">
+            <div id="price-text">$0.00</div>
+            <div style="color: #888; font-size: 1rem;">Gerçek zamanlı fiyat</div>
+        </div>
+        
+        <div id="signal-card" class="neutral">
+            <div id="signal-text" class="signal-neutral">⏳ Sinyal bekleniyor</div>
+            <div id="signal-details">
+                Canlı sinyal için yukarıdaki butona tıklayın.<br>
+                Sistem otomatik olarak ICT stratejisine göre sinyal üretecektir.
+            </div>
+        </div>
+        
+        <div id="ai-box">
+            <h3 style="color: var(--primary); text-align: center; margin-bottom: 15px;">
+                🤖 GPT-4o Teknik Analizi
+            </h3>
+            <p id="ai-comment" style="line-height: 1.6; color: #ccc;">
+                Analiz sonuçları burada görüntülenecek...
+            </p>
+        </div>
+        
+        <div class="chart-container">
+            <div id="tradingview_widget"></div>
         </div>
         
         <div class="navigation">
             <a href="/" class="nav-link">🏠 Ana Sayfa</a>
-            <a href="/signal" class="nav-link">📈 Tek Coin Sinyal</a>
+            <a href="/signal/all" class="nav-link">🔥 Tüm Coinler</a>
+            <a href="/admin/visitor-dashboard" class="nav-link">📊 İstatistikler</a>
         </div>
     </div>
     
+    <script src="https://s3.tradingview.com/tv.js"></script>
     <script>
-        let ws = null;
+        // Global variables
+        let ws = null;                    // Sinyal WebSocket
+        let priceWs = null;               // YENİ: Realtime fiyat WebSocket
+        let tvWidget = null;
+        let currentPrice = null;
+        let isConnected = false;
         
-        function connect() {{
-            const timeframe = document.getElementById('tf').value;
-            const status = document.getElementById('status');
+        // Timeframe mapping
+        const tfMap = {{
+            "1m": "1", "3m": "3", "5m": "5", "15m": "15", "30m": "30",
+            "1h": "60", "4h": "240", "1d": "D", "1w": "W"
+        }};
+        
+        // Get formatted symbol
+        function getSymbol() {{
+            let pair = document.getElementById('pair').value.trim().toUpperCase();
+            if (!pair.endsWith("USDT")) {{
+                pair += "USDT";
+                document.getElementById('pair').value = pair;
+            }}
+            return "BINANCE:" + pair;
+        }}
+        
+        // Create TradingView widget
+        function createWidget(symbol = null, interval = null) {{
+            const tvSymbol = symbol || getSymbol();
+            const tf = document.getElementById('tf').value;
+            const tvInterval = interval || tfMap[tf] || "5";
             
-            status.innerHTML = `📡 ${{timeframe.toUpperCase()}} sinyalleri yükleniyor...`;
-            status.style.color = '#00ffff';
-            
-            // Close existing connection
-            if (ws) {{
-                ws.close();
+            if (tvWidget) {{
+                try {{ tvWidget.remove(); }} catch (e) {{}}
+                tvWidget = null;
             }}
             
-            // Connect to WebSocket
-            const protocol = window.location.protocol === 'https:' ? 'wss' : 'ws';
-            ws = new WebSocket(`${{protocol}}://${{window.location.host}}/ws/all/${{timeframe}}`);
+            tvWidget = new TradingView.widget({{
+                autosize: true,
+                width: "100%",
+                height: 500,
+                symbol: tvSymbol,
+                interval: tvInterval,
+                timezone: "Etc/UTC",
+                theme: "dark",
+                style: "1",
+                locale: "tr",
+                toolbar_bg: "#0a0022",
+                enable_publishing: false,
+                hide_side_toolbar: false,
+                allow_symbol_change: true,
+                container_id: "tradingview_widget",
+                studies: ["RSI@tv-basicstudies", "MACD@tv-basicstudies", "Volume@tv-basicstudies"]
+            }});
             
-            ws.onopen = function() {{
-                status.innerHTML = `✅ ${{timeframe.toUpperCase()}} canlı sinyal akışı başladı!`;
-                status.style.color = '#00ff88';
-                console.log('✅ Tüm coinler WebSocket bağlantısı kuruldu:', timeframe);
-            }};
+            tvWidget.onChartReady(() => {{
+                console.log('✅ Grafik yüklendi:', tvSymbol);
+            }});
+        }}
+        
+        // Update price display
+        function updatePriceDisplay(price) {{
+            if (!price || isNaN(price)) return;
             
-            ws.onmessage = function(event) {{
+            let formattedPrice;
+            if (price >= 1000) {{
+                formattedPrice = '$' + price.toFixed(2);
+            }} else if (price >= 1) {{
+                formattedPrice = '$' + price.toFixed(4);
+            }} else if (price >= 0.01) {{
+                formattedPrice = '$' + price.toFixed(6);
+            }} else {{
+                formattedPrice = '$' + price.toFixed(8);
+            }}
+            
+            const priceElement = document.getElementById('price-text');
+            priceElement.textContent = formattedPrice;
+            
+            priceElement.style.transform = 'scale(1.05)';
+            setTimeout(() => {{ priceElement.style.transform = 'scale(1)'; }}, 200);
+        }}
+        
+        // ==================== REALTIME FİYAT WEBSOCKET ====================
+        function connectRealtimePrice() {{
+            if (priceWs && priceWs.readyState === WebSocket.OPEN) return;
+            
+            const protocol = location.protocol === 'https:' ? 'wss' : 'ws';
+            priceWs = new WebSocket(`${{protocol}}://${{location.host}}/ws/realtime_price`);
+            
+            priceWs.onopen = () => console.log('✅ Realtime fiyat bağlantısı kuruldu');
+            
+            priceWs.onmessage = (event) => {{
                 try {{
                     const data = JSON.parse(event.data);
-                    const table = document.getElementById('signal-table');
+                    const tickers = data.tickers || {{}};
                     
-                    // Skip ping messages
-                    if (data.ping) {{
-                        return;
+                    let pair = document.getElementById('pair').value.trim().toUpperCase();
+                    if (!pair.endsWith("USDT")) pair += "USDT";
+                    
+                    if (tickers[pair] && tickers[pair].price > 0) {{
+                        currentPrice = tickers[pair].price;
+                        updatePriceDisplay(currentPrice);
                     }}
-                    
-                    if (!data || data.length === 0) {{
-                        table.innerHTML = `
-                            <tr>
-                                <td colspan="6" style="text-align:center;padding:50px;color:#ffd700">
-                                    😴 Şu anda ${{timeframe.toUpperCase()}} için sinyal yok
-                                </td>
-                            </tr>
-                        `;
-                        return;
-                    }}
-                    
-                    // Limit to 15 signals for performance
-                    const signalsToShow = data.slice(0, 15);
-                    
-                    // Update table
-                    table.innerHTML = signalsToShow.map((signal, index) => {{
-                        const symbol = signal.pair || signal.symbol || 'N/A';
-                        const signalText = signal.signal || 'NÖTR';
-                        const score = signal.score || 0;
-                        const price = signal.current_price || 0;
-                        const time = signal.last_update || '';
-                        
-                        // Determine signal class
-                        let signalClass = '';
-                        if (signalText.includes('ALIM') || signalText.includes('BUY')) {{
-                            signalClass = 'green';
-                        }} else if (signalText.includes('SATIM') || signalText.includes('SELL')) {{
-                            signalClass = 'red';
-                        }}
-                        
-                        // Format price
-                        let formattedPrice = 'N/A';
-                        if (price && !isNaN(price)) {{
-                            if (price >= 1000) {{
-                                formattedPrice = '$' + price.toFixed(2);
-                            }} else if (price >= 1) {{
-                                formattedPrice = '$' + price.toFixed(4);
-                            }} else {{
-                                formattedPrice = '$' + price.toFixed(6);
-                            }}
-                        }}
-                        
-                        return `
-                            <tr>
-                                <td><strong>#${{index + 1}}</strong></td>
-                                <td><strong>${{symbol}}</strong></td>
-                                <td class="${{signalClass}}">
-                                    ${{signalText}}
-                                </td>
-                                <td>
-                                    <div style="
-                                        background: ${{score >= 80 ? 'rgba(0, 255, 136, 0.2)' : 
-                                                score >= 60 ? 'rgba(255, 215, 0, 0.2)' : 
-                                                'rgba(255, 68, 68, 0.2)'}};
-                                        padding: 5px 10px;
-                                        border-radius: 20px;
-                                        display: inline-block;
-                                    ">
-                                        ${{score}}/100
-                                    </div>
-                                </td>
-                                <td>${{formattedPrice}}</td>
-                                <td>${{time}}</td>
-                            </tr>
-                        `;
-                    }}).join('');
-                    
-                }} catch (error) {{
-                    console.error('Veri işleme hatası:', error);
+                }} catch (e) {{
+                    console.error('Realtime fiyat hatası:', e);
                 }}
             }};
             
-            ws.onerror = function(error) {{
-                console.error('WebSocket hatası:', error);
-                status.innerHTML = '❌ WebSocket bağlantı hatası';
-                status.style.color = '#ff4444';
+            priceWs.onclose = () => {{
+                console.log('🔌 Realtime fiyat bağlantısı kapandı, 3sn sonra yeniden bağlanılıyor...');
+                setTimeout(connectRealtimePrice, 3000);
             }};
             
-            ws.onclose = function() {{
-                console.log('WebSocket bağlantısı kapandı');
-                status.innerHTML = '🔌 Bağlantı kesildi. Yeniden bağlanmak için zaman dilimi seçin.';
-                status.style.color = '#ffd700';
+            priceWs.onerror = (err) => console.error('Realtime fiyat WebSocket hatası:', err);
+        }}
+        
+        // ==================== SİNYAL WEBSOCKET ====================
+        function connect() {{
+            if (isConnected) {{
+                alert('⚠️ Zaten bağlısınız!');
+                return;
+            }}
+            
+            let symbol = document.getElementById('pair').value.trim().toUpperCase();
+            const tfSelect = document.getElementById('tf').value;
+            
+            if (!symbol.endsWith("USDT")) {{
+                symbol += "USDT";
+                document.getElementById('pair').value = symbol;
+            }}
+            
+            document.getElementById('status').innerHTML = 
+                `🔗 <strong>${{symbol}}</strong> için ${{tfSelect.toUpperCase()}} bağlantısı kuruluyor...`;
+            document.getElementById('status').style.color = '#00ffff';
+            
+            createWidget("BINANCE:" + symbol, tfMap[tfSelect]);
+            disconnectWebSocket();
+            
+            const protocol = location.protocol === 'https:' ? 'wss' : 'ws';
+            ws = new WebSocket(`${{protocol}}://${{location.host}}/ws/signal/${{symbol}}/${{tfSelect}}`);
+            
+            ws.onopen = () => {{
+                isConnected = true;
+                document.getElementById('status').innerHTML = 
+                    `✅ <strong>${{symbol}} ${{tfSelect.toUpperCase()}}</strong> canlı sinyal akışı başladı!`;
+                document.getElementById('status').style.color = '#00ff88';
+            }};
+            
+            ws.onmessage = (event) => {{
+                try {{
+                    const data = JSON.parse(event.data);
+                    if (data.heartbeat) return;
+                    updateSignalDisplay(data, symbol);
+                }} catch (e) {{
+                    console.error('Sinyal WebSocket hatası:', e);
+                }}
+            }};
+            
+            ws.onclose = () => {{
+                if (isConnected) {{
+                    document.getElementById('status').innerHTML = '🔌 Bağlantı kesildi. Yeniden bağlanmak için tıklayın.';
+                    document.getElementById('status').style.color = '#ffd700';
+                }}
+                isConnected = false;
             }};
         }}
         
-        // Auto-connect on page load
-        document.addEventListener('DOMContentLoaded', function() {{
-            setTimeout(() => {{
-                connect();
-            }}, 1000);
+        function disconnectWebSocket() {{
+            if (ws) {{ ws.close(); ws = null; }}
+            isConnected = false;
+        }}
+        
+        function updateSignalDisplay(signalData, symbol) {{
+            const signalCard = document.getElementById('signal-card');
+            const signalText = document.getElementById('signal-text');
+            const signalDetails = document.getElementById('signal-details');
+            
+            const signal = signalData.signal || "NÖTR";
+            const score = signalData.score || 50;
+            const price = signalData.current_price || currentPrice || 0;
+            const killzone = signalData.killzone || "Normal";
+            const triggers = signalData.triggers || "Sinyal analiz ediliyor";
+            const lastUpdate = signalData.last_update || new Date().toLocaleTimeString();
+            
+            signalText.textContent = signal;
+            
+            signalDetails.innerHTML = `
+                <strong>${{symbol.replace('USDT', '/USDT')}}</strong><br>
+                ⚡ Skor: <strong>${{score}}/100</strong> | 🎯 Killzone: <strong>${{killzone}}</strong><br>
+                💰 Fiyat: <strong>$${{price.toFixed(4)}}</strong><br>
+                🕒 Son Güncelleme: <strong>${{lastUpdate}}</strong><br>
+                <small style="color: #888;">${{triggers}}</small>
+            `;
+            
+            if (signal.includes('ALIM') || signal.includes('BUY')) {{
+                signalCard.className = 'green'; signalText.className = 'signal-green';
+            }} else if (signal.includes('SATIM') || signal.includes('SELL')) {{
+                signalCard.className = 'red'; signalText.className = 'signal-red';
+            }} else {{
+                signalCard.className = 'neutral'; signalText.className = 'signal-neutral';
+            }}
+            
+            if (price && price !== currentPrice) {{
+                currentPrice = price;
+                updatePriceDisplay(price);
+            }}
+            
+            signalCard.style.transform = 'scale(1.02)';
+            setTimeout(() => {{ signalCard.style.transform = 'scale(1)'; }}, 300);
+        }}
+        
+        async function analyzeChartWithAI() {{
+            const btn = document.getElementById('analyze-btn');
+            const box = document.getElementById('ai-box');
+            const comment = document.getElementById('ai-comment');
+            
+            btn.disabled = true;
+            btn.innerHTML = "⏳ Analiz ediliyor...";
+            box.style.display = 'block';
+            comment.innerHTML = "📊 Grafik analiz ediliyor...<br>🤖 AI yanıt bekleniyor...";
+            
+            try {{
+                const symbol = getSymbol().replace("BINANCE:", "");
+                const timeframe = document.getElementById('tf').value;
+                
+                const response = await fetch('/api/analyze-chart', {{
+                    method: 'POST',
+                    headers: {{ 'Content-Type': 'application/json' }},
+                    body: JSON.stringify({{ symbol, timeframe }})
+                }});
+                
+                const data = await response.json();
+                
+                if (data.success && data.analysis) {{
+                    comment.innerHTML = data.analysis
+                        .replace(/\\n/g, '<br>')
+                        .replace(/🔍/g, '🔍 ').replace(/📊/g, '<br>📊 ')
+                        .replace(/🤔/g, '<br>🤔 ').replace(/💡/g, '<br>💡 ')
+                        .replace(/⚠️/g, '<br>⚠️ ');
+                }} else {{
+                    comment.innerHTML = "❌ Analiz alınamadı.<br>" + (data.detail || 'Tekrar deneyin.');
+                }}
+            }} catch (error) {{
+                comment.innerHTML = "❌ Bağlantı hatası.<br>Lütfen internetinizi kontrol edin.";
+            }} finally {{
+                btn.disabled = false;
+                btn.innerHTML = "🤖 GRAFİĞİ ANALİZ ET";
+            }}
+        }}
+        
+        // Sayfa yüklendiğinde başlat
+        document.addEventListener("DOMContentLoaded", () => {{
+            createWidget();
+            connectRealtimePrice();  // ← EN ÖNEMLİ SATIR: Realtime fiyat başlıyor!
+            
+            document.getElementById('pair').addEventListener('change', () => {{
+                createWidget();
+                if (isConnected) {{ disconnectWebSocket(); connect(); }}
+            }});
+            
+            document.getElementById('tf').addEventListener('change', () => {{
+                createWidget();
+                if (isConnected) {{ disconnectWebSocket(); connect(); }}
+            }});
         }});
         
-        // Cleanup on page unload
-        window.addEventListener('beforeunload', function() {{
-            if (ws) {{
-                ws.close();
-            }}
+        // Sayfa kapanırken temizle
+        window.addEventListener('beforeunload', () => {{
+            disconnectWebSocket();
+            if (priceWs) priceWs.close();
         }});
     </script>
 </body>
@@ -2233,3 +2494,4 @@ if __name__ == "__main__":
         log_level="info",
         access_log=True
     )
+
