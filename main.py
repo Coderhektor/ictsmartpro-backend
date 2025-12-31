@@ -1,4 +1,4 @@
-# main.py - ICT SMART PRO (PROD - Railway Optimized)
+# main.py - ICT SMART PRO (PROD - Railway Optimized - HATASIZ)
 import base64
 import logging
 import asyncio
@@ -128,7 +128,6 @@ async def ws_all(websocket: WebSocket, timeframe: str):
         all_subscribers[timeframe] = set()
     all_subscribers[timeframe].add(websocket)
     
-    # Mevcut güçlü sinyalleri gönder
     try:
         await websocket.send_json(active_strong_signals.get(timeframe, [])[:20])
     except:
@@ -230,7 +229,7 @@ async def home(request: Request):
         ws.onmessage = e => {{
             const data = JSON.parse(e.data);
             if (data.ping) return;
-            if (data.last_update) document.getElementById('update').innerHTML = `🔄 Son Güncelleme: <strong>${{data.last_update}}</strong>`;
+            if (data.last_update) document.getElementById('update').innerHTML = `🔄 Son Güncelleme: <strong>${data.last_update}</strong>`;
             const tbody = document.getElementById('table-body');
             if (!data.top_gainers || data.top_gainers.length === 0) {{
                 tbody.innerHTML = '<tr><td colspan="4" style="text-align:center;padding:50px;color:#ffd700">😴 Aktif pump yok</td></tr>';
@@ -238,10 +237,10 @@ async def home(request: Request):
             }}
             tbody.innerHTML = data.top_gainers.map((c,i) => `
                 <tr>
-                    <td><strong>#${{i+1}}</strong></td>
-                    <td><strong>${{c.symbol}}</strong></td>
+                    <td><strong>#${i+1}</strong></td>
+                    <td><strong>${c.symbol}</strong></td>
                     <td>$${c.price.toFixed(4)}</td>
-                    <td class="${{c.change > 0 ? 'green' : 'red'}}">${{c.change > 0 ? '↗ +' : '↘ '}}${{Math.abs(c.change).toFixed(2)}}%</td>
+                    <td class="${c.change > 0 ? 'green' : 'red'}">${c.change > 0 ? '↗ +' : '↘ '}${Math.abs(c.change).toFixed(2)}%</td>
                 </tr>
             `).join('');
         }};
@@ -316,7 +315,6 @@ async def signal(request: Request):
     <script>
         let ws = null;
         let tvWidget = null;
-        let currentPrice = null;
 
         function getSymbol() {{
             let p = document.getElementById('pair').value.trim().toUpperCase();
@@ -330,7 +328,7 @@ async def signal(request: Request):
             tvWidget = new TradingView.widget({{
                 autosize: true,
                 symbol: getSymbol(),
-                interval: document.getElementById('tf').value === "1d" ? "D" : document.getElementById('tf').value.replace("m","").replace("h","0"),
+                interval: document.getElementById('tf').value === "1d" ? "D" : document.getElementById('tf').value,
                 timezone: "Etc/UTC",
                 theme: "dark",
                 style: "1",
@@ -342,8 +340,7 @@ async def signal(request: Request):
         }}
 
         function updatePriceDisplay(price) {{
-            const el = document.getElementById('price-text');
-            el.textContent = '$' + price.toFixed(price >= 1 ? 4 : 6);
+            document.getElementById('price-text').textContent = '$' + price.toFixed(price >= 1 ? 4 : 6);
         }}
 
         function connect() {{
@@ -351,9 +348,9 @@ async def signal(request: Request):
             const symbol = document.getElementById('pair').value.trim().toUpperCase();
             const tf = document.getElementById('tf').value;
             const fullSymbol = symbol.endsWith("USDT") ? symbol : symbol + "USDT";
-            document.getElementById('status').innerHTML = `🔗 ${{fullSymbol}} ${{tf}} bağlantı kuruluyor...`;
+            document.getElementById('status').innerHTML = `🔗 ${fullSymbol} ${tf} bağlantı kuruluyor...`;
             createWidget();
-            ws = new WebSocket(`${{location.protocol === 'https:' ? 'wss' : 'ws'}}://${{location.host}}/ws/signal/${{fullSymbol}}/${{tf}}`);
+            ws = new WebSocket(`${location.protocol === 'https:' ? 'wss' : 'ws'}://${location.host}/ws/signal/${fullSymbol}/${tf}`);
             ws.onopen = () => document.getElementById('status').innerHTML = `✅ Canlı sinyal başladı!`;
             ws.onmessage = e => {{
                 const data = JSON.parse(e.data);
@@ -363,16 +360,18 @@ async def signal(request: Request):
                 const details = document.getElementById('signal-details');
                 text.textContent = data.signal || "NÖTR";
                 details.innerHTML = `
-                    <strong>${{data.pair || fullSymbol.replace('USDT','/USDT')}}</strong><br>
-                    ⚡ Skor: <strong>${{data.score || 0}}/100</strong><br>
+                    <strong>${data.pair || fullSymbol.replace('USDT','/USDT')}</strong><br>
+                    ⚡ Skor: <strong>${data.score || 0}/100</strong><br>
                     💰 Fiyat: <strong>$${data.current_price || '0.0000'}</strong><br>
-                    🎯 Killzone: <strong>${{data.killzone || 'Normal'}}</strong><br>
+                    🎯 Killzone: <strong>${data.killzone || 'Normal'}</strong><br>
                     🕒 ${data.last_update || 'Şimdi'}<br>
-                    <small>${{data.triggers || 'Analiz ediliyor'}}</small>
+                    <small>${data.triggers || 'Analiz ediliyor'}</small>
                 `;
-                card.className = data.signal.includes("ALIM") ? "green" : data.signal.includes("SATIM") ? "red" : "";
+                card.className = data.signal && (data.signal.includes("ALIM") || data.signal.includes("LONG")) ? "green" : 
+                                 data.signal && (data.signal.includes("SATIM") || data.signal.includes("SHORT")) ? "red" : "";
                 if (data.current_price) updatePriceDisplay(data.current_price);
             }};
+            ws.onclose = () => document.getElementById('status').innerHTML = '🔌 Bağlantı kesildi. Yeniden bağlanılıyor...';
         }}
 
         document.addEventListener("DOMContentLoaded", createWidget);
@@ -468,21 +467,21 @@ async def signal_all(request: Request):
             container.innerHTML = signals.map(sig => `
                 <div class="signal-card">
                     <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:15px;">
-                        <div class="coin-name">${{sig.pair || sig.symbol}}</div>
-                        <div style="font-size:0.9rem;color:#aaa;background:rgba(0,0,0,0.3);padding:5px 12px;border-radius:20px;">${{sig.timeframe || currentTf.toUpperCase()}}</div>
+                        <div class="coin-name">${sig.pair || sig.symbol}</div>
+                        <div style="font-size:0.9rem;color:#aaa;background:rgba(0,0,0,0.3);padding:5px 12px;border-radius:20px;">${sig.timeframe || currentTf.toUpperCase()}</div>
                     </div>
-                    <div class="signal-text ${{getSignalClass(sig.signal)}}">${{sig.signal}}</div>
+                    <div class="signal-text ${getSignalClass(sig.signal)}">${sig.signal}</div>
                     <div class="score-bar">
-                        <div class="score-fill ${{getScoreClass(sig.score)}}" style="width:${{sig.score}}%"></div>
+                        <div class="score-fill ${getScoreClass(sig.score)}" style="width:${sig.score}%"></div>
                     </div>
                     <div style="text-align:center;margin:10px 0;font-size:1.1rem;">
-                        <strong>${{sig.score}}/100</strong> • ${{sig.strength || 'ORTA'}}
+                        <strong>${sig.score}/100</strong> • ${sig.strength || 'ORTA'}
                     </div>
                     <div class="details">
                         <div class="detail-row"><span style="color:#aaa">Fiyat:</span><span>$${sig.current_price}</span></div>
-                        <div class="detail-row"><span style="color:#aaa">Killzone:</span><span>${{sig.killzone || 'Normal'}}</span></div>
-                        <div class="detail-row"><span style="color:#aaa">Tetik:</span><span>${{sig.triggers || '-'}}</span></div>
-                        <div class="detail-row"><span style="color:#aaa">Güncelleme:</span><span>${{sig.last_update || 'Şimdi'}}</span></div>
+                        <div class="detail-row"><span style="color:#aaa">Killzone:</span><span>${sig.killzone || 'Normal'}</span></div>
+                        <div class="detail-row"><span style="color:#aaa">Tetik:</span><span>${sig.triggers || '-'}</span></div>
+                        <div class="detail-row"><span style="color:#aaa">Güncelleme:</span><span>${sig.last_update || 'Şimdi'}</span></div>
                     </div>
                 </div>
             `).join('');
@@ -491,10 +490,10 @@ async def signal_all(request: Request):
         function connect() {{
             const tf = document.getElementById('tf').value;
             currentTf = tf;
-            document.getElementById('status').innerHTML = `📡 ${{tf.toUpperCase()}} sinyalleri yükleniyor...`;
+            document.getElementById('status').innerHTML = `📡 ${tf.toUpperCase()} sinyalleri yükleniyor...`;
             if (ws) ws.close();
-            ws = new WebSocket(`${{location.protocol === 'https:' ? 'wss' : 'ws'}}://${{location.host}}/ws/all/${{tf}}`);
-            ws.onopen = () => document.getElementById('status').innerHTML = `✅ ${{tf.toUpperCase()}} akışı başladı!`;
+            ws = new WebSocket(`${location.protocol === 'https:' ? 'wss' : 'ws'}://${location.host}/ws/all/${tf}`);
+            ws.onopen = () => document.getElementById('status').innerHTML = `✅ ${tf.toUpperCase()} akışı başladı!`;
             ws.onmessage = e => {{
                 try {{
                     const data = JSON.parse(e.data);
