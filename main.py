@@ -556,21 +556,81 @@ async def signal(request: Request):
             background: rgba(255, 255, 255, 0.15);
         }}
         
-        /* YENİ: Zaman Dilimi Butonları */
-        .timeframe-title {{
+             /* GÜNCELLENMİŞ: Zaman Dilimi Butonları - Çok Daha Belirgin! */
+        .timeframe-title {
             color: #00ffff;
-            font-size: 1.3rem;
+            font-size: 1.4rem;
             font-weight: bold;
-            margin: 20px 0 15px 0;
-        }}
+            margin: 25px 0 15px 0;
+            text-shadow: 0 0 10px rgba(0, 255, 255, 0.5);
+        }
         
-        .timeframe-buttons {{
+        .timeframe-buttons {
             display: flex;
             flex-wrap: wrap;
             justify-content: center;
-            gap: 12px;
-            margin: 10px 0 25px 0;
-        }}
+            gap: 14px;
+            margin: 15px 0 30px 0;
+            padding: 10px;
+        }
+        
+        .tf-btn {
+            padding: 16px 24px;
+            font-size: 1.2rem;
+            font-weight: bold;
+            background: rgba(255, 255, 255, 0.15);
+            color: #ffffff;
+            border: 2px solid rgba(255, 255, 255, 0.3);
+            border-radius: 18px;
+            cursor: pointer;
+            transition: all 0.4s ease;
+            min-width: 90px;
+            backdrop-filter: blur(10px);
+            box-shadow: 0 4px 15px rgba(0, 0, 0, 0.3);
+            text-transform: uppercase;
+            letter-spacing: 1px;
+        }
+        
+        .tf-btn:hover {
+            background: rgba(255, 255, 255, 0.25);
+            border-color: #00dbde;
+            transform: translateY(-5px);
+            box-shadow: 0 10px 30px rgba(0, 219, 222, 0.4);
+        }
+        
+        .tf-btn.active {
+            background: linear-gradient(45deg, #00dbde, #fc00ff, #00dbde);
+            background-size: 200% 200%;
+            animation: gradientShift 4s ease infinite;
+            border-color: #fc00ff;
+            color: white !important;
+            box-shadow: 0 0 40px rgba(252, 0, 255, 0.8), 
+                        0 0 60px rgba(0, 219, 222, 0.6);
+            transform: translateY(-6px);
+            font-weight: bolder;
+            text-shadow: 0 0 15px rgba(0, 0, 0, 0.8);
+        }
+        
+        @keyframes gradientShift {
+            0% { background-position: 0% 50%; }
+            50% { background-position: 100% 50%; }
+            100% { background-position: 0% 50%; }
+        }
+        
+        .tf-btn:active {
+            transform: translateY(-2px);
+        }
+        
+        @media (max-width: 768px) {
+            .tf-btn {
+                padding: 14px 20px;
+                font-size: 1.1rem;
+                min-width: 80px;
+            }
+            .timeframe-buttons {
+                gap: 10px;
+            }
+        }
         
         .tf-btn {{
             padding: 14px 22px;
@@ -2391,5 +2451,6 @@ if __name__ == "__main__":
         log_level="info",
         access_log=True
     )
+
 
 
