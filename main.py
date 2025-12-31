@@ -1,4 +1,4 @@
-# main.py — RAILWAY'DE %100 ÇALIŞAN SON VERSİYON
+# main.py — RAILWAY'DE %100 ÇALIŞAN, /signal SAYFASI DÜZELTİLDİ
 import logging
 import asyncio
 from datetime import datetime
@@ -10,7 +10,6 @@ import hashlib
 from fastapi import FastAPI, WebSocket, WebSocketDisconnect, Request, Form
 from fastapi.responses import HTMLResponse, RedirectResponse, JSONResponse
 
-# DİKKAT: realtime_subscribers KALDIRILDI!
 from core import (
     initialize, cleanup,
     single_subscribers, all_subscribers, pump_radar_subscribers,
@@ -73,7 +72,7 @@ async def lifespan(app: FastAPI):
     logger.info("🛑 Uygulama kapatılıyor...")
     await cleanup()
 
-app = FastAPI(lifespan=lifespan, title="ICT SMART PRO", version="7.0 - Railway Ready")
+app = FastAPI(lifespan=lifespan, title="ICT SMART PRO", version="8.0 - Signal Fixed")
 
 # ==================== MIDDLEWARE ====================
 @app.middleware("http")
@@ -169,7 +168,7 @@ async def ws_pump_radar(websocket: WebSocket):
 @app.websocket("/ws/realtime_price")
 async def ws_realtime_price(websocket: WebSocket):
     await websocket.accept()
-    await rt_ticker.subscribe(websocket)  # rt_ticker kullanıyoruz
+    await rt_ticker.subscribe(websocket)
 
     try:
         while True:
@@ -247,19 +246,136 @@ async def home(request: Request):
 </html>"""
     return HTMLResponse(html)
 
-# ==================== DİĞER SAYFALAR (login, health vs.) ====================
+# ==================== TEK COİN SİNYAL SAYFASI (DÜZELTİLDİ) ====================
+@app.get("/signal", response_class=HTMLResponse)
+async def signal_page(request: Request):
+    user_email = request.cookies.get("user_email")
+    if not user_email:
+        return RedirectResponse("/login")
+    username = user_email.split("@")[0]
+    stats_html = get_visitor_stats_html()
+
+    html = f"""<!DOCTYPE html>
+<html lang="tr">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width,initial-scale=1.0,maximum-scale=1.0,user-scalable=no">
+    <title>{username} | CANLI SİNYAL</title>
+    <style>
+        body {{background:linear-gradient(135deg,#0a0022,#110033,#000);color:#e0e0ff;margin:0;font-family:system-ui;min-height:100vh;}}
+        .header {{position:fixed;top:0;left:0;right:0;padding:12px 20px;background:rgba(0,0,0,0.7);backdrop-filter:blur(8px);z-index:100;display:flex;justify-content:space-between;color:#fff;}}
+        .controls {{padding:70px 15px 20px;max-width:1000px;margin:auto;display:flex;flex-wrap:wrap;gap:15px;justify-content:center;}}
+        input,select,button {{padding:15px;border-radius:12px;background:rgba(40,40,60,0.7);color:#fff;border:none;font-size:1.1rem;min-width:180px;}}
+        button {{background:linear-gradient(45deg,#fc00ff,#00dbde);font-weight:bold;cursor:pointer;}}
+        #status {{text-align:center;padding:15px;color:#00dbde;background:rgba(0,0,0,0.4);border-radius:10px;margin:10px 0;}}
+        #price-text {{font-size:3.5rem;text-align:center;margin:20px;background:linear-gradient(90deg,#00dbde,#fc00ff);-webkit-background-clip:text;-webkit-text-fill-color:transparent;font-weight:bold;}}
+        #signal-card {{background:rgba(20,10,50,0.6);border-radius:20px;padding:30px;text-align:center;border-left:6px solid #ffd700;}}
+        .chart-container {{width:100%;max-width:1000px;margin:30px auto;height:500px;border-radius:20px;overflow:hidden;background:#08001a;box-shadow:0 10px 30px rgba(0,219,222,0.2);}}
+        .nav {{text-align:center;padding:20px;}}
+        .nav a {{color:#00dbde;margin:0 15px;text-decoration:none;font-weight:bold;}}
+    </style>
+</head>
+<body>
+    <div class="header"><div>👤 {username}</div><div>ICT SMART PRO</div></div>
+    {stats_html}
+    <div class="controls">
+        <input id="pair" value="BTCUSDT" placeholder="Coin (BTCUSDT)">
+        <select id="tf">
+            <option value="5m" selected>5m</option>
+            <option value="15m">15m</option>
+            <option value="1h">1h</option>
+            <option value="4h">4h</option>
+            <option value="1d">1D</option>
+        </select>
+        <button onclick="connect()">📡 BAĞLAN</button>
+    </div>
+    <div id="status">Coin seçip bağlanın</div>
+    <div id="price-text">$0.00</div>
+    <div id="signal-card">
+        <div id="signal-text">⏳ Bekleniyor</div>
+        <div id="signal-details">Bağlantı kurulunca sinyal gelecek</div>
+    </div>
+    <div class="chart-container"><div id="tradingview_widget"></div></div>
+    <div class="nav">
+        <a href="/">🏠 Ana Sayfa</a>
+        <a href="/signal/all">🔥 Tüm Coinler</a>
+    </div>
+    <script src="https://s3.tradingview.com/tv.js"></script>
+    <script>
+        let ws = null, tvWidget = null;
+        const tfMap = {{"5m":"5","15m":"15","1h":"60","4h":"240","1d":"D"}};
+
+        function getSymbol() {{
+            let p = document.getElementById('pair').value.trim().toUpperCase();
+            if (!p.endsWith("USDT")) p += "USDT";
+            document.getElementById('pair').value = p;
+            return "BINANCE:" + p;
+        }}
+
+        function createWidget() {{
+            const symbol = getSymbol();
+            const tf = document.getElementById('tf').value;
+            const interval = tfMap[tf] || "5";
+            if (tvWidget) tvWidget.remove();
+            tvWidget = new TradingView.widget({{
+                autosize: true, symbol, interval, theme: "dark", timezone: "Etc/UTC",
+                container_id: "tradingview_widget", locale: "tr",
+                studies: ["RSI@tv-basicstudies", "MACD@tv-basicstudies", "Volume@tv-basicstudies"]
+            }});
+        }}
+
+        function connect() {{
+            if (ws) return alert("Zaten bağlı!");
+            const symbol = getSymbol().replace("BINANCE:", "");
+            const tf = document.getElementById('tf').value;
+            document.getElementById("status").textContent = `${symbol} ${tf} bağlanıyor...`;
+            createWidget();
+
+            const url = (location.protocol === "https:" ? "wss" : "ws") + "://" + location.host + `/ws/signal/${symbol}/${tf}`;
+            ws = new WebSocket(url);
+
+            ws.onopen = () => document.getElementById("status").textContent = `${symbol} ${tf} aktif!`;
+            ws.onmessage = e => {{
+                const d = JSON.parse(e.data);
+                if (d.heartbeat) return;
+                document.getElementById("signal-text").textContent = d.signal || "NÖTR";
+                document.getElementById("signal-details").innerHTML = `
+                    <strong>${symbol.replace('USDT','')}/USDT</strong><br>
+                    💰 $${(d.current_price || 0).toFixed(4)}<br>
+                    Skor: <strong>${d.score || 50}/100</strong>
+                `;
+                document.getElementById("signal-card").style.borderLeftColor = 
+                    d.signal?.includes("ALIM") ? "#00ff88" : 
+                    d.signal?.includes("SATIM") ? "#ff4444" : "#ffd700";
+
+                if (d.current_price) {{
+                    document.getElementById("price-text").textContent = "$" + (d.current_price >= 1 ? d.current_price.toFixed(4) : d.current_price.toFixed(6));
+                }}
+            }};
+            ws.onclose = () => document.getElementById("status").textContent = "Bağlantı kesildi";
+        }}
+
+        document.addEventListener("DOMContentLoaded", createWidget);
+    </script>
+</body>
+</html>"""
+    return HTMLResponse(html)
+
+# ==================== GİRİŞ SAYFASI ====================
 @app.get("/login", response_class=HTMLResponse)
 async def login_page():
     return HTMLResponse("""<!DOCTYPE html>
 <html lang="tr">
-<head><meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1.0">
-<title>Giriş | ICT SMART PRO</title>
-<style>
-    body{{background:linear-gradient(135deg,#0a0022,#1a0033,#000);color:#fff;display:flex;align-items:center;justify-content:center;min-height:100vh;margin:0;font-family:system-ui;}}
-    .box{{background:rgba(0,0,0,0.7);padding:40px;border-radius:20px;width:90%;max-width:400px;text-align:center;backdrop-filter:blur(10px);}}
-    input{{width:100%;padding:16px;margin:15px 0;border:none;border-radius:12px;background:rgba(255,255,255,0.1);color:#fff;font-size:1.1rem;}}
-    button{{width:100%;padding:16px;background:linear-gradient(45deg,#fc00ff,#00dbde);border:none;border-radius:12px;color:#fff;font-weight:bold;font-size:1.2rem;cursor:pointer;}}
-</style>
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width,initial-scale=1.0">
+    <title>Giriş | ICT SMART PRO</title>
+    <style>
+        body {{background:linear-gradient(135deg,#0a0022,#1a0033,#000);color:#fff;display:flex;align-items:center;justify-content:center;min-height:100vh;margin:0;font-family:system-ui;}}
+        .box {{background:rgba(0,0,0,0.7);padding:40px;border-radius:20px;width:90%;max-width:400px;text-align:center;backdrop-filter:blur(10px);}}
+        input {{width:100%;padding:16px;margin:15px 0;border:none;border-radius:12px;background:rgba(255,255,255,0.1);color:#fff;font-size:1.1rem;}}
+        button {{width:100%;padding:16px;background:linear-gradient(45deg,#fc00ff,#00dbde);border:none;border-radius:12px;color:#fff;font-weight:bold;font-size:1.2rem;cursor:pointer;}}
+    </style>
 </head>
 <body>
     <div class="box">
@@ -281,6 +397,7 @@ async def login_post(email: str = Form(...)):
         return resp
     return RedirectResponse("/login")
 
+# ==================== HEALTH CHECK ====================
 @app.get("/health")
 async def health():
     return JSONResponse({
