@@ -18,7 +18,47 @@ if not logger.handlers:
     handler.setFormatter(logging.Formatter("%(asctime)s | %(levelname)s | core | %(message)s"))
     logger.addHandler(handler)
 
+#=======================================================================================
+# core.py (güncellenmiş kısım)
+# ... (diğer kodlar aynı)
 
+# Price Pool (havuz)
+price_pool: Dict[str, Dict[str, Any]] = {}
+price_pool_lock = Lock()
+
+def update_price(source: str, symbol: str, price: float, change_24h: Optional[float] = None):
+    """Exchange'den veri at - havuza ekle"""
+    with price_pool_lock:
+        if symbol not in price_pool:
+            price_pool[symbol] = {}
+        price_pool[symbol][source] = {
+            "price": float(price),
+            "change_24h": float(change_24h) if change_24h is not None else None,
+            "timestamp": datetime.now(timezone.utc).isoformat()
+        }
+        # Ortalama best_price hesapla
+        valid_prices = [info["price"] for info in price_pool[symbol].values() if isinstance(info, dict) and info["price"] > 0]
+        if valid_prices:
+            price_pool[symbol]["best_price"] = sum(valid_prices) / len(valid_prices)
+            price_pool[symbol]["sources"] = list(price_pool[symbol].keys())
+            price_pool[symbol]["updated"] = datetime.now(timezone.utc).strftime("%H:%M:%S")
+
+# Ardışık Veri Atma (opsiyonel - paralel yerine kullanma)
+async def sequential_price_update():
+    """Exchange'leri sırayla çağır - havuza at"""
+    while True:
+        for exchange_func in [binance_ticker_stream, bybit_ticker_stream, okx_ticker_stream, coingecko_polling]:
+            try:
+                await exchange_func()  # Sırayla çalıştır
+            except Exception as e:
+                logger.error(f"Exchange hatası: {e}")
+        await asyncio.sleep(60)  # 1 dakika sonra tekrarla
+
+# initialize() içine ekle (eğer ardışık istersen):
+background_tasks.append(asyncio.create_task(sequential_price_update()))
+
+# Ama tavsiye: Her exchange'i ayrı task olarak bırak (paralel)!
+#=======================================================================================
 # ==================== MULTI-EXCHANGE PRICE POOL ====================
 price_pool: Dict[str, Dict[str, Any]] = {}
 price_pool_lock = Lock()
