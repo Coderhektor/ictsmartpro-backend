@@ -1328,3 +1328,4 @@ if __name__ == "__main__":
 # 5. Tüm endpoint'ler doğru yapılandırıldı
 # 6. Kusursuz çalışır durumda!
 
+
