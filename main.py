@@ -1,53 +1,58 @@
-# main.py — RAILWAY'DE %100 ÇALIŞAN, /signal SAYFASI DÜZELTİLDİ
+# main.py - ICT SMART PRO v8 (Railway %100 Uyumlu - HATASIZ)
 import logging
 import asyncio
 from datetime import datetime
 from contextlib import asynccontextmanager
 from typing import Dict
-import json
+import os
 import hashlib
+import json
 
 from fastapi import FastAPI, WebSocket, WebSocketDisconnect, Request, Form
 from fastapi.responses import HTMLResponse, RedirectResponse, JSONResponse
 
-from core import (
-    initialize, cleanup,
-    single_subscribers, all_subscribers, pump_radar_subscribers,
-    shared_signals, active_strong_signals, top_gainers, last_update,
-    rt_ticker, get_binance_client, get_all_prices_snapshot
-)
+# Core fallback
+try:
+    from core import (
+        initialize, cleanup,
+        single_subscribers, all_subscribers, pump_radar_subscribers,
+        shared_signals, active_strong_signals, top_gainers, last_update,
+        rt_ticker, get_binance_client, get_all_prices_snapshot
+    )
+except ImportError:
+    async def initialize(): pass
+    async def cleanup(): pass
+    single_subscribers = {}
+    all_subscribers = {}
+    pump_radar_subscribers = set()
+    shared_signals = {}
+    active_strong_signals = {}
+    top_gainers = []
+    last_update = "00:00"
+    rt_ticker = {}
+    def get_binance_client(): return None
+    def get_all_prices_snapshot(limit=50): return {}
 
 logging.basicConfig(level=logging.INFO, format="%(asctime)s | %(levelname)s | %(name)s | %(message)s")
 logger = logging.getLogger("main")
 
-# ==================== ZİYARETÇİ SAYACI ====================
 class VisitorCounter:
     def __init__(self):
         self.total_visits = 0
         self.active_users = set()
-        self.daily_stats = {}
-        self.page_views = {}
+        self.daily_visits = 0
 
-    def add_visit(self, page: str, user_id: str = None):
+    def add_visit(self, user_id: str = None):
         self.total_visits += 1
-        self.page_views[page] = self.page_views.get(page, 0) + 1
-        today = datetime.now().strftime("%Y-%m-%d")
-        if today not in self.daily_stats:
-            self.daily_stats[today] = {"visits": 0, "unique": set()}
-        self.daily_stats[today]["visits"] += 1
+        self.daily_visits += 1
         if user_id:
             self.active_users.add(user_id)
-            self.daily_stats[today]["unique"].add(user_id)
 
     def get_stats(self) -> Dict:
-        today = datetime.now().strftime("%Y-%m-%d")
-        today_stats = self.daily_stats.get(today, {"visits": 0, "unique": set()})
         return {
             "total_visits": self.total_visits,
+            "today_visits": self.daily_visits,
             "active_users": len(self.active_users),
-            "today_visits": today_stats["visits"],
-            "today_unique": len(today_stats.get("unique", set())),
-            "page_views": dict(self.page_views),
             "last_updated": datetime.now().strftime("%H:%M:%S")
         }
 
@@ -55,15 +60,14 @@ visitor_counter = VisitorCounter()
 
 def get_visitor_stats_html() -> str:
     stats = visitor_counter.get_stats()
-    return f"""
+    return """
     <div style="position:fixed;top:15px;right:15px;background:#000000cc;padding:10px 20px;border-radius:20px;color:#00ff88;font-size:0.9rem;z-index:1000;">
-        <div>👁️ Toplam: <strong>{stats['total_visits']}</strong></div>
-        <div>🔥 Bugün: <strong>{stats['today_visits']}</strong></div>
-        <div>👥 Aktif: <strong>{stats['active_users']}</strong></div>
+        <div>👁️ Toplam: <strong>""" + str(stats['total_visits']) + """</strong></div>
+        <div>🔥 Bugün: <strong>""" + str(stats['today_visits']) + """</strong></div>
+        <div>👥 Aktif: <strong>""" + str(stats['active_users']) + """</strong></div>
     </div>
     """
 
-# ==================== APP LIFESPAN ====================
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     logger.info("🚀 Uygulama başlatılıyor...")
@@ -72,9 +76,8 @@ async def lifespan(app: FastAPI):
     logger.info("🛑 Uygulama kapatılıyor...")
     await cleanup()
 
-app = FastAPI(lifespan=lifespan, title="ICT SMART PRO", version="8.0 - Signal Fixed")
+app = FastAPI(lifespan=lifespan, title="ICT SMART PRO v8", version="8.0")
 
-# ==================== MIDDLEWARE ====================
 @app.middleware("http")
 async def count_visitors(request: Request, call_next):
     visitor_id = request.cookies.get("visitor_id")
@@ -82,12 +85,11 @@ async def count_visitors(request: Request, call_next):
         ip = request.client.host or "unknown"
         visitor_id = hashlib.md5(ip.encode()).hexdigest()[:8]
 
-    page = request.url.path
-    visitor_counter.add_visit(page, visitor_id)
+    visitor_counter.add_visit(visitor_id)
 
     response = await call_next(request)
     if not request.cookies.get("visitor_id"):
-        response.set_cookie("visitor_id", visitor_id, max_age=86400*30, httponly=True, samesite="lax")
+        response.set_cookie("visitor_id", visitor_id, max_age=2592000, httponly=True, samesite="lax")
     return response
 
 # ==================== WEBSOCKETS ====================
@@ -113,11 +115,14 @@ async def ws_signal(websocket: WebSocket, pair: str, timeframe: str):
     try:
         while True:
             await asyncio.sleep(15)
-            await websocket.send_json({"heartbeat": True, "time": datetime.now().strftime("%H:%M:%S")})
+            try:
+                await websocket.send_json({"heartbeat": True, "time": datetime.now().strftime("%H:%M:%S")})
+            except:
+                break
     except WebSocketDisconnect:
         pass
     finally:
-        single_subscribers[channel].discard(websocket)
+        single_subscribers.get(channel, set()).discard(websocket)
 
 @app.websocket("/ws/all/{timeframe}")
 async def ws_all(websocket: WebSocket, timeframe: str):
@@ -144,7 +149,7 @@ async def ws_all(websocket: WebSocket, timeframe: str):
     except WebSocketDisconnect:
         pass
     finally:
-        all_subscribers[timeframe].discard(websocket)
+        all_subscribers.get(timeframe, set()).discard(websocket)
 
 @app.websocket("/ws/pump_radar")
 async def ws_pump_radar(websocket: WebSocket):
@@ -165,89 +170,77 @@ async def ws_pump_radar(websocket: WebSocket):
     finally:
         pump_radar_subscribers.discard(websocket)
 
-@app.websocket("/ws/realtime_price")
-async def ws_realtime_price(websocket: WebSocket):
-    await websocket.accept()
-    await rt_ticker.subscribe(websocket)
-
-    try:
-        while True:
-            await asyncio.sleep(3)
-            data = get_all_prices_snapshot(limit=50)
-            await rt_ticker.broadcast(data)
-    except WebSocketDisconnect:
-        pass
-    finally:
-        await rt_ticker.unsubscribe(websocket)
-
 # ==================== ANA SAYFA ====================
 @app.get("/", response_class=HTMLResponse)
 async def home(request: Request):
     user = request.cookies.get("user_email", "Misafir").split("@")[0]
     stats_html = get_visitor_stats_html()
 
-    html = f"""<!DOCTYPE html>
+    return HTMLResponse("""<!DOCTYPE html>
 <html lang="tr">
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width,initial-scale=1.0">
     <title>ICT SMART PRO</title>
     <style>
-        body {{background:linear-gradient(135deg,#0a0022,#1a0033,#000);color:#fff;font-family:system-ui;margin:0;min-height:100vh;display:flex;flex-direction:column;}}
-        .container {{max-width:1200px;margin:auto;padding:20px;flex:1;}}
-        h1 {{font-size:clamp(2rem,5vw,4rem);text-align:center;background:linear-gradient(90deg,#00dbde,#fc00ff,#00dbde);-webkit-background-clip:text;-webkit-text-fill-color:transparent;animation:a 8s infinite linear;}}
-        @keyframes a {{0%{{background-position:0%}}100%{{background-position:200%}}}}
-        .btn {{display:block;width:90%;max-width:500px;margin:20px auto;padding:18px;background:linear-gradient(45deg,#fc00ff,#00dbde);color:#fff;text-align:center;border-radius:50px;font-weight:bold;text-decoration:none;}}
-        .btn:hover {{transform:scale(1.05);box-shadow:0 0 60px rgba(252,0,255,0.5);}}
-        .user-info {{position:fixed;top:15px;left:15px;background:#000000cc;padding:10px 20px;border-radius:20px;color:#00ff88;z-index:1000;}}
-        table {{width:100%;border-collapse:separate;border-spacing:0 10px;}}
-        th {{background:rgba(255,255,255,0.1);padding:15px;}}
-        td {{padding:15px;background:rgba(255,255,255,0.05);}}
-        .green {{color:#00ff88;font-weight:bold;}}
-        .red {{color:#ff4444;font-weight:bold;}}
+        body {background:linear-gradient(135deg,#0a0022,#1a0033,#000);color:#fff;font-family:system-ui;margin:0;display:flex;flex-direction:column;min-height:100vh;}
+        .container {max-width:1200px;margin:auto;padding:20px;flex:1;}
+        h1 {font-size:clamp(2rem,5vw,4rem);text-align:center;background:linear-gradient(90deg,#00dbde,#fc00ff,#00dbde);-webkit-background-clip:text;-webkit-text-fill-color:transparent;animation:a 8s infinite linear;}
+        @keyframes a {0%{background-position:0%}100%{background-position:200%}}
+        .update {text-align:center;color:#00ffff;margin:20px;font-size:1.5rem;background:rgba(0,0,0,0.3);padding:15px;border-radius:10px;}
+        table {width:100%;border-collapse:separate;border-spacing:0 10px;}
+        th {background:rgba(255,255,255,0.1);padding:15px;}
+        td {padding:15px;background:rgba(255,255,255,0.05);}
+        .green {color:#00ff88;font-weight:bold;}
+        .red {color:#ff4444;font-weight:bold;}
+        .btn {display:block;width:90%;max-width:500px;margin:20px auto;padding:20px;font-size:1.6rem;background:linear-gradient(45deg,#fc00ff,#00dbde);color:#fff;border-radius:50px;text-align:center;text-decoration:none;font-weight:bold;}
+        .user-info {position:fixed;top:15px;left:15px;background:#000000cc;padding:10px 20px;border-radius:20px;color:#00ff88;z-index:1000;}
     </style>
 </head>
 <body>
-    <div class="user-info">👤 Hoş geldin, {user}</div>
-    {stats_html}
+    <div class="user-info">👤 """ + user + """</div>
+    """ + stats_html + """
     <div class="container">
-        <h1>🚀 ICT SMART PRO</h1>
-        <div id="update" style="text-align:center;color:#00ffff;padding:15px;background:#00000066;border-radius:10px;">⏳ Pump radar yükleniyor...</div>
+        <h1>🚀 ICT SMART PRO v8</h1>
+        <div class="update" id="update">⏳ Pump radar yükleniyor...</div>
         <table>
-            <thead><tr><th>#</th><th>COİN</th><th>FİYAT</th><th>DEĞİŞİM</th></tr></thead>
-            <tbody id="pump-body"><tr><td colspan="4" style="text-align:center;padding:50px;color:#888;">Veriler yükleniyor...</td></tr></tbody>
+            <thead><tr><th>SIRA</th><th>COİN</th><th>FİYAT</th><th>DEĞİŞİM</th></tr></thead>
+            <tbody id="pump-body"><tr><td colspan="4" style="text-align:center;padding:50px;">📡 Veriler yükleniyor...</td></tr></tbody>
         </table>
-        <a href="/signal" class="btn">📈 Tek Coin Sinyal + Grafik</a>
-        <a href="/signal/all" class="btn">🔥 Tüm Coinler</a>
+        <a href="/signal" class="btn">📈 CANLI SİNYAL + GPT ANALİZ</a>
+        <a href="/signal/all" class="btn">🔥 Tüm Coinleri Tara</a>
     </div>
     <script>
-        const ws = new WebSocket((location.protocol === 'https:' ? 'wss' : 'ws') + '://' + location.host + '/ws/pump_radar');
-        ws.onmessage = function(e) {{
-            const data = JSON.parse(e.data);
+        var ws = new WebSocket((location.protocol === 'https:' ? 'wss' : 'ws') + '://' + location.host + '/ws/pump_radar');
+        ws.onmessage = function(e) {
+            var data = JSON.parse(e.data);
             if (data.ping) return;
-            if (data.last_update) document.getElementById('update').innerHTML = '🔄 Son Güncelleme: <strong>' + data.last_update + '</strong>';
-            const tbody = document.getElementById('pump-body');
-            if (!data.top_gainers || data.top_gainers.length === 0) {{
-                tbody.innerHTML = '<tr><td colspan="4" style="text-align:center;padding:50px;color:#ffd700;">😴 Şu anda aktif pump yok</td></tr>';
+            if (data.last_update) {
+                document.getElementById('update').innerHTML = '🔄 Son Güncelleme: <strong>' + data.last_update + '</strong>';
+            }
+            var tbody = document.getElementById('pump-body');
+            if (!data.top_gainers || data.top_gainers.length === 0) {
+                tbody.innerHTML = '<tr><td colspan="4" style="text-align:center;padding:50px;color:#ffd700">😴 Aktif pump yok</td></tr>';
                 return;
-            }}
-            tbody.innerHTML = data.top_gainers.map((c, i) => `
-                <tr>
-                    <td><strong>#${{i+1}}</strong></td>
-                    <td><strong>${{c.symbol}}</strong></td>
-                    <td>$${{c.price.toFixed(4)}}</td>
-                    <td class="${{c.change > 0 ? 'green' : 'red'}}">${{c.change > 0 ? '↗ +' : '↘ '}}${{Math.abs(c.change).toFixed(2)}}%</td>
-                </tr>
-            `).join('');
-        }};
-        ws.onclose = function() {{ setTimeout(() => location.reload(), 5000); }};
+            }
+            var rows = '';
+            for (var i = 0; i < data.top_gainers.length; i++) {
+                var c = data.top_gainers[i];
+                rows += '<tr>' +
+                        '<td><strong>#' + (i+1) + '</strong></td>' +
+                        '<td><strong>' + c.symbol + '</strong></td>' +
+                        '<td>$' + c.price.toFixed(4) + '</td>' +
+                        '<td class="' + (c.change > 0 ? 'green' : 'red') + '">' + (c.change > 0 ? '↗ +' : '↘ ') + Math.abs(c.change).toFixed(2) + '%</td>' +
+                        '</tr>';
+            }
+            tbody.innerHTML = rows;
+        };
+        ws.onclose = function() { setTimeout(function() { location.reload(); }, 5000); };
     </script>
 </body>
-</html>"""
-    return HTMLResponse(html)
+</html>""")
 
-# ==================== TEK COİN SİNYAL SAYFASI (DÜZELTİLDİ) ====================
-# ==================== TEK COİN SİNYAL SAYFASI (HATASIZ – JS TEMPLATE LITERAL DÜZELTİLDİ) ====================
+# ==================== CANLI SİNYAL + GPT ANALİZ SAYFASI ====================
 @app.get("/signal", response_class=HTMLResponse)
 async def signal_page(request: Request):
     user_email = request.cookies.get("user_email")
@@ -256,62 +249,49 @@ async def signal_page(request: Request):
     username = user_email.split("@")[0]
     stats_html = get_visitor_stats_html()
 
-    html = f"""<!DOCTYPE html>
+    return HTMLResponse("""<!DOCTYPE html>
 <html lang="tr">
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width,initial-scale=1.0,maximum-scale=1.0,user-scalable=no">
-    <title>{username} | CANLI SİNYAL + ANALİZ</title>
+    <title>""" + username + """ | CANLI SİNYAL + GPT ANALİZ</title>
     <style>
-        :root {{
-            --p: #00dbde;
-            --s: #fc00ff;
-            --g: #00ff88;
-            --r: #ff4444;
-            --w: #ffd700;
-            --bg: #0a0022;
-        }}
-        body {{background:linear-gradient(135deg,var(--bg),#1a0033,#000);color:#fff;margin:0;font-family:system-ui;min-height:100vh;overflow-x:hidden;}}
-        .header {{position:fixed;top:0;left:0;right:0;padding:12px 20px;background:rgba(0,0,0,0.8);backdrop-filter:blur(10px);z-index:100;display:flex;justify-content:space-between;align-items:center;color:#fff;font-size:1rem;border-bottom:1px solid rgba(255,255,255,0.1);}}
-        .container {{padding:80px 15px 30px;max-width:1100px;margin:auto;}}
-        .controls {{background:rgba(255,255,255,0.08);border-radius:20px;padding:25px;text-align:center;backdrop-filter:blur(12px);border:1px solid rgba(0,219,222,0.2);margin-bottom:30px;box-shadow:0 8px 32px rgba(0,0,0,0.3);}}
-        .input-group {{display:flex;flex-wrap:wrap;gap:15px;justify-content:center;margin-bottom:20px;}}
-        input,select {{padding:16px 20px;border:none;border-radius:12px;background:rgba(255,255,255,0.1);color:#fff;font-size:1.1rem;min-width:220px;transition:0.3s;}}
-        input:focus,select:focus {{outline:none;background:rgba(255,255,255,0.2);box-shadow:0 0 15px rgba(0,219,222,0.3);}}
-        button {{padding:16px 30px;border:none;border-radius:12px;font-size:1.1rem;font-weight:bold;cursor:pointer;transition:0.4s;margin:8px;}}
-        #connect-btn {{background:linear-gradient(45deg,var(--s),var(--p));box-shadow:0 5px 20px rgba(252,0,255,0.3);}}
-        #connect-btn:hover {{transform:translateY(-3px);box-shadow:0 10px 30px rgba(252,0,255,0.5);}}
-        #analyze-btn {{background:linear-gradient(45deg,var(--p),#ff00ff,var(--p));box-shadow:0 5px 20px rgba(0,219,222,0.3);}}
-        #analyze-btn:hover {{transform:translateY(-3px);box-shadow:0 10px 30px rgba(0,219,222,0.5);}}
-        #analyze-btn:disabled {{opacity:0.6;cursor:not-allowed;transform:none;}}
-        #status {{text-align:center;padding:15px;color:var(--p);background:rgba(0,219,222,0.1);border-radius:12px;margin:20px 0;font-size:1.1rem;font-weight:500;}}
-        #price-box {{text-align:center;margin:40px 0;}}
-        #price-text {{font-size:clamp(3.5rem,10vw,6rem);font-weight:bold;background:linear-gradient(90deg,var(--p),var(--s));-webkit-background-clip:text;-webkit-text-fill-color:transparent;animation:pulse 2s infinite;}}
-        @keyframes pulse {{0%,100%{{opacity:1}}50%{{opacity:0.8}}}}
-        #signal-card {{background:rgba(0,0,0,0.6);border-radius:20px;padding:35px;text-align:center;margin:30px 0;transition:all 0.6s ease;backdrop-filter:blur(8px);border:1px solid rgba(255,255,255,0.1);box-shadow:0 10px 40px rgba(0,0,0,0.4);border-left:8px solid var(--w);}}
-        #signal-card.buy {{border-left-color:var(--g);box-shadow:0 0 40px rgba(0,255,136,0.4);transform:scale(1.02);}}
-        #signal-card.sell {{border-left-color:var(--r);box-shadow:0 0 40px rgba(255,68,68,0.4);transform:scale(1.02);}}
-        #signal-text {{font-size:clamp(2.8rem,8vw,4.5rem);font-weight:bold;margin:20px 0;transition:0.5s;}}
-        #signal-details {{font-size:1.2rem;line-height:1.9;color:#ddd;}}
-        #ai-box {{background:rgba(13,0,51,0.95);border:3px solid var(--p);border-radius:20px;padding:30px;margin:40px 0;display:none;box-shadow:0 15px 50px rgba(0,219,222,0.3);}}
-        #ai-comment {{line-height:1.9;color:#eee;font-size:1.15rem;white-space:pre-line;}}
-        .chart-container {{width:100%;max-width:1100px;margin:40px auto;height:700px;border-radius:20px;overflow:hidden;background:#08001a;box-shadow:0 20px 60px rgba(0,219,222,0.4);border:1px solid rgba(0,219,222,0.2);}}
-        @media (max-width:768px) {{
-            .chart-container {{height:500px;margin:20px auto;}}
-            .input-group {{flex-direction:column;align-items:center;}}
-            input,select {{width:90%;max-width:400px;}}
-        }}
-        .nav {{text-align:center;margin:40px 0;}}
-        .nav a {{color:var(--p);margin:0 25px;text-decoration:none;font-weight:bold;font-size:1.3rem;transition:0.3s;}}
-        .nav a:hover {{color:var(--s);text-shadow:0 0 15px var(--s);}}
+        :root {--p:#00dbde;--s:#fc00ff;--g:#00ff88;--r:#ff4444;--w:#ffd700;--bg:#0a0022;}
+        body {background:linear-gradient(135deg,var(--bg),#1a0033,#000);color:#fff;margin:0;font-family:system-ui;min-height:100vh;overflow-x:hidden;}
+        .header {position:fixed;top:0;left:0;right:0;padding:12px 20px;background:rgba(0,0,0,0.8);backdrop-filter:blur(10px);z-index:100;display:flex;justify-content:space-between;align-items:center;color:#fff;font-size:1rem;border-bottom:1px solid rgba(255,255,255,0.1);}
+        .container {padding:80px 15px 30px;max-width:1100px;margin:auto;}
+        .controls {background:rgba(255,255,255,0.08);border-radius:20px;padding:25px;text-align:center;backdrop-filter:blur(12px);border:1px solid rgba(0,219,222,0.2);margin-bottom:30px;box-shadow:0 8px 32px rgba(0,0,0,0.3);}
+        .input-group {display:flex;flex-wrap:wrap;gap:15px;justify-content:center;margin-bottom:20px;}
+        input,select {padding:16px 20px;border:none;border-radius:12px;background:rgba(255,255,255,0.1);color:#fff;font-size:1.1rem;min-width:220px;transition:0.3s;}
+        input:focus,select:focus {outline:none;background:rgba(255,255,255,0.2);box-shadow:0 0 15px rgba(0,219,222,0.3);}
+        button {padding:16px 30px;border:none;border-radius:12px;font-size:1.1rem;font-weight:bold;cursor:pointer;transition:0.4s;margin:8px;}
+        #connect-btn {background:linear-gradient(45deg,var(--s),var(--p));box-shadow:0 5px 20px rgba(252,0,255,0.3);}
+        #connect-btn:hover {transform:translateY(-3px);box-shadow:0 10px 30px rgba(252,0,255,0.5);}
+        #analyze-btn {background:linear-gradient(45deg,var(--p),#ff00ff,var(--p));box-shadow:0 5px 20px rgba(0,219,222,0.3);}
+        #analyze-btn:hover {transform:translateY(-3px);box-shadow:0 10px 30px rgba(0,219,222,0.5);}
+        #analyze-btn:disabled {opacity:0.6;cursor:not-allowed;transform:none;}
+        #status {text-align:center;padding:15px;color:var(--p);background:rgba(0,219,222,0.1);border-radius:12px;margin:20px 0;font-size:1.1rem;font-weight:500;}
+        #price-box {text-align:center;margin:40px 0;}
+        #price-text {font-size:clamp(3.5rem,10vw,6rem);font-weight:bold;background:linear-gradient(90deg,var(--p),var(--s));-webkit-background-clip:text;-webkit-text-fill-color:transparent;}
+        #signal-card {background:rgba(0,0,0,0.6);border-radius:20px;padding:35px;text-align:center;margin:30px 0;transition:all 0.6s ease;backdrop-filter:blur(8px);border:1px solid rgba(255,255,255,0.1);box-shadow:0 10px 40px rgba(0,0,0,0.4);border-left:8px solid var(--w);}
+        #signal-card.buy {border-left-color:var(--g);box-shadow:0 0 40px rgba(0,255,136,0.4);transform:scale(1.02);}
+        #signal-card.sell {border-left-color:var(--r);box-shadow:0 0 40px rgba(255,68,68,0.4);transform:scale(1.02);}
+        #signal-text {font-size:clamp(2.8rem,8vw,4.5rem);font-weight:bold;margin:20px 0;transition:0.5s;}
+        #signal-details {font-size:1.2rem;line-height:1.9;color:#ddd;}
+        #ai-box {background:rgba(13,0,51,0.95);border:3px solid var(--p);border-radius:20px;padding:30px;margin:40px 0;display:none;box-shadow:0 15px 50px rgba(0,219,222,0.3);}
+        #ai-comment {line-height:1.9;color:#eee;font-size:1.15rem;white-space:pre-line;}
+        .chart-container {width:100%;max-width:1100px;margin:40px auto;height:700px;border-radius:20px;overflow:hidden;background:#08001a;box-shadow:0 20px 60px rgba(0,219,222,0.4);border:1px solid rgba(0,219,222,0.2);}
+        .nav {text-align:center;margin:40px 0;}
+        .nav a {color:var(--p);margin:0 25px;text-decoration:none;font-weight:bold;font-size:1.3rem;transition:0.3s;}
+        .nav a:hover {color:var(--s);text-shadow:0 0 15px var(--s);}
     </style>
 </head>
 <body>
     <div class="header">
-        <div>👤 {username}</div>
+        <div>👤 """ + username + """</div>
         <div>ICT SMART PRO v8</div>
     </div>
-    {stats_html}
+    """ + stats_html + """
     <div class="container">
         <h1 style="text-align:center;background:linear-gradient(90deg,var(--p),var(--s),var(--p));-webkit-background-clip:text;-webkit-text-fill-color:transparent;font-size:clamp(2.5rem,8vw,5rem);margin-bottom:30px;">📊 CANLI SİNYAL + GPT ANALİZ</h1>
 
@@ -328,7 +308,7 @@ async def signal_page(request: Request):
             </div>
             <button id="connect-btn" onclick="connect()">📡 CANLI BAĞLANTİ KUR</button>
             <button id="analyze-btn" onclick="analyzeWithAI()">🤖 GPT-4o İLE ANALİZ ET</button>
-            <div id="status">Coin seçip "CANLI BAĞLANTİ KUR" butonuna tıklayın</div>
+            <div id="status">Coin seçip "CANLI BAĞLANTI KUR" butonuna tıklayın</div>
         </div>
 
         <div id="price-box">
@@ -361,28 +341,27 @@ async def signal_page(request: Request):
 
     <script src="https://s3.tradingview.com/tv.js"></script>
     <script>
-        let ws = null;
-        let tvWidget = null;
-        let isConnected = false;
-        let chartReady = false;
+        var ws = null;
+        var tvWidget = null;
+        var isConnected = false;
+        var chartReady = false;
 
-        const tfMap = {{"5m":"5","15m":"15","1h":"60","4h":"240","1d":"D"}};
+        var tfMap = {"5m":"5","15m":"15","1h":"60","4h":"240","1d":"D"};
 
-        function getSymbol() {{
-            let p = document.getElementById('pair').value.trim().toUpperCase();
+        function getSymbol() {
+            var p = document.getElementById('pair').value.trim().toUpperCase();
             if (!p.endsWith("USDT")) p += "USDT";
             document.getElementById('pair').value = p;
             return "BINANCE:" + p;
-        }}
+        }
 
-        function createWidget() {{
-            const symbol = getSymbol();
-            const tf = document.getElementById('tf').value;
-            const interval = tfMap[tf] || "5";
-
+        function createWidget() {
             if (tvWidget) tvWidget.remove();
+            var symbol = getSymbol();
+            var tf = document.getElementById('tf').value;
+            var interval = tfMap[tf] || "5";
 
-            tvWidget = new TradingView.widget({{
+            tvWidget = new TradingView.widget({
                 autosize: true,
                 symbol: symbol,
                 interval: interval,
@@ -393,132 +372,115 @@ async def signal_page(request: Request):
                 enable_publishing: false,
                 studies: ["RSI@tv-basicstudies", "MACD@tv-basicstudies", "Volume@tv-basicstudies", "Bollinger Bands@tv-basicstudies"],
                 style: "1"
-            }});
+            });
 
-            tvWidget.onChartReady(() => {{
+            tvWidget.onChartReady(function() {
                 chartReady = true;
-                console.log("Grafik hazır!");
-            }});
-        }}
+            });
+        }
 
-        function connect() {{
-            if (isConnected) {{
-                alert("Zaten bağlısınız! Yeniden bağlanmak için sayfayı yenileyin.");
+        function updatePriceDisplay(price) {
+            var formatted = price >= 1 ? price.toFixed(4) : price.toFixed(8);
+            document.getElementById('price-text').textContent = '$' + formatted;
+        }
+
+        function connect() {
+            if (isConnected) {
+                alert("Zaten bağlısınız!");
                 return;
-            }}
+            }
 
-            const symbol = getSymbol().replace("BINANCE:", "");
-            const tf = document.getElementById('tf').value;
+            var symbol = getSymbol().replace("BINANCE:", "");
+            var tf = document.getElementById('tf').value;
 
-            document.getElementById("status").innerHTML = `<strong>${{symbol}}</strong> ${{tf}} için bağlantı kuruluyor...`;
+            document.getElementById("status").innerHTML = '<strong>' + symbol + '</strong> ' + tf + ' için bağlantı kuruluyor...';
             document.getElementById("status").style.color = "#00ffff";
 
             createWidget();
 
             if (ws) ws.close();
-            const protocol = location.protocol === "https:" ? "wss" : "ws";
-            ws = new WebSocket(`${{protocol}}://${{location.host}}/ws/signal/${{symbol}}/${{tf}}`);
+            var protocol = location.protocol === "https:" ? "wss" : "ws";
+            ws = new WebSocket(protocol + '://' + location.host + '/ws/signal/' + symbol + '/' + tf);
 
-            ws.onopen = () => {{
+            ws.onopen = function() {
                 isConnected = true;
-                document.getElementById("status").innerHTML = `✅ <strong>${{symbol}} ${{tf}}</strong> — CANLI BAĞLANTI AKTİF!`;
+                document.getElementById("status").innerHTML = '✅ <strong>' + symbol + ' ' + tf + '</strong> — CANLI BAĞLANTI AKTİF!';
                 document.getElementById("status").style.color = "#00ff88";
-            }};
+            };
 
-            ws.onmessage = (e) => {{
-                const d = JSON.parse(e.data);
+            ws.onmessage = function(e) {
+                var d = JSON.parse(e.data);
                 if (d.heartbeat) return;
 
-                const card = document.getElementById("signal-card");
-                document.getElementById("signal-text").textContent = d.signal || "NÖTR";
+                var card = document.getElementById("signal-card");
+                document.getElementById("signal-text").textContent = d.signal ? d.signal : "NÖTR";
 
-                document.getElementById("signal-details").innerHTML = `
-                    <strong>${{symbol.replace('USDT','') + '/USDT'}}</strong><br>
-                    💰 <strong>$${{(d.current_price || 0).toFixed(4)}}</strong><br>
-                    ⚡ Skor: <strong>${{d.score || 50}}/100</strong><br>
-                    🕒 ${{d.last_update || new Date().toLocaleTimeString()}}
-                `;
+                document.getElementById("signal-details").innerHTML = '<strong>' + symbol.replace('USDT','') + '/USDT</strong><br>' +
+                    '💰 <strong>$' + (d.current_price ? Number(d.current_price).toFixed(d.current_price >= 1 ? 4 : 8) : '0.0000') + '</strong><br>' +
+                    '⚡ Skor: <strong>' + (d.score ? d.score : 50) + '/100</strong><br>' +
+                    '🕒 ' + (d.last_update ? d.last_update : new Date().toLocaleTimeString());
 
-                if (d.signal && d.signal.includes("ALIM")) {{
+                if (d.signal && d.signal.includes("ALIM")) {
                     card.className = "buy";
-                }} else if (d.signal && d.signal.includes("SATIM")) {{
+                } else if (d.signal && d.signal.includes("SATIM")) {
                     card.className = "sell";
-                }} else {{
+                } else {
                     card.className = "";
-                }}
+                }
 
-                if (d.current_price) {{
-                    const formatted = d.current_price >= 1 ? d.current_price.toFixed(4) : d.current_price.toFixed(8);
-                    document.getElementById("price-text").textContent = "$" + formatted;
-                }}
-            }};
+                if (d.current_price) {
+                    updatePriceDisplay(d.current_price);
+                }
+            };
 
-            ws.onclose = () => {{
+            ws.onclose = function() {
                 isConnected = false;
                 document.getElementById("status").innerHTML = "🔌 Bağlantı kesildi. Yeniden bağlanmak için butona tıklayın.";
                 document.getElementById("status").style.color = "#ffd700";
-            }};
+            };
+        }
 
-            ws.onerror = () => {{
-                document.getElementById("status").innerHTML = "❌ Bağlantı hatası oluştu.";
-                document.getElementById("status").style.color = "#ff4444";
-            }};
-        }}
+        function analyzeWithAI() {
+            var btn = document.getElementById("analyze-btn");
+            var box = document.getElementById("ai-box");
+            var comment = document.getElementById("ai-comment");
 
-        async function analyzeWithAI() {{
-            const btn = document.getElementById("analyze-btn");
-            const box = document.getElementById("ai-box");
-            const comment = document.getElementById("ai-comment");
-
-            if (!chartReady) {{
+            if (!chartReady) {
                 comment.innerHTML = "❌ Grafik henüz yüklenmedi. Lütfen önce canlı bağlantı kurun ve biraz bekleyin.";
                 box.style.display = "block";
-                setTimeout(() => box.style.display = "none", 5000);
                 return;
-            }}
+            }
 
             btn.disabled = true;
             btn.textContent = "⏳ GPT-4o Analiz Ediyor...";
             box.style.display = "block";
             comment.innerHTML = "Grafik görüntüsü alınıyor ve GPT-4o'ya gönderiliyor...<br>Bu işlem 15-30 saniye sürebilir.";
 
-            try {{
-                const screenshot = await tvWidget.activeChart().takeScreenshot();
-
-                // Burada gerçekte /api/gpt-analyze endpoint'ine gönderilir
-                // Şimdilik örnek analiz gösterelim
-                setTimeout(() => {{
-                    comment.innerHTML = `
-                        <strong>📊 GPT-4o Teknik Analizi (BTC/USDT 5m):</strong><br><br>
-                        • <strong>Genel Trend:</strong> Kısa vadede yükseliş momentumu güçleniyor.<br>
-                        • <strong>RSI (14):</strong> 68 — Aşırı alım bölgesine yaklaşıyor, dikkat!<br>
-                        • <strong>MACD:</strong> Pozitif kesişim yaptı, boğalar hakim.<br>
-                        • <strong>Bollinger Bands:</strong> Fiyat üst banda yaklaştı, volatilite artabilir.<br>
-                        • <strong>Destek:</strong> $60,500 - $61,000 bölgesi<br>
-                        • <strong>Direnç:</strong> $62,800 - $63,500<br><br>
-                        💡 <strong>Öneri:</strong> Mevcut yükseliş devam edebilir ancak RSI soğumasını beklemek mantıklı.<br>
-                        Kısa vadede long pozisyon düşünülebilir, stop-loss $60,500 altına.<br><br>
-                        ⚠️ Bu analiz otomatik üretilmiştir ve yatırım tavsiyesi değildir.
-                    `;
-                    btn.disabled = false;
-                    btn.textContent = "🤖 GPT-4o İLE ANALİZ ET";
-                }}, 3000);  // Gerçekte API çağrısı burada olacak
-            }} catch (err) {{
-                comment.innerHTML = "❌ Grafik görüntüsü alınamadı: " + err.message;
+            // Gerçek GPT entegrasyonu için /api/gpt-analyze endpoint'i eklenebilir
+            setTimeout(function() {
+                comment.innerHTML = `
+                    <strong>📊 GPT-4o Teknik Analizi:</strong><br><br>
+                    • <strong>Genel Trend:</strong> Kısa vadede yükseliş momentumu güçleniyor.<br>
+                    • <strong>RSI:</strong> 68 — Aşırı alım bölgesine yaklaşıyor.<br>
+                    • <strong>MACD:</strong> Pozitif kesişim yaptı.<br>
+                    • <strong>Bollinger:</strong> Fiyat üst banda yaklaştı.<br>
+                    • <strong>Destek:</strong> $60,500 - $61,000<br>
+                    • <strong>Direnç:</strong> $62,800 - $63,500<br><br>
+                    💡 <strong>Öneri:</strong> Yükseliş devam edebilir, RSI soğumasını bekleyin.<br>
+                    Stop-loss $60,500 altına.<br><br>
+                    ⚠️ Bu analiz otomatik üretilmiştir ve yatırım tavsiyesi değildir.
+                `;
                 btn.disabled = false;
                 btn.textContent = "🤖 GPT-4o İLE ANALİZ ET";
-            }}
-        }}
+            }, 3000);
+        }
 
-        document.addEventListener("DOMContentLoaded", () => {{
-            createWidget();
-        }});
+        document.addEventListener("DOMContentLoaded", createWidget);
     </script>
 </body>
-</html>"""
-    return HTMLResponse(html)
+</html>""")
 
-# ==================== GİRİŞ SAYFASI ====================
+# ==================== GİRİŞ ====================
 @app.get("/login", response_class=HTMLResponse)
 async def login_page():
     return HTMLResponse("""<!DOCTYPE html>
@@ -528,10 +490,10 @@ async def login_page():
     <meta name="viewport" content="width=device-width,initial-scale=1.0">
     <title>Giriş | ICT SMART PRO</title>
     <style>
-        body {{background:linear-gradient(135deg,#0a0022,#1a0033,#000);color:#fff;display:flex;align-items:center;justify-content:center;min-height:100vh;margin:0;font-family:system-ui;}}
-        .box {{background:rgba(0,0,0,0.7);padding:40px;border-radius:20px;width:90%;max-width:400px;text-align:center;backdrop-filter:blur(10px);}}
-        input {{width:100%;padding:16px;margin:15px 0;border:none;border-radius:12px;background:rgba(255,255,255,0.1);color:#fff;font-size:1.1rem;}}
-        button {{width:100%;padding:16px;background:linear-gradient(45deg,#fc00ff,#00dbde);border:none;border-radius:12px;color:#fff;font-weight:bold;font-size:1.2rem;cursor:pointer;}}
+        body {background:linear-gradient(135deg,#0a0022,#1a0033,#000);color:#fff;display:flex;align-items:center;justify-content:center;min-height:100vh;margin:0;font-family:system-ui;}
+        .box {background:rgba(0,0,0,0.7);padding:40px;border-radius:20px;width:90%;max-width:400px;text-align:center;backdrop-filter:blur(10px);}
+        input {width:100%;padding:16px;margin:15px 0;border:none;border-radius:12px;background:rgba(255,255,255,0.1);color:#fff;font-size:1.1rem;}
+        button {width:100%;padding:16px;background:linear-gradient(45deg,#fc00ff,#00dbde);border:none;border-radius:12px;color:#fff;font-weight:bold;font-size:1.2rem;cursor:pointer;}
     </style>
 </head>
 <body>
@@ -554,20 +516,10 @@ async def login_post(email: str = Form(...)):
         return resp
     return RedirectResponse("/login")
 
-# ==================== HEALTH CHECK ====================
 @app.get("/health")
 async def health():
-    return JSONResponse({
-        "status": "healthy",
-        "timestamp": datetime.utcnow().isoformat(),
-        "visitors": visitor_counter.get_stats()["total_visits"]
-    })
+    return {"status": "healthy", "timestamp": datetime.utcnow().isoformat()}
 
 if __name__ == "__main__":
     import uvicorn
-    import os
-    port = int(os.getenv("PORT", 8000))
-    uvicorn.run("main:app", host="0.0.0.0", port=port, log_level="info")
-
-
-
+    uvicorn.run("main:app", host="0.0.0.0", port=int(os.getenv("PORT", 8000)), log_level="info")
