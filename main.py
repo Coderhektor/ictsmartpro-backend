@@ -307,71 +307,72 @@ async def signal(request: Request):
             <div id="tradingview_widget" style="height:500px;width:100%;"></div>
         </div>
     </div>
-    <script src="https://s3.tradingview.com/tv.js"></script>
-    <script>
-        let ws = null;
-        let tvWidget = null;
+<script src="https://s3.tradingview.com/tv.js"></script>
+<script>
+    let ws = null;
+    let tvWidget = null;
 
-        function getSymbol() {{
-            let p = document.getElementById('pair').value.trim().toUpperCase();
-            if (!p.endsWith("USDT")) p += "USDT";
-            document.getElementById('pair').value = p;
-            return "BINANCE:" + p;
-        }}
+    function getSymbol() {{
+        let p = document.getElementById('pair').value.trim().toUpperCase();
+        if (!p.endsWith("USDT")) p += "USDT";
+        document.getElementById('pair').value = p;
+        return "BINANCE:" + p;
+    }}
 
-        function createWidget() {{
-            if (tvWidget) tvWidget.remove();
-            tvWidget = new TradingView.widget({{
-                autosize: true,
-                symbol: getSymbol(),
-                interval: document.getElementById('tf').value === "1d" ? "D" : document.getElementById('tf').value,
-                timezone: "Etc/UTC",
-                theme: "dark",
-                style: "1",
-                locale: "tr",
-                toolbar_bg: "#0a0022",
-                container_id: "tradingview_widget",
-                studies: ["RSI@tv-basicstudies", "MACD@tv-basicstudies", "Volume@tv-basicstudies"]
-            }});
-        }}
+    function createWidget() {{
+        if (tvWidget) tvWidget.remove();
+        tvWidget = new TradingView.widget({{
+            autosize: true,
+            symbol: getSymbol(),
+            interval: document.getElementById('tf').value === "1d" ? "D" : document.getElementById('tf').value,
+            timezone: "Etc/UTC",
+            theme: "dark",
+            style: "1",
+            locale: "tr",
+            toolbar_bg: "#0a0022",
+            container_id: "tradingview_widget",
+            studies: ["RSI@tv-basicstudies", "MACD@tv-basicstudies", "Volume@tv-basicstudies"]
+        }});
+    }}
 
-        function updatePriceDisplay(price) {{
-            document.getElementById('price-text').textContent = '$' + price.toFixed(price >= 1 ? 4 : 6);
-        }}
+    function updatePriceDisplay(price) {{
+        document.getElementById('price-text').textContent = '$' + price.toFixed(price >= 1 ? 4 : 6);
+    }}
 
-        function connect() {{
-            if (ws) ws.close();
-            const symbol = document.getElementById('pair').value.trim().toUpperCase();
-            const tf = document.getElementById('tf').value;
-            const fullSymbol = symbol.endsWith("USDT") ? symbol : symbol + "USDT";
-            document.getElementById('status').innerHTML = `🔗 ${{fullSymbol}} ${{tf}} bağlantı kuruluyor...`;
-            createWidget();
-            ws = new WebSocket(`${{location.protocol === 'https:' ? 'wss' : 'ws'}}://${{location.host}}/ws/signal/${{fullSymbol}}/${{tf}}`);
-            ws.onopen = () => document.getElementById('status').innerHTML = `✅ Canlı sinyal başladı!`;
-            ws.onmessage = e => {{
-                const data = JSON.parse(e.data);
-                if (data.heartbeat) return;
-                const card = document.getElementById('signal-card');
-                const text = document.getElementById('signal-text');
-                const details = document.getElementById('signal-details');
-                text.textContent = data.signal || "NÖTR";
-                details.innerHTML = `
-                    <strong>${{data.pair || fullSymbol.replace('USDT','/USDT')}}</strong><br>
-                    ⚡ Skor: <strong>${{data.score || 0}}/100</strong><br>
-                    💰 Fiyat: <strong>$${data.current_price || '0.0000'}</strong><br>
-                    🎯 Killzone: <strong>${{data.killzone || 'Normal'}}</strong><br>
-                    🕒 ${{data.last_update || 'Şimdi'}}<br>
-                    <small>${{data.triggers || 'Analiz ediliyor'}}</small>
-                `;
-                card.className = data.signal && (data.signal.includes("ALIM") || data.signal.includes("LONG")) ? "green" : 
-                                 data.signal && (data.signal.includes("SATIM") || data.signal.includes("SHORT")) ? "red" : "";
-                if (data.current_price) updatePriceDisplay(data.current_price);
-            }};
-            ws.onclose = () => document.getElementById('status').innerHTML = '🔌 Bağlantı kesildi. Yeniden bağlanılıyor...';
-        }}
+    function connect() {{
+        if (ws) ws.close();
+        const symbol = document.getElementById('pair').value.trim().toUpperCase();
+        const tf = document.getElementById('tf').value;
+        const fullSymbol = symbol.endsWith("USDT") ? symbol : symbol + "USDT";
+        document.getElementById('status').innerHTML = `🔗 ${{fullSymbol}} ${{tf}} bağlantı kuruluyor...`;
+        createWidget();
+        ws = new WebSocket(`${{location.protocol === 'https:' ? 'wss' : 'ws'}}://${{location.host}}/ws/signal/${{fullSymbol}}/${{tf}}`);
+        ws.onopen = () => document.getElementById('status').innerHTML = `✅ Canlı sinyal başladı!`;
+        ws.onmessage = e => {{
+            const data = JSON.parse(e.data);
+            if (data.heartbeat) return;
+            const card = document.getElementById('signal-card');
+            const text = document.getElementById('signal-text');
+            const details = document.getElementById('signal-details');
+            text.textContent = data.signal || "NÖTR";
+            details.innerHTML = `
+                <strong>${{data.pair || fullSymbol.replace('USDT','/USDT')}}</strong><br>
+                ⚡ Skor: <strong>${{data.score || 0}}/100</strong><br>
+                💰 Fiyat: <strong>$${data.current_price ?? '0.0000'}</strong><br>
+                🎯 Killzone: <strong>${{data.killzone || 'Normal'}}</strong><br>
+                🕒 ${{data.last_update || 'Şimdi'}}<br>
+                <small>${{data.triggers || 'Analiz ediliyor'}}</small>
+            `;
+            card.className = data.signal && (data.signal.includes("ALIM") || data.signal.includes("LONG")) ? "green" : 
+                             data.signal && (data.signal.includes("SATIM") || data.signal.includes("SHORT")) ? "red" : "";
+            if (data.current_price) updatePriceDisplay(data.current_price);
+        }};
+        ws.onclose = () => document.getElementById('status').innerHTML = '🔌 Bağlantı kesildi. Yeniden bağlanılıyor...';
+    }}
 
-        document.addEventListener("DOMContentLoaded", createWidget);
-    </script>
+    document.addEventListener("DOMContentLoaded", createWidget);
+</script>
+  
 </body>
 </html>""")
 
@@ -549,3 +550,4 @@ async def health():
 if __name__ == "__main__":
     import uvicorn
     uvicorn.run("main:app", host="0.0.0.0", port=int(os.getenv("PORT", 8000)), log_level="info")
+
