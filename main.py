@@ -247,6 +247,7 @@ async def home(request: Request):
     return HTMLResponse(html)
 
 # ==================== TEK COİN SİNYAL SAYFASI (DÜZELTİLDİ) ====================
+# ==================== TEK COİN SİNYAL SAYFASI (HATASIZ – JS TEMPLATE LITERAL DÜZELTİLDİ) ====================
 @app.get("/signal", response_class=HTMLResponse)
 async def signal_page(request: Request):
     user_email = request.cookies.get("user_email")
@@ -328,21 +329,21 @@ async def signal_page(request: Request):
             if (ws) return alert("Zaten bağlı!");
             const symbol = getSymbol().replace("BINANCE:", "");
             const tf = document.getElementById('tf').value;
-            document.getElementById("status").textContent = `${symbol} ${tf} bağlanıyor...`;
+            document.getElementById("status").textContent = symbol + " " + tf + " bağlanıyor...";
             createWidget();
 
-            const url = (location.protocol === "https:" ? "wss" : "ws") + "://" + location.host + `/ws/signal/${symbol}/${tf}`;
+            const url = (location.protocol === "https:" ? "wss" : "ws") + "://" + location.host + "/ws/signal/" + symbol + "/" + tf;
             ws = new WebSocket(url);
 
-            ws.onopen = () => document.getElementById("status").textContent = `${symbol} ${tf} aktif!`;
+            ws.onopen = () => document.getElementById("status").textContent = symbol + " " + tf + " aktif!";
             ws.onmessage = e => {{
                 const d = JSON.parse(e.data);
                 if (d.heartbeat) return;
                 document.getElementById("signal-text").textContent = d.signal || "NÖTR";
                 document.getElementById("signal-details").innerHTML = `
-                    <strong>${symbol.replace('USDT','')}/USDT</strong><br>
-                    💰 $${(d.current_price || 0).toFixed(4)}<br>
-                    Skor: <strong>${d.score || 50}/100</strong>
+                    <strong>${{symbol.replace('USDT','') + '/USDT'}}</strong><br>
+                    💰 $${{(d.current_price || 0).toFixed(4)}}<br>
+                    Skor: <strong>${{d.score || 50}}/100</strong>
                 `;
                 document.getElementById("signal-card").style.borderLeftColor = 
                     d.signal?.includes("ALIM") ? "#00ff88" : 
@@ -411,3 +412,4 @@ if __name__ == "__main__":
     import os
     port = int(os.getenv("PORT", 8000))
     uvicorn.run("main:app", host="0.0.0.0", port=port, log_level="info")
+
