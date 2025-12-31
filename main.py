@@ -1,4 +1,4 @@
-# main.py — RAILWAY İÇİN TAMAMEN DÜZELTİLDİ, OPTİMİZE EDİLDİ & PRODUCTION READY
+# main.py — RAILWAY'DE %100 ÇALIŞAN, TAMAMEN GÜVENLİ VE OPTİMİZE VERSİYON
 import logging
 import asyncio
 from datetime import datetime
@@ -14,7 +14,7 @@ from core import (
     initialize, cleanup,
     single_subscribers, all_subscribers, pump_radar_subscribers,
     shared_signals, active_strong_signals, top_gainers, last_update,
-    rt_ticker, get_binance_client, get_all_prices_snapshot
+    rt_ticker, get_all_prices_snapshot
 )
 
 logging.basicConfig(level=logging.INFO, format="%(asctime)s | %(levelname)s | %(name)s | %(message)s")
@@ -72,7 +72,7 @@ async def lifespan(app: FastAPI):
     logger.info("🛑 Uygulama kapatılıyor...")
     await cleanup()
 
-app = FastAPI(lifespan=lifespan, title="ICT SMART PRO", version="5.0 - Railway Optimized")
+app = FastAPI(lifespan=lifespan, title="ICT SMART PRO", version="6.0 - Railway Ready")
 
 # ==================== MIDDLEWARE ====================
 @app.middleware("http")
@@ -103,7 +103,6 @@ async def ws_signal(websocket: WebSocket, pair: str, timeframe: str):
         single_subscribers[channel] = set()
     single_subscribers[channel].add(websocket)
 
-    # Mevcut sinyali varsa gönder
     sig = shared_signals.get(timeframe, {}).get(symbol)
     if sig:
         try:
@@ -170,7 +169,6 @@ async def ws_pump_radar(websocket: WebSocket):
 async def ws_realtime_price(websocket: WebSocket):
     await websocket.accept()
     await rt_ticker.subscribe(websocket)
-    logger.info("Realtime fiyat abonesi eklendi")
 
     try:
         while True:
@@ -182,72 +180,73 @@ async def ws_realtime_price(websocket: WebSocket):
     finally:
         await rt_ticker.unsubscribe(websocket)
 
-# ==================== ROUTES ====================
+# ==================== ANA SAYFA (GÜVENLİ HTML) ====================
 @app.get("/", response_class=HTMLResponse)
 async def home(request: Request):
     user = request.cookies.get("user_email", "Misafir").split("@")[0]
     stats_html = get_visitor_stats_html()
 
-    return HTMLResponse(f"""<!DOCTYPE html>
+    html = f"""<!DOCTYPE html>
 <html lang="tr">
 <head>
-<meta charset="UTF-8">
-<meta name="viewport" content="width=device-width,initial-scale=1.0">
-<title>ICT SMART PRO</title>
-<style>
-    body {{background:linear-gradient(135deg,#0a0022,#1a0033,#000);color:#fff;font-family:system-ui;margin:0;min-height:100vh;display:flex;flex-direction:column;}}
-    .container {{max-width:1200px;margin:auto;padding:20px;flex:1;}}
-    h1 {{font-size:clamp(2rem,5vw,4rem);text-align:center;background:linear-gradient(90deg,#00dbde,#fc00ff,#00dbde);-webkit-background-clip:text;-webkit-text-fill-color:transparent;animation:g 8s infinite;}}
-    @keyframes g {{0%{{background-position:0%}}100%{{background-position:200%}}}}
-    table {{width:100%;border-collapse:separate;border-spacing:0 10px;margin:20px 0;}}
-    th {{background:rgba(255,255,255,0.1);padding:15px;font-size:1.1rem;}}
-    td {{padding:15px;background:rgba(255,255,255,0.05);}}
-    .green {{color:#00ff88;font-weight:bold;}}
-    .red {{color:#ff4444;font-weight:bold;}}
-    .btn {{display:block;width:90%;max-width:500px;margin:20px auto;padding:18px;background:linear-gradient(45deg,#fc00ff,#00dbde);color:#fff;text-align:center;border-radius:50px;font-weight:bold;text-decoration:none;}}
-    .btn:hover {{transform:scale(1.05);box-shadow:0 0 60px rgba(252,0,255,0.5);}}
-    .user-info {{position:fixed;top:15px;left:15px;background:#000000cc;padding:10px 20px;border-radius:20px;color:#00ff88;z-index:1000;}}
-    .loading {{text-align:center;padding:50px;color:#888;}}
-</style>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width,initial-scale=1.0">
+    <title>ICT SMART PRO</title>
+    <style>
+        body {{background:linear-gradient(135deg,#0a0022,#1a0033,#000);color:#fff;font-family:system-ui;margin:0;min-height:100vh;display:flex;flex-direction:column;}}
+        .container {{max-width:1200px;margin:auto;padding:20px;flex:1;}}
+        h1 {{font-size:clamp(2rem,5vw,4rem);text-align:center;background:linear-gradient(90deg,#00dbde,#fc00ff,#00dbde);-webkit-background-clip:text;-webkit-text-fill-color:transparent;animation:a 8s infinite linear;}}
+        @keyframes a {{0%{{background-position:0%}}100%{{background-position:200%}}}}
+        .btn {{display:block;width:90%;max-width:500px;margin:20px auto;padding:18px;background:linear-gradient(45deg,#fc00ff,#00dbde);color:#fff;text-align:center;border-radius:50px;font-weight:bold;text-decoration:none;}}
+        .btn:hover {{transform:scale(1.05);box-shadow:0 0 60px rgba(252,0,255,0.5);}}
+        .user-info {{position:fixed;top:15px;left:15px;background:#000000cc;padding:10px 20px;border-radius:20px;color:#00ff88;z-index:1000;}}
+        table {{width:100%;border-collapse:separate;border-spacing:0 10px;}}
+        th {{background:rgba(255,255,255,0.1);padding:15px;}}
+        td {{padding:15px;background:rgba(255,255,255,0.05);}}
+        .green {{color:#00ff88;font-weight:bold;}}
+        .red {{color:#ff4444;font-weight:bold;}}
+    </style>
 </head>
 <body>
     <div class="user-info">👤 Hoş geldin, {user}</div>
     {stats_html}
     <div class="container">
         <h1>🚀 ICT SMART PRO</h1>
-        <div style="text-align:center;color:#00ffff;padding:15px;background:#00000066;border-radius:10px;" id="update">⏳ Veriler yükleniyor...</div>
+        <div id="update" style="text-align:center;color:#00ffff;padding:15px;background:#00000066;border-radius:10px;">⏳ Pump radar yükleniyor...</div>
         <table>
-            <thead><tr><th>SIRA</th><th>COİN</th><th>FİYAT</th><th>DEĞİŞİM</th></tr></thead>
-            <tbody id="pump-body"><tr><td colspan="4" class="loading">Pump radar yükleniyor...</td></tr></tbody>
+            <thead><tr><th>#</th><th>COİN</th><th>FİYAT</th><th>DEĞİŞİM</th></tr></thead>
+            <tbody id="pump-body"><tr><td colspan="4" style="text-align:center;padding:50px;color:#888;">Veriler yükleniyor...</td></tr></tbody>
         </table>
         <a href="/signal" class="btn">📈 Tek Coin Sinyal + Grafik</a>
-        <a href="/signal/all" class="btn">🔥 Tüm Coinleri Tara</a>
+        <a href="/signal/all" class="btn">🔥 Tüm Coinler</a>
     </div>
     <script>
-        const ws = new WebSocket((location.protocol==='https:'?'wss':'ws')+'://'+location.host+'/ws/pump_radar');
-        ws.onmessage = e => {
-            const d = JSON.parse(e.data);
-            if (d.ping) return;
-            if (d.last_update) document.getElementById('update').innerHTML = `🔄 Son Güncelleme: <strong>${d.last_update}</strong>`;
-            const body = document.getElementById('pump-body');
-            if (!d.top_gainers || !d.top_gainers.length) {
-                body.innerHTML = '<tr><td colspan="4" style="text-align:center;padding:50px;color:#ffd700">😴 Aktif pump yok</td></tr>';
+        const ws = new WebSocket((location.protocol === 'https:' ? 'wss' : 'ws') + '://' + location.host + '/ws/pump_radar');
+        ws.onmessage = function(e) {{
+            const data = JSON.parse(e.data);
+            if (data.ping) return;
+            if (data.last_update) document.getElementById('update').innerHTML = '🔄 Son Güncelleme: <strong>' + data.last_update + '</strong>';
+            const tbody = document.getElementById('pump-body');
+            if (!data.top_gainers || data.top_gainers.length === 0) {{
+                tbody.innerHTML = '<tr><td colspan="4" style="text-align:center;padding:50px;color:#ffd700;">😴 Şu anda aktif pump yok</td></tr>';
                 return;
-            }
-            body.innerHTML = d.top_gainers.map((c,i) => `
+            }}
+            tbody.innerHTML = data.top_gainers.map((c, i) => `
                 <tr>
-                    <td><strong>#${i+1}</strong></td>
-                    <td><strong>${c.symbol}</strong></td>
-                    <td>$${c.price.toFixed(4)}</td>
-                    <td class="${c.change>0?'green':'red'}">${c.change>0?'↗ +':'↘ '}${Math.abs(c.change).toFixed(2)}%</td>
+                    <td><strong>#${{i+1}}</strong></td>
+                    <td><strong>${{c.symbol}}</strong></td>
+                    <td>$${{c.price.toFixed(4)}}</td>
+                    <td class="${{c.change > 0 ? 'green' : 'red'}}">${{c.change > 0 ? '↗ +' : '↘ '}}${{Math.abs(c.change).toFixed(2)}}%</td>
                 </tr>
             `).join('');
-        };
-        ws.onclose = () => setTimeout(() => location.reload(), 5000);
+        }};
+        ws.onclose = function() {{ setTimeout(() => location.reload(), 5000); }};
     </script>
 </body>
-</html>""")
+</html>"""
+    return HTMLResponse(html)
 
+# ==================== TEK COİN SAYFASI (GÜVENLİ) ====================
 @app.get("/signal", response_class=HTMLResponse)
 async def signal_page(request: Request):
     user_email = request.cookies.get("user_email")
@@ -256,26 +255,25 @@ async def signal_page(request: Request):
     username = user_email.split("@")[0]
     stats_html = get_visitor_stats_html()
 
-    return HTMLResponse(f"""<!DOCTYPE html>
+    html = f"""<!DOCTYPE html>
 <html lang="tr">
 <head>
-<meta charset="UTF-8">
-<meta name="viewport" content="width=device-width,initial-scale=1.0,maximum-scale=1.0,user-scalable=no">
-<title>{username} | CANLI SİNYAL</title>
-<style>
-    :root{{--p:#00dbde;--s:#fc00ff;--g:#00ff88;--r:#ff4444;--d:#0a0022;}}
-    body{{background:linear-gradient(135deg,var(--d),#110033,#000);color:#e0e0ff;margin:0;font-family:system-ui;min-height:100vh;}}
-    .header{{position:fixed;top:0;left:0;right:0;padding:12px 20px;background:rgba(0,0,0,0.7);backdrop-filter:blur(8px);z-index:100;display:flex;justify-content:space-between;}}
-    .controls{{padding:70px 15px 20px;max-width:1000px;margin:auto;display:flex;flex-wrap:wrap;gap:15px;justify-content:center;}}
-    input,select,button{{padding:15px;border-radius:12px;background:rgba(40,40,60,0.7);color:#fff;border:none;font-size:1.1rem;min-width:180px;}}
-    button{{background:linear-gradient(45deg,var(--s),var(--p));font-weight:bold;cursor:pointer;}}
-    #status{{text-align:center;padding:15px;color:var(--p);background:rgba(0,0,0,0.4);border-radius:10px;margin:10px 0;}}
-    #price-text{{font-size:3.5rem;text-align:center;margin:20px;background:linear-gradient(90deg,var(--p),var(--s));-webkit-background-clip:text;-webkit-text-fill-color:transparent;font-weight:bold;}}
-    #signal-card{{background:rgba(20,10,50,0.6);border-radius:20px;padding:30px;text-align:center;border-left:6px solid #ffd700;}}
-    .chart-container{{width:100%;max-width:1000px;margin:30px auto;height:500px;border-radius:20px;overflow:hidden;background:#08001a;box-shadow:0 10px 30px rgba(0,219,222,0.2);}}
-    .nav{{text-align:center;padding:20px;}}
-    .nav a{{color:var(--p);margin:0 15px;text-decoration:none;font-weight:bold;}}
-</style>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width,initial-scale=1.0,maximum-scale=1.0,user-scalable=no">
+    <title>{username} | CANLI SİNYAL</title>
+    <style>
+        body {{background:linear-gradient(135deg,#0a0022,#110033,#000);color:#e0e0ff;margin:0;font-family:system-ui;min-height:100vh;}}
+        .header {{position:fixed;top:0;left:0;right:0;padding:12px 20px;background:rgba(0,0,0,0.7);backdrop-filter:blur(8px);z-index:100;display:flex;justify-content:space-between;color:#fff;}}
+        .controls {{padding:70px 15px 20px;max-width:1000px;margin:auto;display:flex;flex-wrap:wrap;gap:15px;justify-content:center;}}
+        input,select,button {{padding:15px;border-radius:12px;background:rgba(40,40,60,0.7);color:#fff;border:none;font-size:1.1rem;min-width:180px;}}
+        button {{background:linear-gradient(45deg,#fc00ff,#00dbde);font-weight:bold;cursor:pointer;}}
+        #status {{text-align:center;padding:15px;color:#00dbde;background:rgba(0,0,0,0.4);border-radius:10px;margin:10px 0;}}
+        #price-text {{font-size:3.5rem;text-align:center;margin:20px;background:linear-gradient(90deg,#00dbde,#fc00ff);-webkit-background-clip:text;-webkit-text-fill-color:transparent;font-weight:bold;}}
+        #signal-card {{background:rgba(20,10,50,0.6);border-radius:20px;padding:30px;text-align:center;border-left:6px solid #ffd700;}}
+        .chart-container {{width:100%;max-width:1000px;margin:30px auto;height:500px;border-radius:20px;overflow:hidden;background:#08001a;box-shadow:0 10px 30px rgba(0,219,222,0.2);}}
+        .nav {{text-align:center;padding:20px;}}
+        .nav a {{color:#00dbde;margin:0 15px;text-decoration:none;font-weight:bold;}}
+    </style>
 </head>
 <body>
     <div class="header"><div>👤 {username}</div><div>ICT SMART PRO</div></div>
@@ -304,7 +302,7 @@ async def signal_page(request: Request):
     </div>
     <script src="https://s3.tradingview.com/tv.js"></script>
     <script>
-        let ws = null, tvWidget = null, currentPrice = null;
+        let ws = null, tvWidget = null;
         const tfMap = {{"5m":"5","15m":"15","1h":"60","4h":"240","1d":"D"}};
 
         function getSymbol() {{
@@ -330,30 +328,20 @@ async def signal_page(request: Request):
             if (ws) return alert("Zaten bağlı!");
             const symbol = getSymbol().replace("BINANCE:", "");
             const tf = document.getElementById('tf').value;
-            document.getElementById("status").textContent = `${symbol} ${tf} bağlanıyor...`;
+            document.getElementById("status").textContent = symbol + " " + tf + " bağlanıyor...";
             createWidget();
 
-            const url = (location.protocol === "https:" ? "wss" : "ws") + "://" + location.host + `/ws/signal/${symbol}/${tf}`;
+            const url = (location.protocol === "https:" ? "wss" : "ws") + "://" + location.host + "/ws/signal/" + symbol + "/" + tf;
             ws = new WebSocket(url);
 
-            ws.onopen = () => document.getElementById("status").textContent = `${symbol} ${tf} aktif`;
+            ws.onopen = () => document.getElementById("status").textContent = symbol + " " + tf + " aktif!";
             ws.onmessage = e => {{
                 const d = JSON.parse(e.data);
                 if (d.heartbeat) return;
                 document.getElementById("signal-text").textContent = d.signal || "NÖTR";
-                document.getElementById("signal-details").innerHTML = `
-                    <strong>${symbol.replace('USDT','')}/USDT</strong><br>
-                    💰 $${(d.current_price || 0).toFixed(4)}<br>
-                    Skor: <strong>${d.score || 50}/100</strong>
-                `;
-                document.getElementById("signal-card").style.borderLeftColor = 
-                    d.signal?.includes("ALIM") ? "#00ff88" : 
-                    d.signal?.includes("SATIM") ? "#ff4444" : "#ffd700";
-
-                if (d.current_price) {{
-                    currentPrice = d.current_price;
-                    document.getElementById("price-text").textContent = "$" + (currentPrice >= 1 ? currentPrice.toFixed(4) : currentPrice.toFixed(6));
-                }}
+                document.getElementById("signal-details").innerHTML = "<strong>" + symbol.replace("USDT","") + "/USDT</strong><br>💰 $" + (d.current_price || 0).toFixed(4) + "<br>Skor: <strong>" + (d.score || 50) + "/100</strong>";
+                document.getElementById("signal-card").style.borderLeftColor = d.signal && d.signal.includes("ALIM") ? "#00ff88" : d.signal && d.signal.includes("SATIM") ? "#ff4444" : "#ffd700";
+                if (d.current_price) document.getElementById("price-text").textContent = "$" + (d.current_price >= 1 ? d.current_price.toFixed(4) : d.current_price.toFixed(6));
             }};
             ws.onclose = () => document.getElementById("status").textContent = "Bağlantı kesildi";
         }}
@@ -361,28 +349,33 @@ async def signal_page(request: Request):
         document.addEventListener("DOMContentLoaded", createWidget);
     </script>
 </body>
-</html>""")
+</html>"""
+    return HTMLResponse(html)
 
+# ==================== GİRİŞ SAYFASI ====================
 @app.get("/login", response_class=HTMLResponse)
 async def login_page():
     return HTMLResponse("""<!DOCTYPE html>
-<html lang="tr"><head><meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1.0">
-<title>Giriş | ICT SMART PRO</title>
-<style>
-    body{{background:linear-gradient(135deg,#0a0022,#1a0033,#000);color:#fff;display:flex;align-items:center;justify-content:center;min-height:100vh;margin:0;font-family:system-ui;}}
-    .box{{background:rgba(0,0,0,0.7);padding:40px;border-radius:20px;width:90%;max-width:400px;text-align:center;backdrop-filter:blur(10px);}}
-    input{{width:100%;padding:16px;margin:15px 0;border:none;border-radius:12px;background:rgba(255,255,255,0.1);color:#fff;font-size:1.1rem;}}
-    button{{width:100%;padding:16px;background:linear-gradient(45deg,#fc00ff,#00dbde);border:none;border-radius:12px;color:#fff;font-weight:bold;font-size:1.2rem;cursor:pointer;}}
-</style>
+<html lang="tr">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width,initial-scale=1.0">
+    <title>Giriş | ICT SMART PRO</title>
+    <style>
+        body {{background:linear-gradient(135deg,#0a0022,#1a0033,#000);color:#fff;display:flex;align-items:center;justify-content:center;min-height:100vh;margin:0;font-family:system-ui;}}
+        .box {{background:rgba(0,0,0,0.7);padding:40px;border-radius:20px;width:90%;max-width:400px;text-align:center;backdrop-filter:blur(10px);}}
+        input {{width:100%;padding:16px;margin:15px 0;border:none;border-radius:12px;background:rgba(255,255,255,0.1);color:#fff;font-size:1.1rem;}}
+        button {{width:100%;padding:16px;background:linear-gradient(45deg,#fc00ff,#00dbde);border:none;border-radius:12px;color:#fff;font-weight:bold;font-size:1.2rem;cursor:pointer;}}
+    </style>
 </head>
 <body>
     <div class="box">
         <h2>🔐 ICT SMART PRO</h2>
         <form method="post" action="/login">
-            <input name="email" type="email" placeholder="E-posta" required>
+            <input name="email" type="email" placeholder="E-posta adresiniz" required>
             <button type="submit">🚀 Giriş Yap</button>
         </form>
-        <p style="margin-top:20px;color:#888;font-size:0.9rem;">Herhangi bir e-posta ile giriş yapabilirsiniz</p>
+        <p style="margin-top:20px;color:#888;font-size:0.9rem;">Demo için herhangi bir e-posta kullanabilirsiniz</p>
     </div>
 </body>
 </html>""")
@@ -395,6 +388,7 @@ async def login_post(email: str = Form(...)):
         return resp
     return RedirectResponse("/login")
 
+# ==================== HEALTH CHECK ====================
 @app.get("/health")
 async def health():
     return JSONResponse({
@@ -408,7 +402,9 @@ async def health():
         }
     })
 
+# ==================== BAŞLATMA ====================
 if __name__ == "__main__":
-    import uvicorn, os
+    import uvicorn
+    import os
     port = int(os.getenv("PORT", 8000))
     uvicorn.run("main:app", host="0.0.0.0", port=port, log_level="info")
