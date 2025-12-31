@@ -37,8 +37,18 @@ signal_queue: asyncio.Queue = asyncio.Queue(maxsize=500)
 
 
 # ==================== BROADCAST WORKER ====================
+# core.py — ACİL DÜZELTME VERSİYONU
+
+# ... üstteki import'lar aynı ...
+
 async def broadcast_worker():
     logger.info("📡 Broadcast worker aktif")
+    
+    # TÜM GLOBAL DEĞİŞKENLERİ BURADA TANIMLA!
+    global top_gainers, last_update, rt_ticker
+    global single_subscribers, all_subscribers, pump_radar_subscribers, realtime_subscribers
+    global shared_signals, active_strong_signals
+    
     while True:
         try:
             msg_type, payload = await signal_queue.get()
@@ -49,7 +59,6 @@ async def broadcast_worker():
                 signal_data = payload["signal"]
                 channel = f"{symbol}:{tf}"
 
-                # Tek coin abonelerine gönder
                 if channel in single_subscribers:
                     dead = set()
                     for ws in list(single_subscribers[channel]):
@@ -59,12 +68,10 @@ async def broadcast_worker():
                             dead.add(ws)
                     single_subscribers[channel] -= dead
 
-                # Güçlü sinyalleri güncelle
                 strong = [s for s in shared_signals[tf].values() if s.get("score", 0) >= 80]
                 strong.sort(key=lambda x: x.get("score", 0), reverse=True)
                 active_strong_signals[tf] = strong[:20]
 
-                # Tüm coin abonelerine gönder
                 if tf in all_subscribers:
                     dead = set()
                     for ws in list(all_subscribers[tf]):
@@ -75,9 +82,8 @@ async def broadcast_worker():
                     all_subscribers[tf] -= dead
 
             elif msg_type == "pump_radar":
-                global top_gainers, last_update
                 top_gainers = payload.get("top_gainers", [])[:10]
-                last_update = payload.get("last_update", datetime.now(timezone.utc).strftime("%H:%M:%S"))
+                last_update = payload.get("last_update", "N/A")
 
                 dead = set()
                 for ws in list(pump_radar_subscribers):
