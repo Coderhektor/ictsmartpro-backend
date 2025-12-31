@@ -424,37 +424,100 @@ async def signal(request: Request):
         }}
     }}
 
-    function connect() {{
-        const symbol = getSymbol().replace("BINANCE:", "");
-        const tf = document.getElementById('tf').value;
-        if (ws) ws.close();
-        ws = new WebSocket((location.protocol==='https:'?'wss':'ws')+'://'+location.host+'/ws/signal/'+symbol+'/'+tf);
+function connect() {
+    // Önce TradingView grafiğini güncelle
+    const symbolInput = document.getElementById('pair').value.trim().toUpperCase();
+    const tfSelect = document.getElementById('tf').value;
 
-        ws.onopen = () => {{
-            document.getElementById('status').innerHTML = "✅ Canlı sinyal akışı başladı!";
-        }};
+    // Symbol formatını düzelt (USDT ekle)
+    let symbol = symbolInput;
+    if (!symbol.endsWith("USDT")) symbol += "USDT";
 
-        ws.onmessage = e => {{
-            const d = JSON.parse(e.data);
-            const card = document.getElementById('signal-card');
-            const text = document.getElementById('signal-text');
-            const details = document.getElementById('signal-details');
+    // TradingView symbol
+    const tvSymbol = "BINANCE:" + symbol;
 
-            text.innerHTML = d.signal || "Sinyal bekleniyor...";
-            details.innerHTML = `<strong>${{d.pair || symbol.replace('USDT','/USDT')}}</strong><br>
-                Skor: <strong>${{d.score || '?'}}/100</strong> | ${{d.killzone || ''}}<br>
-                ${{d.last_update ? 'Son: ' + d.last_update : ''}}<br><small>${{d.triggers || ''}}</small>`;
+    // Interval map
+    const tfMap = {"1m":"1","3m":"3","5m":"5","15m":"15","30m":"30","1h":"60","4h":"240","1d":"D","1w":"W"};
+    const interval = tfMap[tfSelect] || "5";
 
-            if (d.signal && d.signal.includes('ALIM')) {{ card.className = 'green'; text.style.color = '#00ff88'; }}
-            else if (d.signal && d.signal.includes('SATIM')) {{ card.className = 'red'; text.style.color = '#ff4444'; }}
-            else {{ card.className = ''; text.style.color = '#ffd700'; }}
-        }};
-    }}
-</script>
-</body>
-</html>"""
-    
-    return HTMLResponse(content=html_content)
+    // Eğer widget varsa önce kaldır
+    if (tvWidget) {
+        tvWidget.remove();
+        tvWidget = null;
+    }
+
+    // Yeni widget oluştur
+    tvWidget = new TradingView.widget({
+        autosize: true,
+        width: "100%",
+        height: 500,
+        symbol: tvSymbol,
+        interval: interval,
+        timezone: "Etc/UTC",
+        theme: "dark",
+        style: "1",
+        locale: "tr",
+        container_id: "tradingview_widget",
+        studies: ["RSI@tv-basicstudies", "MACD@tv-basicstudies"]
+    });
+
+    tvWidget.onChartReady(() => {
+        document.getElementById('status').innerHTML = `✅ Grafik yüklendi: ${symbol} ${tfSelect.toUpperCase()} • Canlı sinyal akışı başladı!`;
+        
+        // Fiyat takibi
+        setInterval(() => {
+            try {
+                const price = tvWidget.activeChart().getSeries().lastPrice();
+                if (price && price !== currentPrice) {
+                    currentPrice = price;
+                    document.getElementById('price-text').innerHTML = '$' + parseFloat(price).toFixed(price > 1 ? 2 : 6);
+                }
+            } catch(e) {}
+        }, 1500);
+    });
+
+    // Şimdi WebSocket bağlantısını kur
+    if (ws) ws.close();
+
+    ws = new WebSocket((location.protocol==='https:'?'wss':'ws')+'://'+location.host+'/ws/signal/'+symbol+'/'+tfSelect);
+
+    ws.onopen = () => {
+        document.getElementById('status').innerHTML = `✅ ${symbol} ${tfSelect.toUpperCase()} için canlı sinyal akışı başladı!`;
+    };
+
+    ws.onmessage = e => {
+        const d = JSON.parse(e.data);
+        const card = document.getElementById('signal-card');
+        const text = document.getElementById('signal-text');
+        const details = document.getElementById('signal-details');
+
+        text.innerHTML = d.signal || "Sinyal bekleniyor...";
+        details.innerHTML = `<strong>${d.pair || symbol.replace('USDT','/USDT')}</strong><br>
+            Skor: <strong>${d.score || '?'}/100</strong> | ${d.killzone || ''}<br>
+            ${d.last_update ? 'Son: ' + d.last_update : ''}<br><small>${d.triggers || ''}</small>`;
+
+        if (d.signal && d.signal.includes('ALIM')) { 
+            card.className = 'green'; 
+            text.style.color = '#00ff88'; 
+        }
+        else if (d.signal && d.signal.includes('SATIM')) { 
+            card.className = 'red'; 
+            text.style.color = '#ff4444'; 
+        }
+        else { 
+            card.className = ''; 
+            text.style.color = '#ffd700'; 
+        }
+    };
+
+    ws.onerror = (err) => {
+        document.getElementById('status').innerHTML = "❌ WebSocket bağlantı hatası";
+    };
+
+    ws.onclose = () => {
+        document.getElementById('status').innerHTML = "🔌 Sinyal bağlantısı kapandı. Yeniden bağlanmak için butona tıklayın.";
+    };
+}
 
 # ==================== API ENDPOINTS ====================
 @app.post("/api/analyze-chart")
@@ -804,5 +867,6 @@ async def login(request: Request):
 if __name__ == "__main__":
     import uvicorn
     uvicorn.run(app, host="0.0.0.0", port=8000)
+
 
 
