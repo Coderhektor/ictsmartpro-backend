@@ -3,12 +3,13 @@ import asyncio
 import logging
 from collections import defaultdict
 from datetime import datetime, timezone
-from typing import Dict, Set, List, Optional
+from typing import Dict, Set, List, Optional, Any
 from threading import Lock
+from contextlib import asynccontextmanager
 
 import ccxt.async_support as ccxt_async
 import pandas as pd
-from fastapi import WebSocket
+from fastapi import WebSocket, FastAPI
 
 
 # ==================== LOGGER ====================
@@ -21,8 +22,7 @@ if not logger.handlers:
 
 
 # ==================== MULTI-EXCHANGE PRICE POOL ====================
-# {"BTCUSDT": {"binance": {"price":65000,"change_24h":2.1}, "bybit": {...}, "best_price":65005, "updated":"14:30:22"}}
-price_pool: Dict[str, dict] = {}
+price_pool: Dict[str, Dict[str, Any]] = {}
 price_pool_lock = Lock()
 
 def update_price(source: str, symbol: str, price: float, change_24h: Optional[float] = None):
@@ -52,7 +52,7 @@ def update_price(source: str, symbol: str, price: float, change_24h: Optional[fl
             ]
             price_pool[symbol]["updated"] = datetime.now(timezone.utc).strftime("%H:%M:%S")
 
-def get_best_price(symbol: str) -> dict:
+def get_best_price(symbol: str) -> Dict[str, Any]:
     """Belirli bir sembol için en iyi fiyatı döndür"""
     with price_pool_lock:
         data = price_pool.get(symbol, {})
@@ -62,7 +62,7 @@ def get_best_price(symbol: str) -> dict:
             "updated": data.get("updated", "N/A")
         }
 
-def get_all_prices_snapshot(limit: int = 50) -> dict:
+def get_all_prices_snapshot(limit: int = 50) -> Dict[str, Any]:
     """Frontend'e gönderilecek realtime_price payload'ı üretir"""
     with price_pool_lock:
         tickers = {}
@@ -89,6 +89,37 @@ def get_all_prices_snapshot(limit: int = 50) -> dict:
         }
 
 
+# ==================== REALTIME TICKER (MAIN.PY İÇİN GEREKLİ) ====================
+class RealtimeTicker:
+    """Real-time ticker broadcast için manager"""
+    def __init__(self):
+        self.subscribers: Set[WebSocket] = set()
+        self.lock = asyncio.Lock()
+    
+    async def subscribe(self, websocket: WebSocket):
+        async with self.lock:
+            self.subscribers.add(websocket)
+    
+    async def unsubscribe(self, websocket: WebSocket):
+        async with self.lock:
+            self.subscribers.discard(websocket)
+    
+    async def broadcast(self, data: dict):
+        """Tüm abonelere veri gönder"""
+        async with self.lock:
+            dead = []
+            for ws in self.subscribers:
+                try:
+                    await ws.send_json(data)
+                except:
+                    dead.append(ws)
+            for ws in dead:
+                self.subscribers.discard(ws)
+
+# Global realtime ticker instance
+rt_ticker = RealtimeTicker()
+
+
 # ==================== GLOBAL STATE (FRONTEND İÇİN GEREKLİ) ====================
 # WebSocket subscriber kümeleri
 single_subscribers: Dict[str, Set[WebSocket]] = defaultdict(set)
@@ -97,11 +128,11 @@ pump_radar_subscribers: Set[WebSocket] = set()
 realtime_subscribers: Set[WebSocket] = set()
 
 # Sinyal verileri
-shared_signals: Dict[str, Dict[str, dict]] = defaultdict(dict)
-active_strong_signals: Dict[str, List[dict]] = defaultdict(list)
+shared_signals: Dict[str, Dict[str, Dict[str, Any]]] = defaultdict(dict)
+active_strong_signals: Dict[str, List[Dict[str, Any]]] = defaultdict(list)
 
 # Pump radar
-top_gainers: List[dict] = []
+top_gainers: List[Dict[str, Any]] = []
 last_update: str = "Yükleniyor..."
 
 # Binance client (grafik/ohlcv için gerekli)
@@ -110,6 +141,9 @@ all_usdt_symbols: List[str] = []
 
 # Sinyal iş kuyruğu
 signal_queue: asyncio.Queue = asyncio.Queue(maxsize=500)
+
+# Application lifecycle tasks
+background_tasks: List[asyncio.Task] = []
 
 
 # ==================== UTILITY FUNCTIONS (EXPORT EDİLECEKLER) ====================
@@ -286,15 +320,34 @@ async def signal_producer():
     logger.info("🧠 Sinyal üretici başladı")
     
     try:
+        # Indicators modülünü dynamic import et
         from indicators import generate_ict_signal
-    except Exception as e:
-        logger.error(f"indicators.py yüklenemedi: {e}")
-        def generate_ict_signal(df, symbol, tf): 
+    except ImportError as e:
+        logger.warning(f"indicators.py yüklenemedi, fallback fonksiyon kullanılıyor: {e}")
+        def generate_ict_signal(df: pd.DataFrame, symbol: str, tf: str) -> Optional[Dict[str, Any]]:
+            # Fallback basit sinyal üretici
+            if len(df) < 10:
+                return None
+            
+            last_close = df['close'].iloc[-1]
+            prev_close = df['close'].iloc[-2]
+            change = ((last_close - prev_close) / prev_close) * 100
+            
+            if abs(change) > 1.5:
+                return {
+                    "symbol": symbol,
+                    "timeframe": tf,
+                    "score": 70,
+                    "action": "BUY" if change > 0 else "SELL",
+                    "change": round(change, 2),
+                    "current_price": float(last_close),
+                    "timestamp": datetime.now(timezone.utc).isoformat()
+                }
             return None
 
     timeframes = ["5m", "15m", "1h", "4h"]
     scan_symbols = all_usdt_symbols[:30]
-    await asyncio.sleep(15)
+    await asyncio.sleep(15)  # Sistemin tam başlaması için bekle
 
     while True:
         signal_count = 0
@@ -337,19 +390,50 @@ async def initialize():
     logger.info("🚀 Core başlatılıyor (Multi-Exchange Ready)")
     await load_all_symbols()
     
-    # Task’ları başlat
-    asyncio.create_task(broadcast_worker(), name="broadcast_worker")
-    asyncio.create_task(signal_producer(), name="signal_producer")
-    asyncio.create_task(realtime_price_broadcast_task(), name="realtime_price_broadcast")
-    asyncio.create_task(pump_radar_task(), name="pump_radar")
-
+    # Task'ları oluştur ve sakla
+    tasks = [
+        asyncio.create_task(broadcast_worker(), name="broadcast_worker"),
+        asyncio.create_task(signal_producer(), name="signal_producer"),
+        asyncio.create_task(realtime_price_broadcast_task(), name="realtime_price_broadcast"),
+        asyncio.create_task(pump_radar_task(), name="pump_radar")
+    ]
+    
+    # Global task listesine ekle
+    background_tasks.extend(tasks)
+    
     logger.info("✅ Core sistemi aktif")
+    return tasks
 
 
 async def cleanup():
     logger.info("🛑 Core kapanıyor...")
+    
+    # Tüm background task'ları iptal et
+    for task in background_tasks:
+        if not task.done():
+            task.cancel()
+    
+    # Task'ların tamamlanmasını bekle
+    if background_tasks:
+        await asyncio.gather(*background_tasks, return_exceptions=True)
+    
+    # Binance exchange'i kapat
     global _binance_exchange
     if _binance_exchange:
         await _binance_exchange.close()
         _binance_exchange = None
+    
     logger.info("✅ Temizlendi")
+
+
+# ==================== FASTAPI LIFECYCLE MANAGER ====================
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    """FastAPI lifespan manager"""
+    logger.info("🏗️  Uygulama başlatılıyor...")
+    tasks = await initialize()
+    
+    yield
+    
+    logger.info("🛑 Uygulama kapanıyor...")
+    await cleanup()
