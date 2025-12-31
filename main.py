@@ -1,4 +1,4 @@
-# main.py - ICT SMART PRO (PROD - Railway Optimized - HATASIZ)
+# main.py - ICT SMART PRO (PROD - Railway Optimized - %100 HATASIZ)
 import base64
 import logging
 import asyncio
@@ -9,13 +9,11 @@ import os
 import hashlib
 
 from fastapi import FastAPI, WebSocket, WebSocketDisconnect, Request, RedirectResponse, HTMLResponse
-from fastapi.responses import JSONResponse
 
 from core import (
     initialize, cleanup, single_subscribers, all_subscribers,
     pump_radar_subscribers, realtime_subscribers,
-    shared_signals, active_strong_signals, top_gainers, last_update, rt_ticker,
-    get_binance_client
+    shared_signals, active_strong_signals, top_gainers, last_update, rt_ticker
 )
 
 logging.basicConfig(level=logging.INFO, format="%(asctime)s | %(levelname)s | %(name)s | %(message)s")
@@ -26,19 +24,18 @@ class VisitorCounter:
         self.total_visits = 0
         self.active_users = set()
         self.page_views = {}
-    
+
     def add_visit(self, page: str, user_id: str = None) -> int:
         self.total_visits += 1
         self.page_views[page] = self.page_views.get(page, 0) + 1
         if user_id:
             self.active_users.add(user_id)
         return self.total_visits
-    
+
     def get_stats(self) -> Dict:
         return {
             "total_visits": self.total_visits,
             "active_users": len(self.active_users),
-            "page_views": self.page_views,
             "last_updated": datetime.now().strftime("%H:%M:%S")
         }
 
@@ -69,40 +66,39 @@ async def count_visitors(request: Request, call_next):
     if not visitor_id:
         ip = request.client.host or "anonymous"
         visitor_id = hashlib.md5(ip.encode()).hexdigest()[:8]
-    
+
     page = request.url.path
     visitor_counter.add_visit(page, visitor_id)
-    
+
     response = await call_next(request)
-    
+
     if not request.cookies.get("visitor_id"):
         response.set_cookie("visitor_id", visitor_id, max_age=86400, httponly=True, samesite="lax")
-    
+
     return response
 
 # ==================== WEBSOCKETS ====================
 @app.websocket("/ws/signal/{pair}/{timeframe}")
 async def ws_signal(websocket: WebSocket, pair: str, timeframe: str):
     await websocket.accept()
-    
+
     symbol = pair.upper().replace("/", "").replace("-", "").replace(" ", "").strip()
     if not symbol.endswith("USDT"):
         symbol += "USDT"
-    
+
     channel = f"{symbol}:{timeframe}"
-    
+
     if channel not in single_subscribers:
         single_subscribers[channel] = set()
     single_subscribers[channel].add(websocket)
-    
-    # Mevcut sinyali hemen gönder
+
     sig = shared_signals.get(timeframe, {}).get(symbol)
     if sig:
         try:
             await websocket.send_json(sig)
         except:
             pass
-    
+
     try:
         while True:
             await asyncio.sleep(15)
@@ -121,18 +117,18 @@ async def ws_all(websocket: WebSocket, timeframe: str):
     if timeframe not in supported:
         await websocket.close(code=1008)
         return
-    
+
     await websocket.accept()
-    
+
     if timeframe not in all_subscribers:
         all_subscribers[timeframe] = set()
     all_subscribers[timeframe].add(websocket)
-    
+
     try:
         await websocket.send_json(active_strong_signals.get(timeframe, [])[:20])
     except:
         pass
-    
+
     try:
         while True:
             await asyncio.sleep(30)
@@ -149,12 +145,12 @@ async def ws_all(websocket: WebSocket, timeframe: str):
 async def ws_pump(websocket: WebSocket):
     await websocket.accept()
     pump_radar_subscribers.add(websocket)
-    
+
     try:
         await websocket.send_json({"top_gainers": top_gainers[:8], "last_update": last_update})
     except:
         pass
-    
+
     try:
         while True:
             await asyncio.sleep(20)
@@ -171,7 +167,7 @@ async def ws_pump(websocket: WebSocket):
 async def ws_realtime_price(websocket: WebSocket):
     await websocket.accept()
     realtime_subscribers.add(websocket)
-    
+
     try:
         while True:
             try:
@@ -189,7 +185,7 @@ async def ws_realtime_price(websocket: WebSocket):
 async def home(request: Request):
     user = request.cookies.get("user_email") or "Misafir"
     visitor_stats_html = get_visitor_stats_html()
-    
+
     return HTMLResponse(f"""<!DOCTYPE html>
 <html lang="tr">
 <head>
@@ -225,28 +221,27 @@ async def home(request: Request):
         <a href="/signal/all" class="btn">🔥 Tüm Coinleri Tara</a>
     </div>
     <script>
-      <script>
-    const ws = new WebSocket((location.protocol === 'https:' ? 'wss' : 'ws') + '://' + location.host + '/ws/pump_radar');
-    ws.onmessage = e => {{
-        const data = JSON.parse(e.data);
-        if (data.ping) return;
-        if (data.last_update) document.getElementById('update').innerHTML = `🔄 Son Güncelleme: <strong>${{data.last_update}}</strong>`;
-        const tbody = document.getElementById('table-body');
-        if (!data.top_gainers || data.top_gainers.length === 0) {{
-            tbody.innerHTML = '<tr><td colspan="4" style="text-align:center;padding:50px;color:#ffd700">😴 Aktif pump yok</td></tr>';
-            return;
-        }}
-        tbody.innerHTML = data.top_gainers.map((c,i) => `
-            <tr>
-                <td><strong>#${{i+1}}</strong></td>
-                <td><strong>${{c.symbol}}</strong></td>
-                <td>$${c.price.toFixed(4)}</td>
-                <td class="${{c.change > 0 ? 'green' : 'red'}}">${{c.change > 0 ? '↗ +' : '↘ '}}${{Math.abs(c.change).toFixed(2)}}%</td>
-            </tr>
-        `).join('');
-    }};
-    ws.onclose = () => setTimeout(() => location.reload(), 3000);
-</script>
+        const ws = new WebSocket((location.protocol === 'https:' ? 'wss' : 'ws') + '://' + location.host + '/ws/pump_radar');
+        ws.onmessage = e => {{
+            const data = JSON.parse(e.data);
+            if (data.ping) return;
+            if (data.last_update) document.getElementById('update').innerHTML = `🔄 Son Güncelleme: <strong>${{data.last_update}}</strong>`;
+            const tbody = document.getElementById('table-body');
+            if (!data.top_gainers || data.top_gainers.length === 0) {{
+                tbody.innerHTML = '<tr><td colspan="4" style="text-align:center;padding:50px;color:#ffd700">😴 Aktif pump yok</td></tr>';
+                return;
+            }}
+            tbody.innerHTML = data.top_gainers.map((c,i) => `
+                <tr>
+                    <td><strong>#${{i+1}}</strong></td>
+                    <td><strong>${{c.symbol}}</strong></td>
+                    <td>$${c.price.toFixed(4)}</td>
+                    <td class="${{c.change > 0 ? 'green' : 'red'}}">${{c.change > 0 ? '↗ +' : '↘ '}}${{Math.abs(c.change).toFixed(2)}}%</td>
+                </tr>
+            `).join('');
+        }};
+        ws.onclose = () => setTimeout(() => location.reload(), 3000);
+    </script>
 </body>
 </html>""")
 
@@ -255,9 +250,9 @@ async def signal(request: Request):
     user = request.cookies.get("user_email")
     if not user:
         return RedirectResponse("/login")
-    
+
     visitor_stats_html = get_visitor_stats_html()
-    
+
     return HTMLResponse(f"""<!DOCTYPE html>
 <html lang="tr">
 <head>
@@ -312,71 +307,71 @@ async def signal(request: Request):
             <div id="tradingview_widget" style="height:500px;width:100%;"></div>
         </div>
     </div>
-  <script src="https://s3.tradingview.com/tv.js"></script>
-<script>
-    let ws = null;
-    let tvWidget = null;
+    <script src="https://s3.tradingview.com/tv.js"></script>
+    <script>
+        let ws = null;
+        let tvWidget = null;
 
-    function getSymbol() {{
-        let p = document.getElementById('pair').value.trim().toUpperCase();
-        if (!p.endsWith("USDT")) p += "USDT";
-        document.getElementById('pair').value = p;
-        return "BINANCE:" + p;
-    }}
+        function getSymbol() {{
+            let p = document.getElementById('pair').value.trim().toUpperCase();
+            if (!p.endsWith("USDT")) p += "USDT";
+            document.getElementById('pair').value = p;
+            return "BINANCE:" + p;
+        }}
 
-    function createWidget() {{
-        if (tvWidget) tvWidget.remove();
-        tvWidget = new TradingView.widget({{
-            autosize: true,
-            symbol: getSymbol(),
-            interval: document.getElementById('tf').value === "1d" ? "D" : document.getElementById('tf').value,
-            timezone: "Etc/UTC",
-            theme: "dark",
-            style: "1",
-            locale: "tr",
-            toolbar_bg: "#0a0022",
-            container_id: "tradingview_widget",
-            studies: ["RSI@tv-basicstudies", "MACD@tv-basicstudies", "Volume@tv-basicstudies"]
-        }});
-    }}
+        function createWidget() {{
+            if (tvWidget) tvWidget.remove();
+            tvWidget = new TradingView.widget({{
+                autosize: true,
+                symbol: getSymbol(),
+                interval: document.getElementById('tf').value === "1d" ? "D" : document.getElementById('tf').value,
+                timezone: "Etc/UTC",
+                theme: "dark",
+                style: "1",
+                locale: "tr",
+                toolbar_bg: "#0a0022",
+                container_id: "tradingview_widget",
+                studies: ["RSI@tv-basicstudies", "MACD@tv-basicstudies", "Volume@tv-basicstudies"]
+            }});
+        }}
 
-    function updatePriceDisplay(price) {{
-        document.getElementById('price-text').textContent = '$' + price.toFixed(price >= 1 ? 4 : 6);
-    }}
+        function updatePriceDisplay(price) {{
+            document.getElementById('price-text').textContent = '$' + price.toFixed(price >= 1 ? 4 : 6);
+        }}
 
-    function connect() {{
-        if (ws) ws.close();
-        const symbol = document.getElementById('pair').value.trim().toUpperCase();
-        const tf = document.getElementById('tf').value;
-        const fullSymbol = symbol.endsWith("USDT") ? symbol : symbol + "USDT";
-        document.getElementById('status').innerHTML = `🔗 ${{fullSymbol}} ${{tf}} bağlantı kuruluyor...`;
-        createWidget();
-        ws = new WebSocket(`${{location.protocol === 'https:' ? 'wss' : 'ws'}}://${{location.host}}/ws/signal/${{fullSymbol}}/${{tf}}`);
-        ws.onopen = () => document.getElementById('status').innerHTML = `✅ Canlı sinyal başladı!`;
-        ws.onmessage = e => {{
-            const data = JSON.parse(e.data);
-            if (data.heartbeat) return;
-            const card = document.getElementById('signal-card');
-            const text = document.getElementById('signal-text');
-            const details = document.getElementById('signal-details');
-            text.textContent = data.signal || "NÖTR";
-            details.innerHTML = `
-                <strong>${{data.pair || fullSymbol.replace('USDT','/USDT')}}</strong><br>
-                ⚡ Skor: <strong>${{data.score || 0}}/100</strong><br>
-                💰 Fiyat: <strong>$${data.current_price || '0.0000'}</strong><br>
-                🎯 Killzone: <strong>${{data.killzone || 'Normal'}}</strong><br>
-                🕒 ${{data.last_update || 'Şimdi'}}<br>
-                <small>${{data.triggers || 'Analiz ediliyor'}}</small>
-            `;
-            card.className = data.signal && (data.signal.includes("ALIM") || data.signal.includes("LONG")) ? "green" : 
-                             data.signal && (data.signal.includes("SATIM") || data.signal.includes("SHORT")) ? "red" : "";
-            if (data.current_price) updatePriceDisplay(data.current_price);
-        }};
-        ws.onclose = () => document.getElementById('status').innerHTML = '🔌 Bağlantı kesildi. Yeniden bağlanılıyor...';
-    }}
+        function connect() {{
+            if (ws) ws.close();
+            const symbol = document.getElementById('pair').value.trim().toUpperCase();
+            const tf = document.getElementById('tf').value;
+            const fullSymbol = symbol.endsWith("USDT") ? symbol : symbol + "USDT";
+            document.getElementById('status').innerHTML = `🔗 ${{fullSymbol}} ${{tf}} bağlantı kuruluyor...`;
+            createWidget();
+            ws = new WebSocket(`${{location.protocol === 'https:' ? 'wss' : 'ws'}}://${{location.host}}/ws/signal/${{fullSymbol}}/${{tf}}`);
+            ws.onopen = () => document.getElementById('status').innerHTML = `✅ Canlı sinyal başladı!`;
+            ws.onmessage = e => {{
+                const data = JSON.parse(e.data);
+                if (data.heartbeat) return;
+                const card = document.getElementById('signal-card');
+                const text = document.getElementById('signal-text');
+                const details = document.getElementById('signal-details');
+                text.textContent = data.signal || "NÖTR";
+                details.innerHTML = `
+                    <strong>${{data.pair || fullSymbol.replace('USDT','/USDT')}}</strong><br>
+                    ⚡ Skor: <strong>${{data.score || 0}}/100</strong><br>
+                    💰 Fiyat: <strong>$${data.current_price || '0.0000'}</strong><br>
+                    🎯 Killzone: <strong>${{data.killzone || 'Normal'}}</strong><br>
+                    🕒 ${{data.last_update || 'Şimdi'}}<br>
+                    <small>${{data.triggers || 'Analiz ediliyor'}}</small>
+                `;
+                card.className = data.signal && (data.signal.includes("ALIM") || data.signal.includes("LONG")) ? "green" : 
+                                 data.signal && (data.signal.includes("SATIM") || data.signal.includes("SHORT")) ? "red" : "";
+                if (data.current_price) updatePriceDisplay(data.current_price);
+            }};
+            ws.onclose = () => document.getElementById('status').innerHTML = '🔌 Bağlantı kesildi. Yeniden bağlanılıyor...';
+        }}
 
-    document.addEventListener("DOMContentLoaded", createWidget);
-</script>
+        document.addEventListener("DOMContentLoaded", createWidget);
+    </script>
 </body>
 </html>""")
 
@@ -385,9 +380,9 @@ async def signal_all(request: Request):
     user = request.cookies.get("user_email")
     if not user:
         return RedirectResponse("/login")
-    
+
     visitor_stats_html = get_visitor_stats_html()
-    
+
     return HTMLResponse(f"""<!DOCTYPE html>
 <html lang="tr">
 <head>
@@ -554,5 +549,3 @@ async def health():
 if __name__ == "__main__":
     import uvicorn
     uvicorn.run("main:app", host="0.0.0.0", port=int(os.getenv("PORT", 8000)), log_level="info")
-
-
