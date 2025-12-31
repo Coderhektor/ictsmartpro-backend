@@ -134,12 +134,18 @@ async def count_visitors(request: Request, call_next):
 @app.websocket("/ws/signal/{pair}/{timeframe}")
 async def ws_signal(websocket: WebSocket, pair: str, timeframe: str):
     await websocket.accept()
-    symbol = pair.upper().replace("/", "").replace("-", "").strip()
+    
+    # Symbol'ü standartlaştır
+    symbol = pair.upper().replace("/", "").replace("-", "").replace(" ", "").strip()
     if not symbol.endswith("USDT"):
         symbol += "USDT"
-    channel = f"{symbol}:{timeframe}"
+    
+    # KESİN OLARAK aynı formatı kullan: büyük harf, USDT'li, boşluksuz
+    channel = f"{symbol}:{timeframe}"  # örneğin: BTCUSDT:5m
+    
     single_subscribers[channel].add(websocket)
     
+    # Mevcut sinyali varsa hemen gönder
     sig = shared_signals.get(timeframe, {}).get(symbol)
     if sig:
         await websocket.send_json(sig)
@@ -149,8 +155,6 @@ async def ws_signal(websocket: WebSocket, pair: str, timeframe: str):
             await asyncio.sleep(15)
             await websocket.send_json({"heartbeat": True})
     except WebSocketDisconnect:
-        pass
-    finally:
         single_subscribers[channel].discard(websocket)
 
 @app.websocket("/ws/all/{timeframe}")
@@ -1323,3 +1327,4 @@ if __name__ == "__main__":
 # 4. İndentation hataları giderildi
 # 5. Tüm endpoint'ler doğru yapılandırıldı
 # 6. Kusursuz çalışır durumda!
+
