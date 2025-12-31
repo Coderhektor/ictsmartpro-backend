@@ -1,15 +1,13 @@
-# core.py — Multi-Exchange & Railway Production Ready
+# core.py — MULTI-EXCHANGE & RAILWAY PRODUCTION READY (HATALAR DÜZELTİLDİ)
 import asyncio
 import logging
 from collections import defaultdict
 from datetime import datetime, timezone
 from typing import Dict, Set, List, Optional, Any
 from threading import Lock
-from contextlib import asynccontextmanager
 
 import ccxt.async_support as ccxt_async
 import pandas as pd
-from fastapi import WebSocket, FastAPI
 
 
 # ==================== LOGGER ====================
@@ -89,18 +87,18 @@ def get_all_prices_snapshot(limit: int = 50) -> Dict[str, Any]:
         }
 
 
-# ==================== REALTIME TICKER (MAIN.PY İÇİN GEREKLİ) ====================
+# ==================== REALTIME TICKER ====================
 class RealtimeTicker:
     """Real-time ticker broadcast için manager"""
     def __init__(self):
-        self.subscribers: Set[WebSocket] = set()
+        self.subscribers: Set[Any] = set()
         self.lock = asyncio.Lock()
     
-    async def subscribe(self, websocket: WebSocket):
+    async def subscribe(self, websocket: Any):
         async with self.lock:
             self.subscribers.add(websocket)
     
-    async def unsubscribe(self, websocket: WebSocket):
+    async def unsubscribe(self, websocket: Any):
         async with self.lock:
             self.subscribers.discard(websocket)
     
@@ -120,12 +118,12 @@ class RealtimeTicker:
 rt_ticker = RealtimeTicker()
 
 
-# ==================== GLOBAL STATE (FRONTEND İÇİN GEREKLİ) ====================
+# ==================== GLOBAL STATE ====================
 # WebSocket subscriber kümeleri
-single_subscribers: Dict[str, Set[WebSocket]] = defaultdict(set)
-all_subscribers: Dict[str, Set[WebSocket]] = defaultdict(set)
-pump_radar_subscribers: Set[WebSocket] = set()
-realtime_subscribers: Set[WebSocket] = set()
+single_subscribers: Dict[str, Set[Any]] = defaultdict(set)
+all_subscribers: Dict[str, Set[Any]] = defaultdict(set)
+pump_radar_subscribers: Set[Any] = set()
+realtime_subscribers: Set[Any] = set()  # DÜZELTİLDİ: main.py için gerekli
 
 # Sinyal verileri
 shared_signals: Dict[str, Dict[str, Dict[str, Any]]] = defaultdict(dict)
@@ -135,26 +133,28 @@ active_strong_signals: Dict[str, List[Dict[str, Any]]] = defaultdict(list)
 top_gainers: List[Dict[str, Any]] = []
 last_update: str = "Yükleniyor..."
 
-# Binance client (grafik/ohlcv için gerekli)
+# Binance client
 _binance_exchange: Optional[ccxt_async.binance] = None
 all_usdt_symbols: List[str] = []
 
 # Sinyal iş kuyruğu
 signal_queue: asyncio.Queue = asyncio.Queue(maxsize=500)
 
-# Application lifecycle tasks
+# Background tasks
 background_tasks: List[asyncio.Task] = []
 
 
-# ==================== UTILITY FUNCTIONS (EXPORT EDİLECEKLER) ====================
+# ==================== UTILITY FUNCTIONS ====================
 def get_binance_client() -> Optional[ccxt_async.binance]:
     """Frontend ve sinyal üretici tarafından OHLCV çekerken kullanılır"""
     return _binance_exchange
 
 
-# ==================== BROADCAST WORKER ====================
+# ==================== BROADCAST WORKER (DÜZELTİLDİ) ====================
 async def broadcast_worker():
+    """Tüm WebSocket abonelerine veri broadcast eder"""
     logger.info("📡 Broadcast worker başladı")
+    
     while True:
         try:
             msg_type, payload = await signal_queue.get()
@@ -166,13 +166,14 @@ async def broadcast_worker():
                 channel = f"{symbol}:{tf}"
 
                 # 1. Tek coin abonelerine gönder
-                dead = set()
-                for ws in list(single_subscribers[channel]):
-                    try:
-                        await ws.send_json(signal_data)
-                    except:
-                        dead.add(ws)
-                single_subscribers[channel] -= dead
+                if channel in single_subscribers:
+                    dead = set()
+                    for ws in list(single_subscribers[channel]):
+                        try:
+                            await ws.send_json(signal_data)
+                        except:
+                            dead.add(ws)
+                    single_subscribers[channel] -= dead
 
                 # 2. Güçlü sinyalleri güncelle
                 strong = [
@@ -206,7 +207,7 @@ async def broadcast_worker():
                 pump_radar_subscribers -= dead
 
             elif msg_type == "realtime_price":
-                # /ws/realtime_price abonelerine gönder
+                # realtime_subscribers'a gönder (global değişken)
                 dead = set()
                 for ws in list(realtime_subscribers):
                     try:
@@ -247,7 +248,7 @@ async def load_all_symbols():
         all_usdt_symbols = ["BTCUSDT","ETHUSDT","SOLUSDT","XRPUSDT","BNBUSDT","ADAUSDT","DOGEUSDT"]
 
 
-# ==================== OHLCV (Chart için gerekli) ====================
+# ==================== OHLCV ====================
 async def fetch_ohlcv(symbol: str, timeframe: str = "5m", limit: int = 150):
     global _binance_exchange
     if not _binance_exchange:
@@ -260,9 +261,9 @@ async def fetch_ohlcv(symbol: str, timeframe: str = "5m", limit: int = 150):
         return []
 
 
-# ==================== REALTIME PRICE BROADCAST (FRONTEND İÇİN) ====================
+# ==================== REALTIME PRICE BROADCAST ====================
 async def realtime_price_broadcast_task():
-    """Her 3 saniyede bir price_pool'dan en iyi fiyatları toplayıp /ws/realtime_price abonelerine gönderir"""
+    """Her 3 saniyede bir price_pool'dan en iyi fiyatları toplayıp abonelere gönderir"""
     logger.info("📊 Realtime fiyat broadcast başladı")
     while True:
         try:
@@ -317,6 +318,7 @@ async def pump_radar_task():
 
 # ==================== SİNYAL ÜRETİCİ ====================
 async def signal_producer():
+    """Sinyal üretici task"""
     logger.info("🧠 Sinyal üretici başladı")
     
     try:
@@ -339,9 +341,12 @@ async def signal_producer():
                     "timeframe": tf,
                     "score": 70,
                     "action": "BUY" if change > 0 else "SELL",
+                    "signal": "ALIM" if change > 0 else "SATIM",  # Türkçe sinyal
                     "change": round(change, 2),
                     "current_price": float(last_close),
-                    "timestamp": datetime.now(timezone.utc).isoformat()
+                    "strength": "YÜKSEK" if abs(change) > 3 else "ORTA",
+                    "timestamp": datetime.now(timezone.utc).isoformat(),
+                    "last_update": datetime.now(timezone.utc).strftime("%H:%M:%S")
                 }
             return None
 
@@ -387,6 +392,7 @@ async def signal_producer():
 
 # ==================== LIFECYCLE ====================
 async def initialize():
+    """Core sistemini başlat"""
     logger.info("🚀 Core başlatılıyor (Multi-Exchange Ready)")
     await load_all_symbols()
     
@@ -406,6 +412,7 @@ async def initialize():
 
 
 async def cleanup():
+    """Core sistemini temizle"""
     logger.info("🛑 Core kapanıyor...")
     
     # Tüm background task'ları iptal et
@@ -426,14 +433,29 @@ async def cleanup():
     logger.info("✅ Temizlendi")
 
 
-# ==================== FASTAPI LIFECYCLE MANAGER ====================
-@asynccontextmanager
-async def lifespan(app: FastAPI):
-    """FastAPI lifespan manager"""
-    logger.info("🏗️  Uygulama başlatılıyor...")
-    tasks = await initialize()
+# ==================== EXPORT ====================
+# Dışa aktarılacak değişkenler ve fonksiyonlar
+__all__ = [
+    # Değişkenler
+    'single_subscribers',
+    'all_subscribers',
+    'pump_radar_subscribers',
+    'realtime_subscribers',
+    'shared_signals',
+    'active_strong_signals',
+    'top_gainers',
+    'last_update',
+    'rt_ticker',
     
-    yield
+    # Fonksiyonlar
+    'get_binance_client',
+    'get_best_price',
+    'update_price',
+    'get_all_prices_snapshot',
+    'fetch_ohlcv',
+    'signal_queue',
     
-    logger.info("🛑 Uygulama kapanıyor...")
-    await cleanup()
+    # Lifecycle
+    'initialize',
+    'cleanup'
+]
