@@ -425,7 +425,7 @@ async def signal(request: Request):
     }}
 
 function connect() {
-    // Önce TradingView grafiğini güncelle
+    
     const symbolInput = document.getElementById('pair').value.trim().toUpperCase();
     const tfSelect = document.getElementById('tf').value;
 
@@ -867,6 +867,7 @@ async def login(request: Request):
 if __name__ == "__main__":
     import uvicorn
     uvicorn.run(app, host="0.0.0.0", port=8000)
+
 
 
 
