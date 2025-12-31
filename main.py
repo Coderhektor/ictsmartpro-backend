@@ -225,27 +225,28 @@ async def home(request: Request):
         <a href="/signal/all" class="btn">🔥 Tüm Coinleri Tara</a>
     </div>
     <script>
-        const ws = new WebSocket((location.protocol === 'https:' ? 'wss' : 'ws') + '://' + location.host + '/ws/pump_radar');
-        ws.onmessage = e => {{
-            const data = JSON.parse(e.data);
-            if (data.ping) return;
-            if (data.last_update) document.getElementById('update').innerHTML = `🔄 Son Güncelleme: <strong>${data.last_update}</strong>`;
-            const tbody = document.getElementById('table-body');
-            if (!data.top_gainers || data.top_gainers.length === 0) {{
-                tbody.innerHTML = '<tr><td colspan="4" style="text-align:center;padding:50px;color:#ffd700">😴 Aktif pump yok</td></tr>';
-                return;
-            }}
-            tbody.innerHTML = data.top_gainers.map((c,i) => `
-                <tr>
-                    <td><strong>#${i+1}</strong></td>
-                    <td><strong>${c.symbol}</strong></td>
-                    <td>$${c.price.toFixed(4)}</td>
-                    <td class="${c.change > 0 ? 'green' : 'red'}">${c.change > 0 ? '↗ +' : '↘ '}${Math.abs(c.change).toFixed(2)}%</td>
-                </tr>
-            `).join('');
-        }};
-        ws.onclose = () => setTimeout(() => location.reload(), 3000);
-    </script>
+      <script>
+    const ws = new WebSocket((location.protocol === 'https:' ? 'wss' : 'ws') + '://' + location.host + '/ws/pump_radar');
+    ws.onmessage = e => {{
+        const data = JSON.parse(e.data);
+        if (data.ping) return;
+        if (data.last_update) document.getElementById('update').innerHTML = `🔄 Son Güncelleme: <strong>${{data.last_update}}</strong>`;
+        const tbody = document.getElementById('table-body');
+        if (!data.top_gainers || data.top_gainers.length === 0) {{
+            tbody.innerHTML = '<tr><td colspan="4" style="text-align:center;padding:50px;color:#ffd700">😴 Aktif pump yok</td></tr>';
+            return;
+        }}
+        tbody.innerHTML = data.top_gainers.map((c,i) => `
+            <tr>
+                <td><strong>#${{i+1}}</strong></td>
+                <td><strong>${{c.symbol}}</strong></td>
+                <td>$${c.price.toFixed(4)}</td>
+                <td class="${{c.change > 0 ? 'green' : 'red'}}">${{c.change > 0 ? '↗ +' : '↘ '}}${{Math.abs(c.change).toFixed(2)}}%</td>
+            </tr>
+        `).join('');
+    }};
+    ws.onclose = () => setTimeout(() => location.reload(), 3000);
+</script>
 </body>
 </html>""")
 
@@ -553,3 +554,4 @@ async def health():
 if __name__ == "__main__":
     import uvicorn
     uvicorn.run("main:app", host="0.0.0.0", port=int(os.getenv("PORT", 8000)), log_level="info")
+
