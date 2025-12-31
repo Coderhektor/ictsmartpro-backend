@@ -9,7 +9,7 @@ import hashlib
 
 from fastapi import FastAPI, WebSocket, WebSocketDisconnect, Request, RedirectResponse, HTMLResponse
 
-# Core fallback (core.py yoksa crash etmesin)
+# Core fallback
 try:
     from core import (
         initialize, cleanup, single_subscribers, all_subscribers,
@@ -53,10 +53,10 @@ visitor_counter = VisitorCounter()
 
 def get_visitor_stats_html() -> str:
     stats = visitor_counter.get_stats()
-    return f"""
+    return """
     <div style="position:fixed;top:15px;right:15px;background:#000000cc;padding:10px 20px;border-radius:20px;color:#00ff88;font-size:clamp(0.8rem, 2vw, 1.2rem);z-index:1000;">
-        <div>👁️ Toplam: <strong>{stats['total_visits']}</strong></div>
-        <div>🔥 Aktif: <strong>{stats['active_users']}</strong></div>
+        <div>👁️ Toplam: <strong>""" + str(stats['total_visits']) + """</strong></div>
+        <div>🔥 Aktif: <strong>""" + str(stats['active_users']) + """</strong></div>
     </div>
     """
 
@@ -186,30 +186,30 @@ async def home(request: Request):
     user = request.cookies.get("user_email") or "Misafir"
     visitor_stats_html = get_visitor_stats_html()
 
-    return HTMLResponse(f"""<!DOCTYPE html>
+    return HTMLResponse("""<!DOCTYPE html>
 <html lang="tr">
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width,initial-scale=1.0">
     <title>ICT SMART PRO</title>
     <style>
-        body {{background: linear-gradient(135deg, #0a0022, #1a0033, #000);color:#fff;font-family:system-ui;margin:0;display:flex;flex-direction:column;min-height:100vh;}}
-        .container {{max-width:1200px;margin:auto;padding:20px;flex:1;}}
-        h1 {{font-size:clamp(2rem,5vw,4rem);text-align:center;background:linear-gradient(90deg,#00dbde,#fc00ff,#00dbde);-webkit-background-clip:text;-webkit-text-fill-color:transparent;animation:g 8s infinite;}}
-        @keyframes g {{0%{{background-position:0%}}100%{{background-position:200%}}}}
-        .update {{text-align:center;color:#00ffff;margin:20px;font-size:1.5rem;background:rgba(0,0,0,0.3);padding:15px;border-radius:10px;}}
-        table {{width:100%;border-collapse:separate;border-spacing:0 10px;}}
-        th {{background:rgba(255,255,255,0.1);padding:15px;font-size:1.1rem;}}
-        td {{padding:15px;background:rgba(255,255,255,0.05);}}
-        .green {{color:#00ff88;font-weight:bold;}}
-        .red {{color:#ff4444;font-weight:bold;}}
-        .btn {{display:block;width:90%;max-width:500px;margin:20px auto;padding:20px;font-size:1.6rem;background:linear-gradient(45deg,#fc00ff,#00dbde);color:#fff;border-radius:50px;text-align:center;text-decoration:none;font-weight:bold;}}
-        .user-info {{position:fixed;top:15px;left:15px;background:rgba(0,0,0,0.7);padding:10px 20px;border-radius:20px;color:#00ff88;z-index:1000;}}
+        body {background: linear-gradient(135deg, #0a0022, #1a0033, #000);color:#fff;font-family:system-ui;margin:0;display:flex;flex-direction:column;min-height:100vh;}
+        .container {max-width:1200px;margin:auto;padding:20px;flex:1;}
+        h1 {font-size:clamp(2rem,5vw,4rem);text-align:center;background:linear-gradient(90deg,#00dbde,#fc00ff,#00dbde);-webkit-background-clip:text;-webkit-text-fill-color:transparent;animation:g 8s infinite;}
+        @keyframes g {0%{background-position:0%}100%{background-position:200%}}
+        .update {text-align:center;color:#00ffff;margin:20px;font-size:1.5rem;background:rgba(0,0,0,0.3);padding:15px;border-radius:10px;}
+        table {width:100%;border-collapse:separate;border-spacing:0 10px;}
+        th {background:rgba(255,255,255,0.1);padding:15px;font-size:1.1rem;}
+        td {padding:15px;background:rgba(255,255,255,0.05);}
+        .green {color:#00ff88;font-weight:bold;}
+        .red {color:#ff4444;font-weight:bold;}
+        .btn {display:block;width:90%;max-width:500px;margin:20px auto;padding:20px;font-size:1.6rem;background:linear-gradient(45deg,#fc00ff,#00dbde);color:#fff;border-radius:50px;text-align:center;text-decoration:none;font-weight:bold;}
+        .user-info {position:fixed;top:15px;left:15px;background:rgba(0,0,0,0.7);padding:10px 20px;border-radius:20px;color:#00ff88;z-index:1000;}
     </style>
 </head>
 <body>
-    <div class="user-info">👤 {user}</div>
-    {visitor_stats_html}
+    <div class="user-info">👤 """ + user + """</div>
+    """ + visitor_stats_html + """
     <div class="container">
         <h1>🚀 ICT SMART PRO</h1>
         <div class="update" id="update">⏳ Pump radar yükleniyor...</div>
@@ -231,16 +231,17 @@ async def home(request: Request):
                 tbody.innerHTML = '<tr><td colspan="4" style="text-align:center;padding:50px;color:#ffd700">😴 Aktif pump yok</td></tr>';
                 return;
             }
-            tbody.innerHTML = data.top_gainers.map(function(c,i) {
-                return `
-                    <tr>
-                        <td><strong>#' + (i+1) + '</strong></td>
-                        <td><strong>' + c.symbol + '</strong></td>
-                        <td>$' + c.price.toFixed(4) + '</td>
-                        <td class="' + (c.change > 0 ? 'green' : 'red') + '">' + (c.change > 0 ? '↗ +' : '↘ ') + Math.abs(c.change).toFixed(2) + '%</td>
-                    </tr>
-                `;
-            }).join('');
+            var rows = '';
+            for (var i = 0; i < data.top_gainers.length; i++) {
+                var c = data.top_gainers[i];
+                rows += '<tr>' +
+                        '<td><strong>#' + (i+1) + '</strong></td>' +
+                        '<td><strong>' + c.symbol + '</strong></td>' +
+                        '<td>$' + c.price.toFixed(4) + '</td>' +
+                        '<td class="' + (c.change > 0 ? 'green' : 'red') + '">' + (c.change > 0 ? '↗ +' : '↘ ') + Math.abs(c.change).toFixed(2) + '%</td>' +
+                        '</tr>';
+            }
+            tbody.innerHTML = rows;
         };
         ws.onclose = function() { setTimeout(function() { location.reload(); }, 3000); };
     </script>
@@ -255,34 +256,34 @@ async def signal(request: Request):
 
     visitor_stats_html = get_visitor_stats_html()
 
-    return HTMLResponse(f"""<!DOCTYPE html>
+    return HTMLResponse("""<!DOCTYPE html>
 <html lang="tr">
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width,initial-scale=1.0">
     <title>CANLI SİNYAL | ICT SMART PRO</title>
     <style>
-        :root {{--p:#00dbde;--s:#fc00ff;--g:#00ff88;--r:#ff4444;--w:#ffd700;--bg:#0a0022;}}
-        body {{background:linear-gradient(135deg,var(--bg),#1a0033,#000);color:#fff;font-family:system-ui;margin:0;min-height:100vh;}}
-        .container {{max-width:1200px;margin:auto;padding:20px;display:flex;flex-direction:column;gap:25px;}}
-        h1 {{font-size:clamp(2rem,5vw,3.5rem);text-align:center;background:linear-gradient(90deg,var(--p),var(--s),var(--p));-webkit-background-clip:text;-webkit-text-fill-color:transparent;animation:g 8s infinite linear;}}
-        @keyframes g {{0%{{background-position:0%}}100%{{background-position:200%}}}}
-        .controls {{background:rgba(255,255,255,0.08);border-radius:20px;padding:25px;text-align:center;backdrop-filter:blur(10px);border:1px solid rgba(255,255,255,0.1);}}
-        input,select,button {{padding:16px 20px;font-size:1.1rem;border:none;border-radius:12px;background:rgba(255,255,255,0.1);color:#fff;min-width:200px;}}
-        button {{background:linear-gradient(45deg,var(--s),var(--p));cursor:pointer;font-weight:bold;min-width:250px;}}
-        #status {{color:var(--p);margin:15px;font-size:1.1rem;padding:10px;background:rgba(0,219,222,0.1);border-radius:10px;}}
-        #price-text {{font-size:clamp(3rem,8vw,4.5rem);text-align:center;font-weight:bold;background:linear-gradient(90deg,var(--p),var(--s));-webkit-background-clip:text;-webkit-text-fill-color:transparent;}}
-        #signal-card {{background:rgba(0,0,0,0.5);border-radius:20px;padding:30px;text-align:center;border-left:6px solid var(--w);}}
-        #signal-card.green {{border-left-color:var(--g);}}
-        #signal-card.red {{border-left-color:var(--r);}}
-        #signal-text {{font-size:clamp(2rem,5vw,3rem);font-weight:bold;}}
-        .chart-container {{width:100%;max-width:1000px;margin:30px auto;border-radius:20px;overflow:hidden;box-shadow:0 15px 40px rgba(0,219,222,0.2);background:rgba(10,0,34,0.5);}}
-        .user-info {{position:fixed;top:15px;left:15px;background:rgba(0,0,0,0.7);padding:10px 20px;border-radius:20px;color:var(--g);z-index:1000;}}
+        :root {--p:#00dbde;--s:#fc00ff;--g:#00ff88;--r:#ff4444;--w:#ffd700;--bg:#0a0022;}
+        body {background:linear-gradient(135deg,var(--bg),#1a0033,#000);color:#fff;font-family:system-ui;margin:0;min-height:100vh;}
+        .container {max-width:1200px;margin:auto;padding:20px;display:flex;flex-direction:column;gap:25px;}
+        h1 {font-size:clamp(2rem,5vw,3.5rem);text-align:center;background:linear-gradient(90deg,var(--p),var(--s),var(--p));-webkit-background-clip:text;-webkit-text-fill-color:transparent;animation:g 8s infinite linear;}
+        @keyframes g {0%{background-position:0%}100%{background-position:200%}}
+        .controls {background:rgba(255,255,255,0.08);border-radius:20px;padding:25px;text-align:center;backdrop-filter:blur(10px);border:1px solid rgba(255,255,255,0.1);}
+        input,select,button {padding:16px 20px;font-size:1.1rem;border:none;border-radius:12px;background:rgba(255,255,255,0.1);color:#fff;min-width:200px;}
+        button {background:linear-gradient(45deg,var(--s),var(--p));cursor:pointer;font-weight:bold;min-width:250px;}
+        #status {color:var(--p);margin:15px;font-size:1.1rem;padding:10px;background:rgba(0,219,222,0.1);border-radius:10px;}
+        #price-text {font-size:clamp(3rem,8vw,4.5rem);text-align:center;font-weight:bold;background:linear-gradient(90deg,var(--p),var(--s));-webkit-background-clip:text;-webkit-text-fill-color:transparent;}
+        #signal-card {background:rgba(0,0,0,0.5);border-radius:20px;padding:30px;text-align:center;border-left:6px solid var(--w);}
+        #signal-card.green {border-left-color:var(--g);}
+        #signal-card.red {border-left-color:var(--r);}
+        #signal-text {font-size:clamp(2rem,5vw,3rem);font-weight:bold;}
+        .chart-container {width:100%;max-width:1000px;margin:30px auto;border-radius:20px;overflow:hidden;box-shadow:0 15px 40px rgba(0,219,222,0.2);background:rgba(10,0,34,0.5);}
+        .user-info {position:fixed;top:15px;left:15px;background:rgba(0,0,0,0.7);padding:10px 20px;border-radius:20px;color:var(--g);z-index:1000;}
     </style>
 </head>
 <body>
-    <div class="user-info">👤 {user}</div>
-    {visitor_stats_html}
+    <div class="user-info">👤 """ + user + """</div>
+    """ + visitor_stats_html + """
     <div class="container">
         <h1>📊 CANLI SİNYAL + GRAFİK</h1>
         <div class="controls">
@@ -350,7 +351,9 @@ async def signal(request: Request):
             createWidget();
             var protocol = location.protocol === 'https:' ? 'wss' : 'ws';
             ws = new WebSocket(protocol + '://' + location.host + '/ws/signal/' + fullSymbol + '/' + tf);
-            ws.onopen = function() { document.getElementById('status').innerHTML = '✅ Canlı sinyal başladı!'; };
+            ws.onopen = function() {
+                document.getElementById('status').innerHTML = '✅ Canlı sinyal başladı!';
+            };
             ws.onmessage = function(e) {
                 var data = JSON.parse(e.data);
                 if (data.heartbeat) return;
@@ -358,19 +361,19 @@ async def signal(request: Request):
                 var text = document.getElementById('signal-text');
                 var details = document.getElementById('signal-details');
                 text.textContent = data.signal ? data.signal : "NÖTR";
-                details.innerHTML = `
-                    <strong>` + (data.pair ? data.pair : fullSymbol.replace('USDT','/USDT')) + `</strong><br>
-                    ⚡ Skor: <strong>` + (data.score ? data.score : 0) + `/100</strong><br>
-                    💰 Fiyat: <strong>` + (data.current_price ? '$' + Number(data.current_price).toFixed(data.current_price >= 1 ? 4 : 6) : '$0.0000') + `</strong><br>
-                    🎯 Killzone: <strong>` + (data.killzone ? data.killzone : 'Normal') + `</strong><br>
-                    🕒 ` + (data.last_update ? data.last_update : 'Şimdi') + `<br>
-                    <small>` + (data.triggers ? data.triggers : 'Analiz ediliyor') + `</small>
-                `;
+                details.innerHTML = '<strong>' + (data.pair ? data.pair : fullSymbol.replace('USDT','/USDT')) + '</strong><br>' +
+                                    '⚡ Skor: <strong>' + (data.score ? data.score : 0) + '/100</strong><br>' +
+                                    '💰 Fiyat: <strong>' + (data.current_price ? '$' + Number(data.current_price).toFixed(data.current_price >= 1 ? 4 : 6) : '$0.0000') + '</strong><br>' +
+                                    '🎯 Killzone: <strong>' + (data.killzone ? data.killzone : 'Normal') + '</strong><br>' +
+                                    '🕒 ' + (data.last_update ? data.last_update : 'Şimdi') + '<br>' +
+                                    '<small>' + (data.triggers ? data.triggers : 'Analiz ediliyor') + '</small>';
                 card.className = data.signal && (data.signal.includes("ALIM") || data.signal.includes("LONG")) ? "green" : 
                                  data.signal && (data.signal.includes("SATIM") || data.signal.includes("SHORT")) ? "red" : "";
                 if (data.current_price) updatePriceDisplay(data.current_price);
             };
-            ws.onclose = function() { document.getElementById('status').innerHTML = '🔌 Bağlantı kesildi. Yeniden bağlanılıyor...'; };
+            ws.onclose = function() {
+                document.getElementById('status').innerHTML = '🔌 Bağlantı kesildi. Yeniden bağlanılıyor...';
+            };
         }
 
         document.addEventListener("DOMContentLoaded", createWidget);
@@ -386,44 +389,44 @@ async def signal_all(request: Request):
 
     visitor_stats_html = get_visitor_stats_html()
 
-    return HTMLResponse(f"""<!DOCTYPE html>
+    return HTMLResponse("""<!DOCTYPE html>
 <html lang="tr">
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width,initial-scale=1.0">
     <title>TÜM COİNLER | ICT SMART PRO</title>
     <style>
-        :root {{--bg:#0a0022;--card:rgba(255,255,255,0.05);--p:#00dbde;--s:#fc00ff;--g:#00ff88;--r:#ff4444;--w:#ffd700;}}
-        body {{background:linear-gradient(135deg,var(--bg),#1a0033,#000);color:#fff;font-family:system-ui;margin:0;min-height:100vh;}}
-        .container {{max-width:1400px;margin:auto;padding:20px;}}
-        h1 {{text-align:center;font-size:clamp(2rem,5vw,3.5rem);background:linear-gradient(90deg,var(--p),var(--s),var(--p));-webkit-background-clip:text;-webkit-text-fill-color:transparent;animation:g 8s infinite linear;}}
-        @keyframes g {{0%{{background-position:0%}}100%{{background-position:200%}}}}
-        .controls {{background:var(--card);border-radius:20px;padding:20px;text-align:center;margin-bottom:30px;backdrop-filter:blur(10px);border:1px solid rgba(255,255,255,0.1);}}
-        select {{padding:15px;font-size:1.2rem;border:none;border-radius:12px;background:rgba(255,255,255,0.1);color:#fff;}}
-        .signal-grid {{display:grid;grid-template-columns:repeat(auto-fit,minmax(320px,1fr));gap:20px;margin-top:20px;}}
-        .signal-card {{background:var(--card);border-radius:20px;padding:20px;backdrop-filter:blur(10px);border:1px solid rgba(255,255,255,0.1);transition:all 0.3s;}}
-        .signal-card:hover {{transform:translateY(-8px);box-shadow:0 15px 30px rgba(0,219,222,0.2);border-color:var(--p);}}
-        .coin-name {{font-size:1.4rem;font-weight:bold;color:var(--p);}}
-        .signal-text {{font-size:1.6rem;font-weight:bold;text-align:center;margin:15px 0;min-height:60px;display:flex;align-items:center;justify-content:center;}}
-        .signal-buy {{color:var(--g);}}
-        .signal-sell {{color:var(--r);}}
-        .signal-neutral {{color:var(--w);}}
-        .score-bar {{height:12px;background:rgba(255,255,255,0.1);border-radius:6px;overflow:hidden;margin:15px 0;}}
-        .score-fill {{height:100%;border-radius:6px;transition:width 0.5s;}}
-        .score-low {{background:linear-gradient(90deg,var(--r),#ff8800);}}
-        .score-medium {{background:linear-gradient(90deg,#ff8800,var(--w));}}
-        .score-high {{background:linear-gradient(90deg,var(--w),var(--g));}}
-        .score-elite {{background:linear-gradient(90deg,var(--g),#00ffff);}}
-        .details {{font-size:0.95rem;line-height:1.6;color:#ccc;}}
-        .detail-row {{display:flex;justify-content:space-between;margin:8px 0;}}
-        .no-signals {{grid-column:1/-1;text-align:center;padding:60px;font-size:1.5rem;color:var(--w);}}
-        .loading {{grid-column:1/-1;text-align:center;padding:80px;color:#888;font-size:1.3rem;}}
-        .user-info {{position:fixed;top:15px;left:15px;background:rgba(0,0,0,0.7);padding:10px 20px;border-radius:20px;color:var(--g);z-index:1000;}}
+        :root {--bg:#0a0022;--card:rgba(255,255,255,0.05);--p:#00dbde;--s:#fc00ff;--g:#00ff88;--r:#ff4444;--w:#ffd700;}
+        body {background:linear-gradient(135deg,var(--bg),#1a0033,#000);color:#fff;font-family:system-ui;margin:0;min-height:100vh;}
+        .container {max-width:1400px;margin:auto;padding:20px;}
+        h1 {text-align:center;font-size:clamp(2rem,5vw,3.5rem);background:linear-gradient(90deg,var(--p),var(--s),var(--p));-webkit-background-clip:text;-webkit-text-fill-color:transparent;animation:g 8s infinite linear;}
+        @keyframes g {0%{background-position:0%}100%{background-position:200%}}
+        .controls {background:var(--card);border-radius:20px;padding:20px;text-align:center;margin-bottom:30px;backdrop-filter:blur(10px);border:1px solid rgba(255,255,255,0.1);}
+        select {padding:15px;font-size:1.2rem;border:none;border-radius:12px;background:rgba(255,255,255,0.1);color:#fff;}
+        .signal-grid {display:grid;grid-template-columns:repeat(auto-fit,minmax(320px,1fr));gap:20px;margin-top:20px;}
+        .signal-card {background:var(--card);border-radius:20px;padding:20px;backdrop-filter:blur(10px);border:1px solid rgba(255,255,255,0.1);transition:all 0.3s;}
+        .signal-card:hover {transform:translateY(-8px);box-shadow:0 15px 30px rgba(0,219,222,0.2);border-color:var(--p);}
+        .coin-name {font-size:1.4rem;font-weight:bold;color:var(--p);}
+        .signal-text {font-size:1.6rem;font-weight:bold;text-align:center;margin:15px 0;min-height:60px;display:flex;align-items:center;justify-content:center;}
+        .signal-buy {color:var(--g);}
+        .signal-sell {color:var(--r);}
+        .signal-neutral {color:var(--w);}
+        .score-bar {height:12px;background:rgba(255,255,255,0.1);border-radius:6px;overflow:hidden;margin:15px 0;}
+        .score-fill {height:100%;border-radius:6px;transition:width 0.5s;}
+        .score-low {background:linear-gradient(90deg,var(--r),#ff8800);}
+        .score-medium {background:linear-gradient(90deg,#ff8800,var(--w));}
+        .score-high {background:linear-gradient(90deg,var(--w),var(--g));}
+        .score-elite {background:linear-gradient(90deg,var(--g),#00ffff);}
+        .details {font-size:0.95rem;line-height:1.6;color:#ccc;}
+        .detail-row {display:flex;justify-content:space-between;margin:8px 0;}
+        .no-signals {grid-column:1/-1;text-align:center;padding:60px;font-size:1.5rem;color:var(--w);}
+        .loading {grid-column:1/-1;text-align:center;padding:80px;color:#888;font-size:1.3rem;}
+        .user-info {position:fixed;top:15px;left:15px;background:rgba(0,0,0,0.7);padding:10px 20px;border-radius:20px;color:var(--g);z-index:1000;}
     </style>
 </head>
 <body>
-    <div class="user-info">👤 {user}</div>
-    {visitor_stats_html}
+    <div class="user-info">👤 """ + user + """</div>
+    """ + visitor_stats_html + """
     <div class="container">
         <h1>🔥 TÜM COİN SİNYALLERİ</h1>
         <div class="controls">
@@ -464,29 +467,29 @@ async def signal_all(request: Request):
                 return;
             }
             signals.sort(function(a,b) { return b.score - a.score; });
-            container.innerHTML = signals.map(function(sig) {
-                return `
-                    <div class="signal-card">
-                        <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:15px;">
-                            <div class="coin-name">' + (sig.pair ? sig.pair : sig.symbol) + '</div>
-                            <div style="font-size:0.9rem;color:#aaa;background:rgba(0,0,0,0.3);padding:5px 12px;border-radius:20px;">' + (sig.timeframe ? sig.timeframe : currentTf.toUpperCase()) + '</div>
-                        </div>
-                        <div class="signal-text ' + getSignalClass(sig.signal) + '">' + (sig.signal ? sig.signal : 'NÖTR') + '</div>
-                        <div class="score-bar">
-                            <div class="score-fill ' + getScoreClass(sig.score) + '" style="width:' + sig.score + '%"></div>
-                        </div>
-                        <div style="text-align:center;margin:10px 0;font-size:1.1rem;">
-                            <strong>' + sig.score + '/100</strong> • ' + (sig.strength ? sig.strength : 'ORTA') + '
-                        </div>
-                        <div class="details">
-                            <div class="detail-row"><span style="color:#aaa">Fiyat:</span><span>$' + (sig.current_price ? Number(sig.current_price).toFixed(sig.current_price >= 1 ? 4 : 6) : '0.0000') + '</span></div>
-                            <div class="detail-row"><span style="color:#aaa">Killzone:</span><span>' + (sig.killzone ? sig.killzone : 'Normal') + '</span></div>
-                            <div class="detail-row"><span style="color:#aaa">Tetik:</span><span>' + (sig.triggers ? sig.triggers : '-') + '</span></div>
-                            <div class="detail-row"><span style="color:#aaa">Güncelleme:</span><span>' + (sig.last_update ? sig.last_update : 'Şimdi') + '</span></div>
-                        </div>
-                    </div>
-                `;
-            }).join('');
+            var html = '';
+            for (var i = 0; i < signals.length; i++) {
+                var sig = signals[i];
+                html += '<div class="signal-card">' +
+                        '<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:15px;">' +
+                        '<div class="coin-name">' + (sig.pair ? sig.pair : sig.symbol) + '</div>' +
+                        '<div style="font-size:0.9rem;color:#aaa;background:rgba(0,0,0,0.3);padding:5px 12px;border-radius:20px;">' + (sig.timeframe ? sig.timeframe : currentTf.toUpperCase()) + '</div>' +
+                        '</div>' +
+                        '<div class="signal-text ' + getSignalClass(sig.signal) + '">' + (sig.signal ? sig.signal : 'NÖTR') + '</div>' +
+                        '<div class="score-bar">' +
+                        '<div class="score-fill ' + getScoreClass(sig.score) + '" style="width:' + sig.score + '%"></div>' +
+                        '</div>' +
+                        '<div style="text-align:center;margin:10px 0;font-size:1.1rem;">' +
+                        '<strong>' + sig.score + '/100</strong> • ' + (sig.strength ? sig.strength : 'ORTA') + '</div>' +
+                        '<div class="details">' +
+                        '<div class="detail-row"><span style="color:#aaa">Fiyat:</span><span>$' + (sig.current_price ? Number(sig.current_price).toFixed(sig.current_price >= 1 ? 4 : 6) : '0.0000') + '</span></div>' +
+                        '<div class="detail-row"><span style="color:#aaa">Killzone:</span><span>' + (sig.killzone ? sig.killzone : 'Normal') + '</span></div>' +
+                        '<div class="detail-row"><span style="color:#aaa">Tetik:</span><span>' + (sig.triggers ? sig.triggers : '-') + '</span></div>' +
+                        '<div class="detail-row"><span style="color:#aaa">Güncelleme:</span><span>' + (sig.last_update ? sig.last_update : 'Şimdi') + '</span></div>' +
+                        '</div>' +
+                        '</div>';
+            }
+            container.innerHTML = html;
         }
 
         function connect() {
@@ -502,7 +505,7 @@ async def signal_all(request: Request):
                     var data = JSON.parse(e.data);
                     if (data.ping) return;
                     renderSignals(data);
-                } catch(err) {}
+                } catch (err) {}
             };
             ws.onclose = function() { setTimeout(connect, 3000); };
         }
