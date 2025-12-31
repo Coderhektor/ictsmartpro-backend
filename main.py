@@ -1,5 +1,4 @@
 # main.py - ICT SMART PRO (PROD - Railway Optimized - %100 HATASIZ)
-import base64
 import logging
 import asyncio
 from datetime import datetime
@@ -10,8 +9,7 @@ import hashlib
 
 from fastapi import FastAPI, WebSocket, WebSocketDisconnect, Request, RedirectResponse, HTMLResponse
 
-# Core modülünü varsayıyoruz (Railway'de indicators.py + core.py mevcut)
-# Eğer core.py yoksa, ileride onu da yazarız — şimdilik sadece main.py'i düzeltiyoruz.
+# Core fallback (Railway'de core.py yoksa crash etmesin)
 try:
     from core import (
         initialize, cleanup, single_subscribers, all_subscribers,
@@ -19,7 +17,6 @@ try:
         shared_signals, active_strong_signals, top_gainers, last_update, rt_ticker
     )
 except ImportError:
-    # Fallback: tanımsız ama crash etmesin
     async def initialize(): pass
     async def cleanup(): pass
     single_subscribers = {}
@@ -35,19 +32,15 @@ except ImportError:
 logging.basicConfig(level=logging.INFO, format="%(asctime)s | %(levelname)s | %(name)s | %(message)s")
 logger = logging.getLogger("main")
 
-
 class VisitorCounter:
     def __init__(self):
         self.total_visits = 0
         self.active_users = set()
-        self.page_views = {}
 
-    def add_visit(self, page: str, user_id: str = None) -> int:
+    def add_visit(self, page: str, user_id: str = None):
         self.total_visits += 1
-        self.page_views[page] = self.page_views.get(page, 0) + 1
         if user_id:
             self.active_users.add(user_id)
-        return self.total_visits
 
     def get_stats(self) -> Dict:
         return {
@@ -56,9 +49,7 @@ class VisitorCounter:
             "last_updated": datetime.now().strftime("%H:%M:%S")
         }
 
-
 visitor_counter = VisitorCounter()
-
 
 def get_visitor_stats_html() -> str:
     stats = visitor_counter.get_stats()
@@ -69,7 +60,6 @@ def get_visitor_stats_html() -> str:
     </div>
     """
 
-
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     logger.info("🚀 Uygulama başlatılıyor...")
@@ -78,9 +68,7 @@ async def lifespan(app: FastAPI):
     logger.info("🛑 Uygulama kapatılıyor...")
     await cleanup()
 
-
 app = FastAPI(lifespan=lifespan, title="ICT SMART PRO", version="PROD 2025")
-
 
 @app.middleware("http")
 async def count_visitors(request: Request, call_next):
@@ -89,33 +77,26 @@ async def count_visitors(request: Request, call_next):
         ip = request.client.host or "anonymous"
         visitor_id = hashlib.md5(ip.encode()).hexdigest()[:8]
 
-    page = request.url.path
-    visitor_counter.add_visit(page, visitor_id)
+    visitor_counter.add_visit(request.url.path, visitor_id)
 
     response = await call_next(request)
-
     if not request.cookies.get("visitor_id"):
         response.set_cookie("visitor_id", visitor_id, max_age=86400, httponly=True, samesite="lax")
-
     return response
 
-
 # ==================== WEBSOCKETS ====================
-@app.websocket("/ws/signal/{{pair}}/{{timeframe}}")
+@app.websocket("/ws/signal/{pair}/{timeframe}")
 async def ws_signal(websocket: WebSocket, pair: str, timeframe: str):
     await websocket.accept()
-
     symbol = pair.upper().replace("/", "").replace("-", "").replace(" ", "").strip()
     if not symbol.endswith("USDT"):
         symbol += "USDT"
-
-    channel = f"{{symbol}}:{{timeframe}}"
-
+    channel = f"{symbol}:{timeframe}"
     if channel not in single_subscribers:
         single_subscribers[channel] = set()
     single_subscribers[channel].add(websocket)
 
-    sig = shared_signals.get(timeframe, {{}}).get(symbol)
+    sig = shared_signals.get(timeframe, {}).get(symbol)
     if sig:
         try:
             await websocket.send_json(sig)
@@ -126,25 +107,21 @@ async def ws_signal(websocket: WebSocket, pair: str, timeframe: str):
         while True:
             await asyncio.sleep(15)
             try:
-                await websocket.send_json({{"heartbeat": True, "time": datetime.now().strftime("%H:%M:%S")}})
+                await websocket.send_json({"heartbeat": True, "time": datetime.now().strftime("%H:%M:%S")})
             except:
                 break
     except WebSocketDisconnect:
         pass
     finally:
-        if channel in single_subscribers:
-            single_subscribers[channel].discard(websocket)
+        single_subscribers.get(channel, set()).discard(websocket)
 
-
-@app.websocket("/ws/all/{{timeframe}}")
+@app.websocket("/ws/all/{timeframe}")
 async def ws_all(websocket: WebSocket, timeframe: str):
     supported = ["5m", "15m", "1h", "4h"]
     if timeframe not in supported:
         await websocket.close(code=1008)
         return
-
     await websocket.accept()
-
     if timeframe not in all_subscribers:
         all_subscribers[timeframe] = set()
     all_subscribers[timeframe].add(websocket)
@@ -158,23 +135,20 @@ async def ws_all(websocket: WebSocket, timeframe: str):
         while True:
             await asyncio.sleep(30)
             try:
-                await websocket.send_json({{"ping": True}})
+                await websocket.send_json({"ping": True})
             except:
                 break
     except WebSocketDisconnect:
         pass
     finally:
-        if timeframe in all_subscribers:
-            all_subscribers[timeframe].discard(websocket)
-
+        all_subscribers.get(timeframe, set()).discard(websocket)
 
 @app.websocket("/ws/pump_radar")
 async def ws_pump(websocket: WebSocket):
     await websocket.accept()
     pump_radar_subscribers.add(websocket)
-
     try:
-        await websocket.send_json({{"top_gainers": top_gainers[:8], "last_update": last_update}})
+        await websocket.send_json({"top_gainers": top_gainers[:8], "last_update": last_update})
     except:
         pass
 
@@ -182,7 +156,7 @@ async def ws_pump(websocket: WebSocket):
         while True:
             await asyncio.sleep(20)
             try:
-                await websocket.send_json({{"ping": True}})
+                await websocket.send_json({"ping": True})
             except:
                 break
     except WebSocketDisconnect:
@@ -190,12 +164,10 @@ async def ws_pump(websocket: WebSocket):
     finally:
         pump_radar_subscribers.discard(websocket)
 
-
 @app.websocket("/ws/realtime_price")
 async def ws_realtime_price(websocket: WebSocket):
     await websocket.accept()
     realtime_subscribers.add(websocket)
-
     try:
         while True:
             try:
@@ -208,7 +180,6 @@ async def ws_realtime_price(websocket: WebSocket):
     finally:
         realtime_subscribers.discard(websocket)
 
-
 # ==================== SAYFALAR ====================
 @app.get("/", response_class=HTMLResponse)
 async def home(request: Request):
@@ -219,7 +190,7 @@ async def home(request: Request):
 <html lang="tr">
 <head>
     <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width,initial-scale=1.0,maximum-scale=1.0,user-scalable=no">
+    <meta name="viewport" content="width=device-width,initial-scale=1.0">
     <title>ICT SMART PRO</title>
     <style>
         body {{background: linear-gradient(135deg, #0a0022, #1a0033, #000);color:#fff;font-family:system-ui;margin:0;display:flex;flex-direction:column;min-height:100vh;}}
@@ -251,34 +222,33 @@ async def home(request: Request):
     </div>
     <script>
         const ws = new WebSocket((location.protocol === 'https:' ? 'wss' : 'ws') + '://' + location.host + '/ws/pump_radar');
-        ws.onmessage = e => {{
+        ws.onmessage = e => {
             const data = JSON.parse(e.data);
             if (data.ping) return;
-            if (data.last_update) document.getElementById('update').innerHTML = `🔄 Son Güncelleme: <strong>${{data.last_update}}</strong>`;
+            document.getElementById('update').innerHTML = data.last_update ? `🔄 Son Güncelleme: <strong>${data.last_update}</strong>` : '⏳ Yükleniyor...';
             const tbody = document.getElementById('table-body');
-            if (!data.top_gainers || data.top_gainers.length === 0) {{
+            if (!data.top_gainers || data.top_gainers.length === 0) {
                 tbody.innerHTML = '<tr><td colspan="4" style="text-align:center;padding:50px;color:#ffd700">😴 Aktif pump yok</td></tr>';
                 return;
-            }}
+            }
             tbody.innerHTML = data.top_gainers.map((c,i) => `
                 <tr>
-                    <td><strong>#${{i+1}}</strong></td>
-                    <td><strong>${{c.symbol}}</strong></td>
-                    <td>$${{c.price.toFixed(4)}}</td>
-                    <td class="${{c.change > 0 ? 'green' : 'red'}}">${{c.change > 0 ? '↗ +' : '↘ '}}${{Math.abs(c.change).toFixed(2)}}%</td>
+                    <td><strong>#${i+1}</strong></td>
+                    <td><strong>${c.symbol}</strong></td>
+                    <td>$${c.price.toFixed(4)}</td>
+                    <td class="${c.change > 0 ? 'green' : 'red'}">${c.change > 0 ? '↗ +' : '↘ '}${Math.abs(c.change).toFixed(2)}%</td>
                 </tr>
             `).join('');
-        }};
+        };
         ws.onclose = () => setTimeout(() => location.reload(), 3000);
     </script>
 </body>
 </html>""")
 
-
 @app.get("/signal", response_class=HTMLResponse)
 async def signal(request: Request):
-    user = request.cookies.get("user_email") or "Misafir"
-    if user == "Misafir":
+    user = request.cookies.get("user_email")
+    if not user:
         return RedirectResponse("/login")
 
     visitor_stats_html = get_visitor_stats_html()
@@ -287,7 +257,7 @@ async def signal(request: Request):
 <html lang="tr">
 <head>
     <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width,initial-scale=1.0,maximum-scale=1.0,user-scalable=no">
+    <meta name="viewport" content="width=device-width,initial-scale=1.0">
     <title>CANLI SİNYAL | ICT SMART PRO</title>
     <style>
         :root {{--p:#00dbde;--s:#fc00ff;--g:#00ff88;--r:#ff4444;--w:#ffd700;--bg:#0a0022;}}
@@ -342,21 +312,19 @@ async def signal(request: Request):
         let ws = null;
         let tvWidget = null;
 
-        function getSymbol() {{
+        function getSymbol() {
             let p = document.getElementById('pair').value.trim().toUpperCase();
             if (!p.endsWith("USDT")) p += "USDT";
             document.getElementById('pair').value = p;
             return "BINANCE:" + p;
-        }}
+        }
 
-        function createWidget() {{
+        function createWidget() {
             if (tvWidget) tvWidget.remove();
-            const symbol = getSymbol();
-            const tf = document.getElementById('tf').value;
-            tvWidget = new TradingView.widget({{
+            tvWidget = new TradingView.widget({
                 autosize: true,
-                symbol: symbol,
-                interval: tf === "1d" ? "D" : tf,
+                symbol: getSymbol(),
+                interval: document.getElementById('tf').value === "1d" ? "D" : document.getElementById('tf').value,
                 timezone: "Etc/UTC",
                 theme: "dark",
                 style: "1",
@@ -364,24 +332,24 @@ async def signal(request: Request):
                 toolbar_bg: "#0a0022",
                 container_id: "tradingview_widget",
                 studies: ["RSI@tv-basicstudies", "MACD@tv-basicstudies", "Volume@tv-basicstudies"]
-            }});
-        }}
+            });
+        }
 
-        function updatePriceDisplay(price) {{
+        function updatePriceDisplay(price) {
             document.getElementById('price-text').textContent = '$' + price.toFixed(price >= 1 ? 4 : 6);
-        }}
+        }
 
-        function connect() {{
+        function connect() {
             if (ws) ws.close();
             const symbol = document.getElementById('pair').value.trim().toUpperCase();
             const tf = document.getElementById('tf').value;
             const fullSymbol = symbol.endsWith("USDT") ? symbol : symbol + "USDT";
-            document.getElementById('status').innerHTML = `🔗 ${{fullSymbol}} ${{tf}} bağlantı kuruluyor...`;
+            document.getElementById('status').innerHTML = `🔗 ${fullSymbol} ${tf} bağlantı kuruluyor...`;
             createWidget();
-            const wsUrl = `${{location.protocol === 'https:' ? 'wss' : 'ws'}}://${{location.host}}/ws/signal/${{fullSymbol}}/${{tf}}`;
-            ws = new WebSocket(wsUrl);
+            const protocol = location.protocol === 'https:' ? 'wss' : 'ws';
+            ws = new WebSocket(`${protocol}://${location.host}/ws/signal/${fullSymbol}/${tf}`);
             ws.onopen = () => document.getElementById('status').innerHTML = `✅ Canlı sinyal başladı!`;
-            ws.onmessage = e => {{
+            ws.onmessage = e => {
                 const data = JSON.parse(e.data);
                 if (data.heartbeat) return;
                 const card = document.getElementById('signal-card');
@@ -389,35 +357,29 @@ async def signal(request: Request):
                 const details = document.getElementById('signal-details');
                 text.textContent = data.signal ? data.signal : "NÖTR";
                 details.innerHTML = `
-                    <strong>${{data.pair ? data.pair : fullSymbol.replace('USDT','/USDT')}}</strong><br>
-                    ⚡ Skor: <strong>${{data.score ? data.score : 0}}/100</strong><br>
-                    💰 Fiyat: <strong>${{data.current_price ? '$' + Number(data.current_price).toFixed(data.current_price >= 1 ? 4 : 6) : '$0.0000'}}</strong><br>
-                    🎯 Killzone: <strong>${{data.killzone ? data.killzone : 'Normal'}}</strong><br>
-                    🕒 ${{data.last_update ? data.last_update : 'Şimdi'}}<br>
-                    <small>${{data.triggers ? data.triggers : 'Analiz ediliyor'}}</small>
+                    <strong>${data.pair ? data.pair : fullSymbol.replace('USDT','/USDT')}</strong><br>
+                    ⚡ Skor: <strong>${data.score ? data.score : 0}/100</strong><br>
+                    💰 Fiyat: <strong>${data.current_price ? '$' + Number(data.current_price).toFixed(data.current_price >= 1 ? 4 : 6) : '$0.0000'}</strong><br>
+                    🎯 Killzone: <strong>${data.killzone ? data.killzone : 'Normal'}</strong><br>
+                    🕒 ${data.last_update ? data.last_update : 'Şimdi'}<br>
+                    <small>${data.triggers ? data.triggers : 'Analiz ediliyor'}</small>
                 `;
-                card.className = "signal-card " + (
-                    data.signal && (data.signal.includes("ALIM") || data.signal.includes("LONG")) ? "green" :
-                    data.signal && (data.signal.includes("SATIM") || data.signal.includes("SHORT")) ? "red" :
-                    ""
-                );
+                card.className = data.signal && (data.signal.includes("ALIM") || data.signal.includes("LONG")) ? "green" : 
+                                 data.signal && (data.signal.includes("SATIM") || data.signal.includes("SHORT")) ? "red" : "";
                 if (data.current_price) updatePriceDisplay(data.current_price);
-            }};
+            };
             ws.onclose = () => document.getElementById('status').innerHTML = '🔌 Bağlantı kesildi. Yeniden bağlanılıyor...';
-        }}
+        }
 
-        document.addEventListener("DOMContentLoaded", () => {{
-            createWidget();
-        }});
+        document.addEventListener("DOMContentLoaded", createWidget);
     </script>
 </body>
 </html>""")
 
-
 @app.get("/signal/all", response_class=HTMLResponse)
 async def signal_all(request: Request):
-    user = request.cookies.get("user_email") or "Misafir"
-    if user == "Misafir":
+    user = request.cookies.get("user_email")
+    if not user:
         return RedirectResponse("/login")
 
     visitor_stats_html = get_visitor_stats_html()
@@ -426,7 +388,7 @@ async def signal_all(request: Request):
 <html lang="tr">
 <head>
     <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width,initial-scale=1.0,maximum-scale=1.0,user-scalable=no">
+    <meta name="viewport" content="width=device-width,initial-scale=1.0">
     <title>TÜM COİNLER | ICT SMART PRO</title>
     <style>
         :root {{--bg:#0a0022;--card:rgba(255,255,255,0.05);--p:#00dbde;--s:#fc00ff;--g:#00ff88;--r:#ff4444;--w:#ffd700;}}
@@ -479,75 +441,72 @@ async def signal_all(request: Request):
         let ws = null;
         let currentTf = "5m";
 
-        function getScoreClass(score) {{
+        function getScoreClass(score) {
             if (score >= 90) return "score-elite";
             if (score >= 75) return "score-high";
             if (score >= 50) return "score-medium";
             return "score-low";
-        }}
+        }
 
-        function getSignalClass(signal) {{
+        function getSignalClass(signal) {
             if (!signal) return "signal-neutral";
             if (signal.includes("ALIM") || signal.includes("LONG")) return "signal-buy";
             if (signal.includes("SATIM") || signal.includes("SHORT")) return "signal-sell";
             return "signal-neutral";
-        }}
+        }
 
-        function renderSignals(signals) {{
+        function renderSignals(signals) {
             const container = document.getElementById('signal-container');
-            if (!signals || signals.length === 0) {{
+            if (!signals || signals.length === 0) {
                 container.innerHTML = '<div class="no-signals">😴 Şu anda aktif güçlü sinyal yok</div>';
                 return;
-            }}
+            }
             signals.sort((a,b) => b.score - a.score);
             container.innerHTML = signals.map(sig => `
                 <div class="signal-card">
                     <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:15px;">
-                        <div class="coin-name">${{sig.pair || sig.symbol}}</div>
-                        <div style="font-size:0.9rem;color:#aaa;background:rgba(0,0,0,0.3);padding:5px 12px;border-radius:20px;">${{sig.timeframe || currentTf.toUpperCase()}}</div>
+                        <div class="coin-name">${sig.pair ? sig.pair : sig.symbol}</div>
+                        <div style="font-size:0.9rem;color:#aaa;background:rgba(0,0,0,0.3);padding:5px 12px;border-radius:20px;">${sig.timeframe ? sig.timeframe : currentTf.toUpperCase()}</div>
                     </div>
-                    <div class="signal-text ${{getSignalClass(sig.signal)}}">${{sig.signal || 'NÖTR'}}</div>
+                    <div class="signal-text ${getSignalClass(sig.signal)}">${sig.signal ? sig.signal : 'NÖTR'}</div>
                     <div class="score-bar">
-                        <div class="score-fill ${{getScoreClass(sig.score)}}" style="width:${{sig.score}}%"></div>
+                        <div class="score-fill ${getScoreClass(sig.score)}" style="width:${sig.score}%"></div>
                     </div>
                     <div style="text-align:center;margin:10px 0;font-size:1.1rem;">
-                        <strong>${{sig.score}}/100</strong> • ${{sig.strength || 'ORTA'}}
+                        <strong>${sig.score}/100</strong> • ${sig.strength ? sig.strength : 'ORTA'}
                     </div>
                     <div class="details">
-                        <div class="detail-row"><span style="color:#aaa">Fiyat:</span><span>$${{parseFloat(sig.current_price || 0).toFixed(sig.current_price >= 1 ? 4 : 6)}}</span></div>
-                        <div class="detail-row"><span style="color:#aaa">Killzone:</span><span>${{sig.killzone || 'Normal'}}</span></div>
-                        <div class="detail-row"><span style="color:#aaa">Tetik:</span><span>${{sig.triggers || '-'}}</span></div>
-                        <div class="detail-row"><span style="color:#aaa">Güncelleme:</span><span>${{sig.last_update || 'Şimdi'}}</span></div>
+                        <div class="detail-row"><span style="color:#aaa">Fiyat:</span><span>$${sig.current_price ? Number(sig.current_price).toFixed(sig.current_price >= 1 ? 4 : 6) : '0.0000'}</span></div>
+                        <div class="detail-row"><span style="color:#aaa">Killzone:</span><span>${sig.killzone ? sig.killzone : 'Normal'}</span></div>
+                        <div class="detail-row"><span style="color:#aaa">Tetik:</span><span>${sig.triggers ? sig.triggers : '-'}</span></div>
+                        <div class="detail-row"><span style="color:#aaa">Güncelleme:</span><span>${sig.last_update ? sig.last_update : 'Şimdi'}</span></div>
                     </div>
                 </div>
             `).join('');
-        }}
+        }
 
-        function connect() {{
+        function connect() {
             const tf = document.getElementById('tf').value;
             currentTf = tf;
-            document.getElementById('status').innerHTML = `📡 ${{tf.toUpperCase()}} sinyalleri yükleniyor...`;
+            document.getElementById('status').innerHTML = `📡 ${tf.toUpperCase()} sinyalleri yükleniyor...`;
             if (ws) ws.close();
-            const wsUrl = `${{location.protocol === 'https:' ? 'wss' : 'ws'}}://${{location.host}}/ws/all/${{tf}}`;
-            ws = new WebSocket(wsUrl);
-            ws.onopen = () => document.getElementById('status').innerHTML = `✅ ${{tf.toUpperCase()}} akışı başladı!`;
-            ws.onmessage = e => {{
-                try {{
+            const protocol = location.protocol === 'https:' ? 'wss' : 'ws';
+            ws = new WebSocket(`${protocol}://${location.host}/ws/all/${tf}`);
+            ws.onopen = () => document.getElementById('status').innerHTML = `✅ ${tf.toUpperCase()} akışı başladı!`;
+            ws.onmessage = e => {
+                try {
                     const data = JSON.parse(e.data);
                     if (data.ping) return;
                     renderSignals(data);
-                }} catch (err) {{ console.error(err); }}
-            }};
+                } catch {}
+            };
             ws.onclose = () => setTimeout(connect, 3000);
-        }}
+        }
 
-        document.addEventListener('DOMContentLoaded', () => {{
-            setTimeout(connect, 800);
-        }});
+        document.addEventListener('DOMContentLoaded', () => setTimeout(connect, 800));
     </script>
 </body>
 </html>""")
-
 
 @app.get("/login", response_class=HTMLResponse)
 async def login_page():
@@ -576,7 +535,6 @@ async def login_page():
 </body>
 </html>""")
 
-
 @app.post("/login")
 async def login(request: Request):
     form = await request.form()
@@ -587,14 +545,10 @@ async def login(request: Request):
         return resp
     return RedirectResponse("/login")
 
-
 @app.get("/health")
 async def health():
-    return {{"status": "ok", "time": datetime.now().isoformat()}}
-
+    return {"status": "ok", "time": datetime.now().isoformat()}
 
 if __name__ == "__main__":
     import uvicorn
-    port = int(os.getenv("PORT", 8000))
-    logger.info(f"🚀 Sunucu http://0.0.0.0:{port} adresinde başlatılıyor...")
-    uvicorn.run("main:app", host="0.0.0.0", port=port, log_level="info", reload=False)
+    uvicorn.run("main:app", host="0.0.0.0", port=int(os.getenv("PORT", 8000)), log_level="info")
