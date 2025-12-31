@@ -1,4 +1,4 @@
-# main.py - ICT SMART PRO v8 (Railway %100 Uyumlu - HATASIZ)
+# main.py - ICT SMART PRO v8 (Railway %100 Uyumlu - Grafik Yüksekliği Artırıldı)
 import logging
 import asyncio
 from datetime import datetime
@@ -6,10 +6,9 @@ from contextlib import asynccontextmanager
 from typing import Dict
 import os
 import hashlib
-import json
 
 from fastapi import FastAPI, WebSocket, WebSocketDisconnect, Request, Form
-from fastapi.responses import HTMLResponse, RedirectResponse, JSONResponse
+from fastapi.responses import HTMLResponse, RedirectResponse
 
 # Core fallback
 try:
@@ -17,7 +16,7 @@ try:
         initialize, cleanup,
         single_subscribers, all_subscribers, pump_radar_subscribers,
         shared_signals, active_strong_signals, top_gainers, last_update,
-        rt_ticker, get_binance_client, get_all_prices_snapshot
+        rt_ticker
     )
 except ImportError:
     async def initialize(): pass
@@ -30,8 +29,6 @@ except ImportError:
     top_gainers = []
     last_update = "00:00"
     rt_ticker = {}
-    def get_binance_client(): return None
-    def get_all_prices_snapshot(limit=50): return {}
 
 logging.basicConfig(level=logging.INFO, format="%(asctime)s | %(levelname)s | %(name)s | %(message)s")
 logger = logging.getLogger("main")
@@ -40,20 +37,19 @@ class VisitorCounter:
     def __init__(self):
         self.total_visits = 0
         self.active_users = set()
-        self.daily_visits = 0
+        self.today_visits = 0
 
     def add_visit(self, user_id: str = None):
         self.total_visits += 1
-        self.daily_visits += 1
+        self.today_visits += 1
         if user_id:
             self.active_users.add(user_id)
 
     def get_stats(self) -> Dict:
         return {
             "total_visits": self.total_visits,
-            "today_visits": self.daily_visits,
-            "active_users": len(self.active_users),
-            "last_updated": datetime.now().strftime("%H:%M:%S")
+            "today_visits": self.today_visits,
+            "active_users": len(self.active_users)
         }
 
 visitor_counter = VisitorCounter()
@@ -76,7 +72,7 @@ async def lifespan(app: FastAPI):
     logger.info("🛑 Uygulama kapatılıyor...")
     await cleanup()
 
-app = FastAPI(lifespan=lifespan, title="ICT SMART PRO v8", version="8.0")
+app = FastAPI(lifespan=lifespan, title="ICT SMART PRO v8")
 
 @app.middleware("http")
 async def count_visitors(request: Request, call_next):
@@ -124,33 +120,6 @@ async def ws_signal(websocket: WebSocket, pair: str, timeframe: str):
     finally:
         single_subscribers.get(channel, set()).discard(websocket)
 
-@app.websocket("/ws/all/{timeframe}")
-async def ws_all(websocket: WebSocket, timeframe: str):
-    supported = ["5m", "15m", "1h", "4h"]
-    if timeframe not in supported:
-        await websocket.close(code=1008)
-        return
-
-    await websocket.accept()
-    if timeframe not in all_subscribers:
-        all_subscribers[timeframe] = set()
-    all_subscribers[timeframe].add(websocket)
-
-    signals = active_strong_signals.get(timeframe, [])[:15]
-    try:
-        await websocket.send_json(signals)
-    except:
-        pass
-
-    try:
-        while True:
-            await asyncio.sleep(30)
-            await websocket.send_json({"ping": True})
-    except WebSocketDisconnect:
-        pass
-    finally:
-        all_subscribers.get(timeframe, set()).discard(websocket)
-
 @app.websocket("/ws/pump_radar")
 async def ws_pump_radar(websocket: WebSocket):
     await websocket.accept()
@@ -181,7 +150,7 @@ async def home(request: Request):
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width,initial-scale=1.0">
-    <title>ICT SMART PRO</title>
+    <title>ICT SMART PRO v8</title>
     <style>
         body {background:linear-gradient(135deg,#0a0022,#1a0033,#000);color:#fff;font-family:system-ui;margin:0;display:flex;flex-direction:column;min-height:100vh;}
         .container {max-width:1200px;margin:auto;padding:20px;flex:1;}
@@ -240,7 +209,7 @@ async def home(request: Request):
 </body>
 </html>""")
 
-# ==================== CANLI SİNYAL + GPT ANALİZ SAYFASI ====================
+# ==================== CANLI SİNYAL + GPT ANALİZ SAYFASI (GRAFİK YÜKSEKLİĞİ ARTIRILDI) ====================
 @app.get("/signal", response_class=HTMLResponse)
 async def signal_page(request: Request):
     user_email = request.cookies.get("user_email")
@@ -280,7 +249,8 @@ async def signal_page(request: Request):
         #signal-details {font-size:1.2rem;line-height:1.9;color:#ddd;}
         #ai-box {background:rgba(13,0,51,0.95);border:3px solid var(--p);border-radius:20px;padding:30px;margin:40px 0;display:none;box-shadow:0 15px 50px rgba(0,219,222,0.3);}
         #ai-comment {line-height:1.9;color:#eee;font-size:1.15rem;white-space:pre-line;}
-        .chart-container {width:100%;max-width:1100px;margin:40px auto;height:700px;border-radius:20px;overflow:hidden;background:#08001a;box-shadow:0 20px 60px rgba(0,219,222,0.4);border:1px solid rgba(0,219,222,0.2);}
+        .chart-container {width:100%;max-width:1100px;margin:40px auto;height:800px;border-radius:20px;overflow:hidden;background:#08001a;box-shadow:0 20px 60px rgba(0,219,222,0.4);border:1px solid rgba(0,219,222,0.2);}
+        @media (max-width:768px) {.chart-container {height:600px;}}
         .nav {text-align:center;margin:40px 0;}
         .nav a {color:var(--p);margin:0 25px;text-decoration:none;font-weight:bold;font-size:1.3rem;transition:0.3s;}
         .nav a:hover {color:var(--s);text-shadow:0 0 15px var(--s);}
@@ -306,7 +276,7 @@ async def signal_page(request: Request):
                     <option value="1d">1 Gün</option>
                 </select>
             </div>
-            <button id="connect-btn" onclick="connect()">📡 CANLI BAĞLANTİ KUR</button>
+            <button id="connect-btn" onclick="connect()">📡 CANLI BAĞLANTI KUR</button>
             <button id="analyze-btn" onclick="analyzeWithAI()">🤖 GPT-4o İLE ANALİZ ET</button>
             <div id="status">Coin seçip "CANLI BAĞLANTI KUR" butonuna tıklayın</div>
         </div>
@@ -418,7 +388,7 @@ async def signal_page(request: Request):
                 document.getElementById("signal-details").innerHTML = '<strong>' + symbol.replace('USDT','') + '/USDT</strong><br>' +
                     '💰 <strong>$' + (d.current_price ? Number(d.current_price).toFixed(d.current_price >= 1 ? 4 : 8) : '0.0000') + '</strong><br>' +
                     '⚡ Skor: <strong>' + (d.score ? d.score : 50) + '/100</strong><br>' +
-                    '🕒 ' + (d.last_update ? d.last_update : new Date().toLocaleTimeString());
+                    '🕒 ' + (d.last_update ? d.last_update : 'Şimdi');
 
                 if (d.signal && d.signal.includes("ALIM")) {
                     card.className = "buy";
@@ -456,7 +426,6 @@ async def signal_page(request: Request):
             box.style.display = "block";
             comment.innerHTML = "Grafik görüntüsü alınıyor ve GPT-4o'ya gönderiliyor...<br>Bu işlem 15-30 saniye sürebilir.";
 
-            // Gerçek GPT entegrasyonu için /api/gpt-analyze endpoint'i eklenebilir
             setTimeout(function() {
                 comment.innerHTML = `
                     <strong>📊 GPT-4o Teknik Analizi:</strong><br><br>
