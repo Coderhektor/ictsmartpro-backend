@@ -9,6 +9,37 @@ import ccxt.async_support as ccxt_async
 import pandas as pd
 
 from fastapi import WebSocket
+from threading import Lock
+from datetime import datetime
+import asyncio
+
+# Global thread-safe price pool
+price_pool = {}
+price_pool_lock = Lock()
+
+def update_price(source: str, symbol: str, price: float, change_24h: float = None):
+    """Tüm borsalardan gelen fiyatları güvenli şekilde güncelle"""
+    with price_pool_lock:
+        if symbol not in price_pool:
+            price_pool[symbol] = {}
+        
+        price_pool[symbol][source] = {
+            "price": price,
+            "change_24h": change_24h,
+            "timestamp": datetime.utcnow().isoformat()
+        }
+        
+        # En iyi fiyatı hesapla (örneğin ortalama veya en güncel)
+        prices = [v["price"] for v in price_pool[symbol].values() if v["price"] > 0]
+        if prices:
+            price_pool[symbol]["best_price"] = sum(prices) / len(prices)
+            price_pool[symbol]["sources"] = list(price_pool[symbol].keys())
+            price_pool[symbol]["updated"] = datetime.utcnow().isoformat()
+
+def get_price(symbol: str) -> dict:
+    """Sinyal üretiminde kullanılacak fiyat bilgisini dön"""
+    with price_pool_lock:
+        return price_pool.get(symbol, {})
 
 logger = logging.getLogger("core")
 logger.setLevel(logging.INFO)
