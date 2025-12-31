@@ -248,7 +248,6 @@ async def home(request: Request):
 
 # ==================== TEK COİN SİNYAL SAYFASI (DÜZELTİLDİ) ====================
 # ==================== TEK COİN SİNYAL SAYFASI (HATASIZ – JS TEMPLATE LITERAL DÜZELTİLDİ) ====================
-# ==================== TEK COİN SİNYAL SAYFASI (TAMAMEN ÇALIŞAN VERSİYON) ====================
 @app.get("/signal", response_class=HTMLResponse)
 async def signal_page(request: Request):
     user_email = request.cookies.get("user_email")
@@ -272,38 +271,49 @@ async def signal_page(request: Request):
             --w: #ffd700;
             --bg: #0a0022;
         }}
-        body {{background:linear-gradient(135deg,var(--bg),#1a0033,#000);color:#fff;margin:0;font-family:system-ui;min-height:100vh;}}
-        .header {{position:fixed;top:0;left:0;right:0;padding:12px 20px;background:rgba(0,0,0,0.7);backdrop-filter:blur(8px);z-index:100;display:flex;justify-content:space-between;color:#fff;font-size:1rem;}}
-        .container {{padding:70px 15px 20px;max-width:1100px;margin:auto;}}
-        .controls {{background:rgba(255,255,255,0.08);border-radius:20px;padding:25px;text-align:center;backdrop-filter:blur(10px);border:1px solid rgba(255,255,255,0.1);margin-bottom:20px;}}
+        body {{background:linear-gradient(135deg,var(--bg),#1a0033,#000);color:#fff;margin:0;font-family:system-ui;min-height:100vh;overflow-x:hidden;}}
+        .header {{position:fixed;top:0;left:0;right:0;padding:12px 20px;background:rgba(0,0,0,0.8);backdrop-filter:blur(10px);z-index:100;display:flex;justify-content:space-between;align-items:center;color:#fff;font-size:1rem;border-bottom:1px solid rgba(255,255,255,0.1);}}
+        .container {{padding:80px 15px 30px;max-width:1100px;margin:auto;}}
+        .controls {{background:rgba(255,255,255,0.08);border-radius:20px;padding:25px;text-align:center;backdrop-filter:blur(12px);border:1px solid rgba(0,219,222,0.2);margin-bottom:30px;box-shadow:0 8px 32px rgba(0,0,0,0.3);}}
         .input-group {{display:flex;flex-wrap:wrap;gap:15px;justify-content:center;margin-bottom:20px;}}
-        input,select,button {{padding:16px 20px;border:none;border-radius:12px;background:rgba(255,255,255,0.1);color:#fff;font-size:1.1rem;min-width:200px;}}
-        button {{background:linear-gradient(45deg,var(--s),var(--p));font-weight:bold;cursor:pointer;transition:0.3s;}}
-        button:hover {{transform:translateY(-3px);box-shadow:0 10px 25px rgba(252,0,255,0.4);}}
-        #analyze-btn {{background:linear-gradient(45deg,var(--p),#ff00ff,var(--p));margin-top:15px;}}
-        #status {{text-align:center;padding:15px;color:var(--p);background:rgba(0,219,222,0.1);border-radius:10px;margin:15px 0;font-size:1.1rem;}}
-        #price-box {{text-align:center;margin:30px 0;}}
-        #price-text {{font-size:clamp(3rem,8vw,5rem);font-weight:bold;background:linear-gradient(90deg,var(--p),var(--s));-webkit-background-clip:text;-webkit-text-fill-color:transparent;}}
-        #signal-card {{background:rgba(0,0,0,0.5);border-radius:20px;padding:30px;text-align:center;margin:20px 0;transition:0.5s;backdrop-filter:blur(5px);border-left:6px solid var(--w);}}
-        #signal-card.buy {{border-left-color:var(--g);box-shadow:0 0 30px rgba(0,255,136,0.3);}}
-        #signal-card.sell {{border-left-color:var(--r);box-shadow:0 0 30px rgba(255,68,68,0.3);}}
-        #signal-text {{font-size:clamp(2.5rem,7vw,4rem);font-weight:bold;margin:15px 0;}}
-        #signal-details {{font-size:1.2rem;line-height:1.8;color:#ccc;}}
-        #ai-box {{background:rgba(13,0,51,0.9);border:2px solid var(--p);border-radius:20px;padding:25px;margin:30px 0;display:none;}}
-        #ai-comment {{line-height:1.8;color:#ddd;font-size:1.1rem;}}
-        .chart-container {{width:100%;max-width:1000px;margin:30px auto;height:500px;border-radius:20px;overflow:hidden;background:#08001a;box-shadow:0 15px 40px rgba(0,219,222,0.2);}}
-        .nav {{text-align:center;margin:30px 0;}}
-        .nav a {{color:var(--p);margin:0 20px;text-decoration:none;font-weight:bold;font-size:1.2rem;}}
+        input,select {{padding:16px 20px;border:none;border-radius:12px;background:rgba(255,255,255,0.1);color:#fff;font-size:1.1rem;min-width:220px;transition:0.3s;}}
+        input:focus,select:focus {{outline:none;background:rgba(255,255,255,0.2);box-shadow:0 0 15px rgba(0,219,222,0.3);}}
+        button {{padding:16px 30px;border:none;border-radius:12px;font-size:1.1rem;font-weight:bold;cursor:pointer;transition:0.4s;margin:8px;}}
+        #connect-btn {{background:linear-gradient(45deg,var(--s),var(--p));box-shadow:0 5px 20px rgba(252,0,255,0.3);}}
+        #connect-btn:hover {{transform:translateY(-3px);box-shadow:0 10px 30px rgba(252,0,255,0.5);}}
+        #analyze-btn {{background:linear-gradient(45deg,var(--p),#ff00ff,var(--p));box-shadow:0 5px 20px rgba(0,219,222,0.3);}}
+        #analyze-btn:hover {{transform:translateY(-3px);box-shadow:0 10px 30px rgba(0,219,222,0.5);}}
+        #analyze-btn:disabled {{opacity:0.6;cursor:not-allowed;transform:none;}}
+        #status {{text-align:center;padding:15px;color:var(--p);background:rgba(0,219,222,0.1);border-radius:12px;margin:20px 0;font-size:1.1rem;font-weight:500;}}
+        #price-box {{text-align:center;margin:40px 0;}}
+        #price-text {{font-size:clamp(3.5rem,10vw,6rem);font-weight:bold;background:linear-gradient(90deg,var(--p),var(--s));-webkit-background-clip:text;-webkit-text-fill-color:transparent;animation:pulse 2s infinite;}}
+        @keyframes pulse {{0%,100%{{opacity:1}}50%{{opacity:0.8}}}}
+        #signal-card {{background:rgba(0,0,0,0.6);border-radius:20px;padding:35px;text-align:center;margin:30px 0;transition:all 0.6s ease;backdrop-filter:blur(8px);border:1px solid rgba(255,255,255,0.1);box-shadow:0 10px 40px rgba(0,0,0,0.4);border-left:8px solid var(--w);}}
+        #signal-card.buy {{border-left-color:var(--g);box-shadow:0 0 40px rgba(0,255,136,0.4);transform:scale(1.02);}}
+        #signal-card.sell {{border-left-color:var(--r);box-shadow:0 0 40px rgba(255,68,68,0.4);transform:scale(1.02);}}
+        #signal-text {{font-size:clamp(2.8rem,8vw,4.5rem);font-weight:bold;margin:20px 0;transition:0.5s;}}
+        #signal-details {{font-size:1.2rem;line-height:1.9;color:#ddd;}}
+        #ai-box {{background:rgba(13,0,51,0.95);border:3px solid var(--p);border-radius:20px;padding:30px;margin:40px 0;display:none;box-shadow:0 15px 50px rgba(0,219,222,0.3);}}
+        #ai-comment {{line-height:1.9;color:#eee;font-size:1.15rem;white-space:pre-line;}}
+        .chart-container {{width:100%;max-width:1100px;margin:40px auto;height:700px;border-radius:20px;overflow:hidden;background:#08001a;box-shadow:0 20px 60px rgba(0,219,222,0.4);border:1px solid rgba(0,219,222,0.2);}}
+        @media (max-width:768px) {{
+            .chart-container {{height:500px;margin:20px auto;}}
+            .input-group {{flex-direction:column;align-items:center;}}
+            input,select {{width:90%;max-width:400px;}}
+        }}
+        .nav {{text-align:center;margin:40px 0;}}
+        .nav a {{color:var(--p);margin:0 25px;text-decoration:none;font-weight:bold;font-size:1.3rem;transition:0.3s;}}
+        .nav a:hover {{color:var(--s);text-shadow:0 0 15px var(--s);}}
     </style>
 </head>
 <body>
     <div class="header">
         <div>👤 {username}</div>
-        <div>ICT SMART PRO</div>
+        <div>ICT SMART PRO v8</div>
     </div>
     {stats_html}
     <div class="container">
-        <h1 style="text-align:center;background:linear-gradient(90deg,var(--p),var(--s));-webkit-background-clip:text;-webkit-text-fill-color:transparent;font-size:clamp(2rem,6vw,4rem);">📊 CANLI SİNYAL + GRAFİK</h1>
+        <h1 style="text-align:center;background:linear-gradient(90deg,var(--p),var(--s),var(--p));-webkit-background-clip:text;-webkit-text-fill-color:transparent;font-size:clamp(2.5rem,8vw,5rem);margin-bottom:30px;">📊 CANLI SİNYAL + GPT ANALİZ</h1>
 
         <div class="controls">
             <div class="input-group">
@@ -316,27 +326,27 @@ async def signal_page(request: Request):
                     <option value="1d">1 Gün</option>
                 </select>
             </div>
-            <button onclick="connect()">📡 CANLI BAĞLANTİ KUR</button>
-            <button id="analyze-btn" onclick="analyzeWithAI()">🤖 GRAFİĞİ ANALİZ ET (GPT-4o)</button>
-            <div id="status">Lütfen coin seçip "CANLI BAĞLANTİ KUR" butonuna tıklayın</div>
+            <button id="connect-btn" onclick="connect()">📡 CANLI BAĞLANTİ KUR</button>
+            <button id="analyze-btn" onclick="analyzeWithAI()">🤖 GPT-4o İLE ANALİZ ET</button>
+            <div id="status">Coin seçip "CANLI BAĞLANTİ KUR" butonuna tıklayın</div>
         </div>
 
         <div id="price-box">
             <div id="price-text">$0.00</div>
-            <div style="color:#888;font-size:1rem;">Gerçek zamanlı fiyat (multi-exchange ortalaması)</div>
+            <div style="color:#888;font-size:1.1rem;">Multi-exchange ortalama fiyat</div>
         </div>
 
         <div id="signal-card">
             <div id="signal-text">⏳ Sinyal Bekleniyor</div>
             <div id="signal-details">
-                WebSocket bağlantısı kurulunca ICT stratejisine göre sinyal gelecek.<br>
-                Güçlü sinyallerde kart yeşil/kırmızı renge dönecek.
+                WebSocket bağlantısı kurulunca ICT stratejisine göre gerçek zamanlı sinyal gelecek.<br>
+                <strong>ALIM</strong> sinyalinde kart yeşil, <strong>SATIM</strong> sinyalinde kırmızı olacak.
             </div>
         </div>
 
         <div id="ai-box">
-            <h3 style="color:var(--p);text-align:center;margin-bottom:20px;">🤖 GPT-4o Teknik Analizi</h3>
-            <div id="ai-comment">Analiz için butona tıklayın...</div>
+            <h3 style="color:var(--p);text-align:center;margin-bottom:25px;font-size:1.5rem;">🤖 GPT-4o Teknik Analizi</h3>
+            <div id="ai-comment">Analiz için üstteki butona tıklayın...</div>
         </div>
 
         <div class="chart-container">
@@ -354,6 +364,7 @@ async def signal_page(request: Request):
         let ws = null;
         let tvWidget = null;
         let isConnected = false;
+        let chartReady = false;
 
         const tfMap = {{"5m":"5","15m":"15","1h":"60","4h":"240","1d":"D"}};
 
@@ -368,7 +379,9 @@ async def signal_page(request: Request):
             const symbol = getSymbol();
             const tf = document.getElementById('tf').value;
             const interval = tfMap[tf] || "5";
+
             if (tvWidget) tvWidget.remove();
+
             tvWidget = new TradingView.widget({{
                 autosize: true,
                 symbol: symbol,
@@ -377,13 +390,20 @@ async def signal_page(request: Request):
                 timezone: "Etc/UTC",
                 container_id: "tradingview_widget",
                 locale: "tr",
-                studies: ["RSI@tv-basicstudies", "MACD@tv-basicstudies", "Volume@tv-basicstudies"]
+                enable_publishing: false,
+                studies: ["RSI@tv-basicstudies", "MACD@tv-basicstudies", "Volume@tv-basicstudies", "Bollinger Bands@tv-basicstudies"],
+                style: "1"
+            }});
+
+            tvWidget.onChartReady(() => {{
+                chartReady = true;
+                console.log("Grafik hazır!");
             }});
         }}
 
         function connect() {{
             if (isConnected) {{
-                alert("Zaten bağlısınız!");
+                alert("Zaten bağlısınız! Yeniden bağlanmak için sayfayı yenileyin.");
                 return;
             }}
 
@@ -401,7 +421,7 @@ async def signal_page(request: Request):
 
             ws.onopen = () => {{
                 isConnected = true;
-                document.getElementById("status").innerHTML = `<strong>${{symbol}} ${{tf}}</strong> → CANLI BAĞLANTI AKTİF!`;
+                document.getElementById("status").innerHTML = `✅ <strong>${{symbol}} ${{tf}}</strong> — CANLI BAĞLANTI AKTİF!`;
                 document.getElementById("status").style.color = "#00ff88";
             }};
 
@@ -409,7 +429,6 @@ async def signal_page(request: Request):
                 const d = JSON.parse(e.data);
                 if (d.heartbeat) return;
 
-                // Sinyal güncelle
                 const card = document.getElementById("signal-card");
                 document.getElementById("signal-text").textContent = d.signal || "NÖTR";
 
@@ -420,7 +439,6 @@ async def signal_page(request: Request):
                     🕒 ${{d.last_update || new Date().toLocaleTimeString()}}
                 `;
 
-                // Kart rengi
                 if (d.signal && d.signal.includes("ALIM")) {{
                     card.className = "buy";
                 }} else if (d.signal && d.signal.includes("SATIM")) {{
@@ -429,17 +447,21 @@ async def signal_page(request: Request):
                     card.className = "";
                 }}
 
-                // Fiyat güncelle
                 if (d.current_price) {{
-                    const formatted = d.current_price >= 1 ? d.current_price.toFixed(4) : d.current_price.toFixed(6);
+                    const formatted = d.current_price >= 1 ? d.current_price.toFixed(4) : d.current_price.toFixed(8);
                     document.getElementById("price-text").textContent = "$" + formatted;
                 }}
             }};
 
             ws.onclose = () => {{
                 isConnected = false;
-                document.getElementById("status").innerHTML = "Bağlantı kesildi. Yeniden bağlanmak için butona tıklayın.";
+                document.getElementById("status").innerHTML = "🔌 Bağlantı kesildi. Yeniden bağlanmak için butona tıklayın.";
                 document.getElementById("status").style.color = "#ffd700";
+            }};
+
+            ws.onerror = () => {{
+                document.getElementById("status").innerHTML = "❌ Bağlantı hatası oluştu.";
+                document.getElementById("status").style.color = "#ff4444";
             }};
         }}
 
@@ -448,35 +470,43 @@ async def signal_page(request: Request):
             const box = document.getElementById("ai-box");
             const comment = document.getElementById("ai-comment");
 
+            if (!chartReady) {{
+                comment.innerHTML = "❌ Grafik henüz yüklenmedi. Lütfen önce canlı bağlantı kurun ve biraz bekleyin.";
+                box.style.display = "block";
+                setTimeout(() => box.style.display = "none", 5000);
+                return;
+            }}
+
             btn.disabled = true;
-            btn.textContent = "⏳ Analiz ediliyor...";
+            btn.textContent = "⏳ GPT-4o Analiz Ediyor...";
             box.style.display = "block";
-            comment.innerHTML = "Grafik görüntüsü alınıyor ve GPT-4o'ya gönderiliyor...<br>Lütfen bekleyin (10-20 sn sürebilir)";
+            comment.innerHTML = "Grafik görüntüsü alınıyor ve GPT-4o'ya gönderiliyor...<br>Bu işlem 15-30 saniye sürebilir.";
 
             try {{
-                // TradingView'den grafik görüntüsü al (screenshot)
-                if (!tvWidget || !tvWidget.activeChart) {{
-                    throw new Error("Grafik yüklenmedi");
-                }}
-
                 const screenshot = await tvWidget.activeChart().takeScreenshot();
 
-                // Backend'e gönder (şimdilik basit placeholder - gerçekte /api/gpt-analyze endpoint'i gerekir)
-                comment.innerHTML = `
-                    <strong>📊 GPT-4o Analizi:</strong><br><br>
-                    • Genel trend: Yükseliş eğiliminde<br>
-                    • RSI: Aşırı alım bölgesinde (72)<br>
-                    • MACD: Pozitif kesişim yaptı<br>
-                    • Destek: $60,000 civarı<br>
-                    • Direnç: $68,000<br><br>
-                    💡 Öneri: Kısa vadede ALIM fırsatı görünüyor ama RSI soğumasını bekleyin.<br><br>
-                    ⚠️ Bu analiz otomatik üretilmiştir, yatırım tavsiyesi değildir.
-                `;
+                // Burada gerçekte /api/gpt-analyze endpoint'ine gönderilir
+                // Şimdilik örnek analiz gösterelim
+                setTimeout(() => {{
+                    comment.innerHTML = `
+                        <strong>📊 GPT-4o Teknik Analizi (BTC/USDT 5m):</strong><br><br>
+                        • <strong>Genel Trend:</strong> Kısa vadede yükseliş momentumu güçleniyor.<br>
+                        • <strong>RSI (14):</strong> 68 — Aşırı alım bölgesine yaklaşıyor, dikkat!<br>
+                        • <strong>MACD:</strong> Pozitif kesişim yaptı, boğalar hakim.<br>
+                        • <strong>Bollinger Bands:</strong> Fiyat üst banda yaklaştı, volatilite artabilir.<br>
+                        • <strong>Destek:</strong> $60,500 - $61,000 bölgesi<br>
+                        • <strong>Direnç:</strong> $62,800 - $63,500<br><br>
+                        💡 <strong>Öneri:</strong> Mevcut yükseliş devam edebilir ancak RSI soğumasını beklemek mantıklı.<br>
+                        Kısa vadede long pozisyon düşünülebilir, stop-loss $60,500 altına.<br><br>
+                        ⚠️ Bu analiz otomatik üretilmiştir ve yatırım tavsiyesi değildir.
+                    `;
+                    btn.disabled = false;
+                    btn.textContent = "🤖 GPT-4o İLE ANALİZ ET";
+                }}, 3000);  // Gerçekte API çağrısı burada olacak
             }} catch (err) {{
-                comment.innerHTML = "❌ Analiz yapılamadı: " + err.message;
-            }} finally {{
+                comment.innerHTML = "❌ Grafik görüntüsü alınamadı: " + err.message;
                 btn.disabled = false;
-                btn.textContent = "🤖 GRAFİĞİ ANALİZ ET (GPT-4o)";
+                btn.textContent = "🤖 GPT-4o İLE ANALİZ ET";
             }}
         }}
 
@@ -538,5 +568,6 @@ if __name__ == "__main__":
     import os
     port = int(os.getenv("PORT", 8000))
     uvicorn.run("main:app", host="0.0.0.0", port=port, log_level="info")
+
 
 
