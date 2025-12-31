@@ -1820,7 +1820,311 @@ async def health():
             "realtime_subscribers": len(realtime_subscribers)
         }
     }
+#==========================================================
+# main.py dosyasına ekleyin (sağlık kontrolünden sonra)
 
+# ==================== DEBUG ENDPOINTS ====================
+@app.get("/debug/websocket-status")
+async def debug_websocket_status():
+    """WebSocket durumlarını göster"""
+    from core import single_subscribers, all_subscribers, pump_radar_subscribers, realtime_subscribers
+    
+    # Single subscribers detayları
+    single_details = {}
+    for channel, subscribers in single_subscribers.items():
+        if subscribers:
+            single_details[channel] = len(subscribers)
+    
+    # All subscribers detayları
+    all_details = {}
+    for timeframe, subscribers in all_subscribers.items():
+        if subscribers:
+            all_details[timeframe] = len(subscribers)
+    
+    # Shared signals durumu
+    from core import shared_signals
+    signal_counts = {}
+    for tf, signals in shared_signals.items():
+        signal_counts[tf] = len(signals)
+    
+    # Active strong signals
+    from core import active_strong_signals
+    strong_counts = {}
+    for tf, signals in active_strong_signals.items():
+        strong_counts[tf] = len(signals)
+    
+    return JSONResponse({
+        "timestamp": datetime.now().isoformat(),
+        "websockets": {
+            "single_subscribers": {
+                "total": sum(len(v) for v in single_subscribers.values()),
+                "details": single_details
+            },
+            "all_subscribers": {
+                "total": sum(len(v) for v in all_subscribers.values()),
+                "details": all_details
+            },
+            "pump_radar": len(pump_radar_subscribers),
+            "realtime": len(realtime_subscribers)
+        },
+        "signals": {
+            "shared_signals": signal_counts,
+            "active_strong_signals": strong_counts,
+            "last_update": last_update
+        },
+        "queue_status": {
+            "signal_queue_size": signal_queue.qsize() if 'signal_queue' in globals() else 0
+        }
+    })
+
+@app.get("/debug/signal/{symbol}/{timeframe}")
+async def debug_signal(symbol: str, timeframe: str = "5m"):
+    """Belirli bir sembol ve timeframe için sinyal durumunu göster"""
+    symbol = symbol.upper().replace("/", "").replace("-", "").strip()
+    if not symbol.endswith("USDT"):
+        symbol += "USDT"
+    
+    from core import shared_signals
+    
+    signal_data = shared_signals.get(timeframe, {}).get(symbol)
+    
+    return JSONResponse({
+        "symbol": symbol,
+        "timeframe": timeframe,
+        "has_signal": signal_data is not None,
+        "signal_data": signal_data,
+        "shared_signals_count": len(shared_signals.get(timeframe, {})),
+        "timestamp": datetime.now().isoformat()
+    })
+
+@app.get("/debug/test-indicator/{symbol}")
+async def test_indicator(symbol: str, timeframe: str = "5m"):
+    """İndicator fonksiyonlarını test et"""
+    try:
+        from indicators import generate_ict_signal
+        from core import get_binance_client
+        
+        symbol = symbol.upper().replace("/", "").replace("-", "").strip()
+        if not symbol.endswith("USDT"):
+            symbol += "USDT"
+        
+        binance_client = get_binance_client()
+        
+        if not binance_client:
+            return JSONResponse({
+                "error": "Binance client not available",
+                "success": False
+            })
+        
+        # Veri çek
+        ccxt_symbol = symbol.replace('USDT', '/USDT')
+        klines = await binance_client.fetch_ohlcv(
+            ccxt_symbol, 
+            timeframe=timeframe, 
+            limit=100
+        )
+        
+        if not klines or len(klines) < 50:
+            return JSONResponse({
+                "error": f"Insufficient data for {symbol}: {len(klines) if klines else 0} candles",
+                "success": False
+            })
+        
+        # DataFrame oluştur
+        df = pd.DataFrame(klines, columns=['timestamp', 'open', 'high', 'low', 'close', 'volume'])
+        
+        # Indicator'ü test et
+        signal = generate_ict_signal(df, symbol, timeframe)
+        
+        return JSONResponse({
+            "success": True,
+            "symbol": symbol,
+            "timeframe": timeframe,
+            "data_points": len(klines),
+            "indicator_working": signal is not None,
+            "signal_result": signal,
+            "test_timestamp": datetime.now().isoformat()
+        })
+        
+    except Exception as e:
+        logger.error(f"Indicator test error: {e}", exc_info=True)
+        return JSONResponse({
+            "error": str(e),
+            "success": False,
+            "traceback": str(e.__traceback__) if hasattr(e, '__traceback__') else None
+        })
+
+@app.get("/debug/websocket-test")
+async def websocket_test_page():
+    """WebSocket test sayfası"""
+    html = """
+    <!DOCTYPE html>
+    <html>
+    <head>
+        <title>WebSocket Test</title>
+        <style>
+            body { font-family: Arial, sans-serif; padding: 20px; background: #f0f0f0; }
+            .test-container { background: white; padding: 20px; border-radius: 10px; margin-bottom: 20px; }
+            button { padding: 10px 20px; margin: 5px; background: #007bff; color: white; border: none; border-radius: 5px; cursor: pointer; }
+            .log { background: #333; color: #0f0; padding: 10px; border-radius: 5px; font-family: monospace; height: 300px; overflow-y: auto; }
+            .success { color: green; }
+            .error { color: red; }
+            .info { color: blue; }
+        </style>
+    </head>
+    <body>
+        <h1>WebSocket Test Sayfası</h1>
+        
+        <div class="test-container">
+            <h3>Test 1: WebSocket Bağlantısı</h3>
+            <input id="symbol" value="BTCUSDT" placeholder="Sembol">
+            <input id="timeframe" value="5m" placeholder="Timeframe">
+            <button onclick="testWebSocket()">WebSocket Bağlantısını Test Et</button>
+            <div id="ws-log" class="log"></div>
+        </div>
+        
+        <div class="test-container">
+            <h3>Test 2: Sinyal Durumu</h3>
+            <button onclick="checkSignal()">Sinyal Durumunu Kontrol Et</button>
+            <div id="signal-log" class="log"></div>
+        </div>
+        
+        <div class="test-container">
+            <h3>Test 3: Indicator Test</h3>
+            <button onclick="testIndicator()">Indicator'ü Test Et</button>
+            <div id="indicator-log" class="log"></div>
+        </div>
+        
+        <script>
+            let ws = null;
+            let logCount = 0;
+            
+            function log(containerId, message, className = '') {
+                const container = document.getElementById(containerId);
+                const line = document.createElement('div');
+                line.innerHTML = `[${new Date().toLocaleTimeString()}] ${message}`;
+                if (className) line.className = className;
+                container.appendChild(line);
+                container.scrollTop = container.scrollHeight;
+                logCount++;
+            }
+            
+            function testWebSocket() {
+                const symbol = document.getElementById('symbol').value || 'BTCUSDT';
+                const timeframe = document.getElementById('timeframe').value || '5m';
+                const logId = 'ws-log';
+                
+                log(logId, `🔗 ${symbol}/${timeframe} için WebSocket bağlantısı deneniyor...`, 'info');
+                
+                if (ws) {
+                    ws.close();
+                    ws = null;
+                }
+                
+                const protocol = window.location.protocol === 'https:' ? 'wss' : 'ws';
+                ws = new WebSocket(`${protocol}://${window.location.host}/ws/signal/${symbol}/${timeframe}`);
+                
+                ws.onopen = function() {
+                    log(logId, `✅ WebSocket bağlantısı kuruldu!`, 'success');
+                };
+                
+                ws.onmessage = function(event) {
+                    try {
+                        const data = JSON.parse(event.data);
+                        if (data.heartbeat) {
+                            log(logId, `💓 Heartbeat: ${data.time || 'now'}`, 'info');
+                        } else {
+                            log(logId, `📨 Sinyal alındı: ${JSON.stringify(data).substring(0, 200)}...`, 'success');
+                        }
+                    } catch (e) {
+                        log(logId, `❌ Veri parse hatası: ${e.message}`, 'error');
+                    }
+                };
+                
+                ws.onerror = function(error) {
+                    log(logId, `❌ WebSocket hatası: ${error}`, 'error');
+                };
+                
+                ws.onclose = function() {
+                    log(logId, '🔌 WebSocket bağlantısı kapandı', 'info');
+                };
+                
+                // 10 saniye sonra kapat
+                setTimeout(() => {
+                    if (ws && ws.readyState === WebSocket.OPEN) {
+                        ws.close();
+                        log(logId, '⏱️ Test tamamlandı, bağlantı kapatıldı', 'info');
+                    }
+                }, 10000);
+            }
+            
+            async function checkSignal() {
+                const symbol = document.getElementById('symbol').value || 'BTCUSDT';
+                const timeframe = document.getElementById('timeframe').value || '5m';
+                const logId = 'signal-log';
+                
+                log(logId, `🔍 ${symbol}/${timeframe} sinyal durumu kontrol ediliyor...`, 'info');
+                
+                try {
+                    const response = await fetch(`/debug/signal/${symbol}/${timeframe}`);
+                    const data = await response.json();
+                    
+                    if (data.has_signal) {
+                        log(logId, `✅ Sinyal bulundu!`, 'success');
+                        log(logId, `📊 Sinyal verisi: ${JSON.stringify(data.signal_data)}`, 'success');
+                    } else {
+                        log(logId, `❌ Sinyal bulunamadı`, 'error');
+                        log(logId, `ℹ️ Toplam sinyal sayısı: ${data.shared_signals_count}`, 'info');
+                    }
+                    
+                    // WebSocket durumunu da kontrol et
+                    const wsStatus = await fetch('/debug/websocket-status');
+                    const wsData = await wsStatus.json();
+                    log(logId, `📡 WebSocket istatistikleri: ${JSON.stringify(wsData.websockets)}`, 'info');
+                    
+                } catch (error) {
+                    log(logId, `❌ Kontrol hatası: ${error.message}`, 'error');
+                }
+            }
+            
+            async function testIndicator() {
+                const symbol = document.getElementById('symbol').value || 'BTCUSDT';
+                const timeframe = document.getElementById('timeframe').value || '5m';
+                const logId = 'indicator-log';
+                
+                log(logId, `🧪 ${symbol}/${timeframe} için indicator test ediliyor...`, 'info');
+                
+                try {
+                    const response = await fetch(`/debug/test-indicator/${symbol}?timeframe=${timeframe}`);
+                    const data = await response.json();
+                    
+                    if (data.success) {
+                        log(logId, `✅ Indicator başarıyla çalıştı!`, 'success');
+                        log(logId, `📊 Veri noktaları: ${data.data_points}`, 'info');
+                        log(logId, `⚡ Indicator çalışıyor: ${data.indicator_working}`, 'info');
+                        if (data.signal_result) {
+                            log(logId, `🎯 Sinyal sonucu: ${JSON.stringify(data.signal_result)}`, 'success');
+                        }
+                    } else {
+                        log(logId, `❌ Indicator hatası: ${data.error}`, 'error');
+                    }
+                } catch (error) {
+                    log(logId, `❌ Test hatası: ${error.message}`, 'error');
+                }
+            }
+            
+            // Otomatik test başlat
+            setTimeout(() => {
+                log('ws-log', '🚀 Otomatik test başlatılıyor...', 'info');
+                testWebSocket();
+                setTimeout(checkSignal, 2000);
+                setTimeout(testIndicator, 4000);
+            }, 1000);
+        </script>
+    </body>
+    </html>
+    """
+    return HTMLResponse(content=html)
 # ==================== GİRİŞ SAYFASI ====================
 @app.get("/login", response_class=HTMLResponse)
 async def login_page():
@@ -1936,3 +2240,4 @@ if __name__ == "__main__":
 # 3. Tüm endpoint'ler test edildi
 # 4. Memory leak önlemleri alındı
 # 5. Responsive design tamamlandı
+
