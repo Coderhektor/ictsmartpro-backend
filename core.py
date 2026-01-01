@@ -58,7 +58,6 @@ def get_best_price(symbol: str) -> Dict[str, Any]:
             "updated": data.get("updated", "N/A")
         }
 
-# ✅ DÜZELTME: Girinti sıfırlandı (en solda)
 def get_all_prices_snapshot(limit: int = 50) -> Dict[str, Any]:
     with price_pool_lock:
         logger.debug(f"get_all_prices_snapshot: price_pool boyutu = {len(price_pool)}")
@@ -363,8 +362,8 @@ async def broadcast_worker():
                             disconnected.add(ws)
                     all_subscribers[tf] -= disconnected
 
-                elif msg_type == "pump_radar":
-                    global top_gainers, last_update, pump_radar_subscribers  # ← BU SATIRI EKLE!
+            elif msg_type == "pump_radar":
+                global top_gainers, last_update, pump_radar_subscribers
 
                 top_gainers.clear()
                 top_gainers.extend(payload.get("top_gainers", [])[:10])
@@ -377,6 +376,8 @@ async def broadcast_worker():
                     except Exception:
                         disconnected.add(ws)
                 pump_radar_subscribers -= disconnected
+
+            signal_queue.task_done()
             
         except asyncio.CancelledError:
             break
