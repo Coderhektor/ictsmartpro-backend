@@ -340,26 +340,60 @@ async def home(request: Request):
         <a href="/signal" class="btn">🚀 Tek Coin Canlı Sinyal + Grafik</a>
         <a href="/signal/all" class="btn">🔥 Tüm Coinleri Tara</a>
     </div>
-    <script>
-        const ws = new WebSocket((location.protocol === 'https:' ? 'wss' : 'ws') + '://' + location.host + '/ws/pump_radar');
-        ws.onmessage = function(e) {{
+   <script>
+    const ws = new WebSocket((location.protocol === 'https:' ? 'wss' : 'ws') + '://' + location.host + '/ws/realtime_price');
+    
+    ws.onmessage = function(e) {
+        try {
             const d = JSON.parse(e.data);
-            document.getElementById('update').innerHTML = `Son Güncelleme: <strong>${{d.last_update || 'Şimdi'}}</strong>`;
+            
+            // DEBUG: Konsola yaz
+            console.log('FİYAT VERİSİ GELDİ:', Object.keys(d.tickers || {}).length + ' coin');
+            
+            // Son güncelleme zamanını göster
+            document.getElementById('update').innerHTML = `Son Güncelleme: <strong>${d.last_update || 'Şimdi'}</strong>`;
+            
             const t = document.getElementById('table-body');
-            if (!d.top_gainers || d.top_gainers.length === 0) {{
-                t.innerHTML = '<tr><td colspan="4" style="padding:80px;color:#ffd700">😴 Şu anda pump yok</td></tr>';
+            
+            // Eğer ticker yoksa
+            if (!d.tickers || Object.keys(d.tickers).length === 0) {
+                t.innerHTML = '<tr><td colspan="4" style="padding:80px;color:#ffd700">⏳ Fiyatlar yükleniyor...</td></tr>';
                 return;
-            }}
-            t.innerHTML = d.top_gainers.map((c, i) => `
+            }
+            
+            // Ticker'ları tabloya ekle
+            const tickers = Object.entries(d.tickers);
+            
+            // İlk 10'u göster
+            t.innerHTML = tickers.slice(0, 10).map(([symbol, data], i) => `
                 <tr>
-                    <td>#${{i+1}}</td>
-                    <td><strong>${{c.symbol}}</strong></td>
-                    <td>$${{c.price.toFixed(4)}}</td>
-                    <td class="${{c.change > 0 ? 'green' : 'red'}}">${{c.change > 0 ? '+' : ''}}${{c.change.toFixed(2)}}%</td>
+                    <td>#${i+1}</td>
+                    <td><strong>${symbol.replace('USDT', '')}</strong></td>
+                    <td>$${data.price.toFixed(data.price > 1 ? 2 : 6)}</td>
+                    <td class="${data.change > 0 ? 'green' : 'red'}">${data.change > 0 ? '+' : ''}${data.change.toFixed(2)}%</td>
                 </tr>
             `).join('');
-        }};
-    </script>
+            
+        } catch (err) {
+            console.error('WebSocket veri hatası:', err);
+        }
+    };
+    
+    ws.onopen = function() {
+        console.log('✅ Realtime price WebSocket bağlandı');
+        document.getElementById('update').innerHTML = 'Canlı fiyatlar bağlandı...';
+    };
+    
+    ws.onerror = function(err) {
+        console.error('WebSocket hatası:', err);
+        document.getElementById('update').innerHTML = '❌ Bağlantı hatası';
+    };
+    
+    ws.onclose = function() {
+        console.log('WebSocket kapandı');
+        document.getElementById('update').innerHTML = '🔌 Bağlantı kesildi';
+    };
+</script>
 </body>
 </html>"""
     return HTMLResponse(content=html_content)
@@ -1428,5 +1462,6 @@ async def debug_info():
 if __name__ == "__main__":
     import uvicorn
     uvicorn.run(app, host="0.0.0.0", port=8000) 
+
 
 
