@@ -153,58 +153,56 @@ class GrokIndicators:
     def detect_fibonacci_levels(self, df: pd.DataFrame, ph: pd.Series, pl: pd.Series) -> pd.DataFrame:
         df = df.copy()
     
-    # Tüm fib sütunlarını NaN ile başlat
-    for level in self._fib_levels:
-        col_name = f'fib_{str(level).replace(".", "")}'
-        df[col_name] = np.nan
-    
-    df['fib_direction'] = ''
-    df['fib_ote_zone'] = False
+        # Tüm fib sütunlarını NaN ile başlat
+        for level in self._fib_levels:
+            col_name = f'fib_{str(level).replace(".", "")}'
+            df[col_name] = np.nan
+        
+        df['fib_direction'] = ''
+        df['fib_ote_zone'] = False
 
-    ph_series = ph.dropna()
-    pl_series = pl.dropna()
+        ph_series = ph.dropna()
+        pl_series = pl.dropna()
 
-    # En az 1 pivot high ve 1 pivot low olmalı (2 değil, 1 yeterli)
-    if len(ph_series) < 1 or len(pl_series) < 1:
-        return df  # Fibonacci yok ama en azından sütunlar var (NaN)
+        # En az 1 pivot high ve 1 pivot low olmalı
+        if len(ph_series) < 1 or len(pl_series) < 1:
+            return df
 
-    # En son pivot high ve pivot low'u al
-    last_ph_idx = ph_series.index[-1]
-    last_pl_idx = pl_series.index[-1]
+        last_ph_idx = ph_series.index[-1]
+        last_pl_idx = pl_series.index[-1]
 
-    try:
-        if last_ph_idx > last_pl_idx:
-            # Bearish retracement
-            high_price = df.loc[last_ph_idx, 'high']
-            low_price = df.loc[last_pl_idx, 'low']
-            fib_range = high_price - low_price
-            if fib_range <= 0:
-                return df
-            for level in self._fib_levels:
-                col_name = f'fib_{str(level).replace(".", "")}'
-                df[col_name] = high_price - (fib_range * level)
-            df['fib_direction'] = 'bearish'
-            # OTE zone kontrolü (NaN değilse)
-            if 'fib_618' in df.columns and 'fib_705' in df.columns:
-                df['fib_ote_zone'] = (df['close'] >= df['fib_618']) & (df['close'] <= df['fib_705'])
-        else:
-            # Bullish retracement
-            low_price = df.loc[last_pl_idx, 'low']
-            high_price = df.loc[last_ph_idx, 'high']
-            fib_range = high_price - low_price
-            if fib_range <= 0:
-                return df
-            for level in self._fib_levels:
-                col_name = f'fib_{str(level).replace(".", "")}'
-                df[col_name] = low_price + (fib_range * level)
-            df['fib_direction'] = 'bullish'
-            if 'fib_618' in df.columns and 'fib_705' in df.columns:
-                df['fib_ote_zone'] = (df['close'] >= df['fib_618']) & (df['close'] <= df['fib_705'])
-    except Exception as e:
-        logger.debug(f"Fibonacci hesaplama hatası: {e}")
-        # Hata olsa bile sütunlar NaN kalsın, patlamasın
+        try:
+            if last_ph_idx > last_pl_idx:
+                # Bearish retracement
+                high_price = df.loc[last_ph_idx, 'high']
+                low_price = df.loc[last_pl_idx, 'low']
+                fib_range = high_price - low_price
+                if fib_range <= 0:
+                    return df
+                for level in self._fib_levels:
+                    col_name = f'fib_{str(level).replace(".", "")}'
+                    df[col_name] = high_price - (fib_range * level)
+                df['fib_direction'] = 'bearish'
+                if 'fib_618' in df.columns and 'fib_705' in df.columns:
+                    df['fib_ote_zone'] = (df['close'] >= df['fib_618']) & (df['close'] <= df['fib_705'])
+            else:
+                # Bullish retracement
+                low_price = df.loc[last_pl_idx, 'low']
+                high_price = df.loc[last_ph_idx, 'high']
+                fib_range = high_price - low_price
+                if fib_range <= 0:
+                    return df
+                for level in self._fib_levels:
+                    col_name = f'fib_{str(level).replace(".", "")}'
+                    df[col_name] = low_price + (fib_range * level)
+                df['fib_direction'] = 'bullish'
+                if 'fib_618' in df.columns and 'fib_705' in df.columns:
+                    df['fib_ote_zone'] = (df['close'] >= df['fib_618']) & (df['close'] <= df['fib_705'])
+        except Exception as e:
+            logger.debug(f"Fibonacci hesaplama hatası: {e}")
 
-    return df
+        return df
+
     def calculate_signal_score(self, patterns: Dict[str, pd.Series]) -> int:
         score = 0
         idx = -1
@@ -253,7 +251,6 @@ def generate_ict_signal(df: pd.DataFrame, symbol: str, timeframe: str) -> Option
             logger.warning(f"{symbol}: Yetersiz veri ({len(df)})")
             return generate_simple_signal(df, symbol, timeframe)
 
-        # Sütun kontrolü
         required = ['open', 'high', 'low', 'close', 'volume']
         if not all(col in df.columns for col in required):
             logger.error(f"{symbol}: Eksik sütun")
@@ -262,19 +259,14 @@ def generate_ict_signal(df: pd.DataFrame, symbol: str, timeframe: str) -> Option
         df = df.copy()
         df = df.astype(float, errors='ignore')
 
-        # Pivot
         df['pivot_high'], df['pivot_low'] = grok.detect_pivots(df['high'], df['low'])
 
-        # Volume Profile
         _, poc_price, (va_low, va_high) = grok.calculate_volume_profile(df)
 
-        # ICT Patterns
         patterns = grok.detect_ict_patterns(df)
 
-        # Fibonacci
         df = grok.detect_fibonacci_levels(df, df['pivot_high'], df['pivot_low'])
 
-        # Skor
         signal_score = grok.calculate_signal_score(patterns)
         normalized_score = int(np.clip((signal_score + 100), 0, 200) / 2)
 
@@ -286,7 +278,7 @@ def generate_ict_signal(df: pd.DataFrame, symbol: str, timeframe: str) -> Option
         killzone = "London" if patterns.get('london_kz', pd.Series([False])).iloc[-1] else \
                    "New York" if patterns.get('ny_kz', pd.Series([False])).iloc[-1] else "Normal"
 
-        has_elite = last.get('entry_signal', '') != '' or abs(signal_score) > 80
+        has_elite = abs(signal_score) > 80
 
         signal_text = "🚀 ELITE ALIM" if has_elite and signal_score > 0 else \
                       "🔥 ELITE SATIM" if has_elite and signal_score < 0 else \
