@@ -1209,6 +1209,30 @@ async def signal_page(request: Request):
                 <option value="1d">1 Gün</option>
                 <option value="1W">1 Hafta</option>
                 <option value="1M">1 Ay</option>
+
+                select#timeframe {
+    background-color: #1a0033;
+    color: #00ff88;
+    border: 2px solid #00dbde;
+    border-radius: 12px;
+    padding: 14px 40px 14px 18px;
+    font-size: 1.2rem;
+    font-weight: bold;
+    min-width: 220px;
+    appearance: none;
+    background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='14' height='10' viewBox='0 0 14 10'%3E%3Cpath fill='%2300ff88' d='M1 1l6 6 6-6' stroke='%2300ff88' stroke-width='2'/%3E%3C/svg%3E");
+    background-repeat: no-repeat;
+    background-position: right 18px center;
+    background-size: 14px;
+    cursor: pointer;
+    transition: all 0.3s ease;
+}
+
+select#timeframe:focus {
+    outline: none;
+    border-color: #fc00ff;
+    box-shadow: 0 0 20px rgba(252, 0, 255, 0.5);
+}
                 </select>
                 <div>
                     <button onclick="connectSignal()">🔴 CANLI SİNYAL BAĞLANTISI KUR</button>
@@ -1489,5 +1513,6 @@ if __name__ == "__main__":
         log_level="info",
         access_log=False
     )
+
 
 
