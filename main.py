@@ -1,164 +1,126 @@
 """
 ICT SMART PRO - VERSION 7.0
 Production Optimized - GROK TRADE ELITE PATTERN ENGINE INTEGRATED
+Production-Ready with All Modules Optimized
 """
 
-import base64
-import logging
 import asyncio
-import json
+import base64
 import hashlib
+import json
+import logging
 import os
-import pandas as pd
-import numpy as np
-from datetime import datetime
-from contextlib import asynccontextmanager
-from typing import Optional, Dict, List, Set, Any, Tuple
+import sys
 from collections import defaultdict
+from contextlib import asynccontextmanager
+from datetime import datetime, timedelta
+from typing import Any, Dict, List, Optional, Set, Tuple
 
-from fastapi import FastAPI, WebSocket, WebSocketDisconnect, Request, HTMLResponse, RedirectResponse, JSONResponse
-from fastapi.responses import HTMLResponse
+import numpy as np
+import pandas as pd
+from fastapi import (FastAPI, HTTPException, Request, WebSocket,
+                     WebSocketDisconnect)
+from fastapi.responses import HTMLResponse, JSONResponse, RedirectResponse
 from openai import OpenAI
 
-# ==================== LOGGING ====================
-
+# ==================== LOGGING CONFIGURATION ====================
 logging.basicConfig(
     level=logging.INFO,
     format='%(asctime)s | %(name)s | %(levelname)s | %(message)s',
     datefmt='%Y-%m-%d %H:%M:%S'
 )
 
+# Suppress noisy logs
 logging.getLogger("httpx").setLevel(logging.WARNING)
 logging.getLogger("websockets").setLevel(logging.WARNING)
-
 logger = logging.getLogger("ict_smart_pro")
 
-# ==================== GLOBAL PRICE POOL & TOP GAINERS ====================
-
+# ==================== GLOBAL STATE ====================
 price_pool = defaultdict(lambda: {"price": 0.0, "change": 0.0, "timestamp": 0.0, "source": ""})
 top_gainers: List[Dict] = []
 last_update: str = "Yükleniyor..."
+price_sources_subscribers: Set[WebSocket] = set()
+single_subscribers: Dict[str, Set[WebSocket]] = defaultdict(set)
+all_subscribers: Dict[str, Set[WebSocket]] = defaultdict(set)
+pump_radar_subscribers: Set[WebSocket] = set()
+signal_history: Dict[str, List[Dict]] = defaultdict(list)
+shared_signals: Dict[str, Dict[str, Dict]] = {}
+active_strong_signals: Dict[str, List[Dict]] = defaultdict(list)
 
-def update_price(source: str, symbol: str, price: float, change: Optional[float] = None):
-    if price <= 0:
-        return
-    price_pool[symbol] = {
-        "price": price,
-        "change": change if change is not None else price_pool[symbol]["change"],
-        "timestamp": datetime.utcnow().timestamp(),
-        "source": source
-    }
-
-async def calculate_top_gainers():
-    global top_gainers, last_update
-    while True:
-        try:
-            cutoff = datetime.utcnow().timestamp() - 120
-            recent = [
-                (sym, info["price"], info["change"])
-                for sym, info in price_pool.items()
-                if info["timestamp"] > cutoff and abs(info["change"]) > 0.1
-            ]
-            sorted_gainers = sorted(recent, key=lambda x: x[2], reverse=True)[:30]
-
-            top_gainers = [
-                {"symbol": sym.replace("USDT", ""), "price": price, "change": round(change, 2)}
-                for sym, price, change in sorted_gainers
-            ]
-            last_update = datetime.utcnow().strftime("%H:%M:%S UTC")
-
-            if pump_radar_subscribers:
-                payload = {
-                    "top_gainers": top_gainers[:10],
-                    "last_update": last_update,
-                    "total_coins": len(top_gainers)
-                }
-                tasks = [ws.send_json(payload) for ws in pump_radar_subscribers]
-                await asyncio.gather(*tasks, return_exceptions=True)
-
-        except Exception as e:
-            logger.error(f"Top gainers hesaplamada hata: {e}")
-
-        await asyncio.sleep(12)
-
-# ==================== CORE IMPORT & FALLBACK ====================
-
+# ==================== CORE MODULE IMPORT WITH FALLBACK ====================
 try:
     from core import (
+        cleanup as core_cleanup,
+        get_all_prices_snapshot as core_get_all_prices_snapshot,
+        get_binance_client as core_get_binance_client,
         initialize as core_initialize,
-        cleanup,
-        single_subscribers,
-        all_subscribers,
-        pump_radar_subscribers,
-        shared_signals,
-        active_strong_signals,
-        get_binance_client,
-        price_sources_status,
-        get_all_prices_snapshot
+        price_sources_status as core_price_sources_status,
     )
-    from utils import all_usdt_symbols
-    logger.info("✅ Core modülleri başarıyla yüklendi")
-except ImportError as e:
-    logger.warning(f"⚠️ Core modülleri import hatası: {e} - Fallback aktif")
     
-    # Fallback değişkenler
-    top_gainers = []
-    last_update = "Yükleniyor..."
-    price_pool = defaultdict(lambda: {"price": 0.0, "change": 0.0, "timestamp": 0.0, "source": ""})
-    pump_radar_subscribers = set()
-    single_subscribers = defaultdict(set)
-    all_subscribers = defaultdict(set)
-    shared_signals = {}
-    active_strong_signals = {}
-    get_binance_client = lambda: None
-    price_sources_status = {}
-    get_all_prices_snapshot = lambda: {}
-    all_usdt_symbols = []
-
-    async def core_initialize():
-        logger.info("Fallback initialize çalışıyor")
-        asyncio.create_task(calculate_top_gainers())
-
-    cleanup = lambda: asyncio.sleep(0)
-
-# Tek initialize fonksiyonu
-async def initialize():
-    await core_initialize()
-    asyncio.create_task(calculate_top_gainers())
-
-# ==================== OPENAI ====================
-
-openai_client = None
-if os.getenv("OPENAI_API_KEY"):
+    # Import additional core functions if they exist
     try:
-        openai_client = OpenAI(api_key=os.getenv("OPENAI_API_KEY"))
-        logger.info("✅ OpenAI client başlatıldı")
-    except Exception as e:
-        logger.warning(f"⚠️ OpenAI başlatma hatası: {e}")
+        from core import all_usdt_symbols
+    except ImportError:
+        all_usdt_symbols = []
+    
+    logger.info("✅ Core modülleri başarıyla yüklendi")
+    
+except ImportError as e:
+    logger.warning(f"⚠️ Core modülleri import hatası: {e} - Fallback modu aktif")
+    
+    # Fallback implementations
+    all_usdt_symbols = []
+    
+    def core_initialize():
+        logger.info("Fallback initialize çalışıyor")
+        return asyncio.sleep(0)
+    
+    async def core_cleanup():
+        logger.info("Fallback cleanup çalışıyor")
+        await asyncio.sleep(0)
+    
+    def core_get_binance_client():
+        return None
+    
+    def core_price_sources_status():
+        return {}
+    
+    def core_get_all_prices_snapshot():
+        return {}
+    
+    logger.info("Fallback modül fonksiyonları oluşturuldu")
 
 # ==================== VISITOR COUNTER ====================
-
 class VisitorCounter:
     def __init__(self):
         self.total_visits = 0
-        self.active_users = set()
+        self.active_users: Set[str] = set()
         self.daily_stats = defaultdict(lambda: {"visits": 0, "unique": set()})
         self.page_views = defaultdict(int)
-
+    
     def add_visit(self, page: str, user_id: Optional[str] = None) -> int:
         self.total_visits += 1
         self.page_views[page] += 1
+        
         today = datetime.now().strftime("%Y-%m-%d")
         self.daily_stats[today]["visits"] += 1
+        
         if user_id:
             self.active_users.add(user_id)
             self.daily_stats[today]["unique"].add(user_id)
+        
         return self.total_visits
-
+    
     def get_stats(self) -> Dict[str, Any]:
         today = datetime.now().strftime("%Y-%m-%d")
         today_stats = self.daily_stats.get(today, {"visits": 0, "unique": set()})
-        top_pages = sorted(self.page_views.items(), key=lambda x: x[1], reverse=True)[:5]
+        
+        top_pages = sorted(
+            self.page_views.items(), 
+            key=lambda x: x[1], 
+            reverse=True
+        )[:5]
+        
         return {
             "total_visits": self.total_visits,
             "active_users": len(self.active_users),
@@ -180,19 +142,22 @@ def get_visitor_stats_html() -> str:
     </div>
     """
 
-# ==================== GLOBAL STATE ====================
-
-price_sources_subscribers = set()
-signal_history = defaultdict(list)
-pump_radar_subscribers = set()  # fallback'ta da tanımlı olsun diye tekrar
+# ==================== OPENAI CLIENT ====================
+openai_client = None
+try:
+    openai_api_key = os.getenv("OPENAI_API_KEY")
+    if openai_api_key:
+        openai_client = OpenAI(api_key=openai_api_key)
+        logger.info("✅ OpenAI client başlatıldı")
+    else:
+        logger.warning("⚠️ OPENAI_API_KEY ortam değişkeni tanımlı değil")
+except Exception as e:
+    logger.warning(f"⚠️ OpenAI başlatma hatası: {e}")
+    openai_client = None
 
 # ==================== GROK TRADE ELITE INDICATORS ====================
-
 class GrokIndicators:
-    """
-    Grok Trade Elite - Ultra Hassas Sinyal Üretimi
-    Tüm paternler ve indikatörler aktif!
-    """
+    """Grok Trade Elite - Ultra Hassas Sinyal Üretimi"""
     
     def __init__(self):
         self._fib_levels = [0.0, 0.236, 0.382, 0.5, 0.618, 0.705, 0.786, 0.886, 1.0]
@@ -204,28 +169,40 @@ class GrokIndicators:
         self.EMA21_PERIOD = 21
         self.BB_PERIOD = 20
         self.SIGNAL_THRESHOLD = 40
-        
+    
     @staticmethod
     def calculate_rsi(series: pd.Series, period: int = 14) -> pd.Series:
+        """RSI hesaplama"""
+        if len(series) < period + 1:
+            return pd.Series([50] * len(series), index=series.index)
+        
         delta = series.diff()
         gain = delta.clip(lower=0)
         loss = -delta.clip(upper=0)
+        
         avg_gain = gain.ewm(alpha=1/period, adjust=False).mean()
         avg_loss = loss.ewm(alpha=1/period, adjust=False).mean()
+        
         rs = avg_gain / (avg_loss + 1e-10)
         rsi = 100 - (100 / (1 + rs))
+        
         return rsi.fillna(50).clip(0, 100)
     
     @staticmethod
     def calculate_sma(series: pd.Series, period: int) -> pd.Series:
+        """Simple Moving Average"""
+        if len(series) < period:
+            return series.copy()
         return series.rolling(window=period, min_periods=1).mean()
     
     @staticmethod
     def calculate_ema(series: pd.Series, period: int) -> pd.Series:
+        """Exponential Moving Average"""
         return series.ewm(span=period, adjust=False).mean()
     
     @staticmethod
     def calculate_macd(series: pd.Series, fast: int = 12, slow: int = 26, signal: int = 9) -> Tuple[pd.Series, pd.Series, pd.Series]:
+        """MACD hesaplama"""
         ema_fast = series.ewm(span=fast, adjust=False).mean()
         ema_slow = series.ewm(span=slow, adjust=False).mean()
         macd_line = ema_fast - ema_slow
@@ -235,6 +212,7 @@ class GrokIndicators:
     
     @staticmethod
     def calculate_bollinger_bands(series: pd.Series, period: int = 20, std_dev: float = 2.0) -> Tuple[pd.Series, pd.Series, pd.Series]:
+        """Bollinger Bands hesaplama"""
         sma = series.rolling(window=period, min_periods=1).mean()
         std = series.rolling(window=period, min_periods=1).std()
         upper = sma + (std * std_dev)
@@ -243,26 +221,40 @@ class GrokIndicators:
     
     @staticmethod
     def calculate_atr(df: pd.DataFrame, period: int = 14) -> pd.Series:
+        """Average True Range"""
         high_low = df['high'] - df['low']
         high_close = np.abs(df['high'] - df['close'].shift())
         low_close = np.abs(df['low'] - df['close'].shift())
+        
         tr = pd.concat([high_low, high_close, low_close], axis=1).max(axis=1)
         atr = tr.rolling(window=period).mean()
-        return atr
+        
+        return atr.fillna(tr.mean() if not tr.empty else 0)
     
     @staticmethod
     def calculate_stochastic(df: pd.DataFrame, period: int = 14, smooth_k: int = 3, smooth_d: int = 3) -> Tuple[pd.Series, pd.Series]:
+        """Stochastic Oscillator"""
+        if len(df) < period:
+            return pd.Series([50] * len(df)), pd.Series([50] * len(df))
+        
         low_min = df['low'].rolling(window=period).min()
         high_max = df['high'].rolling(window=period).max()
+        
         k = 100 * ((df['close'] - low_min) / (high_max - low_min + 1e-10))
         k_smooth = k.rolling(window=smooth_k).mean()
         d_smooth = k_smooth.rolling(window=smooth_d).mean()
+        
         return k_smooth, d_smooth
     
     @staticmethod
     def calculate_obv(df: pd.DataFrame) -> pd.Series:
-        obv = pd.Series(index=df.index, dtype=float)
-        obv.iloc[0] = 0
+        """On-Balance Volume"""
+        if len(df) < 2:
+            return pd.Series([0] * len(df), index=df.index)
+        
+        obv = pd.Series(0.0, index=df.index)
+        obv.iloc[0] = df['volume'].iloc[0] if len(df) > 0 else 0
+        
         for i in range(1, len(df)):
             if df['close'].iloc[i] > df['close'].iloc[i-1]:
                 obv.iloc[i] = obv.iloc[i-1] + df['volume'].iloc[i]
@@ -270,38 +262,61 @@ class GrokIndicators:
                 obv.iloc[i] = obv.iloc[i-1] - df['volume'].iloc[i]
             else:
                 obv.iloc[i] = obv.iloc[i-1]
+        
         return obv
     
     @staticmethod
     def calculate_heikin_ashi(df: pd.DataFrame) -> pd.DataFrame:
+        """Heikin-Ashi dönüşümü"""
         ha_close = (df['open'] + df['high'] + df['low'] + df['close']) / 4
-        ha_open = pd.Series(index=df.index, dtype=float)
-        ha_open.iloc[0] = (df['open'].iloc[0] + df['close'].iloc[0]) / 2
-        ha_open.iloc[1:] = (ha_open.shift(1).iloc[1:] + ha_close.shift(1).iloc[1:]) / 2
+        
+        ha_open = pd.Series(0.0, index=df.index)
+        if len(df) > 0:
+            ha_open.iloc[0] = (df['open'].iloc[0] + df['close'].iloc[0]) / 2
+        
+        for i in range(1, len(df)):
+            ha_open.iloc[i] = (ha_open.iloc[i-1] + ha_close.iloc[i-1]) / 2
+        
         ha_high = pd.concat([df['high'], ha_open, ha_close], axis=1).max(axis=1)
         ha_low = pd.concat([df['low'], ha_open, ha_close], axis=1).min(axis=1)
-        return pd.DataFrame({'ha_open': ha_open, 'ha_high': ha_high, 'ha_low': ha_low, 'ha_close': ha_close})
+        
+        return pd.DataFrame({
+            'ha_open': ha_open,
+            'ha_high': ha_high,
+            'ha_low': ha_low,
+            'ha_close': ha_close
+        })
     
-    @staticmethod
-    def detect_pivots(high: pd.Series, low: pd.Series, length: int = 5) -> Tuple[pd.Series, pd.Series]:
+    def detect_pivots(self, high: pd.Series, low: pd.Series, length: int = 5) -> Tuple[pd.Series, pd.Series]:
+        """Pivot noktaları tespiti"""
         ph = pd.Series(np.nan, index=high.index)
         pl = pd.Series(np.nan, index=low.index)
         
         for i in range(length, len(high) - length):
-            if high.iloc[i] == high.iloc[i-length:i+length+1].max():
+            window_high = high.iloc[i-length:i+length+1]
+            window_low = low.iloc[i-length:i+length+1]
+            
+            if high.iloc[i] == window_high.max():
                 ph.iloc[i] = high.iloc[i]
-            if low.iloc[i] == low.iloc[i-length:i+length+1].min():
+            
+            if low.iloc[i] == window_low.min():
                 pl.iloc[i] = low.iloc[i]
         
         return ph, pl
     
     def calculate_volume_profile(self, df: pd.DataFrame, bins: int = 50, lookback: Optional[int] = None) -> Tuple[pd.DataFrame, float, Tuple[float, float]]:
-        data = df.iloc[-lookback:] if lookback else df
+        """Volume Profile analizi"""
+        if lookback:
+            data = df.iloc[-lookback:] if len(df) > lookback else df
+        else:
+            data = df
+        
         if len(data) == 0:
-            return pd.DataFrame(), data['close'].mean(), (0, 0)
+            return pd.DataFrame(), 0.0, (0.0, 0.0)
         
         price_min = data['low'].min()
         price_max = data['high'].max()
+        
         if price_max <= price_min:
             return pd.DataFrame(), price_min, (price_min, price_min)
         
@@ -311,6 +326,7 @@ class GrokIndicators:
         for _, row in data.iterrows():
             low_idx = np.searchsorted(bin_edges, row['low'], side='right') - 1
             high_idx = np.searchsorted(bin_edges, row['high'], side='right') - 1
+            
             low_idx = max(0, min(low_idx, bins-1))
             high_idx = max(0, min(high_idx, bins-1))
             
@@ -333,6 +349,7 @@ class GrokIndicators:
         sorted_idx = np.argsort(profile)[::-1]
         cum_vol = 0
         va_indices = [poc_idx]
+        
         for idx in sorted_idx:
             if idx == poc_idx:
                 continue
@@ -347,33 +364,42 @@ class GrokIndicators:
         return vp_df, poc_price, (va_low, va_high)
     
     def detect_all_patterns(self, df: pd.DataFrame) -> Dict[str, pd.Series]:
+        """Tüm teknik paternleri tespit et"""
         patterns = {}
         
+        # Temel veri doğrulama
+        required_cols = ['open', 'high', 'low', 'close', 'volume']
+        if not all(col in df.columns for col in required_cols):
+            return patterns
+        
+        # Heikin-Ashi dönüşümü
         ha = self.calculate_heikin_ashi(df)
         ha_close = ha['ha_close']
         ha_range = ha['ha_high'] - ha['ha_low']
         
+        # RSI hesaplamaları
         rsi6 = self.calculate_rsi(ha_close, self.RSI6_PERIOD)
         rsi14 = self.calculate_rsi(ha_close, self.RSI14_PERIOD)
         sma50_rsi = self.calculate_sma(rsi6, self.SMA50_PERIOD)
         
+        # RSI patternleri
         patterns['rsi6_crossover'] = (rsi6 > sma50_rsi) & (rsi6.shift(1) <= sma50_rsi.shift(1))
         patterns['rsi6_crossunder'] = (rsi6 < sma50_rsi) & (rsi6.shift(1) >= sma50_rsi.shift(1))
-        
         patterns['rsi_oversold_6'] = rsi6 < 30
         patterns['rsi_overbought_6'] = rsi6 > 70
         patterns['rsi_oversold_14'] = rsi14 < 30
         patterns['rsi_overbought_14'] = rsi14 > 70
-        
         patterns['rsi_bullish_div'] = (df['close'] < df['close'].shift(2)) & (rsi14 > rsi14.shift(2))
         patterns['rsi_bearish_div'] = (df['close'] > df['close'].shift(2)) & (rsi14 < rsi14.shift(2))
         
+        # MACD
         macd_line, signal_line, histogram = self.calculate_macd(df['close'])
         patterns['macd_bullish_cross'] = (macd_line > signal_line) & (macd_line.shift(1) <= signal_line.shift(1))
         patterns['macd_bearish_cross'] = (macd_line < signal_line) & (macd_line.shift(1) >= signal_line.shift(1))
         patterns['macd_above_zero'] = macd_line > 0
         patterns['macd_below_zero'] = macd_line < 0
         
+        # Moving Averages
         sma50 = self.calculate_sma(df['close'], 50)
         sma200 = self.calculate_sma(df['close'], 200)
         ema9 = self.calculate_ema(df['close'], 9)
@@ -384,22 +410,26 @@ class GrokIndicators:
         patterns['ema_bullish_cross'] = (ema9 > ema21) & (ema9.shift(1) <= ema21.shift(1))
         patterns['ema_bearish_cross'] = (ema9 < ema21) & (ema9.shift(1) >= ema21.shift(1))
         
+        # Bollinger Bands
         bb_upper, bb_middle, bb_lower = self.calculate_bollinger_bands(df['close'])
         patterns['bb_oversold'] = df['close'] < bb_lower
         patterns['bb_overbought'] = df['close'] > bb_upper
         patterns['bb_squeeze'] = (bb_upper - bb_lower) < ((bb_upper - bb_lower).rolling(20).mean() * 0.5)
         
+        # Stochastic
         stoch_k, stoch_d = self.calculate_stochastic(df)
         patterns['stoch_oversold'] = stoch_k < 20
         patterns['stoch_overbought'] = stoch_k > 80
         patterns['stoch_bullish_cross'] = (stoch_k > stoch_d) & (stoch_k.shift(1) <= stoch_d.shift(1))
         patterns['stoch_bearish_cross'] = (stoch_k < stoch_d) & (stoch_k.shift(1) >= stoch_d.shift(1))
         
+        # Volume
         obv = self.calculate_obv(df)
         patterns['volume_spike'] = df['volume'] > (df['volume'].rolling(20).mean() * 2.5)
         patterns['obv_bullish_div'] = (df['close'] < df['close'].shift(2)) & (obv > obv.shift(2))
         patterns['obv_bearish_div'] = (df['close'] > df['close'].shift(2)) & (obv < obv.shift(2))
         
+        # CRT Pattern
         avg_range = ha_range.rolling(5).mean()
         narrow_prev = ha_range.shift(1) < (avg_range.shift(1) * 1.5)
         wide_now = ha_range > (avg_range * 1.5)
@@ -407,33 +437,37 @@ class GrokIndicators:
         patterns['crt_buy'] = narrow_prev & wide_now & (ha_close > ha['ha_open']) & (ha_close > df['high'].shift(1))
         patterns['crt_sell'] = narrow_prev & wide_now & (ha_close < ha['ha_open']) & (ha_close < df['low'].shift(1))
         
+        # FVG
         patterns['fvg_up'] = df['low'] > df['high'].shift(2)
         patterns['fvg_down'] = df['high'] < df['low'].shift(2)
         
+        # Order Block
         patterns['bull_ob'] = (df['close'].shift(1) < df['open'].shift(1)) & (df['close'] > df['high'].shift(1)) & (df['close'] > df['open'])
         patterns['bear_ob'] = (df['close'].shift(1) > df['open'].shift(1)) & (df['close'] < df['low'].shift(1)) & (df['close'] < df['open'])
         
+        # Candlestick Patterns
         patterns['bullish_engulfing'] = (df['close'].shift(1) < df['open'].shift(1)) & (df['open'] < df['close'].shift(1)) & (df['close'] > df['open'].shift(1))
         patterns['bearish_engulfing'] = (df['close'].shift(1) > df['open'].shift(1)) & (df['open'] > df['close'].shift(1)) & (df['close'] < df['open'].shift(1))
         
+        # Pin Bars
         body = (df['close'] - df['open']).abs()
         lower_wick = pd.concat([df['open'], df['close']], axis=1).min(axis=1) - df['low']
         upper_wick = df['high'] - pd.concat([df['open'], df['close']], axis=1).max(axis=1)
         
         patterns['bullish_pin'] = (lower_wick > 2 * body) & (upper_wick < body) & (df['close'] > df['open'])
         patterns['bearish_pin'] = (upper_wick > 2 * body) & (lower_wick < body) & (df['close'] < df['open'])
-        
         patterns['doji'] = body < (0.1 * (df['high'] - df['low']))
         
+        # Multi-candle patterns
         patterns['morning_star'] = (df['close'].shift(2) < df['open'].shift(2)) & \
-                                  (df['close'].shift(1) < df['open'].shift(1)) & \
-                                  (df['close'] > df['open']) & \
-                                  (df['close'] > ((df['open'].shift(2) + df['close'].shift(2)) / 2))
+                                   (df['close'].shift(1) < df['open'].shift(1)) & \
+                                   (df['close'] > df['open']) & \
+                                   (df['close'] > ((df['open'].shift(2) + df['close'].shift(2)) / 2))
         
         patterns['evening_star'] = (df['close'].shift(2) > df['open'].shift(2)) & \
-                                  (df['close'].shift(1) > df['open'].shift(1)) & \
-                                  (df['close'] < df['open']) & \
-                                  (df['close'] < ((df['open'].shift(2) + df['close'].shift(2)) / 2))
+                                   (df['close'].shift(1) > df['open'].shift(1)) & \
+                                   (df['close'] < df['open']) & \
+                                   (df['close'] < ((df['open'].shift(2) + df['close'].shift(2)) / 2))
         
         patterns['three_white_soldiers'] = (df['close'] > df['open']) & \
                                           (df['close'].shift(1) > df['open'].shift(1)) & \
@@ -447,6 +481,7 @@ class GrokIndicators:
                                        (df['close'] < df['close'].shift(1)) & \
                                        (df['close'].shift(1) < df['close'].shift(2))
         
+        # Chart Patterns
         patterns['double_top'] = (df['high'] < df['high'].shift(1)) & (df['high'].shift(1) > df['high'].shift(2)) & \
                                 (abs(df['high'].shift(1) - df['high']) < (df['high'].shift(1) * 0.02))
         
@@ -456,27 +491,33 @@ class GrokIndicators:
         patterns['support_bounce'] = (df['low'] > df['low'].rolling(20).min().shift(1)) & (df['close'] > df['open'])
         patterns['resistance_break'] = (df['high'] > df['high'].rolling(20).max().shift(1)) & (df['close'] > df['open'])
         
-        if isinstance(df.index, pd.DatetimeIndex):
-            hours = df.index.hour
-        else:
-            hours = pd.Series([datetime.utcnow().hour] * len(df))
-            
+        # Kill Zones
+        try:
+            if isinstance(df.index, pd.DatetimeIndex):
+                hours = df.index.hour
+            else:
+                hours = pd.Series([datetime.utcnow().hour] * len(df), index=df.index)
+        except:
+            hours = pd.Series([datetime.utcnow().hour] * len(df), index=df.index)
+        
         patterns['london_kz'] = (hours >= 7) & (hours < 10)
         patterns['ny_kz'] = (hours >= 13) & (hours < 16)
         patterns['asia_kz'] = (hours >= 0) & (hours < 4)
         patterns['in_killzone'] = patterns['london_kz'] | patterns['ny_kz'] | patterns['asia_kz']
         
+        # Trend Analysis
         patterns['uptrend'] = df['close'] > sma50
         patterns['downtrend'] = df['close'] < sma50
         patterns['strong_uptrend'] = (df['close'] > sma50) & (sma50 > sma200)
         patterns['strong_downtrend'] = (df['close'] < sma50) & (sma50 < sma200)
         
+        # Bar Patterns
         patterns['inside_bar'] = (df['high'] < df['high'].shift(1)) & (df['low'] > df['low'].shift(1))
         patterns['outside_bar'] = (df['high'] > df['high'].shift(1)) & (df['low'] < df['low'].shift(1))
-        
         patterns['gaps_up'] = df['low'] > df['high'].shift(1)
         patterns['gaps_down'] = df['high'] < df['low'].shift(1)
         
+        # Raw indicators for reference
         patterns['rsi6'] = rsi6
         patterns['rsi14'] = rsi14
         patterns['macd'] = macd_line
@@ -488,163 +529,189 @@ class GrokIndicators:
         return patterns
     
     def detect_fibonacci_levels(self, df: pd.DataFrame, ph: pd.Series, pl: pd.Series) -> pd.DataFrame:
+        """Fibonacci seviyelerini hesapla"""
         df = df.copy()
         
+        # Fibonacci seviyeleri için sütunları başlat
         for level in self._fib_levels:
             col_name = f'fib_{str(level).replace(".", "")}'
             df[col_name] = np.nan
         
         df['fib_direction'] = ''
         df['fib_ote_zone'] = False
-
+        
+        # Pivot noktalarını filtrele
         ph_series = ph.dropna()
         pl_series = pl.dropna()
-
+        
         if len(ph_series) < 1 or len(pl_series) < 1:
             return df
-
+        
+        # En son pivot noktalarını bul
         last_ph_idx = ph_series.index[-1]
         last_pl_idx = pl_series.index[-1]
-
+        
         try:
-            if last_ph_idx > last_pl_idx:
+            if last_ph_idx > last_pl_idx:  # Bearish Fibonacci
                 high_price = df.loc[last_ph_idx, 'high']
                 low_price = df.loc[last_pl_idx, 'low']
                 fib_range = high_price - low_price
+                
                 if fib_range > 0:
                     for level in self._fib_levels:
                         col_name = f'fib_{str(level).replace(".", "")}'
                         df[col_name] = high_price - (fib_range * level)
+                    
                     df['fib_direction'] = 'bearish'
+                    
                     if 'fib_618' in df.columns and 'fib_705' in df.columns:
                         df['fib_ote_zone'] = (df['close'] >= df['fib_618']) & (df['close'] <= df['fib_705'])
-            else:
+            
+            else:  # Bullish Fibonacci
                 low_price = df.loc[last_pl_idx, 'low']
                 high_price = df.loc[last_ph_idx, 'high']
                 fib_range = high_price - low_price
+                
                 if fib_range > 0:
                     for level in self._fib_levels:
                         col_name = f'fib_{str(level).replace(".", "")}'
                         df[col_name] = low_price + (fib_range * level)
+                    
                     df['fib_direction'] = 'bullish'
+                    
                     if 'fib_618' in df.columns and 'fib_705' in df.columns:
                         df['fib_ote_zone'] = (df['close'] >= df['fib_618']) & (df['close'] <= df['fib_705'])
+        
         except Exception as e:
             logger.debug(f"Fibonacci hatası: {e}")
-
+        
         return df
     
     def calculate_signal_score(self, patterns: Dict[str, pd.Series]) -> int:
+        """Patternlere göre sinyal skoru hesapla"""
         score = 0
-        idx = -1
         
         try:
-            if patterns.get('rsi6_crossover', pd.Series([False])).iloc[idx]:
+            last_idx = -1
+            
+            # RSI Patterns
+            if patterns.get('rsi6_crossover', pd.Series([False])).iloc[last_idx]:
                 score += 25
-            if patterns.get('rsi6_crossunder', pd.Series([False])).iloc[idx]:
+            if patterns.get('rsi6_crossunder', pd.Series([False])).iloc[last_idx]:
                 score -= 25
-            if patterns.get('rsi_oversold_6', pd.Series([False])).iloc[idx]:
+            if patterns.get('rsi_oversold_6', pd.Series([False])).iloc[last_idx]:
                 score += 20
-            if patterns.get('rsi_overbought_6', pd.Series([False])).iloc[idx]:
+            if patterns.get('rsi_overbought_6', pd.Series([False])).iloc[last_idx]:
                 score -= 20
-            if patterns.get('rsi_bullish_div', pd.Series([False])).iloc[idx]:
+            if patterns.get('rsi_bullish_div', pd.Series([False])).iloc[last_idx]:
                 score += 30
-            if patterns.get('rsi_bearish_div', pd.Series([False])).iloc[idx]:
+            if patterns.get('rsi_bearish_div', pd.Series([False])).iloc[last_idx]:
                 score -= 30
             
-            if patterns.get('macd_bullish_cross', pd.Series([False])).iloc[idx]:
+            # MACD Patterns
+            if patterns.get('macd_bullish_cross', pd.Series([False])).iloc[last_idx]:
                 score += 20
-            if patterns.get('macd_bearish_cross', pd.Series([False])).iloc[idx]:
+            if patterns.get('macd_bearish_cross', pd.Series([False])).iloc[last_idx]:
                 score -= 20
-            if patterns.get('macd_above_zero', pd.Series([False])).iloc[idx]:
+            if patterns.get('macd_above_zero', pd.Series([False])).iloc[last_idx]:
                 score += 15
-            if patterns.get('macd_below_zero', pd.Series([False])).iloc[idx]:
+            if patterns.get('macd_below_zero', pd.Series([False])).iloc[last_idx]:
                 score -= 15
             
-            if patterns.get('golden_cross', pd.Series([False])).iloc[idx]:
+            # Moving Average Crosses
+            if patterns.get('golden_cross', pd.Series([False])).iloc[last_idx]:
                 score += 30
-            if patterns.get('death_cross', pd.Series([False])).iloc[idx]:
+            if patterns.get('death_cross', pd.Series([False])).iloc[last_idx]:
                 score -= 30
-            if patterns.get('ema_bullish_cross', pd.Series([False])).iloc[idx]:
+            if patterns.get('ema_bullish_cross', pd.Series([False])).iloc[last_idx]:
                 score += 20
-            if patterns.get('ema_bearish_cross', pd.Series([False])).iloc[idx]:
+            if patterns.get('ema_bearish_cross', pd.Series([False])).iloc[last_idx]:
                 score -= 20
             
-            if patterns.get('crt_buy', pd.Series([False])).iloc[idx]:
+            # ICT Patterns
+            if patterns.get('crt_buy', pd.Series([False])).iloc[last_idx]:
                 score += 35
-            if patterns.get('crt_sell', pd.Series([False])).iloc[idx]:
+            if patterns.get('crt_sell', pd.Series([False])).iloc[last_idx]:
                 score -= 35
-            if patterns.get('fvg_up', pd.Series([False])).iloc[idx]:
+            if patterns.get('fvg_up', pd.Series([False])).iloc[last_idx]:
                 score += 30
-            if patterns.get('fvg_down', pd.Series([False])).iloc[idx]:
+            if patterns.get('fvg_down', pd.Series([False])).iloc[last_idx]:
                 score -= 30
-            if patterns.get('bull_ob', pd.Series([False])).iloc[idx]:
+            if patterns.get('bull_ob', pd.Series([False])).iloc[last_idx]:
                 score += 25
-            if patterns.get('bear_ob', pd.Series([False])).iloc[idx]:
+            if patterns.get('bear_ob', pd.Series([False])).iloc[last_idx]:
                 score -= 25
             
-            if patterns.get('bullish_engulfing', pd.Series([False])).iloc[idx]:
+            # Candlestick Patterns
+            if patterns.get('bullish_engulfing', pd.Series([False])).iloc[last_idx]:
                 score += 20
-            if patterns.get('bearish_engulfing', pd.Series([False])).iloc[idx]:
+            if patterns.get('bearish_engulfing', pd.Series([False])).iloc[last_idx]:
                 score -= 20
-            if patterns.get('bullish_pin', pd.Series([False])).iloc[idx]:
+            if patterns.get('bullish_pin', pd.Series([False])).iloc[last_idx]:
                 score += 15
-            if patterns.get('bearish_pin', pd.Series([False])).iloc[idx]:
+            if patterns.get('bearish_pin', pd.Series([False])).iloc[last_idx]:
                 score -= 15
-            if patterns.get('morning_star', pd.Series([False])).iloc[idx]:
+            if patterns.get('morning_star', pd.Series([False])).iloc[last_idx]:
                 score += 25
-            if patterns.get('evening_star', pd.Series([False])).iloc[idx]:
+            if patterns.get('evening_star', pd.Series([False])).iloc[last_idx]:
                 score -= 25
             
-            if patterns.get('support_bounce', pd.Series([False])).iloc[idx]:
+            # Support/Resistance
+            if patterns.get('support_bounce', pd.Series([False])).iloc[last_idx]:
                 score += 20
-            if patterns.get('resistance_break', pd.Series([False])).iloc[idx]:
+            if patterns.get('resistance_break', pd.Series([False])).iloc[last_idx]:
                 score += 25
-            if patterns.get('double_bottom', pd.Series([False])).iloc[idx]:
+            if patterns.get('double_bottom', pd.Series([False])).iloc[last_idx]:
                 score += 20
-            if patterns.get('double_top', pd.Series([False])).iloc[idx]:
+            if patterns.get('double_top', pd.Series([False])).iloc[last_idx]:
                 score -= 20
             
-            if patterns.get('volume_spike', pd.Series([False])).iloc[idx]:
+            # Volume Patterns
+            if patterns.get('volume_spike', pd.Series([False])).iloc[last_idx]:
                 score += 10
-            if patterns.get('obv_bullish_div', pd.Series([False])).iloc[idx]:
+            if patterns.get('obv_bullish_div', pd.Series([False])).iloc[last_idx]:
                 score += 15
-            if patterns.get('obv_bearish_div', pd.Series([False])).iloc[idx]:
+            if patterns.get('obv_bearish_div', pd.Series([False])).iloc[last_idx]:
                 score -= 15
             
-            if patterns.get('in_killzone', pd.Series([False])).iloc[idx]:
+            # Kill Zones
+            if patterns.get('in_killzone', pd.Series([False])).iloc[last_idx]:
                 score += 15
-            if patterns.get('london_kz', pd.Series([False])).iloc[idx]:
+            if patterns.get('london_kz', pd.Series([False])).iloc[last_idx]:
                 score += 10
-            if patterns.get('ny_kz', pd.Series([False])).iloc[idx]:
+            if patterns.get('ny_kz', pd.Series([False])).iloc[last_idx]:
                 score += 12
-            if patterns.get('asia_kz', pd.Series([False])).iloc[idx]:
+            if patterns.get('asia_kz', pd.Series([False])).iloc[last_idx]:
                 score += 8
             
-            if patterns.get('strong_uptrend', pd.Series([False])).iloc[idx]:
+            # Trend Strength
+            if patterns.get('strong_uptrend', pd.Series([False])).iloc[last_idx]:
                 score += 15
-            if patterns.get('strong_downtrend', pd.Series([False])).iloc[idx]:
+            if patterns.get('strong_downtrend', pd.Series([False])).iloc[last_idx]:
                 score -= 15
             
-            if patterns.get('bb_oversold', pd.Series([False])).iloc[idx]:
+            # Bollinger Bands
+            if patterns.get('bb_oversold', pd.Series([False])).iloc[last_idx]:
                 score += 12
-            if patterns.get('bb_overbought', pd.Series([False])).iloc[idx]:
+            if patterns.get('bb_overbought', pd.Series([False])).iloc[last_idx]:
                 score -= 12
-            if patterns.get('bb_squeeze', pd.Series([False])).iloc[idx]:
+            if patterns.get('bb_squeeze', pd.Series([False])).iloc[last_idx]:
                 score += 10
             
-            if patterns.get('stoch_oversold', pd.Series([False])).iloc[idx]:
+            # Stochastic
+            if patterns.get('stoch_oversold', pd.Series([False])).iloc[last_idx]:
                 score += 12
-            if patterns.get('stoch_overbought', pd.Series([False])).iloc[idx]:
+            if patterns.get('stoch_overbought', pd.Series([False])).iloc[last_idx]:
                 score -= 12
-            if patterns.get('stoch_bullish_cross', pd.Series([False])).iloc[idx]:
+            if patterns.get('stoch_bullish_cross', pd.Series([False])).iloc[last_idx]:
                 score += 10
-            if patterns.get('stoch_bearish_cross', pd.Series([False])).iloc[idx]:
+            if patterns.get('stoch_bearish_cross', pd.Series([False])).iloc[last_idx]:
                 score -= 10
             
-            if patterns.get('three_white_soldiers', pd.Series([False])).iloc[idx]:
+            # Multi-candle patterns
+            if patterns.get('three_white_soldiers', pd.Series([False])).iloc[last_idx]:
                 score += 15
-            if patterns.get('three_black_crows', pd.Series([False])).iloc[idx]:
+            if patterns.get('three_black_crows', pd.Series([False])).iloc[last_idx]:
                 score -= 15
                 
         except Exception as e:
@@ -653,19 +720,23 @@ class GrokIndicators:
         return score
     
     def analyze_market_structure(self, df: pd.DataFrame) -> Dict[str, Any]:
+        """Piyasa yapısı analizi"""
         close = df['close']
         high = df['high']
         low = df['low']
         
+        # Higher Highs / Lower Lows
         hh = (high > high.shift(1)) & (high.shift(1) > high.shift(2))
         ll = (low < low.shift(1)) & (low.shift(1) < low.shift(2))
         
         structure_bullish = hh.any() and not ll.any()
         structure_bearish = ll.any() and not hh.any()
         
+        # Break of Structure
         bos_bullish = structure_bullish and (close.iloc[-1] > high.rolling(20).max().iloc[-2])
         bos_bearish = structure_bearish and (close.iloc[-1] < low.rolling(20).min().iloc[-2])
         
+        # Change of Character
         choch_bullish = structure_bearish and (close.iloc[-1] > high.rolling(10).max().iloc[-2])
         choch_bearish = structure_bullish and (close.iloc[-1] < low.rolling(10).min().iloc[-2])
         
@@ -677,57 +748,151 @@ class GrokIndicators:
             'lower_lows': int(ll.iloc[-1]) if len(ll) > 0 else 0
         }
 
-# Global instance
+# Global Grok instance
 grok = GrokIndicators()
 
-# ==================== SİNYAL FONKSİYONLARI ====================
+# ==================== UTILITY FUNCTIONS ====================
+def update_price(source: str, symbol: str, price: float, change: Optional[float] = None):
+    """Fiyat havuzunu güncelle"""
+    if price <= 0:
+        return
+    
+    current_info = price_pool[symbol]
+    new_change = change if change is not None else current_info["change"]
+    
+    price_pool[symbol] = {
+        "price": price,
+        "change": new_change,
+        "timestamp": datetime.utcnow().timestamp(),
+        "source": source
+    }
 
+async def calculate_top_gainers():
+    """Top gainers hesaplama görevi"""
+    global top_gainers, last_update
+    
+    while True:
+        try:
+            cutoff = datetime.utcnow().timestamp() - 120  # Son 2 dakika
+            
+            # Güncel fiyatları filtrele
+            recent = []
+            for sym, info in price_pool.items():
+                if info["timestamp"] > cutoff and abs(info["change"]) > 0.1:
+                    recent.append((sym, info["price"], info["change"]))
+            
+            # En iyi kazananları sırala
+            sorted_gainers = sorted(recent, key=lambda x: x[2], reverse=True)[:30]
+            
+            # Formatla
+            top_gainers = [
+                {
+                    "symbol": sym.replace("USDT", ""), 
+                    "price": price, 
+                    "change": round(change, 2)
+                }
+                for sym, price, change in sorted_gainers
+            ]
+            
+            last_update = datetime.utcnow().strftime("%H:%M:%S UTC")
+            
+            # Abonelere gönder
+            if pump_radar_subscribers:
+                payload = {
+                    "top_gainers": top_gainers[:10],
+                    "last_update": last_update,
+                    "total_coins": len(top_gainers)
+                }
+                
+                tasks = []
+                for ws in list(pump_radar_subscribers):
+                    try:
+                        tasks.append(ws.send_json(payload))
+                    except:
+                        pump_radar_subscribers.discard(ws)
+                
+                if tasks:
+                    await asyncio.gather(*tasks, return_exceptions=True)
+            
+        except Exception as e:
+            logger.error(f"Top gainers hesaplamada hata: {e}")
+        
+        await asyncio.sleep(12)
+
+# ==================== SIGNAL GENERATION ====================
 def generate_ict_signal(df: pd.DataFrame, symbol: str, timeframe: str) -> Optional[Dict[str, Any]]:
+    """ICT sinyali oluştur"""
     try:
+        # Veri kontrolü
         if len(df) < 50:
             logger.warning(f"{symbol}: Yetersiz veri ({len(df)})")
-            return generate_technical_analysis(df, symbol, timeframe)
-
+            return None
+        
         required = ['open', 'high', 'low', 'close', 'volume']
         if not all(col in df.columns for col in required):
             logger.error(f"{symbol}: Eksik sütun")
-            return generate_technical_analysis(df, symbol, timeframe)
-
-        df = df.copy()
-        df = df.astype(float, errors='ignore')
+            return None
         
+        # Veri hazırlığı
+        df = df.copy()
+        for col in required:
+            df[col] = pd.to_numeric(df[col], errors='coerce')
+        
+        df = df.dropna()
+        
+        if len(df) < 50:
+            return None
+        
+        # Pivot noktaları
         df['pivot_high'], df['pivot_low'] = grok.detect_pivots(df['high'], df['low'])
         
+        # Volume profile
         _, poc_price, (va_low, va_high) = grok.calculate_volume_profile(df)
         
+        # Pattern tespiti
         patterns = grok.detect_all_patterns(df)
         
+        # Fibonacci
         df = grok.detect_fibonacci_levels(df, df['pivot_high'], df['pivot_low'])
         
+        # Piyasa yapısı
         market_structure = grok.analyze_market_structure(df)
         
+        # Sinyal skoru
         signal_score = grok.calculate_signal_score(patterns)
-        
         normalized_score = int(np.clip((signal_score + 150) * 100 / 300, 0, 100))
         
+        # Son veri
         last = df.iloc[-1]
         current_price = float(last['close'])
         
+        # Aktif patternler
         active_patterns = []
         for pattern_name, pattern_series in patterns.items():
-            if isinstance(pattern_series, pd.Series) and not pattern_name.startswith(('rsi', 'macd', 'sma', 'ema', 'volume')):
-                if pattern_series.iloc[-1] and pattern_series.dtype == bool:
-                    name = pattern_name.replace('_', ' ').title()
-                    active_patterns.append(name)
+            if (isinstance(pattern_series, pd.Series) and 
+                pattern_name not in ['rsi6', 'rsi14', 'macd', 'macd_signal', 'sma50', 'sma200', 'volume']):
+                try:
+                    if pattern_series.iloc[-1] and pattern_series.dtype == bool:
+                        name = pattern_name.replace('_', ' ').title()
+                        active_patterns.append(name)
+                except:
+                    pass
         
-        killzone = "London" if patterns.get('london_kz', pd.Series([False])).iloc[-1] else \
-                  "New York" if patterns.get('ny_kz', pd.Series([False])).iloc[-1] else \
-                  "Asia" if patterns.get('asia_kz', pd.Series([False])).iloc[-1] else "Normal"
+        # Killzone
+        killzone = "Normal"
+        if patterns.get('london_kz', pd.Series([False])).iloc[-1]:
+            killzone = "London"
+        elif patterns.get('ny_kz', pd.Series([False])).iloc[-1]:
+            killzone = "New York"
+        elif patterns.get('asia_kz', pd.Series([False])).iloc[-1]:
+            killzone = "Asia"
         
+        # Sinyal gücü
         signal_strength = "ELITE" if normalized_score >= 85 else \
                          "GÜÇLÜ" if normalized_score >= 70 else \
                          "ORTA" if normalized_score >= 55 else "ZAYIF"
         
+        # Sinyal tipi
         if signal_score > 0:
             signal_text = "ELITE ALIM" if normalized_score >= 85 else \
                          "GÜÇLÜ ALIM" if normalized_score >= 70 else \
@@ -739,20 +904,23 @@ def generate_ict_signal(df: pd.DataFrame, symbol: str, timeframe: str) -> Option
         else:
             signal_text = "NÖTR"
         
+        # Yapı bilgisi
         structure_info = market_structure['market_structure']
         if market_structure['bos'] != 'NONE':
             structure_info += f" | BOS: {market_structure['bos']}"
         if market_structure['choch'] != 'NONE':
             structure_info += f" | ChoCH: {market_structure['choch']}"
         
+        # Göstergeler
         rsi6_val = float(patterns.get('rsi6', pd.Series([50])).iloc[-1])
         rsi14_val = float(patterns.get('rsi14', pd.Series([50])).iloc[-1])
         macd_val = float(patterns.get('macd', pd.Series([0])).iloc[-1])
         
+        # Tetikleyiciler
         triggers = active_patterns[:8]
         trigger_text = " | ".join(triggers) if triggers else f"RSI6: {rsi6_val:.1f}"
         
-        logger.info(f"{symbol}/{timeframe} → {signal_text} | Skor: {normalized_score} | Patern: {len(active_patterns)}")
+        logger.info(f"{symbol}/{timeframe} → {signal_text} | Skor: {normalized_score}")
         
         return {
             "pair": symbol.replace("USDT", "/USDT"),
@@ -770,70 +938,72 @@ def generate_ict_signal(df: pd.DataFrame, symbol: str, timeframe: str) -> Option
                 "macd": round(macd_val, 4)
             },
             "active_patterns": len(active_patterns),
-            "last_update": datetime.utcnow().strftime("%H:%M:%S UTC")
+            "last_update": datetime.utcnow().strftime("%H:%M:%S UTC"),
+            "timestamp": datetime.now().isoformat()
         }
-
+        
     except Exception as e:
         logger.error(f"Sinyal hatası {symbol}: {e}")
         import traceback
         logger.error(traceback.format_exc())
-        return generate_technical_analysis(df, symbol, timeframe)
+        return None
 
-def calculate_rsi(prices, period=14):
-    if len(prices) < period + 1:
-        return 50
-    
-    try:
-        deltas = prices.diff()
-        gain = (deltas.where(deltas > 0, 0)).rolling(window=period).mean()
-        loss = (-deltas.where(deltas < 0, 0)).rolling(window=period).mean()
-        
-        rs = gain / loss
-        rsi = 100 - (100 / (1 + rs))
-        
-        return float(rsi.iloc[-1]) if not pd.isna(rsi.iloc[-1]) else 50
-    except:
-        return 50
-
-def calculate_macd(prices, fast=12, slow=26, signal=9):
-    if len(prices) < slow + signal:
-        return {"trend": "NÖTR"}
-    
-    try:
-        exp1 = prices.ewm(span=fast, adjust=False).mean()
-        exp2 = prices.ewm(span=slow, adjust=False).mean()
-        macd_line = exp1 - exp2
-        signal_line = macd_line.ewm(span=signal, adjust=False).mean()
-        histogram = macd_line - signal_line
-        
-        hist_value = histogram.iloc[-1]
-        
-        if hist_value > 0:
-            trend = "YÜKSELİŞ"
-        elif hist_value < 0:
-            trend = "DÜŞÜŞ"
-        else:
-            trend = "NÖTR"
-        
-        return {"trend": trend}
-    except:
-        return {"trend": "NÖTR"}
-
-def generate_technical_analysis(df, symbol, timeframe):
+def generate_technical_analysis(df: pd.DataFrame, symbol: str, timeframe: str) -> Optional[Dict[str, Any]]:
+    """Geleneksel teknik analiz sinyali"""
     if len(df) < 20:
         return None
     
     try:
+        # Temel fiyat bilgileri
         current_price = float(df['close'].iloc[-1])
-        prev_price = float(df['close'].iloc[-2])
+        prev_price = float(df['close'].iloc[-2]) if len(df) > 1 else current_price
         change_pct = ((current_price - prev_price) / prev_price * 100) if prev_price > 0 else 0
         
-        rsi_value = calculate_rsi(df['close'])
-        macd_data = calculate_macd(df['close'])
+        # RSI
+        def calculate_rsi_series(prices, period=14):
+            if len(prices) < period + 1:
+                return 50
+            
+            deltas = prices.diff()
+            gain = (deltas.where(deltas > 0, 0)).rolling(window=period).mean()
+            loss = (-deltas.where(deltas < 0, 0)).rolling(window=period).mean()
+            
+            rs = gain / (loss + 1e-10)
+            rsi = 100 - (100 / (1 + rs))
+            
+            return float(rsi.iloc[-1]) if not pd.isna(rsi.iloc[-1]) else 50
         
+        rsi_value = calculate_rsi_series(df['close'])
+        
+        # MACD
+        def calculate_macd_series(prices, fast=12, slow=26, signal=9):
+            if len(prices) < slow + signal:
+                return {"trend": "NÖTR"}
+            
+            exp1 = prices.ewm(span=fast, adjust=False).mean()
+            exp2 = prices.ewm(span=slow, adjust=False).mean()
+            macd_line = exp1 - exp2
+            signal_line = macd_line.ewm(span=signal, adjust=False).mean()
+            histogram = macd_line - signal_line
+            
+            hist_value = histogram.iloc[-1]
+            
+            if hist_value > 0:
+                trend = "YÜKSELİŞ"
+            elif hist_value < 0:
+                trend = "DÜŞÜŞ"
+            else:
+                trend = "NÖTR"
+            
+            return {"trend": trend}
+        
+        macd_data = calculate_macd_series(df['close'])
+        
+        # Moving Averages
         ma20 = df['close'].rolling(window=20).mean().iloc[-1] if len(df) >= 20 else current_price
         ma50 = df['close'].rolling(window=50).mean().iloc[-1] if len(df) >= 50 else current_price
         
+        # Trend analizi
         if current_price > ma20 > ma50:
             trend_strength = "GÜÇLÜ YÜKSELİŞ"
             trend_score = 80
@@ -850,6 +1020,7 @@ def generate_technical_analysis(df, symbol, timeframe):
             trend_strength = "YATAY"
             trend_score = 50
         
+        # Skor hesaplama
         score = trend_score
         
         if rsi_value > 70:
@@ -864,6 +1035,7 @@ def generate_technical_analysis(df, symbol, timeframe):
         
         score = max(10, min(95, score))
         
+        # Sinyal belirleme
         if score >= 70:
             signal_type = "GÜÇLÜ ALIM"
             strength = "YÜKSEK"
@@ -885,6 +1057,7 @@ def generate_technical_analysis(df, symbol, timeframe):
             strength = "DÜŞÜK"
             color = "gold"
         
+        # Killzone
         now_utc = datetime.utcnow()
         hour = now_utc.hour
         
@@ -897,8 +1070,9 @@ def generate_technical_analysis(df, symbol, timeframe):
         else:
             killzone = "NORMAL"
         
+        # Sonuç
         result = {
-            "pair": f"{symbol}/USDT",
+            "pair": f"{symbol.replace('USDT', '')}/USDT",
             "timeframe": timeframe.upper(),
             "current_price": round(current_price, 6 if current_price < 1 else 4),
             "signal": signal_type,
@@ -916,6 +1090,7 @@ def generate_technical_analysis(df, symbol, timeframe):
             "timestamp": datetime.now().isoformat()
         }
         
+        # Geçmişe kaydet
         signal_key = f"{symbol}:{timeframe}"
         signal_history[signal_key].append(result)
         if len(signal_history[signal_key]) > 5:
@@ -927,39 +1102,70 @@ def generate_technical_analysis(df, symbol, timeframe):
         logger.error(f"Teknik analiz hatası: {e}")
         return None
 
-# ==================== LIFESPAN ====================
+# ==================== INITIALIZATION ====================
+async def initialize_application():
+    """Uygulama başlatma"""
+    logger.info("ICT SMART PRO v7.0 başlatılıyor...")
+    
+    try:
+        # Core modülü başlat
+        await core_initialize()
+        logger.info("✅ Core modül başlatıldı")
+    except Exception as e:
+        logger.warning(f"⚠️ Core modül başlatma hatası: {e}")
+    
+    # Top gainers hesaplama görevini başlat
+    asyncio.create_task(calculate_top_gainers())
+    logger.info("✅ Top gainers hesaplayıcı başlatıldı")
+    
+    logger.info("✅ ICT SMART PRO başlatma tamamlandı")
 
+async def cleanup_application():
+    """Uygulama temizleme"""
+    logger.info("Uygulama kapatılıyor...")
+    
+    try:
+        await core_cleanup()
+        logger.info("✅ Core modül temizlendi")
+    except Exception as e:
+        logger.error(f"Core temizleme hatası: {e}")
+    
+    # WebSocket bağlantılarını kapat
+    for ws in list(price_sources_subscribers):
+        try:
+            await ws.close()
+        except:
+            pass
+    
+    logger.info("✅ Uygulama kapatıldı")
+
+# ==================== FASTAPI LIFESPAN ====================
 @asynccontextmanager
 async def lifespan(app: FastAPI):
+    """FastAPI lifespan yöneticisi"""
     logger.info("ICT SMART PRO başlatılıyor...")
-    try:
-        await initialize()
-        logger.info("Uygulama başarıyla başlatıldı")
-    except Exception as e:
-        logger.error(f"Başlatma hatası: {e}")
+    await initialize_application()
     yield
-    logger.info("Uygulama kapatılıyor...")
-    try:
-        await cleanup()
-    except Exception as e:
-        logger.error(f"Kapatma hatası: {e}")
+    logger.info("ICT SMART PRO kapatılıyor...")
+    await cleanup_application()
 
 # ==================== FASTAPI APP ====================
-
 app = FastAPI(
     lifespan=lifespan,
     title="ICT SMART PRO",
     version="7.0",
     description="Production Optimized Crypto Signal Platform",
     docs_url="/api/docs",
-    redoc_url="/api/redoc"
+    redoc_url="/api/redoc",
+    openapi_url="/api/openapi.json"
 )
 
 # ==================== MIDDLEWARE ====================
-
 @app.middleware("http")
 async def count_visitors_middleware(request: Request, call_next):
+    """Ziyaretçi sayma middleware'i"""
     visitor_id = request.cookies.get("visitor_id")
+    
     if not visitor_id:
         ip = request.client.host or "anonymous"
         visitor_id = hashlib.md5(f"{ip}{datetime.now().strftime('%Y%m%d')}".encode()).hexdigest()[:12]
@@ -981,24 +1187,27 @@ async def count_visitors_middleware(request: Request, call_next):
     
     return response
 
-# ==================== WEBSOCKET ENDPOINTS ====================
-
+# ==================== WEB SOCKET ENDPOINTS ====================
 @app.websocket("/ws/price_sources")
 async def websocket_price_sources(websocket: WebSocket):
+    """Fiyat kaynakları WebSocket"""
     await websocket.accept()
     price_sources_subscribers.add(websocket)
+    
     try:
         while True:
             try:
                 await websocket.send_json({
-                    "sources": price_sources_status, 
+                    "sources": core_price_sources_status(), 
                     "total_symbols": len(price_pool),
                     "timestamp": datetime.now().isoformat()
                 })
             except Exception as e:
                 logger.error(f"Price sources send error: {e}")
                 break
+            
             await asyncio.sleep(10)
+            
     except WebSocketDisconnect:
         pass
     except Exception as e:
@@ -1008,13 +1217,18 @@ async def websocket_price_sources(websocket: WebSocket):
 
 @app.websocket("/ws/signal/{pair}/{timeframe}")
 async def websocket_signal(websocket: WebSocket, pair: str, timeframe: str):
+    """Tek coin sinyal WebSocket"""
     await websocket.accept()
+    
+    # Sembolü normalize et
     symbol = pair.upper().replace("/", "").replace("-", "").strip()
     if not symbol.endswith("USDT"):
         symbol += "USDT"
+    
     channel = f"{symbol}:{timeframe}"
     single_subscribers[channel].add(websocket)
     
+    # Mevcut sinyali gönder
     sig = shared_signals.get(timeframe, {}).get(symbol)
     if sig:
         await websocket.send_json(sig)
@@ -1022,7 +1236,13 @@ async def websocket_signal(websocket: WebSocket, pair: str, timeframe: str):
     try:
         while True:
             await asyncio.sleep(30)
-            await websocket.send_json({"heartbeat": True, "timestamp": datetime.now().isoformat()})
+            try:
+                await websocket.send_json({
+                    "heartbeat": True, 
+                    "timestamp": datetime.now().isoformat()
+                })
+            except:
+                break
                 
     except WebSocketDisconnect:
         pass
@@ -1033,6 +1253,7 @@ async def websocket_signal(websocket: WebSocket, pair: str, timeframe: str):
 
 @app.websocket("/ws/all/{timeframe}")
 async def websocket_all_signals(websocket: WebSocket, timeframe: str):
+    """Tüm sinyaller WebSocket"""
     supported = ["5m", "15m", "1h", "4h", "1d"]
     
     if timeframe not in supported:
@@ -1042,16 +1263,21 @@ async def websocket_all_signals(websocket: WebSocket, timeframe: str):
     await websocket.accept()
     all_subscribers[timeframe].add(websocket)
     
+    # İlk sinyalleri gönder
     initial_signals = active_strong_signals.get(timeframe, [])[:20]
     await websocket.send_json(initial_signals)
     
     try:
         while True:
             await asyncio.sleep(60)
-            await websocket.send_json({
-                "ping": True, 
-                "timestamp": datetime.now().isoformat()
-            })
+            try:
+                await websocket.send_json({
+                    "ping": True, 
+                    "timestamp": datetime.now().isoformat()
+                })
+            except:
+                break
+                
     except WebSocketDisconnect:
         pass
     except Exception as e:
@@ -1061,9 +1287,11 @@ async def websocket_all_signals(websocket: WebSocket, timeframe: str):
 
 @app.websocket("/ws/pump_radar")
 async def websocket_pump_radar(websocket: WebSocket):
+    """Pump radar WebSocket"""
     await websocket.accept()
     pump_radar_subscribers.add(websocket)
     
+    # İlk veriyi gönder
     await websocket.send_json({
         "top_gainers": top_gainers[:10], 
         "last_update": last_update,
@@ -1073,10 +1301,14 @@ async def websocket_pump_radar(websocket: WebSocket):
     try:
         while True:
             await asyncio.sleep(30)
-            await websocket.send_json({
-                "ping": True,
-                "timestamp": datetime.now().isoformat()
-            })
+            try:
+                await websocket.send_json({
+                    "ping": True,
+                    "timestamp": datetime.now().isoformat()
+                })
+            except:
+                break
+                
     except WebSocketDisconnect:
         pass
     except Exception as e:
@@ -1085,15 +1317,16 @@ async def websocket_pump_radar(websocket: WebSocket):
         pump_radar_subscribers.discard(websocket)
 
 # ==================== HTML PAGES ====================
-@app.get("/")
+@app.get("/", response_class=HTMLResponse)
 async def home_page(request: Request):
+    """Ana sayfa"""
     user = request.cookies.get("user_email") or "Misafir"
     visitor_stats = get_visitor_stats_html()
     
     system_status = "🟢"
-    binance_status = "🟢" if get_binance_client() else "🔴"
+    binance_status = "🟢" if core_get_binance_client() else "🔴"
     
-    html = f"""
+    html_content = f"""
     <!DOCTYPE html>
     <html lang="tr">
     <head>
@@ -1205,18 +1438,18 @@ async def home_page(request: Request):
     </html>
     """
     
-    return HTMLResponse(content=html)
+    return HTMLResponse(content=html_content)
 
-
-@app.get("/signal")
+@app.get("/signal", response_class=HTMLResponse)
 async def signal_page(request: Request):
+    """Tek coin sinyal sayfası"""
     user = request.cookies.get("user_email")
     if not user:
         return RedirectResponse("/login")
     
     visitor_stats = get_visitor_stats_html()
     
-    html = f"""
+    html_content = f"""
     <!DOCTYPE html>
     <html lang="tr">
     <head>
@@ -1319,7 +1552,6 @@ async def signal_page(request: Request):
                 border-radius: 10px;
                 color: #00ff88;
             }}
-
             input#pair {{
                 background-color: #1a0033;
                 color: #00ff88;
@@ -1348,7 +1580,6 @@ async def signal_page(request: Request):
                 border-color: #fc00ff88;
                 box-shadow: 0 0 15px rgba(252, 0, 255, 0.3);
             }}
-
             select#timeframe {{
                 background-color: #1a0033;
                 color: #00ff88;
@@ -1545,11 +1776,12 @@ async def signal_page(request: Request):
     </html>
     """
     
-    return HTMLResponse(content=html)
-#===============================================
+    return HTMLResponse(content=html_content)
 
+# ==================== API ENDPOINTS ====================
 @app.post("/api/analyze-chart")
 async def analyze_chart_endpoint(request: Request):
+    """Chart analiz API endpoint"""
     try:
         body = await request.json()
         symbol = body.get("symbol", "BTC").upper()
@@ -1557,36 +1789,67 @@ async def analyze_chart_endpoint(request: Request):
         
         logger.info(f"ELITE Analiz isteği: {symbol} @ {timeframe}")
         
-        binance_client = get_binance_client()
+        binance_client = core_get_binance_client()
         if not binance_client:
             return JSONResponse({
                 "analysis": "Binance bağlantısı aktif değil.",
                 "success": False
             }, status_code=503)
         
+        # Sembolü normalize et
         if symbol.endswith("/USDT"):
             symbol = symbol.replace("/USDT", "")
         if not symbol.endswith("USDT"):
             symbol += "USDT"
         
-        interval_map = {"5m": "5m", "15m": "15m", "1h": "1h", "4h": "4h", "1d": "1d"}
+        # Timeframe mapping
+        interval_map = {
+            "1m": "1m", "3m": "3m", "5m": "5m", 
+            "15m": "15m", "30m": "30m", 
+            "1h": "1h", "4h": "4h", "1d": "1d"
+        }
+        
         ccxt_timeframe = interval_map.get(timeframe, "5m")
         
         try:
-            klines = await binance_client.fetch_ohlcv(symbol, timeframe=ccxt_timeframe, limit=300)
+            # Veriyi al
+            klines = await binance_client.fetch_ohlcv(
+                symbol, 
+                timeframe=ccxt_timeframe, 
+                limit=300
+            )
             
             if not klines or len(klines) < 50:
-                return JSONResponse({"analysis": f"{symbol.replace('USDT', '')} için yeterli veri yok.", "success": False})
+                return JSONResponse({
+                    "analysis": f"{symbol.replace('USDT', '')} için yeterli veri yok.",
+                    "success": False
+                })
             
-            df = pd.DataFrame(klines, columns=['timestamp','open','high','low','close','volume'])
-            df.iloc[:,1:] = df.iloc[:,1:].apply(pd.to_numeric, errors='coerce')
+            # DataFrame oluştur
+            df = pd.DataFrame(
+                klines, 
+                columns=['timestamp', 'open', 'high', 'low', 'close', 'volume']
+            )
+            
+            # Numerik dönüşüm
+            for col in ['open', 'high', 'low', 'close', 'volume']:
+                df[col] = pd.to_numeric(df[col], errors='coerce')
+            
             df = df.dropna()
             
+            # Analiz yap
             analysis = generate_ict_signal(df, symbol.replace("USDT", ""), timeframe)
             
             if not analysis:
                 analysis = generate_technical_analysis(df, symbol.replace("USDT", ""), timeframe)
             
+            if not analysis:
+                return JSONResponse({
+                    "analysis": "Analiz yapılamadı.",
+                    "success": False
+                })
+            
+            # Rapor oluştur
             report = f"""
 ELITE ANALİZ - {analysis['pair']} ({analysis['timeframe']})
 
@@ -1612,21 +1875,45 @@ Saat: {analysis['last_update']}
             
         except Exception as e:
             logger.error(f"Veri hatası: {e}")
-            return JSONResponse({"analysis": f"Veri alınamadı: {str(e)}", "success": False})
+            return JSONResponse({
+                "analysis": f"Veri alınamadı: {str(e)}", 
+                "success": False
+            })
             
     except Exception as e:
         logger.error(f"Analiz hatası: {e}")
-        return JSONResponse({"analysis": f"Hata: {str(e)}", "success": False}, status_code=500)
+        return JSONResponse({
+            "analysis": f"Hata: {str(e)}", 
+            "success": False
+        }, status_code=500)
 
-# ==================== RUN ====================
+@app.get("/api/health")
+async def health_check():
+    """Sağlık kontrol endpoint'i"""
+    return {
+        "status": "healthy",
+        "version": "7.0",
+        "timestamp": datetime.now().isoformat(),
+        "visitors": visitor_counter.get_stats(),
+        "price_pool_size": len(price_pool),
+        "top_gainers_count": len(top_gainers)
+    }
 
+# ==================== MAIN ENTRY POINT ====================
 if __name__ == "__main__":
     import uvicorn
+    
     port = int(os.getenv("PORT", 8000))
     host = os.getenv("HOST", "0.0.0.0")
     
-    logger.info(f"ICT SMART PRO v7.0 başlatılıyor... (GROK ELITE ENGINE ACTIVE)")
+    logger.info(f"ICT SMART PRO v7.0 başlatılıyor...")
     logger.info(f"Host: {host}:{port}")
+    logger.info(f"GROK ELITE ENGINE ACTIVE")
     
-    uvicorn.run(app, host=host, port=port, log_level="info", access_log=False)
-
+    uvicorn.run(
+        app, 
+        host=host, 
+        port=port, 
+        log_level="info", 
+        access_log=False
+    )
