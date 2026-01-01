@@ -363,8 +363,9 @@ async def broadcast_worker():
                             disconnected.add(ws)
                     all_subscribers[tf] -= disconnected
 
-            elif msg_type == "pump_radar":
-                # DOĞRU KULLANIM: Global değişkenleri doğrudan kullan
+                elif msg_type == "pump_radar":
+                   global top_gainers, last_update, pump_radar_subscribers  # ← BU SATIRI EKLE!
+
                 top_gainers.clear()
                 top_gainers.extend(payload.get("top_gainers", [])[:10])
                 last_update = payload.get("last_update", "N/A")
@@ -376,8 +377,6 @@ async def broadcast_worker():
                     except Exception:
                         disconnected.add(ws)
                 pump_radar_subscribers -= disconnected
-
-            signal_queue.task_done()
             
         except asyncio.CancelledError:
             break
