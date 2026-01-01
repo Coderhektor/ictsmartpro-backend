@@ -364,7 +364,7 @@ async def broadcast_worker():
                     all_subscribers[tf] -= disconnected
 
                 elif msg_type == "pump_radar":
-                   global top_gainers, last_update, pump_radar_subscribers  # ← BU SATIRI EKLE!
+                    global top_gainers, last_update, pump_radar_subscribers  # ← BU SATIRI EKLE!
 
                 top_gainers.clear()
                 top_gainers.extend(payload.get("top_gainers", [])[:10])
