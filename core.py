@@ -13,40 +13,49 @@ import pandas as pd
 # core.py en üstte, mevcut global'lerin yanına ekle
 price_sources_status: Dict[str, Dict[str, Any]] = {}  # "binance": {"last_update": ..., "symbols_count": 0, "healthy": True}
 
- 
-    def update_price(source: str, symbol: str, price: float, change_24h: Optional[float] = None):
+def update_price(source: str, symbol: str, price: float, change_24h: Optional[float] = None):
     with price_pool_lock:
-        # Symbol'ü başlat (nested dict yapısı)
+        # Symbol'ü normalize et (tüm exchange'ler için aynı format)
+        symbol = symbol.upper().replace('-', '').replace('/', '')
+        if not symbol.endswith('USDT'):
+            symbol += 'USDT'
+        
+        # Eğer symbol yoksa, doğru yapıyla başlat
         if symbol not in price_pool:
             price_pool[symbol] = {
-                "sources": {},
-                "best_price": 0.0,
-                "updated": ""
+                'sources': {},  # Kaynak verileri burada
+                'best_price': 0.0,
+                'updated': ''
             }
         
         # Kaynak verisini kaydet
-        price_pool[symbol]["sources"][source] = {
-            "price": float(price),
-            "change_24h": float(change_24h) if change_24h is not None else None,
-            "timestamp": datetime.now(timezone.utc).isoformat()
+        price_pool[symbol]['sources'][source] = {
+            'price': float(price),
+            'change_24h': float(change_24h) if change_24h is not None else None,
+            'timestamp': datetime.now(timezone.utc).isoformat()
         }
         
-        # Geçerli fiyatları topla
-        sources_dict = price_pool[symbol]["sources"]
-        valid_prices = [info["price"] for info in sources_dict.values() 
-                       if info.get("price", 0) > 0]
+        # Ortalama fiyatı hesapla (tüm kaynakların ortalaması)
+        sources = price_pool[symbol]['sources']
+        valid_prices = [v['price'] for v in sources.values() if v['price'] > 0]
         
         if valid_prices:
-            # Ortalama fiyatı hesapla
-            price_pool[symbol]["best_price"] = round(sum(valid_prices) / len(valid_prices), 10)
-            price_pool[symbol]["updated"] = datetime.now(timezone.utc).strftime("%H:%M:%S")
+            price_pool[symbol]['best_price'] = round(sum(valid_prices) / len(valid_prices), 8)
+            price_pool[symbol]['updated'] = datetime.now(timezone.utc).strftime("%H:%M:%S")
         
         # Kaynak durumunu güncelle
         price_sources_status[source] = {
-            "last_update": datetime.now(timezone.utc).strftime("%H:%M:%S UTC"),
-            "symbols_count": len([s for s in price_pool.values() if source in s.get("sources", {})]),
-            "healthy": True
+            'last_update': datetime.now(timezone.utc).strftime("%H:%M:%S UTC"),
+            'symbols_count': sum(1 for data in price_pool.values() 
+                               if source in data.get('sources', {})),
+            'healthy': True
         }
+        
+        # DEBUG: Kaç symbol var?
+        if len(price_pool) % 50 == 0:  # Her 50 symbol'de bir log
+            logger.info(f"📊 Fiyat havuzunda {len(price_pool)} symbol, "
+                       f"son güncellenen: {symbol} = {price}")
+
 # ==================== LOGGER ====================
 logger = logging.getLogger("core")
 logger.setLevel(logging.INFO)
