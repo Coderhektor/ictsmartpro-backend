@@ -359,25 +359,22 @@ async def broadcast_worker():
                             disconnected.add(ws)
                     all_subscribers[tf] -= disconnected
 
-            elif msg_type == "pump_radar":
-                global top_gainers, last_update
-                top_gainers = payload.get("top_gainers", [])[:10]
-                last_update = payload.get("last_update", "N/A")
+           elif msg_type == "pump_radar":
+    global top_gainers, last_update
+    top_gainers = payload.get("top_gainers", [])[:10]
+    last_update = payload.get("last_update", "N/A")
 
-                disconnected = set()
-                for ws in pump_radar_subscribers:
-                    try:
-                        await ws.send_json(payload)
-                    except Exception:
-                        disconnected.add(ws)
-                pump_radar_subscribers -= disconnected
-
-            signal_queue.task_done()
-        except asyncio.CancelledError:
-            break
-        except Exception as e:
-            logger.error(f"Broadcast worker hatası: {e}")
-            await asyncio.sleep(1)
+    # Kısa ve hatasız versiyon:
+    from core import pump_radar_subscribers  # <-- Import et
+    disconnected = []
+    for ws in list(pump_radar_subscribers):
+        try:
+            await ws.send_json(payload)
+        except Exception:
+            disconnected.append(ws)
+    
+    for ws in disconnected:
+        pump_radar_subscribers.discard(ws)
 
 # ==================== EXCHANGE STREAMS (FALLBACK) ====================
 try:
