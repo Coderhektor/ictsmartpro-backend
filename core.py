@@ -49,22 +49,7 @@ if not logger.handlers:
 price_pool: Dict[str, Dict[str, Any]] = {}
 price_pool_lock = Lock()
 
-def update_price(source: str, symbol: str, price: float, change_24h: Optional[float] = None):
-    with price_pool_lock:
-        if symbol not in price_pool:
-            price_pool[symbol] = {}
-
-        price_pool[symbol][source] = {
-            "price": float(price),
-            "change_24h": float(change_24h) if change_24h is not None else None,
-            "timestamp": datetime.now(timezone.utc).isoformat()
-        }
-
-        valid_prices = [info["price"] for info in price_pool[symbol].values() if info.get("price", 0) > 0]
-        if valid_prices:
-            price_pool[symbol]["best_price"] = round(sum(valid_prices) / len(valid_prices), 10)
-            price_pool[symbol]["sources"] = list(price_pool[symbol].keys())
-            price_pool[symbol]["updated"] = datetime.now(timezone.utc).strftime("%H:%M:%S")
+ 
 
 def get_best_price(symbol: str) -> Dict[str, Any]:
     with price_pool_lock:
