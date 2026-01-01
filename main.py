@@ -13,7 +13,7 @@ from fastapi.responses import HTMLResponse, RedirectResponse, JSONResponse
 from fastapi import FastAPI, WebSocket, WebSocketDisconnect, Request, Response, UploadFile, File, HTTPException
 from core import (
     initialize, cleanup, single_subscribers, all_subscribers,
-    pump_radar_subscribers, realtime_subscribers,
+    pump_radar_subscribers,
     shared_signals, active_strong_signals, top_gainers, last_update, rt_ticker,
     get_binance_client
 )
@@ -1315,3 +1315,4 @@ async def login(request: Request):
 if __name__ == "__main__":
     import uvicorn
     uvicorn.run(app, host="0.0.0.0", port=8000)
+
