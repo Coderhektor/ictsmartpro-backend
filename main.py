@@ -374,6 +374,41 @@ async function connect() {{
     }};
 }}
 
+async function analyzeChartWithAI() {{
+    const btn = document.getElementById('analyze-btn');
+    const box = document.getElementById('ai-box');
+    const comment = document.getElementById('ai-comment');
+    const symbol = getWsSymbol();
+    const timeframe = document.getElementById('tf').value;
+
+    btn.disabled = true;
+    btn.innerHTML = "⏳ Analiz ediliyor...";
+    box.style.display = 'block';
+    comment.innerHTML = "📊 Sunucuya istek gönderiliyor... Lütfen bekleyin.";
+
+    try {{
+        const response = await fetch('/api/analyze-chart', {{
+            method: 'POST',
+            headers: {{ 'Content-Type': 'application/json' }},
+            body: JSON.stringify({{ symbol: symbol, timeframe: timeframe }})
+        }});
+
+        const data = await response.json();
+
+        if (data.success) {{
+            comment.innerHTML = data.analysis.replace(/\\n/g, '<br>');
+        }} else {{
+            comment.innerHTML = `<strong style="color:#ff4444">❌ Analiz hatası:</strong><br>${{data.analysis || 'Bilinmeyen hata'}}`;
+        }}
+    }} catch (err) {{
+        comment.innerHTML = `<strong style="color:#ff4444">❌ Bağlantı hatası:</strong><br>${{err.message || 'Sunucuya ulaşılamıyor'}}`;
+        console.error('Analiz hatası:', err);
+    }} finally {{
+        btn.disabled = false;
+        btn.innerHTML = "🤖 GRAFİĞİ ANALİZ ET";
+    }}
+}}
+
 document.addEventListener("DOMContentLoaded", () => setTimeout(connect, 500));
 </script>
 </body></html>"""
