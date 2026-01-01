@@ -1199,11 +1199,16 @@ async def signal_page(request: Request):
             <div class="controls">
                 <input type="text" id="pair" placeholder="Coin (örn: BTC)" value="BTC">
                 <select id="timeframe">
-                    <option value="5m" selected>5 Dakika</option>
-                    <option value="15m">15 Dakika</option>
-                    <option value="1h">1 Saat</option>
-                    <option value="4h">4 Saat</option>
-                    <option value="1d">1 Gün</option>
+                <option value="1m">1 Dakika</option>
+                <option value="3m">3 Dakika</option>
+                <option value="5m" selected>5 Dakika</option>
+                <option value="15m">15 Dakika</option>
+                <option value="30m">30 Dakika</option>
+                <option value="1h">1 Saat</option>
+                <option value="4h">4 Saat</option>
+                <option value="1d">1 Gün</option>
+                <option value="1W">1 Hafta</option>
+                <option value="1M">1 Ay</option>
                 </select>
                 <div>
                     <button onclick="connectSignal()">🔴 CANLI SİNYAL BAĞLANTISI KUR</button>
@@ -1242,13 +1247,18 @@ async def signal_page(request: Request):
             let currentSymbol = "BTC";
             let currentTimeframe = "5m";
             
-            const timeframeMap = {{
-                "5m": "5",
-                "15m": "15",
-                "1h": "60",
-                "4h": "240",
-                "1d": "D"
-            }};
+           const timeframeMap = {{
+            "1m": "1",
+            "3m": "3",
+            "5m": "5",
+            "15m": "15",
+            "30m": "30",
+            "1h": "60",
+            "4h": "240",
+            "1d": "D",
+            "1W": "W",
+            "1M": "M"
+           }};
             
             function getTradingViewSymbol(pair) {{
                 let symbol = pair.trim().toUpperCase();
@@ -1479,4 +1489,5 @@ if __name__ == "__main__":
         log_level="info",
         access_log=False
     )
+
 
