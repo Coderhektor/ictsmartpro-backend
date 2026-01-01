@@ -890,39 +890,39 @@ async def signal_page(request: Request):
                     document.getElementById('connection-status').innerHTML = '✅ ' + currentSymbol + ' ' + currentTimeframe.toUpperCase() + ' canlı sinyal başladı!';
                 }};
                 
-                signalWs.onmessage = function(event) {
-                    try {{
-                        if (event.data.includes('heartbeat')) return;
-                        
-                        const data = JSON.parse(event.data);
-                        const card = document.getElementById('signal-card');
-                        const text = document.getElementById('signal-text');
-                        const details = document.getElementById('signal-details');
-                        
-                        text.innerHTML = data.signal || "⏸️ Sinyal bekleniyor...";
-                        
-                        details.innerHTML = `
-                            <strong>${{data.pair || currentSymbol + '/USDT'}}</strong><br>
-                            💰 Fiyat: <strong>$${{(data.current_price || 0).toFixed(data.current_price < 1 ? 6 : 4)}}</strong><br>
-                            📊 Skor: <strong>${{data.score || '?'}}/100</strong> | ${{data.killzone || 'Normal'}}
-                        `;
-                        
-                        if (data.signal && (data.signal.includes('ALIM') || data.signal.includes('YÜKSELİŞ'))) {{
-                            card.className = 'signal-card green';
-                            text.style.color = '#00ff88';
-                        }} else if (data.signal && (data.signal.includes('SATIM') || data.signal.includes('DÜŞÜŞ'))) {{
-                            card.className = 'signal-card red';
-                            text.style.color = '#ff4444';
-                        }} else {{
-                            card.className = 'signal-card';
-                            text.style.color = '#ffd700';
-                        }}
-                        
-                    }} catch (error) {{
-                        console.error('Hata:', error);
-                    }}
-                }};
-            }
+             signalWs.onmessage = function(event) {
+    try {
+        if (event.data.includes('heartbeat')) return;
+        
+        const data = JSON.parse(event.data);
+        const card = document.getElementById('signal-card');
+        const text = document.getElementById('signal-text');
+        const details = document.getElementById('signal-details');
+        
+        text.innerHTML = data.signal || "⏸️ Sinyal bekleniyor...";
+        
+        // DÜZELTİLMİŞ KISIM - Doğrudan JS template literal kullanıyoruz
+        details.innerHTML = `
+            <strong>${data.pair || currentSymbol + '/USDT'}</strong><br>
+            💰 Fiyat: <strong>$${(data.current_price || 0).toFixed(data.current_price < 1 ? 6 : 4)}</strong><br>
+            📊 Skor: <strong>${data.score || '?'} / 100</strong> | ${data.killzone || 'Normal'}
+        `;
+        
+        if (data.signal && (data.signal.includes('ALIM') || data.signal.includes('YÜKSELİŞ'))) {
+            card.className = 'signal-card green';
+            text.style.color = '#00ff88';
+        } else if (data.signal && (data.signal.includes('SATIM') || data.signal.includes('DÜŞÜŞ'))) {
+            card.className = 'signal-card red';
+            text.style.color = '#ff4444';
+        } else {
+            card.className = 'signal-card';
+            text.style.color = '#ffd700';
+        }
+        
+    } catch (error) {
+        console.error('WebSocket mesaj hatası:', error);
+    }
+};
             
             async function analyzeChartWithAI() {{
                 const btn = document.querySelector('button[onclick="analyzeChartWithAI()"]');
@@ -1607,6 +1607,7 @@ if __name__ == "__main__":
         log_level="info",
         access_log=False
     )
+
 
 
 
