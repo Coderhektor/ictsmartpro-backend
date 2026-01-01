@@ -14,7 +14,7 @@ import pandas as pd
 price_sources_status: Dict[str, Dict[str, Any]] = {}  # "binance": {"last_update": ..., "symbols_count": 0, "healthy": True}
 
  
-          def update_price(source: str, symbol: str, price: float, change_24h: Optional[float] = None):
+    def update_price(source: str, symbol: str, price: float, change_24h: Optional[float] = None):
     with price_pool_lock:
         # Symbol'ü başlat (nested dict yapısı)
         if symbol not in price_pool:
@@ -213,19 +213,39 @@ async def pump_radar_task():
     logger.info("🔥 Pump radar başladı")
     while True:
         try:
+            gains = []
+            
             with price_pool_lock:
-                gains = []
                 for symbol, data in price_pool.items():
+                    # Yeni yapıya göre eriş
                     price = data.get("best_price", 0)
                     if price <= 0:
                         continue
-                    change = next((d["change_24h"] for d in data.values() if d.get("change_24h") is not None), 0)
-                    if abs(change) >= 2.0:
+                    
+                    # sources dict'inden change_24h değerlerini al
+                    sources_dict = data.get("sources", {})
+                    if not sources_dict:
+                        continue
+                    
+                    # Tüm kaynakların change_24h ortalamasını hesapla
+                    changes = []
+                    for source_info in sources_dict.values():
+                        change_val = source_info.get("change_24h")
+                        if change_val is not None:
+                            changes.append(change_val)
+                    
+                    if not changes:
+                        continue
+                    
+                    avg_change = sum(changes) / len(changes)
+                    
+                    if abs(avg_change) >= 2.0:  # %2'den fazla değişim
                         gains.append({
                             "symbol": symbol.replace("USDT", ""),
                             "price": price,
-                            "change": round(change, 2)
+                            "change": round(avg_change, 2)
                         })
+            
             if gains:
                 gains.sort(key=lambda x: x["change"], reverse=True)
                 payload = {
@@ -233,7 +253,9 @@ async def pump_radar_task():
                     "last_update": datetime.now(timezone.utc).strftime("%H:%M:%S UTC")
                 }
                 await signal_queue.put(("pump_radar", payload))
+            
             await asyncio.sleep(20)
+            
         except Exception as e:
             logger.error(f"Pump radar hatası: {e}")
             await asyncio.sleep(20)
