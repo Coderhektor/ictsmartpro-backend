@@ -1411,4 +1411,4 @@ async def price_sources_debug(request: Request):
 # ==================== BAŞLATMA ====================
 if __name__ == "__main__":
     import uvicorn
-    uvicorn.run(app, host="0.0.0.0", port=8000) canlı sinyal bağlantısı kur dediğimizde nereye bağlanıyor, bağlantı sağlandığını nasıl görebiliriz, birde analiz butonuna tıkladığında nereye bağlanıyor, bundan nasıl emin olabiliriz
+    uvicorn.run(app, host="0.0.0.0", port=8000) 
