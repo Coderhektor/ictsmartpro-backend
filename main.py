@@ -344,7 +344,7 @@ async def home(request: Request):
     const ws = new WebSocket((location.protocol === 'https:' ? 'wss' : 'ws') + '://' + location.host + '/ws/realtime_price');
     
     ws.onmessage = function(e) {
-        try { {
+        try { 
             const d = JSON.parse(e.data);
             
             // DEBUG: Konsola yaz
@@ -377,7 +377,7 @@ async def home(request: Request):
         } catch (err) {
             console.error('WebSocket veri hatası:', err);
         }
-    }};
+    };
     
     ws.onopen = function() {
         console.log('✅ Realtime price WebSocket bağlandı');
@@ -1453,6 +1453,7 @@ async def debug_info():
 if __name__ == "__main__":
     import uvicorn
     uvicorn.run(app, host="0.0.0.0", port=8000) 
+
 
 
 
