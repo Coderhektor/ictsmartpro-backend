@@ -740,14 +740,19 @@ async def signal_page(request: Request):
                 border: 2px solid #00dbde;
                 display: none;
             }}
-            .chart-container {{
-                width: 100%;
-                height: 500px;
-                background: rgba(10, 0, 34, 0.8);
-                border-radius: 10px;
-                margin: 30px 0;
-                overflow: hidden;
-            }}
+          .chart-container {
+            width: 100%;
+            height: 80vh;
+            min-height: 600px;
+            max-height: 900px;
+            background: rgba(10, 0, 34, 0.9);
+            border-radius: 16px;
+            margin: 30px 0;
+            overflow: hidden;
+            box-shadow: 0 8px 32px rgba(0, 0, 0, 0.6),
+            0 0 30px rgba(0, 219, 222, 0.15);
+            border: 1px solid rgba(0, 219, 222, 0.3);
+            }
             .navigation {{
                 text-align: center;
                 margin-top: 30px;
@@ -1602,5 +1607,6 @@ if __name__ == "__main__":
         log_level="info",
         access_log=False
     )
+
 
 
