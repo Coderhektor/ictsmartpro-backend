@@ -59,10 +59,38 @@ def get_best_price(symbol: str) -> Dict[str, Any]:
             "updated": data.get("updated", "N/A")
         }
 
-def get_all_prices_snapshot(limit: int = 50) -> Dict[str, Any]:
+ def get_all_prices_snapshot(limit: int = 50) -> Dict[str, Any]:
     with price_pool_lock:
+        # DEBUG: Tüm price_pool'u logla
+        logger.debug(f"get_all_prices_snapshot: price_pool boyutu = {len(price_pool)}")
+        
+        # Eğer price_pool boşsa, MANUEL TEST VERİLERİ EKLE
+        if len(price_pool) == 0:
+            logger.warning("⚠️ price_pool BOŞ! Manuel test verileri ekleniyor...")
+            # Acil test verileri
+            test_data = [
+                ("BTCUSDT", 87658.77, 2.5),
+                ("ETHUSDT", 3500.50, 1.8),
+                ("SOLUSDT", 120.75, 5.2),
+                ("XRPUSDT", 0.68, -1.2),
+                ("BNBUSDT", 380.25, 3.1),
+            ]
+            
+            for symbol, price, change in test_data:
+                if symbol not in price_pool:
+                    price_pool[symbol] = {
+                        "sources": {"debug": {"price": price, "change_24h": change, "timestamp": datetime.now(timezone.utc).isoformat()}},
+                        "best_price": price,
+                        "updated": datetime.now(timezone.utc).strftime("%H:%M:%S")
+                    }
+            
+            logger.info(f"✅ {len(test_data)} manuel test fiyatı eklendi")
+        
+        # Şimdi normal işleme devam et
         valid_symbols = {sym: data for sym, data in price_pool.items() 
                         if data.get("best_price", 0) > 0}
+        
+        logger.debug(f"Valid symbols: {len(valid_symbols)}")
         
         sorted_symbols = sorted(
             valid_symbols.items(),
@@ -88,6 +116,8 @@ def get_all_prices_snapshot(limit: int = 50) -> Dict[str, Any]:
                 "sources": list(sources_dict.keys())
             }
 
+        logger.debug(f"get_all_prices_snapshot: {len(tickers)} ticker döndürüldü")
+        
         return {
             "tickers": tickers,
             "last_update": datetime.now(timezone.utc).strftime("%H:%M:%S UTC")
@@ -168,31 +198,37 @@ async def fetch_ohlcv(symbol: str, timeframe: str = "5m", limit: int = 150):
         return []
 
 # ==================== REALTIME PRICE TASK ====================
-async def realtime_price_task():
+ async def realtime_price_task():
     logger.info("📊 Realtime fiyat broadcast başladı")
-    await asyncio.sleep(10)
     
-    # Test verileri ekle
-    test_data = [
-        ("BTCUSDT", 50000.0, 2.5),
-        ("ETHUSDT", 3000.0, 1.8),
-        ("SOLUSDT", 100.0, 5.2),
-        ("XRPUSDT", 0.55, -1.2),
-        ("BNBUSDT", 350.0, 3.1),
-    ]
+    # İlk broadcast için 3 saniye bekle
+    await asyncio.sleep(3)
     
-    for symbol, price, change in test_data:
-        update_price("test", symbol, price, change)
-    
+    counter = 0
     while True:
         try:
+            # Fiyat snapshot'ını al
             data = get_all_prices_snapshot(limit=50)
+            
+            # DEBUG log
+            ticker_count = len(data.get("tickers", {}))
+            if counter % 10 == 0:  # Her 10. broadcast'ta log
+                if ticker_count > 0:
+                    first_symbol = list(data["tickers"].keys())[0]
+                    first_price = data["tickers"][first_symbol]["price"]
+                    logger.info(f"📡 Broadcast #{counter}: {ticker_count} coin | Örnek: {first_symbol} = ${first_price:.2f}")
+                else:
+                    logger.warning(f"⚠️ Broadcast #{counter}: HİÇ coin yok!")
+            
+            # Broadcast yap
             await rt_ticker.broadcast(data)
+            
+            counter += 1
             await asyncio.sleep(3)
+            
         except Exception as e:
             logger.error(f"Realtime task hatası: {e}")
             await asyncio.sleep(5)
-
 # ==================== PUMP RADAR TASK ====================
 async def pump_radar_task():
     logger.info("🔥 Pump radar başladı")
