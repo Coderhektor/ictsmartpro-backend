@@ -359,7 +359,7 @@ async def broadcast_worker():
                             disconnected.add(ws)
                     all_subscribers[tf] -= disconnected
 
-           elif msg_type == "pump_radar":
+    elif msg_type == "pump_radar":
     global top_gainers, last_update
     top_gainers = payload.get("top_gainers", [])[:10]
     last_update = payload.get("last_update", "N/A")
