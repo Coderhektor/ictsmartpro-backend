@@ -344,7 +344,7 @@ async def home(request: Request):
     const ws = new WebSocket((location.protocol === 'https:' ? 'wss' : 'ws') + '://' + location.host + '/ws/realtime_price');
     
     ws.onmessage = function(e) {
-        try {
+        try { 
             const d = JSON.parse(e.data);
             
             // DEBUG: Konsola yaz
@@ -714,44 +714,35 @@ async def signal(request: Request):
                 document.getElementById('status').innerHTML = `✅ ${{symbol}} ${{tfSelect.toUpperCase()}} için canlı sinyal akışı başladı!`;
             }};
             
-            ws.onmessage = e => {{
-                const d = JSON.parse(e.data);
-                const card = document.getElementById('signal-card');
-                const text = document.getElementById('signal-text');
-                const details = document.getElementById('signal-details');
-                
-                text.innerHTML = d.signal || "Sinyal bekleniyor...";
-                details.innerHTML = `
-                    <strong>${{d.pair || symbol.replace('USDT','/USDT')}}</strong><br>
-                    Skor: <strong>${{d.score || '?'}}/100</strong> | ${{d.killzone || ''}}<br>
-                    ${{d.last_update ? 'Son: ' + d.last_update : ''}}<br>
-                    <small>${{d.triggers || ''}}</small>
-                `;
-                
-                if (d.signal && d.signal.includes('ALIM')) {{
-                    card.className = 'green';
-                    text.style.color = '#00ff88';
-                }} else if (d.signal && d.signal.includes('SATIM')) {{
-                    card.className = 'red';
-                    text.style.color = '#ff4444';
-                }} else {{
-                    card.className = '';
-                    text.style.color = '#ffd700';
+                   ws.onmessage = e => {{
+                try {{
+                    const d = JSON.parse(e.data);
+                    const card = document.getElementById('signal-card');
+                    const text = document.getElementById('signal-text');
+                    const details = document.getElementById('signal-details');
+                    
+                    text.innerHTML = d.signal || "Sinyal bekleniyor...";
+                    details.innerHTML = `
+                        <strong>${{d.pair || symbol.replace('USDT','/USDT')}}</strong><br>
+                        Skor: <strong>${{d.score || '?'}}/100</strong> | ${{d.killzone || ''}}<br>
+                        ${{d.last_update ? 'Son: ' + d.last_update : ''}}<br>
+                        <small>${{d.triggers || ''}}</small>
+                    `;
+                    
+                    if (d.signal && d.signal.includes('ALIM')) {{
+                        card.className = 'green';
+                        text.style.color = '#00ff88';
+                    }} else if (d.signal && d.signal.includes('SATIM')) {{
+                        card.className = 'red';
+                        text.style.color = '#ff4444';
+                    }} else {{
+                        card.className = '';
+                        text.style.color = '#ffd700';
+                    }}
+                }} catch (err) {{
+                    console.error('Sinyal parse hatası:', err);
                 }}
             }};
-            
-            ws.onerror = (err) => {{
-                document.getElementById('status').innerHTML = "❌ WebSocket bağlantı hatası";
-            }};
-            
-            ws.onclose = () => {{
-                document.getElementById('status').innerHTML = "🔌 Sinyal bağlantısı kapandı. Yeniden bağlanmak için butona tıklayın.";
-            }};
-        }}
-    </script>
-</body>
-</html>"""
-    return HTMLResponse(content=html_content)
 
 # ==================== API ENDPOINTS ====================
 @app.post("/api/analyze-chart")
@@ -1462,6 +1453,7 @@ async def debug_info():
 if __name__ == "__main__":
     import uvicorn
     uvicorn.run(app, host="0.0.0.0", port=8000) 
+
 
 
 
