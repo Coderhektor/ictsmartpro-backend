@@ -97,7 +97,31 @@ async def lifespan(app: FastAPI):
     await cleanup()
 
 app = FastAPI(lifespan=lifespan, title="ICT SMART PRO", version="3.0 - STABLE")
+#===========================================================================
+# main.py imports kısmına ekle
+from core import price_sources_status
 
+# Yeni WebSocket endpoint
+@app.websocket("/ws/price_sources")
+async def ws_price_sources(websocket: WebSocket):
+    await websocket.accept()
+    price_sources_subscribers.add(websocket)  # yeni set tanımla: price_sources_subscribers = set()
+
+    # İlk veri gönder
+    await websocket.send_json({
+        "sources": price_sources_status,
+        "total_symbols": len(price_pool)
+    })
+
+    try:
+        while True:
+            await asyncio.sleep(5)
+            await websocket.send_json({
+                "sources": price_sources_status,
+                "total_symbols": len(price_pool)
+            })
+    except WebSocketDisconnect:
+        price_sources_subscribers.discard(websocket)
 # ==================== MIDDLEWARE FOR VISITOR COUNTING ====================
 @app.middleware("http")
 async def count_visitors(request: Request, call_next):
@@ -1317,5 +1341,6 @@ async def login(request: Request):
 if __name__ == "__main__":
     import uvicorn
     uvicorn.run(app, host="0.0.0.0", port=8000)
+
 
 
