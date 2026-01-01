@@ -890,7 +890,7 @@ async def signal_page(request: Request):
                     document.getElementById('connection-status').innerHTML = '✅ ' + currentSymbol + ' ' + currentTimeframe.toUpperCase() + ' canlı sinyal başladı!';
                 }};
                 
-                signalWs.onmessage = function(event) {{
+                signalWs.onmessage = function(event) {
                     try {{
                         if (event.data.includes('heartbeat')) return;
                         
@@ -922,7 +922,7 @@ async def signal_page(request: Request):
                         console.error('Hata:', error);
                     }}
                 }};
-            }}
+            }
             
             async function analyzeChartWithAI() {{
                 const btn = document.querySelector('button[onclick="analyzeChartWithAI()"]');
@@ -1607,6 +1607,7 @@ if __name__ == "__main__":
         log_level="info",
         access_log=False
     )
+
 
 
 
