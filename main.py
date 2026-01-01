@@ -740,19 +740,14 @@ async def signal_page(request: Request):
                 border: 2px solid #00dbde;
                 display: none;
             }}
-          .chart-container {
-            width: 100%;
-            height: 80vh;
-            min-height: 600px;
-            max-height: 900px;
-            background: rgba(10, 0, 34, 0.9);
-            border-radius: 16px;
-            margin: 30px 0;
-            overflow: hidden;
-            box-shadow: 0 8px 32px rgba(0, 0, 0, 0.6),
-            0 0 30px rgba(0, 219, 222, 0.15);
-            border: 1px solid rgba(0, 219, 222, 0.3);
-            }
+            .chart-container {{
+                width: 100%;
+                height: 500px;
+                background: rgba(10, 0, 34, 0.8);
+                border-radius: 10px;
+                margin: 30px 0;
+                overflow: hidden;
+            }}
             .navigation {{
                 text-align: center;
                 margin-top: 30px;
@@ -785,17 +780,12 @@ async def signal_page(request: Request):
             
             <div class="controls">
                 <input type="text" id="pair" placeholder="Coin (örn: BTC)" value="BTC">
-               <select id="timeframe">
-                <option value="1m">1 Dakika</option>
-                <option value="3m">3 Dakika</option>
-                <option value="5m" selected>5 Dakika</option>
-                <option value="15m">15 Dakika</option>
-                <option value="30m">30 Dakika</option>
-                <option value="1h">1 Saat</option>
-                <option value="4h">4 Saat</option>
-                <option value="1d">1 Gün</option>
-                <option value="1W">1 Hafta</option>
-                <option value="1M">1 Ay</option>
+                <select id="timeframe">
+                    <option value="5m" selected>5 Dakika</option>
+                    <option value="15m">15 Dakika</option>
+                    <option value="1h">1 Saat</option>
+                    <option value="4h">4 Saat</option>
+                    <option value="1d">1 Gün</option>
                 </select>
                 <div>
                     <button onclick="connectSignal()">🔴 CANLI SİNYAL BAĞLANTISI KUR</button>
@@ -834,18 +824,13 @@ async def signal_page(request: Request):
             let currentSymbol = "BTC";
             let currentTimeframe = "5m";
             
-           const timeframeMap = {{
-            "1m": "1",
-            "3m": "3",
-            "5m": "5",
-            "15m": "15",
-            "30m": "30",
-            "1h": "60",
-            "4h": "240",
-            "1d": "D",
-            "1W": "W",
-            "1M": "M"
-           }};
+            const timeframeMap = {{
+                "5m": "5",
+                "15m": "15",
+                "1h": "60",
+                "4h": "240",
+                "1d": "D"
+            }};
             
             function getTradingViewSymbol(pair) {{
                 let symbol = pair.trim().toUpperCase();
@@ -890,38 +875,39 @@ async def signal_page(request: Request):
                     document.getElementById('connection-status').innerHTML = '✅ ' + currentSymbol + ' ' + currentTimeframe.toUpperCase() + ' canlı sinyal başladı!';
                 }};
                 
-               signalWs.onmessage = function(event) {{
+                signalWs.onmessage = function(event) {{
                     try {{
-                if (event.data.includes('heartbeat')) return;
-        
-                const data = JSON.parse(event.data);
-                const card = document.getElementById('signal-card');
-                const text = document.getElementById('signal-text');
-                const details = document.getElementById('signal-details');
-        
-                text.innerHTML = data.signal || "Sinyal bekleniyor...";
-        
-                details.innerHTML = `
-                <strong>${{data.pair || currentSymbol + '/USDT'}}</strong><br>
-                Fiyat: <strong>$${{(data.current_price || 0).toFixed(data.current_price < 1 ? 6 : 4)}}</strong><br>
-                Skor: <strong>${{data.score || '?'}} / 100</strong> | ${{data.killzone || 'Normal'}}
-                  `;
-        
-                if (data.signal && (data.signal.includes('ALIM') || data.signal.includes('YÜKSELİŞ'))) {{
-                card.className = 'signal-card green';
-                text.style.color = '#00ff88';
-                }} else if (data.signal && (data.signal.includes('SATIM') || data.signal.includes('DÜŞÜŞ'))) {{
-                card.className = 'signal-card red';
-                text.style.color = '#ff4444';
-                }} else {{
-                card.className = 'signal-card';
-                text.style.color = '#ffd700';
-                }}
-        
-                }} catch (error) {{
-                console.error('WebSocket mesaj hatası:', error);
+                        if (event.data.includes('heartbeat')) return;
+                        
+                        const data = JSON.parse(event.data);
+                        const card = document.getElementById('signal-card');
+                        const text = document.getElementById('signal-text');
+                        const details = document.getElementById('signal-details');
+                        
+                        text.innerHTML = data.signal || "⏸️ Sinyal bekleniyor...";
+                        
+                        details.innerHTML = `
+                            <strong>${{data.pair || currentSymbol + '/USDT'}}</strong><br>
+                            💰 Fiyat: <strong>$${{(data.current_price || 0).toFixed(data.current_price < 1 ? 6 : 4)}}</strong><br>
+                            📊 Skor: <strong>${{data.score || '?'}}/100</strong> | ${{data.killzone || 'Normal'}}
+                        `;
+                        
+                        if (data.signal && (data.signal.includes('ALIM') || data.signal.includes('YÜKSELİŞ'))) {{
+                            card.className = 'signal-card green';
+                            text.style.color = '#00ff88';
+                        }} else if (data.signal && (data.signal.includes('SATIM') || data.signal.includes('DÜŞÜŞ'))) {{
+                            card.className = 'signal-card red';
+                            text.style.color = '#ff4444';
+                        }} else {{
+                            card.className = 'signal-card';
+                            text.style.color = '#ffd700';
+                        }}
+                        
+                    }} catch (error) {{
+                        console.error('Hata:', error);
                     }}
                 }};
+            }}
             
             async function analyzeChartWithAI() {{
                 const btn = document.querySelector('button[onclick="analyzeChartWithAI()"]');
