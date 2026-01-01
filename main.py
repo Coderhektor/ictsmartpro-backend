@@ -1,3 +1,4 @@
+ 
 """
 ICT SMART PRO - VERSION 7.0
 Production Optimized - GROK TRADE ELITE PATTERN ENGINE INTEGRATED
@@ -11,59 +12,124 @@ import hashlib
 import os
 import pandas as pd
 import numpy as np
-from datetime import datetime, timedelta
+from datetime import datetime
 from contextlib import asynccontextmanager
-from typing import Optional, Dict, List, Set, Any, Tuple, Union
-from collections import defaultdict, deque
+from typing import Optional, Dict, List, Set, Any
+from collections import defaultdict
 
 from fastapi import FastAPI, WebSocket, WebSocketDisconnect, Request, UploadFile, File, Form
-from fastapi.responses import HTMLResponse, RedirectResponse, JSONResponse, StreamingResponse
+from fastapi.responses import HTMLResponse, RedirectResponse, JSONResponse
 from openai import OpenAI
 
-# Configure logging for production
+# ==================== LOGGING ====================
+
 logging.basicConfig(
     level=logging.INFO,
     format='%(asctime)s | %(name)s | %(levelname)s | %(message)s',
     datefmt='%Y-%m-%d %H:%M:%S'
 )
 
-# Suppress noisy logs
-logging.getLogger("core").setLevel(logging.WARNING)
-logging.getLogger("grok_indicators").setLevel(logging.WARNING)
 logging.getLogger("httpx").setLevel(logging.WARNING)
 logging.getLogger("websockets").setLevel(logging.WARNING)
 
 logger = logging.getLogger("ict_smart_pro")
 
-# Core modülleri - Import with error handling
+# ==================== GLOBAL PRICE POOL & TOP GAINERS ====================
+
+price_pool = defaultdict(lambda: {"price": 0.0, "change": 0.0, "timestamp": 0.0, "source": ""})
+top_gainers: List[Dict] = []
+last_update: str = "Yükleniyor..."
+
+def update_price(source: str, symbol: str, price: float, change: Optional[float] = None):
+    if price <= 0:
+        return
+    price_pool[symbol] = {
+        "price": price,
+        "change": change if change is not None else price_pool[symbol]["change"],
+        "timestamp": datetime.utcnow().timestamp(),
+        "source": source
+    }
+
+async def calculate_top_gainers():
+    global top_gainers, last_update
+    while True:
+        try:
+            cutoff = datetime.utcnow().timestamp() - 120
+            recent = [
+                (sym, info["price"], info["change"])
+                for sym, info in price_pool.items()
+                if info["timestamp"] > cutoff and abs(info["change"]) > 0.1
+            ]
+            sorted_gainers = sorted(recent, key=lambda x: x[2], reverse=True)[:30]
+
+            top_gainers = [
+                {"symbol": sym.replace("USDT", ""), "price": price, "change": round(change, 2)}
+                for sym, price, change in sorted_gainers
+            ]
+            last_update = datetime.utcnow().strftime("%H:%M:%S UTC")
+
+            if pump_radar_subscribers:
+                payload = {
+                    "top_gainers": top_gainers[:10],
+                    "last_update": last_update,
+                    "total_coins": len(top_gainers)
+                }
+                tasks = [ws.send_json(payload) for ws in pump_radar_subscribers]
+                await asyncio.gather(*tasks, return_exceptions=True)
+
+        except Exception as e:
+            logger.error(f"Top gainers hesaplamada hata: {e}")
+
+        await asyncio.sleep(12)
+
+# ==================== CORE IMPORT & FALLBACK ====================
+# ==================== CORE IMPORT & FALLBACK (DÜZELTİLMİŞ) ====================
+
 try:
     from core import (
-        initialize, cleanup, single_subscribers, all_subscribers, pump_radar_subscribers,
-        shared_signals, active_strong_signals, top_gainers, last_update, rt_ticker,
-        get_binance_client, price_sources_status, price_pool, get_all_prices_snapshot
+        initialize as core_initialize,
+        cleanup,
+        single_subscribers,
+        all_subscribers,
+        pump_radar_subscribers,
+        shared_signals,
+        active_strong_signals,
+        get_binance_client,
+        price_sources_status,
+        get_all_prices_snapshot
     )
     from utils import all_usdt_symbols
     logger.info("✅ Core modülleri başarıyla yüklendi")
 except ImportError as e:
-    logger.warning(f"⚠️ Core modülleri import hatası: {e}")
-    # Fallback fonksiyonlar
-    initialize = lambda: asyncio.sleep(0)
-    cleanup = lambda: asyncio.sleep(0)
+    logger.warning(f"⚠️ Core modülleri import hatası: {e} - Fallback aktif")
+    
+    # Fallback değişkenler
+    top_gainers = []
+    last_update = "Yükleniyor..."
+    price_pool = defaultdict(lambda: {"price": 0.0, "change": 0.0, "timestamp": 0.0, "source": ""})
+    pump_radar_subscribers = set()
     single_subscribers = defaultdict(set)
     all_subscribers = defaultdict(set)
-    pump_radar_subscribers = set()
     shared_signals = {}
     active_strong_signals = {}
-    top_gainers = []
-    last_update = ""
-    rt_ticker = ""
     get_binance_client = lambda: None
     price_sources_status = {}
-    price_pool = {}
     get_all_prices_snapshot = lambda: {}
     all_usdt_symbols = []
 
-# OpenAI
+    async def core_initialize():
+        logger.info("Fallback initialize çalışıyor")
+        asyncio.create_task(calculate_top_gainers())
+
+    cleanup = lambda: asyncio.sleep(0)
+
+# Tek initialize fonksiyonu
+async def initialize():
+    await core_initialize()
+    asyncio.create_task(calculate_top_gainers())
+
+# ==================== OPENAI ====================
+
 openai_client = None
 if os.getenv("OPENAI_API_KEY"):
     try:
@@ -80,30 +146,21 @@ class VisitorCounter:
         self.active_users = set()
         self.daily_stats = defaultdict(lambda: {"visits": 0, "unique": set()})
         self.page_views = defaultdict(int)
-        self.user_agents = defaultdict(int)
-        self.referrers = defaultdict(int)
 
-    def add_visit(self, page: str, user_id: Optional[str] = None, 
-                  user_agent: Optional[str] = None, referrer: Optional[str] = None) -> int:
+    def add_visit(self, page: str, user_id: Optional[str] = None) -> int:
         self.total_visits += 1
         self.page_views[page] += 1
-        
         today = datetime.now().strftime("%Y-%m-%d")
         self.daily_stats[today]["visits"] += 1
-        
         if user_id:
             self.active_users.add(user_id)
             self.daily_stats[today]["unique"].add(user_id)
-            
         return self.total_visits
 
     def get_stats(self) -> Dict[str, Any]:
         today = datetime.now().strftime("%Y-%m-%d")
         today_stats = self.daily_stats.get(today, {"visits": 0, "unique": set()})
-        
-        # En popüler sayfalar (max 5)
         top_pages = sorted(self.page_views.items(), key=lambda x: x[1], reverse=True)[:5]
-        
         return {
             "total_visits": self.total_visits,
             "active_users": len(self.active_users),
@@ -1610,6 +1667,7 @@ if __name__ == "__main__":
         log_level="info",
         access_log=False
     )
+
 
 
 
