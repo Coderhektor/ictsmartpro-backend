@@ -150,7 +150,7 @@ class GrokIndicators:
 
         return patterns
 
-        def detect_fibonacci_levels(self, df: pd.DataFrame, ph: pd.Series, pl: pd.Series) -> pd.DataFrame:
+    def detect_fibonacci_levels(self, df: pd.DataFrame, ph: pd.Series, pl: pd.Series) -> pd.DataFrame:
         df = df.copy()
     
     # Tüm fib sütunlarını NaN ile başlat
