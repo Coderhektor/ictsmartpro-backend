@@ -542,7 +542,7 @@ async def analyze_chart(request: Request):
             signal = {
                 "pair": f"{symbol}/USDT", "timeframe": timeframe.upper(), "current_price": round(last_price, 6),
                 "signal": "⏸️ NEUTRAL", "score": 50, "strength": "ORTA", "killzone": "Normal",
-                "triggers": "Yeterli sinyal tetikleyicisi yok",
+                "triggers": "Yeterli veri yok",
                 "last_update": datetime.utcnow().strftime("%H:%M:%S UTC")
             }
 
