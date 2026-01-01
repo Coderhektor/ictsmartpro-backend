@@ -60,20 +60,24 @@ price_pool: Dict[str, Dict[str, Any]] = {}
 price_pool_lock = Lock()
 
  
-
 def get_best_price(symbol: str) -> Dict[str, Any]:
     with price_pool_lock:
         data = price_pool.get(symbol, {})
         return {
             "best_price": data.get("best_price", 0.0),
-            "sources": data.get("sources", []),
+            "sources": list(data.get("sources", {}).keys()),
             "updated": data.get("updated", "N/A")
         }
 
 def get_all_prices_snapshot(limit: int = 50) -> Dict[str, Any]:
     with price_pool_lock:
+        # Sadece best_price'i olanları filtrele
+        valid_symbols = {sym: data for sym, data in price_pool.items() 
+                        if data.get("best_price", 0) > 0}
+        
+        # Fiyata göre sırala
         sorted_symbols = sorted(
-            price_pool.items(),
+            valid_symbols.items(),
             key=lambda x: x[1].get("best_price", 0),
             reverse=True
         )[:limit]
@@ -81,16 +85,26 @@ def get_all_prices_snapshot(limit: int = 50) -> Dict[str, Any]:
         tickers = {}
         for symbol, data in sorted_symbols:
             price = data.get("best_price", 0)
-            if price <= 0:
-                continue
-            change = next((d["change_24h"] for d in data.values() if d.get("change_24h") is not None), 0.0)
-            tickers[symbol] = {"price": price, "change": round(change, 2)}
+            
+            # 24s değişimi hesapla (kaynakların ortalaması)
+            changes = []
+            sources_dict = data.get("sources", {})
+            for source_info in sources_dict.values():
+                if source_info.get("change_24h") is not None:
+                    changes.append(source_info["change_24h"])
+            
+            change_24h = round(sum(changes) / len(changes), 2) if changes else 0.0
+            
+            tickers[symbol] = {
+                "price": price,
+                "change": change_24h,
+                "sources": list(sources_dict.keys())
+            }
 
         return {
             "tickers": tickers,
             "last_update": datetime.now(timezone.utc).strftime("%H:%M:%S UTC")
         }
- 
 
 # ==================== REALTIME TICKER ====================
 class RealtimeTicker:
@@ -171,13 +185,24 @@ async def fetch_ohlcv(symbol: str, timeframe: str = "5m", limit: int = 150):
         return []
 
 # ==================== REALTIME PRICE TASK ====================
-async def realtime_price_task():
+ async def realtime_price_task():
     logger.info("📊 Realtime fiyat broadcast başladı")
+    
+    # İlk başta 10 saniye bekle (fiyatların dolması için)
     await asyncio.sleep(10)
+    
     while True:
         try:
+            # Fiyatları al
             data = get_all_prices_snapshot(limit=50)
-            await rt_ticker.broadcast(data)
+            
+            # Eğer hiç fiyat yoksa logla
+            if not data.get("tickers"):
+                logger.debug("⚠️ Fiyat havuzu boş, exchange'lerden veri bekleniyor...")
+            else:
+                # Broadcast yap
+                await rt_ticker.broadcast(data)
+            
             await asyncio.sleep(3)
         except Exception as e:
             logger.error(f"Realtime task hatası: {e}")
