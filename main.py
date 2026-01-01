@@ -1,6 +1,6 @@
 """
-ICT SMART PRO - VERSION 5.0
-Gerçek Borsa Verileri ile Tam Fonksiyonlu Sinyal Sistemi
+ICT SMART PRO - VERSION 6.0
+Basit ve Hatasız Sürüm
 """
 
 import base64
@@ -19,7 +19,7 @@ from fastapi import FastAPI, WebSocket, WebSocketDisconnect, Request, UploadFile
 from fastapi.responses import HTMLResponse, RedirectResponse, JSONResponse
 from openai import OpenAI
 
-# Core modüllerini import et
+# Core modülleri
 try:
     from core import (
         initialize, cleanup, single_subscribers, all_subscribers, pump_radar_subscribers,
@@ -29,7 +29,6 @@ try:
     from utils import all_usdt_symbols
 except ImportError as e:
     logging.error(f"Core modülleri import hatası: {e}")
-    # Fallback değerler
     initialize = lambda: asyncio.sleep(0)
     cleanup = lambda: asyncio.sleep(0)
     single_subscribers = defaultdict(set)
@@ -46,22 +45,17 @@ except ImportError as e:
     get_all_prices_snapshot = lambda: {}
     all_usdt_symbols = []
 
-# OpenAI (opsiyonel)
+# OpenAI
 openai_client = None
 if os.getenv("OPENAI_API_KEY"):
     try:
         openai_client = OpenAI(api_key=os.getenv("OPENAI_API_KEY"))
-    except Exception as e:
-        logging.error(f"OpenAI client oluşturma hatası: {e}")
+    except:
+        pass
 
 # Logger
-logging.basicConfig(
-    level=logging.INFO,
-    format="%(asctime)s | %(levelname)s | %(name)s | %(message)s",
-    datefmt="%Y-%m-%d %H:%M:%S"
-)
+logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger("ict_smart_pro")
-logger.setLevel(logging.INFO)
 
 # ==================== VISITOR COUNTER ====================
 
@@ -75,20 +69,16 @@ class VisitorCounter:
     def add_visit(self, page: str, user_id: Optional[str] = None) -> int:
         self.total_visits += 1
         self.page_views[page] += 1
-        
         today = datetime.now().strftime("%Y-%m-%d")
         self.daily_stats[today]["visits"] += 1
-        
         if user_id:
             self.active_users.add(user_id)
             self.daily_stats[today]["unique"].add(user_id)
-        
         return self.total_visits
 
     def get_stats(self) -> Dict[str, Any]:
         today = datetime.now().strftime("%Y-%m-%d")
         today_stats = self.daily_stats.get(today, {"visits": 0, "unique": set()})
-        
         return {
             "total_visits": self.total_visits,
             "active_users": len(self.active_users),
@@ -102,14 +92,13 @@ visitor_counter = VisitorCounter()
 
 def get_visitor_stats_html() -> str:
     stats = visitor_counter.get_stats()
-    html = f"""
+    return f"""
     <div style="position:fixed;top:15px;right:15px;background:#000000cc;padding:10px 20px;border-radius:20px;color:#00ff88;font-size:clamp(0.8rem, 2vw, 1.2rem);z-index:1000;">
         <div>👁️ Toplam: <strong>{stats['total_visits']}</strong></div>
         <div>🔥 Bugün: <strong>{stats['today_visits']}</strong></div>
         <div>👥 Aktif: <strong>{stats['active_users']}</strong></div>
     </div>
     """
-    return html
 
 # ==================== GLOBAL STATE ====================
 
@@ -119,29 +108,22 @@ price_sources_subscribers = set()
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
-    logger.info("🚀 ICT SMART PRO Uygulaması başlatılıyor...")
+    logger.info("🚀 Uygulama başlatılıyor...")
     try:
         await initialize()
         logger.info("✅ Uygulama başlatıldı")
     except Exception as e:
-        logger.error(f"❌ Uygulama başlatma hatası: {e}")
-    
+        logger.error(f"❌ Başlatma hatası: {e}")
     yield
-    
     logger.info("🛑 Uygulama kapatılıyor...")
     try:
         await cleanup()
     except Exception as e:
-        logger.error(f"❌ Uygulama kapatma hatası: {e}")
+        logger.error(f"❌ Kapatma hatası: {e}")
 
 # ==================== FASTAPI APP ====================
 
-app = FastAPI(
-    lifespan=lifespan,
-    title="ICT SMART PRO",
-    version="5.0 - REAL-TIME",
-    description="Gerçek borsa verileri ile kesin sinyaller"
-)
+app = FastAPI(lifespan=lifespan, title="ICT SMART PRO", version="6.0")
 
 # ==================== MIDDLEWARE ====================
 
@@ -158,13 +140,7 @@ async def count_visitors_middleware(request: Request, call_next):
     response = await call_next(request)
     
     if not request.cookies.get("visitor_id"):
-        response.set_cookie(
-            key="visitor_id",
-            value=visitor_id,
-            max_age=86400,
-            httponly=True,
-            samesite="lax"
-        )
+        response.set_cookie(key="visitor_id", value=visitor_id, max_age=86400, httponly=True, samesite="lax")
     
     return response
 
@@ -174,29 +150,22 @@ async def count_visitors_middleware(request: Request, call_next):
 async def websocket_price_sources(websocket: WebSocket):
     await websocket.accept()
     price_sources_subscribers.add(websocket)
-    
     try:
         while True:
-            data = {
-                "sources": price_sources_status,
-                "total_symbols": len(price_pool)
-            }
-            await websocket.send_json(data)
+            await websocket.send_json({"sources": price_sources_status, "total_symbols": len(price_pool)})
             await asyncio.sleep(5)
     except WebSocketDisconnect:
         price_sources_subscribers.discard(websocket)
     except Exception as e:
-        logger.error(f"Price sources WebSocket hatası: {e}")
+        logger.error(f"Price sources error: {e}")
         price_sources_subscribers.discard(websocket)
 
 @app.websocket("/ws/signal/{pair}/{timeframe}")
 async def websocket_signal(websocket: WebSocket, pair: str, timeframe: str):
     await websocket.accept()
-    
     symbol = pair.upper().replace("/", "").replace("-", "").strip()
     if not symbol.endswith("USDT"):
         symbol += "USDT"
-    
     channel = f"{symbol}:{timeframe}"
     single_subscribers[channel].add(websocket)
     
@@ -207,97 +176,131 @@ async def websocket_signal(websocket: WebSocket, pair: str, timeframe: str):
     try:
         while True:
             await asyncio.sleep(15)
-            await websocket.send_json({"heartbeat": True, "timestamp": datetime.utcnow().isoformat()})
+            await websocket.send_json({"heartbeat": True})
     except WebSocketDisconnect:
         single_subscribers[channel].discard(websocket)
     except Exception as e:
-        logger.error(f"Signal WebSocket hatası: {e}")
+        logger.error(f"Signal error: {e}")
         single_subscribers[channel].discard(websocket)
 
 @app.websocket("/ws/all/{timeframe}")
 async def websocket_all_signals(websocket: WebSocket, timeframe: str):
-    supported_timeframes = ["1m", "3m", "5m", "15m", "30m", "1h", "4h", "1d", "1w"]
-    
-    if timeframe not in supported_timeframes:
-        await websocket.close(code=1008, reason="Desteklenmeyen timeframe")
+    supported = ["1m", "3m", "5m", "15m", "30m", "1h", "4h", "1d", "1w"]
+    if timeframe not in supported:
+        await websocket.close(code=1008)
         return
-    
     await websocket.accept()
     all_subscribers[timeframe].add(websocket)
-    
-    signals = active_strong_signals.get(timeframe, [])
-    await websocket.send_json(signals)
-    
+    await websocket.send_json(active_strong_signals.get(timeframe, []))
     try:
         while True:
             await asyncio.sleep(30)
-            await websocket.send_json({
-                "ping": True,
-                "timestamp": datetime.utcnow().isoformat(),
-                "signal_count": len(signals)
-            })
+            await websocket.send_json({"ping": True})
     except WebSocketDisconnect:
         all_subscribers[timeframe].discard(websocket)
     except Exception as e:
-        logger.error(f"All signals WebSocket hatası: {e}")
+        logger.error(f"All signals error: {e}")
         all_subscribers[timeframe].discard(websocket)
 
 @app.websocket("/ws/pump_radar")
 async def websocket_pump_radar(websocket: WebSocket):
     await websocket.accept()
     pump_radar_subscribers.add(websocket)
-    
-    await websocket.send_json({
-        "top_gainers": top_gainers,
-        "last_update": last_update,
-        "total_coins": len(top_gainers)
-    })
-    
+    await websocket.send_json({"top_gainers": top_gainers, "last_update": last_update})
     try:
         while True:
             await asyncio.sleep(20)
-            await websocket.send_json({
-                "ping": True,
-                "timestamp": datetime.utcnow().isoformat()
-            })
+            await websocket.send_json({"ping": True})
     except WebSocketDisconnect:
         pump_radar_subscribers.discard(websocket)
     except Exception as e:
-        logger.error(f"Pump radar WebSocket hatası: {e}")
+        logger.error(f"Pump radar error: {e}")
         pump_radar_subscribers.discard(websocket)
 
-# ==================== HELPER FUNCTIONS ====================
+# ==================== HTML PAGES ====================
 
-def format_price(price):
-    """Fiyat formatlama"""
-    try:
-        price_float = float(price)
-        if price_float >= 1000:
-            return f"{price_float:,.2f}"
-        elif price_float >= 1:
-            return f"{price_float:,.3f}"
-        else:
-            return f"{price_float:,.6f}"
-    except:
-        return str(price)
-
-def format_volume(volume):
-    """Hacim formatlama"""
-    try:
-        volume_float = float(volume)
-        if volume_float >= 1000000:
-            return f"{(volume_float / 1000000):.2f}M"
-        elif volume_float >= 1000:
-            return f"{(volume_float / 1000):.2f}K"
-        else:
-            return f"{volume_float:.2f}"
-    except:
-        return str(volume)
-
-# ==================== HTML TEMPLATES ====================
-
-def get_home_page_html(user: str, visitor_stats: str) -> str:
-    """Ana sayfa HTML"""
+@app.get("/")
+async def home_page(request: Request):
+    user = request.cookies.get("user_email") or "Misafir"
+    visitor_stats = get_visitor_stats_html()
+    
+    # JavaScript kodunu ayrı string olarak oluştur
+    js_code = """
+    <script>
+        const ws = new WebSocket((window.location.protocol === 'https:' ? 'wss://' : 'ws://') + window.location.host + '/ws/pump_radar');
+        
+        ws.onopen = function() {
+            document.getElementById('update-info').innerHTML = '✅ Gerçek veri bağlantısı kuruldu';
+        };
+        
+        ws.onmessage = function(event) {
+            try {
+                const data = JSON.parse(event.data);
+                if (data.ping) return;
+                
+                if (data.last_update) {
+                    document.getElementById('update-info').innerHTML = '🔄 Son güncelleme: ' + data.last_update;
+                }
+                
+                const table = document.getElementById('pump-table');
+                if (!data.top_gainers || data.top_gainers.length === 0) {
+                    table.innerHTML = '<tr><td colspan="5" style="text-align: center; padding: 50px; color: #ffd700;">📊 Şu anda aktif pump hareketi yok</td></tr>';
+                    return;
+                }
+                
+                let html = '';
+                data.top_gainers.slice(0, 15).forEach(function(coin, index) {
+                    const changeClass = coin.change > 0 ? 'change-positive' : 'change-negative';
+                    const changeSign = coin.change > 0 ? '+' : '';
+                    
+                    html += `
+                        <tr>
+                            <td>#${index + 1}</td>
+                            <td><strong>${coin.symbol}</strong></td>
+                            <td>$${formatPrice(coin.price)}</td>
+                            <td class="${changeClass}">${changeSign}${coin.change.toFixed(2)}%</td>
+                            <td>$${formatVolume(coin.volume || 0)}</td>
+                        </tr>
+                    `;
+                });
+                
+                table.innerHTML = html;
+                
+            } catch (error) {
+                console.error('Hata:', error);
+            }
+        };
+        
+        ws.onerror = function() {
+            document.getElementById('update-info').innerHTML = '❌ Bağlantı hatası';
+        };
+        
+        ws.onclose = function() {
+            document.getElementById('update-info').innerHTML = '🔌 Bağlantı kesildi';
+        };
+        
+        function formatPrice(price) {
+            if (price >= 1000) {
+                return price.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+            } else if (price >= 1) {
+                return price.toLocaleString('en-US', { minimumFractionDigits: 3, maximumFractionDigits: 3 });
+            } else {
+                return price.toLocaleString('en-US', { minimumFractionDigits: 6, maximumFractionDigits: 6 });
+            }
+        }
+        
+        function formatVolume(volume) {
+            if (volume >= 1000000) {
+                return (volume / 1000000).toFixed(2) + 'M';
+            } else if (volume >= 1000) {
+                return (volume / 1000).toFixed(2) + 'K';
+            } else {
+                return volume.toFixed(2);
+            }
+        }
+    </script>
+    """
+    
     html = f"""
     <!DOCTYPE html>
     <html lang="tr">
@@ -432,98 +435,141 @@ def get_home_page_html(user: str, visitor_stats: str) -> str:
             </div>
         </div>
         
-        <script>
-            const ws = new WebSocket(
-                (window.location.protocol === 'https:' ? 'wss://' : 'ws://') + 
-                window.location.host + '/ws/pump_radar'
-            );
-            
-            ws.onopen = function() {{
-                document.getElementById('update-info').innerHTML = '✅ Gerçek veri bağlantısı kuruldu';
-            }};
-            
-            ws.onmessage = function(event) {{
-                try {{
-                    const data = JSON.parse(event.data);
-                    
-                    if (data.ping) return;
-                    
-                    if (data.last_update) {{
-                        document.getElementById('update-info').innerHTML = 
-                            '🔄 Son güncelleme: ' + data.last_update;
-                    }}
-                    
-                    const table = document.getElementById('pump-table');
-                    
-                    if (!data.top_gainers || data.top_gainers.length === 0) {{
-                        table.innerHTML = `
-                            <tr>
-                                <td colspan="5" style="text-align: center; padding: 50px; color: #ffd700;">
-                                    📊 Şu anda aktif pump hareketi yok
-                                </td>
-                            </tr>
-                        `;
-                        return;
-                    }}
-                    
-                    let html = '';
-                    data.top_gainers.slice(0, 15).forEach(function(coin, index) {{
-                        const changeClass = coin.change > 0 ? 'change-positive' : 'change-negative';
-                        const changeSign = coin.change > 0 ? '+' : '';
-                        
-                        html += `
-                            <tr>
-                                <td>#${'{'}{'{'}index + 1{'}'}{'}'}</td>
-                                <td><strong>${'{'}{'{'}coin.symbol{'}'}{'}'}</strong></td>
-                                <td>$${'$'}{'{'}{'{'}formatPrice(coin.price){'}'}{'}'}</td>
-                                <td class="${'{'}{'{'}changeClass{'}'}{'}'}">${'{'}{'{'}changeSign{'}'}{'}'}${'{'}{'{'}coin.change.toFixed(2){'}'}{'}'}%</td>
-                                <td>$${'$'}{'{'}{'{'}formatVolume(coin.volume || 0){'}'}{'}'}</td>
-                            </tr>
-                        `;
-                    }});
-                    
-                    table.innerHTML = html;
-                    
-                }} catch (error) {{
-                    console.error('Hata:', error);
-                }}
-            }};
-            
-            ws.onerror = function() {{
-                document.getElementById('update-info').innerHTML = '❌ Bağlantı hatası';
-            }};
-            
-            ws.onclose = function() {{
-                document.getElementById('update-info').innerHTML = '🔌 Bağlantı kesildi';
-            }};
-            
-            function formatPrice(price) {{
-                if (price >= 1000) {{
-                    return price.toLocaleString('en-US', {{ minimumFractionDigits: 2, maximumFractionDigits: 2 }});
-                }} else if (price >= 1) {{
-                    return price.toLocaleString('en-US', {{ minimumFractionDigits: 3, maximumFractionDigits: 3 }});
-                }} else {{
-                    return price.toLocaleString('en-US', {{ minimumFractionDigits: 6, maximumFractionDigits: 6 }});
-                }}
-            }}
-            
-            function formatVolume(volume) {{
-                if (volume >= 1000000) {{
-                    return (volume / 1000000).toFixed(2) + 'M';
-                }} else if (volume >= 1000) {{
-                    return (volume / 1000).toFixed(2) + 'K';
-                }} else {{
-                    return volume.toFixed(2);
-                }}
-            }}
-        </script>
+        {js_code}
     </body>
     </html>
     """
-    return html
+    
+    return HTMLResponse(content=html)
 
-def get_signal_page_html(user: str, visitor_stats: str) -> str:
-    """Sinyal sayfası HTML"""
+@app.get("/signal")
+async def signal_page(request: Request):
+    user = request.cookies.get("user_email")
+    if not user:
+        return RedirectResponse("/login")
+    
+    visitor_stats = get_visitor_stats_html()
+    
+    # JavaScript kodunu ayrı string olarak oluştur
+    js_code = """
+    <script src="https://s3.tradingview.com/tv.js"></script>
+    <script>
+        let signalWs = null;
+        let tradingViewWidget = null;
+        
+        const timeframeMap = {
+            "1m": "1",
+            "3m": "3",
+            "5m": "5",
+            "15m": "15",
+            "30m": "30",
+            "1h": "60",
+            "4h": "240",
+            "1d": "D",
+            "1w": "W"
+        };
+        
+        function getTradingViewSymbol() {
+            let pair = document.getElementById('pair').value.trim().toUpperCase();
+            if (!pair.endsWith("USDT")) {
+                pair += "USDT";
+            }
+            return "BINANCE:" + pair;
+        }
+        
+        function getWebSocketSymbol() {
+            return document.getElementById('pair').value.trim().toUpperCase();
+        }
+        
+        async function connectSignal() {
+            const symbol = getWebSocketSymbol();
+            const timeframe = document.getElementById('timeframe').value;
+            const tvSymbol = getTradingViewSymbol();
+            const interval = timeframeMap[timeframe] || "5";
+            
+            if (signalWs) {
+                signalWs.close();
+                signalWs = null;
+            }
+            
+            if (tradingViewWidget) {
+                tradingViewWidget.remove();
+                tradingViewWidget = null;
+            }
+            
+            tradingViewWidget = new TradingView.widget({
+                width: "100%",
+                height: "100%",
+                symbol: tvSymbol,
+                interval: interval,
+                timezone: "Etc/UTC",
+                theme: "dark",
+                style: "1",
+                locale: "tr",
+                container_id: "tradingview_widget",
+                studies: ["RSI@tv-basicstudies", "MACD@tv-basicstudies"]
+            });
+            
+            tradingViewWidget.onChartReady(function() {
+                document.getElementById('connection-status').innerHTML = '✅ Grafik yüklendi: ' + symbol + ' ' + timeframe.toUpperCase();
+            });
+            
+            const protocol = window.location.protocol === 'https:' ? 'wss://' : 'ws://';
+            signalWs = new WebSocket(protocol + window.location.host + '/ws/signal/' + symbol + '/' + timeframe);
+            
+            signalWs.onopen = function() {
+                document.getElementById('connection-status').innerHTML = '✅ ' + symbol + ' ' + timeframe.toUpperCase() + ' canlı sinyal başladı!';
+            };
+            
+            signalWs.onmessage = function(event) {
+                try {
+                    if (event.data.includes('heartbeat')) return;
+                    
+                    const data = JSON.parse(event.data);
+                    const card = document.getElementById('signal-card');
+                    const text = document.getElementById('signal-text');
+                    const details = document.getElementById('signal-details');
+                    
+                    text.innerHTML = data.signal || "⏸️ Sinyal bekleniyor...";
+                    
+                    details.innerHTML = `
+                        <strong>${data.pair || symbol + '/USDT'}</strong><br>
+                        💰 Fiyat: <strong>$${(data.current_price || 0).toLocaleString('en-US', {minimumFractionDigits: 4, maximumFractionDigits: 6})}</strong><br>
+                        📊 Skor: <strong>${data.score || '?'}/100</strong> | ${data.killzone || 'Normal'}<br>
+                        🕒 ${data.last_update ? 'Son: ' + data.last_update : ''}
+                    `;
+                    
+                    if (data.signal && data.signal.includes('ALIM')) {
+                        card.className = 'signal-card green';
+                        text.style.color = '#00ff88';
+                    } else if (data.signal && data.signal.includes('SATIM')) {
+                        card.className = 'signal-card red';
+                        text.style.color = '#ff4444';
+                    } else {
+                        card.className = 'signal-card';
+                        text.style.color = '#ffd700';
+                    }
+                    
+                } catch (error) {
+                    console.error('Hata:', error);
+                }
+            };
+            
+            signalWs.onerror = function() {
+                document.getElementById('connection-status').innerHTML = '❌ WebSocket hatası';
+            };
+            
+            signalWs.onclose = function() {
+                document.getElementById('connection-status').innerHTML = '🔌 Bağlantı kapandı';
+            };
+        }
+        
+        document.addEventListener('DOMContentLoaded', function() {
+            setTimeout(connectSignal, 1000);
+        });
+    </script>
+    """
+    
     html = f"""
     <!DOCTYPE html>
     <html lang="tr">
@@ -638,7 +684,6 @@ def get_signal_page_html(user: str, visitor_stats: str) -> str:
                 min-height: 24px;
             }}
         </style>
-        <script src="https://s3.tradingview.com/tv.js"></script>
     </head>
     <body>
         <div class="user-info">Hoş geldin, {user}</div>
@@ -685,132 +730,98 @@ def get_signal_page_html(user: str, visitor_stats: str) -> str:
             </div>
         </div>
         
-        <script>
-            let signalWs = null;
-            let tradingViewWidget = null;
-            
-            const timeframeMap = {{
-                "1m": "1",
-                "3m": "3",
-                "5m": "5",
-                "15m": "15",
-                "30m": "30",
-                "1h": "60",
-                "4h": "240",
-                "1d": "D",
-                "1w": "W"
-            }};
-            
-            function getTradingViewSymbol() {{
-                let pair = document.getElementById('pair').value.trim().toUpperCase();
-                if (!pair.endsWith("USDT")) {{
-                    pair += "USDT";
-                }}
-                return "BINANCE:" + pair;
-            }}
-            
-            function getWebSocketSymbol() {{
-                return document.getElementById('pair').value.trim().toUpperCase();
-            }}
-            
-            async function connectSignal() {{
-                const symbol = getWebSocketSymbol();
-                const timeframe = document.getElementById('timeframe').value;
-                const tvSymbol = getTradingViewSymbol();
-                const interval = timeframeMap[timeframe] || "5";
-                
-                if (signalWs) {{
-                    signalWs.close();
-                    signalWs = null;
-                }}
-                
-                if (tradingViewWidget) {{
-                    tradingViewWidget.remove();
-                    tradingViewWidget = null;
-                }}
-                
-                tradingViewWidget = new TradingView.widget({{
-                    width: "100%",
-                    height: "100%",
-                    symbol: tvSymbol,
-                    interval: interval,
-                    timezone: "Etc/UTC",
-                    theme: "dark",
-                    style: "1",
-                    locale: "tr",
-                    container_id: "tradingview_widget",
-                    studies: ["RSI@tv-basicstudies", "MACD@tv-basicstudies"]
-                }});
-                
-                tradingViewWidget.onChartReady(function() {{
-                    document.getElementById('connection-status').innerHTML = 
-                        '✅ Grafik yüklendi: ' + symbol + ' ' + timeframe.toUpperCase();
-                }});
-                
-                const protocol = window.location.protocol === 'https:' ? 'wss://' : 'ws://';
-                signalWs = new WebSocket(
-                    protocol + window.location.host + '/ws/signal/' + symbol + '/' + timeframe
-                );
-                
-                signalWs.onopen = function() {{
-                    document.getElementById('connection-status').innerHTML = 
-                        '✅ ' + symbol + ' ' + timeframe.toUpperCase() + ' canlı sinyal başladı!';
-                }};
-                
-                signalWs.onmessage = function(event) {{
-                    try {{
-                        if (event.data.includes('heartbeat')) return;
-                        
-                        const data = JSON.parse(event.data);
-                        const card = document.getElementById('signal-card');
-                        const text = document.getElementById('signal-text');
-                        const details = document.getElementById('signal-details');
-                        
-                        text.innerHTML = data.signal || "⏸️ Sinyal bekleniyor...";
-                        
-                        details.innerHTML = `
-                            <strong>${'{'}{'{'}data.pair || symbol + '/USDT'{'}'}{'}'}</strong><br>
-                            💰 Fiyat: <strong>$${'$'}{'{'}{'{'}(data.current_price || 0).toLocaleString('en-US', {{minimumFractionDigits: 4, maximumFractionDigits: 6}}){'}'}{'}'}</strong><br>
-                            📊 Skor: <strong>${'{'}{'{'}data.score || '?'{'}'}{'}'}/100</strong> | ${'{'}{'{'}data.killzone || 'Normal'{'}'}{'}'}<br>
-                            🕒 ${'{'}{'{'}data.last_update ? 'Son: ' + data.last_update : ''{'}'}{'}'}
-                        `;
-                        
-                        if (data.signal && data.signal.includes('ALIM')) {{
-                            card.className = 'signal-card green';
-                            text.style.color = '#00ff88';
-                        }} else if (data.signal && data.signal.includes('SATIM')) {{
-                            card.className = 'signal-card red';
-                            text.style.color = '#ff4444';
-                        }} else {{
-                            card.className = 'signal-card';
-                            text.style.color = '#ffd700';
-                        }}
-                        
-                    }} catch (error) {{
-                        console.error('Hata:', error);
-                    }}
-                }};
-                
-                signalWs.onerror = function() {{
-                    document.getElementById('connection-status').innerHTML = '❌ WebSocket hatası';
-                }};
-                
-                signalWs.onclose = function() {{
-                    document.getElementById('connection-status').innerHTML = '🔌 Bağlantı kapandı';
-                }};
-            }}
-            
-            document.addEventListener('DOMContentLoaded', function() {{
-                setTimeout(connectSignal, 1000);
-            }});
-        </script>
+        {js_code}
     </body>
     </html>
     """
-    return html
+    
+    return HTMLResponse(content=html)
 
-def get_all_signals_page_html(user: str, visitor_stats: str) -> str:
-    """Tüm sinyaller sayfası HTML"""
+@app.get("/signal/all")
+async def all_signals_page(request: Request):
+    user = request.cookies.get("user_email")
+    if not user:
+        return RedirectResponse("/login")
+    
+    visitor_stats = get_visitor_stats_html()
+    
+    # JavaScript kodunu ayrı string olarak oluştur
+    js_code = """
+    <script>
+        let allSignalsWs = null;
+        
+        function connectAllSignals() {
+            const timeframe = document.getElementById('timeframe').value;
+            document.getElementById('connection-status').innerHTML = '🔄 ' + timeframe.toUpperCase() + ' sinyalleri yükleniyor...';
+            
+            if (allSignalsWs) {
+                allSignalsWs.close();
+            }
+            
+            const protocol = window.location.protocol === 'https:' ? 'wss://' : 'ws://';
+            allSignalsWs = new WebSocket(protocol + window.location.host + '/ws/all/' + timeframe);
+            
+            allSignalsWs.onopen = function() {
+                document.getElementById('connection-status').innerHTML = '✅ ' + timeframe.toUpperCase() + ' canlı sinyal akışı başladı!';
+            };
+            
+            allSignalsWs.onmessage = function(event) {
+                try {
+                    if (event.data.includes('ping')) return;
+                    
+                    const signals = JSON.parse(event.data);
+                    const table = document.getElementById('signals-table');
+                    
+                    if (!signals || signals.length === 0) {
+                        table.innerHTML = '<tr><td colspan="7" style="text-align: center; padding: 50px; color: #ffd700;">📊 Şu anda güçlü sinyal bulunmuyor</td></tr>';
+                        return;
+                    }
+                    
+                    let html = '';
+                    signals.slice(0, 50).forEach(function(signal, index) {
+                        let signalClass = 'signal-neutral';
+                        if (signal.signal && signal.signal.includes('ALIM')) {
+                            signalClass = 'signal-buy';
+                        } else if (signal.signal && signal.signal.includes('SATIM')) {
+                            signalClass = 'signal-sell';
+                        }
+                        
+                        html += `
+                            <tr>
+                                <td>#${index + 1}</td>
+                                <td><strong>${signal.pair ? signal.pair.replace('USDT', '/USDT') : 'N/A'}</strong></td>
+                                <td class="${signalClass}">${signal.signal || '⏸️ Bekle'}</td>
+                                <td><strong>${signal.score || '?'}/100</strong></td>
+                                <td>$${(signal.current_price || 0).toLocaleString('en-US', {minimumFractionDigits: 4, maximumFractionDigits: 6})}</td>
+                                <td>${signal.killzone || 'Normal'}</td>
+                                <td>${signal.last_update || ''}</td>
+                            </tr>
+                        `;
+                    });
+                    
+                    table.innerHTML = html;
+                    
+                } catch (error) {
+                    console.error('Hata:', error);
+                }
+            };
+            
+            allSignalsWs.onerror = function() {
+                document.getElementById('connection-status').innerHTML = '❌ WebSocket hatası';
+            };
+            
+            allSignalsWs.onclose = function() {
+                document.getElementById('connection-status').innerHTML = '🔌 Bağlantı kapandı';
+            };
+        }
+        
+        document.addEventListener('DOMContentLoaded', function() {
+            document.getElementById('timeframe').value = '5m';
+            setTimeout(connectAllSignals, 500);
+        });
+    </script>
+    """
+    
     html = f"""
     <!DOCTYPE html>
     <html lang="tr">
@@ -968,122 +979,14 @@ def get_all_signals_page_html(user: str, visitor_stats: str) -> str:
             </div>
         </div>
         
-        <script>
-            let allSignalsWs = null;
-            
-            function connectAllSignals() {{
-                const timeframe = document.getElementById('timeframe').value;
-                document.getElementById('connection-status').innerHTML = 
-                    '🔄 ' + timeframe.toUpperCase() + ' sinyalleri yükleniyor...';
-                
-                if (allSignalsWs) {{
-                    allSignalsWs.close();
-                }}
-                
-                const protocol = window.location.protocol === 'https:' ? 'wss://' : 'ws://';
-                allSignalsWs = new WebSocket(
-                    protocol + window.location.host + '/ws/all/' + timeframe
-                );
-                
-                allSignalsWs.onopen = function() {{
-                    document.getElementById('connection-status').innerHTML = 
-                        '✅ ' + timeframe.toUpperCase() + ' canlı sinyal akışı başladı!';
-                }};
-                
-                allSignalsWs.onmessage = function(event) {{
-                    try {{
-                        if (event.data.includes('ping')) return;
-                        
-                        const signals = JSON.parse(event.data);
-                        const table = document.getElementById('signals-table');
-                        
-                        if (!signals || signals.length === 0) {{
-                            table.innerHTML = `
-                                <tr>
-                                    <td colspan="7" style="text-align: center; padding: 50px; color: #ffd700;">
-                                        📊 Şu anda güçlü sinyal bulunmuyor
-                                    </td>
-                                </tr>
-                            `;
-                            return;
-                        }}
-                        
-                        let html = '';
-                        signals.slice(0, 50).forEach(function(signal, index) {{
-                            let signalClass = 'signal-neutral';
-                            if (signal.signal && signal.signal.includes('ALIM')) {{
-                                signalClass = 'signal-buy';
-                            }} else if (signal.signal && signal.signal.includes('SATIM')) {{
-                                signalClass = 'signal-sell';
-                            }}
-                            
-                            html += `
-                                <tr>
-                                    <td>#${'{'}{'{'}index + 1{'}'}{'}'}</td>
-                                    <td><strong>${'{'}{'{'}signal.pair ? signal.pair.replace('USDT', '/USDT') : 'N/A'{'}'}{'}'}</strong></td>
-                                    <td class="${'{'}{'{'}signalClass{'}'}{'}'}">${'{'}{'{'}signal.signal || '⏸️ Bekle'{'}'}{'}'}</td>
-                                    <td><strong>${'{'}{'{'}signal.score || '?'{'}'}{'}'}/100</strong></td>
-                                    <td>$${'$'}{'{'}{{'}(signal.current_price || 0).toLocaleString('en-US', {{minimumFractionDigits: 4, maximumFractionDigits: 6}}){'}'}{'}'}</td>
-                                    <td>${'{'}{'{'}signal.killzone || 'Normal'{'}'}{'}'}</td>
-                                    <td>${'{'}{'{'}signal.last_update || ''{'}'}{'}'}</td>
-                                </tr>
-                            `;
-                        }});
-                        
-                        table.innerHTML = html;
-                        
-                    }} catch (error) {{
-                        console.error('Hata:', error);
-                    }}
-                }};
-                
-                allSignalsWs.onerror = function() {{
-                    document.getElementById('connection-status').innerHTML = '❌ WebSocket hatası';
-                }};
-                
-                allSignalsWs.onclose = function() {{
-                    document.getElementById('connection-status').innerHTML = '🔌 Bağlantı kapandı';
-                }};
-            }}
-            
-            document.addEventListener('DOMContentLoaded', function() {{
-                document.getElementById('timeframe').value = '5m';
-                setTimeout(connectAllSignals, 500);
-            }});
-        </script>
+        {js_code}
     </body>
     </html>
     """
-    return html
-
-# ==================== HTTP ENDPOINTS ====================
-
-@app.get("/")
-async def home_page(request: Request):
-    user = request.cookies.get("user_email") or "Misafir"
-    visitor_stats_html = get_visitor_stats_html()
-    html_content = get_home_page_html(user, visitor_stats_html)
-    return HTMLResponse(content=html_content)
-
-@app.get("/signal")
-async def signal_page(request: Request):
-    user = request.cookies.get("user_email")
-    if not user:
-        return RedirectResponse("/login")
     
-    visitor_stats_html = get_visitor_stats_html()
-    html_content = get_signal_page_html(user, visitor_stats_html)
-    return HTMLResponse(content=html_content)
+    return HTMLResponse(content=html)
 
-@app.get("/signal/all")
-async def all_signals_page(request: Request):
-    user = request.cookies.get("user_email")
-    if not user:
-        return RedirectResponse("/login")
-    
-    visitor_stats_html = get_visitor_stats_html()
-    html_content = get_all_signals_page_html(user, visitor_stats_html)
-    return HTMLResponse(content=html_content)
+# ==================== API ENDPOINTS ====================
 
 @app.post("/api/analyze-chart")
 async def analyze_chart_endpoint(request: Request):
@@ -1092,43 +995,20 @@ async def analyze_chart_endpoint(request: Request):
         symbol = body.get("symbol", "BTC").upper()
         timeframe = body.get("timeframe", "5m")
         
-        logger.info(f"Grafik analizi isteği: {symbol} @ {timeframe}")
-        
         binance_client = get_binance_client()
         if not binance_client:
-            return JSONResponse({
-                "analysis": "❌ Binance bağlantısı aktif değil.",
-                "success": False
-            }, status_code=503)
+            return JSONResponse({"analysis": "❌ Binance bağlantısı yok", "success": False}, status_code=503)
         
         ccxt_symbol = f"{symbol}/USDT"
-        
-        interval_map = {
-            "1m": "1m", "3m": "3m", "5m": "5m",
-            "15m": "15m", "30m": "30m", "1h": "1h",
-            "4h": "4h", "1d": "1d", "1w": "1w"
-        }
+        interval_map = {"1m":"1m","3m":"3m","5m":"5m","15m":"15m","30m":"30m","1h":"1h","4h":"4h","1d":"1d","1w":"1w"}
         ccxt_timeframe = interval_map.get(timeframe, "5m")
         
-        klines = await binance_client.fetch_ohlcv(
-            ccxt_symbol,
-            timeframe=ccxt_timeframe,
-            limit=200
-        )
-        
+        klines = await binance_client.fetch_ohlcv(ccxt_symbol, timeframe=ccxt_timeframe, limit=150)
         if not klines or len(klines) < 50:
-            return JSONResponse({
-                "analysis": f"❌ Yetersiz veri: {len(klines) if klines else 0} mum",
-                "success": False
-            }, status_code=404)
+            return JSONResponse({"analysis": f"❌ Yetersiz veri: {len(klines)} mum", "success": False}, status_code=404)
         
-        df = pd.DataFrame(klines, columns=[
-            'timestamp', 'open', 'high', 'low', 'close', 'volume'
-        ])
-        
-        for col in ['open', 'high', 'low', 'close', 'volume']:
-            df[col] = pd.to_numeric(df[col], errors='coerce')
-        
+        df = pd.DataFrame(klines, columns=['timestamp','open','high','low','close','volume'])
+        df.iloc[:,1:] = df.iloc[:,1:].apply(pd.to_numeric, errors='coerce')
         df = df.dropna().tail(100)
         
         signal = None
@@ -1136,7 +1016,7 @@ async def analyze_chart_endpoint(request: Request):
             from indicators import generate_ict_signal, generate_simple_signal
             signal = generate_ict_signal(df, symbol, timeframe) or generate_simple_signal(df, symbol, timeframe)
         except Exception as e:
-            logger.warning(f"Indicator modülü hatası: {e}")
+            logger.warning(f"Indicator hatası: {e}")
             last_price = float(df['close'].iloc[-1])
             prev_price = float(df['close'].iloc[-2])
             change = ((last_price - prev_price) / prev_price * 100) if prev_price > 0 else 0
@@ -1167,40 +1047,31 @@ async def analyze_chart_endpoint(request: Request):
                 "last_update": datetime.utcnow().strftime("%H:%M:%S UTC")
             }
         
-        analysis_report = f"""
+        analysis = f"""
 🔍 <strong>{symbol}/USDT</strong> {timeframe.upper()} TEKNİK ANALİZ RAPORU
 
-🎯 <strong>SİNYAL:</strong> {signal['signal']}
-📊 <strong>SKOR:</strong> {signal['score']}/100 ({signal['strength']})
-💰 <strong>FİYAT:</strong> ${signal['current_price']:,.6f}
-🕐 <strong>KİLLZONE:</strong> {signal['killzone']}
-🕒 <strong>SON GÜNCELLEME:</strong> {signal['last_update']}
+🎯 **SİNYAL**: {signal['signal']}
+📊 **SKOR**: {signal['score']}/100 ({signal['strength']})
+💰 **FİYAT**: ${signal['current_price']:,.6f}
+🕐 **KİLLZONE**: {signal['killzone']}
+🕒 **SON GÜNCELLEME**: {signal['last_update']}
 
-🎯 <strong>TETİKLEYENLER:</strong>
+🎯 **TETİKLEYENLER**:
 • {signal.get('triggers', 'Veri yok')}
 
-⚠️ <strong>UYARI:</strong> Bu bir yatırım tavsiyesi değildir.
+⚠️ **UYARI**: Bu bir yatırım tavsiyesi değildir.
 """
         
-        return JSONResponse({
-            "analysis": analysis_report,
-            "signal_data": signal,
-            "success": True
-        })
+        return JSONResponse({"analysis": analysis, "signal_data": signal, "success": True})
         
     except Exception as e:
         logger.exception(f"Analiz hatası: {e}")
-        return JSONResponse({
-            "analysis": "❌ Sunucu hatası: Teknik analiz yapılamadı",
-            "success": False
-        }, status_code=500)
+        return JSONResponse({"analysis": "❌ Sunucu hatası", "success": False}, status_code=500)
 
 @app.post("/api/gpt-analyze")
 async def gpt_analyze_endpoint(image_file: UploadFile = File(...)):
     if not openai_client:
-        return JSONResponse({
-            "error": "OpenAI API anahtarı yok"
-        }, status_code=501)
+        return JSONResponse({"error": "OpenAI API anahtarı yok"}, status_code=501)
     
     try:
         image_data = await image_file.read()
@@ -1211,45 +1082,23 @@ async def gpt_analyze_endpoint(image_file: UploadFile = File(...)):
             messages=[{
                 "role": "user",
                 "content": [
-                    {
-                        "type": "text",
-                        "text": """Bu bir kripto para grafiği. Türkçe teknik analiz yap:
-1. Trend
-2. Destek/direnç
-3. Mum formasyonları
-4. RSI/MACD durumu
-5. Kısa vadeli öneri"""
-                    },
-                    {
-                        "type": "image_url",
-                        "image_url": {
-                            "url": f"data:image/png;base64,{image_b64}"
-                        }
-                    }
+                    {"type": "text", "text": "Bu kripto grafiğini Türkçe analiz et:"},
+                    {"type": "image_url", "image_url": {"url": f"data:image/png;base64,{image_b64}"}}
                 ]
             }],
             max_tokens=1000,
             temperature=0.3
         )
         
-        analysis = response.choices[0].message.content
-        
-        return JSONResponse({
-            "analysis": analysis,
-            "success": True
-        })
+        return JSONResponse({"analysis": response.choices[0].message.content, "success": True})
         
     except Exception as e:
-        logger.exception(f"GPT analiz hatası: {e}")
-        return JSONResponse({
-            "error": f"GPT analiz hatası: {str(e)}",
-            "success": False
-        }, status_code=500)
+        logger.exception(f"GPT hatası: {e}")
+        return JSONResponse({"error": str(e)}, status_code=500)
 
 @app.get("/api/visitor-stats")
 async def get_visitor_stats():
-    stats = visitor_counter.get_stats()
-    return JSONResponse(stats)
+    return JSONResponse(visitor_counter.get_stats())
 
 @app.get("/admin/visitor-dashboard")
 async def visitor_dashboard_page(request: Request):
@@ -1258,126 +1107,47 @@ async def visitor_dashboard_page(request: Request):
         return RedirectResponse("/login")
     
     stats = visitor_counter.get_stats()
-    
-    page_rows = ""
+    rows = ""
     for page, views in sorted(stats['page_views'].items(), key=lambda x: x[1], reverse=True):
-        page_rows += f"<tr><td>{page}</td><td><strong>{views:,}</strong></td></tr>"
+        rows += f"<tr><td>{page}</td><td><strong>{views}</strong></td></tr>"
     
-    html_content = f"""
-    <!DOCTYPE html>
-    <html>
-    <head>
-        <meta charset="utf-8">
-        <title>Admin Panel</title>
-        <style>
-            body {{ background: #000; color: #fff; padding: 20px; font-family: sans-serif; }}
-            .card {{ background: rgba(0, 0, 0, 0.5); padding: 20px; border-radius: 10px; margin: 20px 0; }}
-            table {{ width: 100%; border-collapse: collapse; }}
-            th, td {{ padding: 12px; border-bottom: 1px solid #333; }}
-            th {{ background: rgba(0, 219, 222, 0.2); color: #00ffff; }}
-        </style>
-    </head>
-    <body>
-        {get_visitor_stats_html()}
-        <div class="card">
-            <h2>📊 İstatistikler</h2>
-            <p>Toplam: <strong>{stats['total_visits']:,}</strong></p>
-            <p>Bugün: <strong>{stats['today_visits']:,}</strong></p>
-            <p>Aktif: <strong>{stats['active_users']}</strong></p>
-        </div>
-        <div class="card">
-            <h3>Sayfa Görüntülenmeleri</h3>
-            <table>
-                <tr><th>Sayfa</th><th>Görüntülenme</th></tr>
-                {page_rows}
-            </table>
-        </div>
-        <a href="/" style="color: #00dbde;">← Ana Sayfa</a>
-    </body>
-    </html>
+    html = f"""
+    <!DOCTYPE html><html><head><meta charset="utf-8"><title>Admin Panel</title>
+    <style>body{{background:#000;color:#fff;padding:20px;font-family:sans-serif}}
+    .card{{background:#00000088;padding:25px;border-radius:20px;margin:15px 0}}
+    table{{width:100%;border-collapse:collapse}}th,td{{padding:12px;border-bottom:1px solid #333}}</style></head><body>
+    {get_visitor_stats_html()}
+    <div class="card"><h2>📊 İstatistikler</h2>
+    Toplam: <strong>{stats['total_visits']:,}</strong> | Bugün: <strong>{stats['today_visits']:,}</strong> | Aktif: <strong>{stats['active_users']}</strong>
+    </div>
+    <div class="card"><h3>Sayfa Görüntülenmeleri</h3><table><tr><th>Sayfa</th><th>Görüntülenme</th></tr>{rows}</table></div>
+    <a href="/" style="color:#00dbde">← Ana Sayfa</a></body></html>
     """
     
-    return HTMLResponse(content=html_content)
+    return HTMLResponse(content=html)
 
 @app.get("/login")
 async def login_page():
-    html_content = """
-    <!DOCTYPE html>
-    <html>
-    <head>
-        <meta charset="utf-8">
-        <title>Giriş</title>
-        <style>
-            body {
-                background: linear-gradient(135deg, #0a0022, #1a0033, #000);
-                color: #fff;
-                display: flex;
-                align-items: center;
-                justify-content: center;
-                height: 100vh;
-                margin: 0;
-            }
-            .box {
-                background: rgba(0, 0, 0, 0.7);
-                padding: 40px;
-                border-radius: 20px;
-                text-align: center;
-                max-width: 400px;
-                width: 90%;
-            }
-            input {
-                width: 100%;
-                padding: 12px;
-                margin: 8px 0;
-                border: none;
-                border-radius: 8px;
-                background: #333;
-                color: #fff;
-            }
-            button {
-                width: 100%;
-                padding: 12px;
-                background: linear-gradient(45deg, #00dbde, #fc00ff);
-                border: none;
-                border-radius: 8px;
-                color: #fff;
-                font-weight: bold;
-                cursor: pointer;
-            }
-        </style>
-    </head>
-    <body>
-        <div class="box">
-            <h2>🔐 ICT SMART PRO</h2>
-            <form method="post">
-                <input name="email" placeholder="E-posta" required>
-                <button type="submit">Giriş Yap</button>
-            </form>
-            <p style="color: #888; margin-top: 15px;">
-                Demo için herhangi bir e-posta kullanabilirsiniz
-            </p>
-        </div>
-    </body>
-    </html>
+    html = """
+    <!DOCTYPE html><html><head><meta charset="utf-8"><title>Giriş</title>
+    <style>body{{background:#000;color:#fff;display:flex;align-items:center;justify-content:center;height:100vh;margin:0}}
+    .box{{background:#000000aa;padding:40px;border-radius:20px;text-align:center;max-width:400px;width:90%}}
+    input{{width:100%;padding:12px;margin:8px;border:none;border-radius:8px;background:#333;color:#fff}}
+    button{{width:100%;padding:12px;background:linear-gradient(45deg,#00dbde,#fc00ff);border:none;border-radius:8px;color:#fff;font-weight:bold}}</style></head><body>
+    <div class="box"><h2>🔐 ICT SMART PRO</h2>
+    <form method="post"><input name="email" placeholder="E-posta" required><button type="submit">Giriş Yap</button></form>
+    <p style="color:#888;margin-top:15px">Herhangi bir e-posta ile giriş yapabilirsiniz (demo)</p></div></body></html>
     """
-    return HTMLResponse(content=html_content)
+    return HTMLResponse(content=html)
 
 @app.post("/login")
 async def login_user(request: Request):
-    form_data = await request.form()
-    email = str(form_data.get("email", "")).strip().lower()
-    
+    form = await request.form()
+    email = str(form.get("email", "")).strip().lower()
     if "@" in email and "." in email:
-        response = RedirectResponse("/", status_code=303)
-        response.set_cookie(
-            key="user_email",
-            value=email,
-            max_age=2592000,
-            httponly=True,
-            samesite="lax"
-        )
-        return response
-    
+        resp = RedirectResponse("/", status_code=303)
+        resp.set_cookie("user_email", email, max_age=2592000, httponly=True, samesite="lax")
+        return resp
     return RedirectResponse("/login")
 
 @app.get("/debug/sources")
@@ -1386,111 +1156,72 @@ async def debug_sources_page(request: Request):
     if not user:
         return RedirectResponse("/login")
     
-    html_content = f"""
-    <!DOCTYPE html>
-    <html>
-    <head>
-        <meta charset="utf-8">
-        <title>Fiyat Kaynakları</title>
-        <style>
-            body {{ background: #000; color: #fff; padding: 20px; font-family: sans-serif; }}
-            table {{ width: 100%; border-collapse: collapse; margin-top: 20px; }}
-            th, td {{ padding: 12px; border-bottom: 1px solid #333; }}
-            th {{ background: rgba(0, 219, 222, 0.2); color: #00ffff; }}
-        </style>
-    </head>
-    <body>
-        {get_visitor_stats_html()}
-        <h2>🟢 Fiyat Kaynakları</h2>
-        <p id="total" style="color: #00ff88;">Yükleniyor...</p>
-        <table>
-            <thead>
-                <tr>
-                    <th>KAYNAK</th>
-                    <th>DURUM</th>
-                    <th>SON GÜNCELLEME</th>
-                    <th>COİN SAYISI</th>
-                </tr>
-            </thead>
-            <tbody id="sources-table">
-                <tr>
-                    <td colspan="4" style="text-align: center; padding: 40px;">
-                        🔄 Veriler yükleniyor...
-                    </td>
-                </tr>
-            </tbody>
-        </table>
-        <a href="/" style="color: #00dbde;">← Ana Sayfa</a>
+    js_code = """
+    <script>
+        const ws = new WebSocket((window.location.protocol === 'https:' ? 'wss://' : 'ws://') + window.location.host + '/ws/price_sources');
         
-        <script>
-            const ws = new WebSocket(
-                (window.location.protocol === 'https:' ? 'wss://' : 'ws://') + 
-                window.location.host + '/ws/price_sources'
-            );
-            
-            ws.onmessage = function(event) {{
-                try {{
-                    const data = JSON.parse(event.data);
-                    document.getElementById('total').innerText = 
-                        '📈 Toplam ' + data.total_symbols.toLocaleString() + ' coin aktif';
+        ws.onmessage = function(event) {
+            try {
+                const data = JSON.parse(event.data);
+                document.getElementById('total').innerText = '📈 Toplam ' + data.total_symbols.toLocaleString() + ' coin aktif';
+                
+                const table = document.getElementById('sources-table');
+                let html = '';
+                
+                for (const [sourceName, sourceData] of Object.entries(data.sources)) {
+                    const status = sourceData.healthy ? '✅ SAĞLIKLI' : '❌ HATA';
+                    const bg = sourceData.healthy ? '#00ff8822' : '#ff444422';
                     
-                    const table = document.getElementById('sources-table');
-                    let html = '';
-                    
-                    for (const [sourceName, sourceData] of Object.entries(data.sources)) {{
-                        const status = sourceData.healthy ? '✅ SAĞLIKLI' : '❌ HATA';
-                        const bg = sourceData.healthy ? '#00ff8822' : '#ff444422';
-                        
-                        html += `
-                            <tr style="background: ${'{'}{'{'}bg{'}'}{'}'}">
-                                <td><strong>${'{'}{'{'}sourceName.toUpperCase(){'}'}{'}'}</strong></td>
-                                <td>${'{'}{'{'}status{'}'}{'}'}</td>
-                                <td>${'{'}{'{'}sourceData.last_update || 'Asla'{'}'}{'}'}</td>
-                                <td><strong>${'{'}{'{'}sourceData.symbols_count || 0{'}'}{'}'}</strong></td>
-                            </tr>
-                        `;
-                    }}
-                    
-                    table.innerHTML = html;
-                    
-                }} catch (error) {{
-                    console.error('Hata:', error);
-                }}
-            }};
-        </script>
-    </body>
-    </html>
+                    html += `
+                        <tr style="background: ${bg}">
+                            <td><strong>${sourceName.toUpperCase()}</strong></td>
+                            <td>${status}</td>
+                            <td>${sourceData.last_update || 'Asla'}</td>
+                            <td><strong>${sourceData.symbols_count || 0}</strong></td>
+                        </tr>
+                    `;
+                }
+                
+                table.innerHTML = html;
+                
+            } catch (error) {
+                console.error('Hata:', error);
+            }
+        };
+    </script>
     """
-    return HTMLResponse(content=html_content)
+    
+    html = f"""
+    <!DOCTYPE html><html><head><meta charset="utf-8"><title>Fiyat Kaynakları Debug</title>
+    <style>body{{background:#000;color:#fff;padding:20px;font-family:sans-serif}}
+    table{{width:100%;border-collapse:collapse}}th,td{{padding:12px;text-align:left;border-bottom:1px solid #333}}th{{background:#00dbde22}}</style></head><body>
+    {get_visitor_stats_html()}
+    <h2>🟢 Fiyat Kaynakları</h2>
+    <p id="total" style="font-size:1.2rem;color:#00ff88">Yükleniyor...</p>
+    <table><thead><tr><th>KAYNAK</th><th>DURUM</th><th>SON GÜNCELLEME</th><th>COIN SAYISI</th></tr></thead><tbody id="sources-table">
+    <tr><td colspan="4" style="text-align:center;padding:40px;">🔄 Veriler yükleniyor...</td></tr></tbody></table>
+    {js_code}
+    <a href="/" style="color:#00dbde;font-size:1.1rem;margin-top:20px;display:inline-block">← Ana Sayfa</a>
+    </body></html>
+    """
+    return HTMLResponse(content=html)
 
 @app.get("/health")
 async def health_check_endpoint():
     stats = visitor_counter.get_stats()
-    
     healthy_sources = 0
     if price_sources_status:
         healthy_sources = sum(1 for v in price_sources_status.values() if v.get("healthy", False))
     
     return {
         "status": "OK",
-        "version": "5.0-REALTIME",
+        "version": "6.0-REALTIME",
         "timestamp": datetime.utcnow().isoformat(),
         "services": {
             "binance_connected": get_binance_client() is not None,
             "price_sources_healthy": healthy_sources,
             "price_sources_total": len(price_sources_status),
             "symbols_loaded": len(all_usdt_symbols),
-            "active_connections": {
-                "price_sources": len(price_sources_subscribers),
-                "single_signals": sum(len(subs) for subs in single_subscribers.values()),
-                "all_signals": sum(len(subs) for subs in all_subscribers.values()),
-                "pump_radar": len(pump_radar_subscribers)
-            }
-        },
-        "performance": {
-            "top_gainers_count": len(top_gainers),
-            "active_signals": {tf: len(sigs) for tf, sigs in active_strong_signals.items()},
-            "shared_signals": {tf: len(sigs) for tf, sigs in shared_signals.items()}
         },
         "visitor_stats": stats
     }
@@ -1499,11 +1230,4 @@ async def health_check_endpoint():
 
 if __name__ == "__main__":
     import uvicorn
-    
-    port = int(os.getenv("PORT", 8000))
-    uvicorn.run(
-        app,
-        host="0.0.0.0",
-        port=port,
-        log_level="info"
-    )
+    uvicorn.run(app, host="0.0.0.0", port=int(os.getenv("PORT", 8000)), log_level="info")
