@@ -150,41 +150,61 @@ class GrokIndicators:
 
         return patterns
 
-    def detect_fibonacci_levels(self, df: pd.DataFrame, ph: pd.Series, pl: pd.Series) -> pd.DataFrame:
-        df = df.copy()
-        for level in self._fib_levels:
-            df[f'fib_{str(level).replace(".", "")}'] = np.nan
-        df['fib_direction'] = ''
-        df['fib_ote_zone'] = False
+ def detect_fibonacci_levels(self, df: pd.DataFrame, ph: pd.Series, pl: pd.Series) -> pd.DataFrame:
+    df = df.copy()
+    
+    # Tüm fib sütunlarını NaN ile başlat
+    for level in self._fib_levels:
+        col_name = f'fib_{str(level).replace(".", "")}'
+        df[col_name] = np.nan
+    
+    df['fib_direction'] = ''
+    df['fib_ote_zone'] = False
 
-        ph_series = ph.dropna()
-        pl_series = pl.dropna()
+    ph_series = ph.dropna()
+    pl_series = pl.dropna()
 
-        if len(ph_series) < 2 or len(pl_series) < 2:
-            return df
+    # En az 1 pivot high ve 1 pivot low olmalı (2 değil, 1 yeterli)
+    if len(ph_series) < 1 or len(pl_series) < 1:
+        return df  # Fibonacci yok ama en azından sütunlar var (NaN)
 
-        last_ph_idx = ph_series.index[-1]
-        last_pl_idx = pl_series.index[-1]
+    # En son pivot high ve pivot low'u al
+    last_ph_idx = ph_series.index[-1]
+    last_pl_idx = pl_series.index[-1]
 
+    try:
         if last_ph_idx > last_pl_idx:
+            # Bearish retracement
             high_price = df.loc[last_ph_idx, 'high']
             low_price = df.loc[last_pl_idx, 'low']
             fib_range = high_price - low_price
+            if fib_range <= 0:
+                return df
             for level in self._fib_levels:
-                df[f'fib_{str(level).replace(".", "")}'] = high_price - (fib_range * level)
+                col_name = f'fib_{str(level).replace(".", "")}'
+                df[col_name] = high_price - (fib_range * level)
             df['fib_direction'] = 'bearish'
-            df['fib_ote_zone'] = (df['close'] >= df['fib_618']) & (df['close'] <= df['fib_705'])
+            # OTE zone kontrolü (NaN değilse)
+            if 'fib_618' in df.columns and 'fib_705' in df.columns:
+                df['fib_ote_zone'] = (df['close'] >= df['fib_618']) & (df['close'] <= df['fib_705'])
         else:
+            # Bullish retracement
             low_price = df.loc[last_pl_idx, 'low']
             high_price = df.loc[last_ph_idx, 'high']
             fib_range = high_price - low_price
+            if fib_range <= 0:
+                return df
             for level in self._fib_levels:
-                df[f'fib_{str(level).replace(".", "")}'] = low_price + (fib_range * level)
+                col_name = f'fib_{str(level).replace(".", "")}'
+                df[col_name] = low_price + (fib_range * level)
             df['fib_direction'] = 'bullish'
-            df['fib_ote_zone'] = (df['close'] >= df['fib_618']) & (df['close'] <= df['fib_705'])
+            if 'fib_618' in df.columns and 'fib_705' in df.columns:
+                df['fib_ote_zone'] = (df['close'] >= df['fib_618']) & (df['close'] <= df['fib_705'])
+    except Exception as e:
+        logger.debug(f"Fibonacci hesaplama hatası: {e}")
+        # Hata olsa bile sütunlar NaN kalsın, patlamasın
 
-        return df
-
+    return df
     def calculate_signal_score(self, patterns: Dict[str, pd.Series]) -> int:
         score = 0
         idx = -1
