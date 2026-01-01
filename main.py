@@ -185,16 +185,18 @@ async def ws_pump(websocket: WebSocket):
 @app.websocket("/ws/realtime_price")
 async def ws_realtime_price(websocket: WebSocket):
     await websocket.accept()
-    realtime_subscribers.add(websocket)
+    await rt_ticker.subscribe(websocket)  # sınıfın kendi metodu
+    
     try:
         while True:
-            await websocket.send_json({
-                "tickers": rt_ticker["tickers"],
-                "last_update": rt_ticker["last_update"]
-            })
+            data = get_all_prices_snapshot(limit=50)  # core'dan fonksiyonu import etmeyi unutma!
+            await websocket.send_json(data)
             await asyncio.sleep(5)
     except WebSocketDisconnect:
-        realtime_subscribers.discard(websocket)
+        await rt_ticker.unsubscribe(websocket)
+    except Exception as e:
+        logger.error(f"Realtime price WS error: {e}")
+        await rt_ticker.unsubscribe(websocket)
 
 # ==================== ANA SAYFA ====================
 @app.get("/", response_class=HTMLResponse)
@@ -1315,4 +1317,5 @@ async def login(request: Request):
 if __name__ == "__main__":
     import uvicorn
     uvicorn.run(app, host="0.0.0.0", port=8000)
+
 
