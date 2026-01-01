@@ -412,6 +412,8 @@ async def initialize():
         asyncio.create_task(bybit_ticker_stream()),
         asyncio.create_task(okx_ticker_stream()),
         asyncio.create_task(coingecko_polling()),
+        # Pump radar'ı başlat
+        asyncio.create_task(start_pump_radar()),
     ]
     background_tasks.extend(tasks)
     logger.info("✅ Tüm background task'lar başlatıldı")
