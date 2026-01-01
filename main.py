@@ -107,6 +107,7 @@ from core import price_sources_status
 async def ws_price_sources(websocket: WebSocket):
     await websocket.accept()
     price_sources_subscribers.add(websocket)  # yeni set tanımla: price_sources_subscribers = set()
+    price_sources_subscribers = set()
 
     # İlk veri gönder
     await websocket.send_json({
@@ -1412,3 +1413,4 @@ async def price_sources_debug(request: Request):
 if __name__ == "__main__":
     import uvicorn
     uvicorn.run(app, host="0.0.0.0", port=8000) 
+
