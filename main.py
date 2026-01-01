@@ -505,7 +505,7 @@ document.addEventListener("DOMContentLoaded", () => {{
 </script>
 </body></html>"""
     return HTMLResponse(content=html_content)
-
+#============================================================
 @app.post("/api/analyze-chart")
 async def analyze_chart(request: Request):
     try:
@@ -530,42 +530,94 @@ async def analyze_chart(request: Request):
         df.iloc[:,1:] = df.iloc[:,1:].apply(pd.to_numeric, errors='coerce')
         df = df.dropna().tail(100)
 
+        # Timestamp'leri datetime yapalım (killzone için saat bilgisi lazım)
+        df['timestamp'] = pd.to_datetime(df['timestamp'], unit='ms')
+        df = df.set_index('timestamp')
+
         signal = None
         try:
             from indicators import generate_ict_signal, generate_simple_signal
-            signal = generate_ict_signal(df, symbol, timeframe) or generate_simple_signal(df, symbol, timeframe)
+            signal = generate_ict_signal(df, symbol + "USDT", timeframe)
+            if not signal:
+                signal = generate_simple_signal(df, symbol + "USDT", timeframe)
         except Exception as e:
-            logger.warning("Indicator modülü hatası, fallback kullanılıyor")
+            logger.warning(f"Indicator modülü hatası: {e}, fallback kullanılıyor")
+            signal = generate_simple_signal(df, symbol + "USDT", timeframe)
 
         if not signal:
             last_price = float(df['close'].iloc[-1])
             signal = {
-                "pair": f"{symbol}/USDT", "timeframe": timeframe.upper(), "current_price": round(last_price, 6),
-                "signal": "⏸️ NEUTRAL", "score": 50, "strength": "ORTA", "killzone": "Normal",
-                "triggers": "Yeterli veri yok",
+                "pair": f"{symbol}/USDT",
+                "timeframe": timeframe.upper(),
+                "current_price": round(last_price, 6 if last_price < 1 else 4),
+                "signal": "⏸️ NÖTR",
+                "score": 50,
+                "strength": "ORTA",
+                "killzone": "Normal",
+                "triggers": "Yeterli pattern tespit edilemedi",
                 "last_update": datetime.utcnow().strftime("%H:%M:%S UTC")
             }
 
-        analysis = f"""🔍 <strong>{symbol}/USDT</strong> {timeframe.upper()} TEKNİK ANALİZ RAPORU
+        # Raporu Geliştirilmiş Haliyle Oluştur
+        analysis_lines = [
+            f"🔍 <strong>{signal['pair']}</strong> {signal['timeframe']} TEKNİK ANALİZ RAPORU",
+            "",
+            f"🎯 **GÜNCEL SİNYAL**: <strong>{signal['signal']}</strong>",
+            f"📊 **GÜÇ SKORU**: <strong>{signal['score']}/100</strong> ({signal['strength']})",
+            f"💰 **MEVCUT FİYAT**: <strong>${signal['current_price']:,.6f}</strong>",
+            f"🕐 **KİLLZONE**: <strong>{signal['killzone']}</strong>",
+            f"🕒 **SON GÜNCELLEME**: {signal['last_update']}",
+            "",
+            "🎯 **TETİKLEYEN PATTERNLER**:"
+        ]
 
-🎯 **GÜNCEL SİNYAL**: {signal['signal']}
-📊 **GÜÇ SKORU**: {signal['score']}/100 ({signal['strength']})
-💰 **MEVCUT FİYAT**: ${signal['current_price']:,.6f}
-🕐 **KİLLZONE**: {signal['killzone']}
-🕒 **SON GÜNCELLEME**: {signal['last_update']}
+        triggers = signal.get('triggers', '')
+        if triggers and triggers != "RSI6 Momentum" and triggers != "Veri yok":
+            trigger_list = triggers.split(" | ")
+            for t in trigger_list:
+                analysis_lines.append(f"• {t}")
+        else:
+            analysis_lines.append("• Temel momentum ve yapı analizi")
 
-🎯 **TETİKLEYENLER**:
-• {signal.get('triggers', 'Veri yok')}
+        # Ekstra ICT Detayları (indicators.py'den gelen verilerle zenginleştir)
+        extra_info = []
+        if 'fib_ote_zone' in df.columns and df['fib_ote_zone'].iloc[-1]:
+            direction = df['fib_direction'].iloc[-1]
+            extra_info.append(f"🎯 <strong>OTE ZONE</strong>'da ({'YUKARI' if direction == 'bullish' else 'AŞAĞI'} yönlü retracement)")
+        if df['close'].iloc[-1] > poc_price:
+            extra_info.append("📈 Fiyat POC üstünde (boğa baskın)")
+        elif df['close'].iloc[-1] < poc_price:
+            extra_info.append("📉 Fiyat POC altında (ayı baskın)")
+        else:
+            extra_info.append("⚖️ Fiyat POC seviyesinde")
 
-📈 **ICT ÖZETİ**:
-{symbol.upper()}/USDT için <strong>{signal['signal']}</strong> sinyali üretildi.
+        if extra_info:
+            analysis_lines.append("")
+            analysis_lines.append("🔥 **EKSTRA ICT GÖZLEMLER**:")
+            for info in extra_info:
+                analysis_lines.append(info)
 
-⚠️ Bu bir yatırım tavsiyesi değildir."""
+        analysis_lines += [
+            "",
+            f"📈 **ICT ÖZETİ**:",
+            f"{symbol}/USDT mevcut yapıda <strong>{signal['signal']}</strong> eğilimi gösteriyor.",
+            "Killzone saatlerinde daha güçlü hareket beklenebilir.",
+            "",
+            "⚠️ Bu bir yatırım tavsiyesi değildir. Kendi analizinizi yapın."
+        ]
 
-        return JSONResponse({"analysis": analysis, "signal_data": signal, "success": True})
+        analysis = "\n".join(analysis_lines)
+
+        return JSONResponse({
+            "analysis": analysis,
+            "signal_data": signal,
+            "success": True
+        })
+
     except Exception as e:
         logger.exception("Analiz hatası")
-        return JSONResponse({"analysis": "❌ Sunucu hatası", "success": False}, status_code=500)
+        return JSONResponse({"analysis": "❌ Sunucu hatası oluştu. Lütfen tekrar deneyin.", "success": False}, status_code=500)
+#============================================================
 
 @app.post("/api/gpt-analyze")
 async def gpt_analyze_endpoint(image_file: UploadFile = File(...)):
@@ -683,3 +735,4 @@ async def health_check():
 if __name__ == "__main__":
     import uvicorn
     uvicorn.run(app, host="0.0.0.0", port=8000, log_level="info")
+
