@@ -537,83 +537,57 @@ async def signal(request: Request):
             return "BINANCE:" + pair;
         }}
         
-        function createWidget() {{
-            const symbol = getSymbol();
-            const interval = tfMap[document.getElementById('tf').value] || "5";
-            
-            if (tvWidget) tvWidget.remove();
-            
-            tvWidget = new TradingView.widget({{
-                autosize: true,
-                width: "100%",
-                height: 500,
-                symbol: symbol,
-                interval: interval,
-                timezone: "Etc/UTC",
-                theme: "dark",
-                style: "1",
-                locale: "tr",
-                container_id: "tradingview_widget",
-                studies: ["RSI@tv-basicstudies", "MACD@tv-basicstudies"]
-            }});
-            
-            tvWidget.onChartReady(() => {{
-                document.getElementById('status').innerHTML = "✅ Grafik yüklendi • Sinyal bağlantısı kurun";
-                
-                setInterval(() => {{
-                    try {{
-                        const price = tvWidget.activeChart().getSeries().lastPrice();
-                        if (price && price !== currentPrice) {{
+     function createWidget() {
+    const symbol = getSymbol();
+    const interval = tfMap[document.getElementById('tf').value] || "5";
+    
+    if (tvWidget) {
+        tvWidget.remove();
+        tvWidget = null;
+    }
+    
+    const container = document.getElementById('tradingview_widget');
+    container.innerHTML = ''; // temizle
+
+    tvWidget = new TradingView.widget({
+        autosize: true,
+        symbol: symbol,
+        interval: interval,
+        timezone: "Etc/UTC",
+        theme: "dark",
+        style: "1",
+        locale: "tr",
+        container: "tradingview_widget",  // container_id yerine container
+        studies: ["RSI@tv-basicstudies", "MACD@tv-basicstudies"]
+    });
+
+    // YENİ YÖNTEM: Widget hazır olana kadar bekle
+    const checkReady = setInterval(() => {
+        if (tvWidget && tvWidget._ready) {
+            clearInterval(checkReady);
+            onWidgetReady();
+        }
+    }, 300);
+
+    function onWidgetReady() {
+        document.getElementById('status').innerHTML = "✅ Grafik yüklendi • Sinyal bağlantısı kurun";
+        
+        setInterval(() => {
+            try {
+                if (tvWidget && tvWidget._innerWindow) {
+                    const chart = tvWidget._innerWindow().chart();
+                    if (chart) {
+                        const price = chart.getVisiblePriceRange()?.max;
+                        if (price && price !== currentPrice) {
                             currentPrice = price;
                             document.getElementById('price-text').innerHTML = '$' + parseFloat(price).toFixed(price > 1 ? 2 : 6);
-                        }}
-                    }} catch(e) {{}}
-                }}, 1500);
-            }});
-        }}
-        
-        document.addEventListener("DOMContentLoaded", createWidget);
-        document.getElementById('pair').addEventListener('change', createWidget);
-        document.getElementById('tf').addEventListener('change', createWidget);
-        
-        async function analyzeChartWithAI() {{
-            const btn = document.getElementById('analyze-btn');
-            const box = document.getElementById('ai-box');
-            const comment = document.getElementById('ai-comment');
-            
-            btn.disabled = true;
-            btn.innerHTML = "Analiz ediliyor...";
-            box.style.display = 'block';
-            comment.innerHTML = "📸 Grafik yakalanıyor...<br>🧠 Analiz yapılıyor...";
-            
-            try {{
-                // Kendi analiz motorumuzu çalıştır
-                const symbol = getSymbol().replace("BINANCE:", "");
-                const timeframe = document.getElementById('tf').value;
-                
-                const response = await fetch('/api/analyze-chart', {{
-                    method: 'POST',
-                    headers: {{'Content-Type': 'application/json'}},
-                    body: JSON.stringify({{
-                        symbol: symbol,
-                        timeframe: timeframe
-                    }})
-                }});
-                
-                const data = await response.json();
-                
-                if (data.analysis) {{
-                    comment.innerHTML = data.analysis.replace(/\\n/g, '<br>');
-                }} else {{
-                    comment.innerHTML = "❌ Analiz alınamadı: " + (data.detail || 'Bilinmeyen hata');
-                }}
-            }} catch (err) {{
-                comment.innerHTML = "❌ Bağlantı hatası. Tekrar deneyin.<br>" + err.message;
-            }} finally {{
-                btn.disabled = false;
-                btn.innerHTML = "🤖 GRAFİĞİ GPT-4o İLE ANALİZ ET";
-            }}
-        }}
+                        }
+                    }
+                }
+            } catch(e) {}
+        }, 1500);
+    }
+}
         
         function connect() {{
             const symbolInput = document.getElementById('pair').value.trim().toUpperCase();
@@ -640,35 +614,44 @@ async def signal(request: Request):
                 tvWidget = null;
             }}
             
-            // Yeni widget oluştur
-            tvWidget = new TradingView.widget({{
-                autosize: true,
-                width: "100%",
-                height: 500,
-                symbol: tvSymbol,
-                interval: interval,
-                timezone: "Etc/UTC",
-                theme: "dark",
-                style: "1",
-                locale: "tr",
-                container_id: "tradingview_widget",
-                studies: ["RSI@tv-basicstudies", "MACD@tv-basicstudies"]
-            }});
-            
-            tvWidget.onChartReady(() => {{
-                document.getElementById('status').innerHTML = `✅ Grafik yüklendi: ${{symbol}} ${{tfSelect.toUpperCase()}} • Canlı sinyal akışı başladı!`;
-                
-                // Fiyat takibi
-                setInterval(() => {{
-                    try {{
-                        const price = tvWidget.activeChart().getSeries().lastPrice();
-                        if (price && price !== currentPrice) {{
-                            currentPrice = price;
-                            document.getElementById('price-text').innerHTML = '$' + parseFloat(price).toFixed(price > 1 ? 2 : 6);
-                        }}
-                    }} catch(e) {{}}
-                }}, 1500);
-            }});
+        tvWidget = new TradingView.widget({
+    autosize: true,
+    symbol: tvSymbol,
+    interval: interval,
+    timezone: "Etc/UTC",
+    theme: "dark",
+    style: "1",
+    locale: "tr",
+    container: "tradingview_widget",  // container_id → container
+    studies: ["RSI@tv-basicstudies", "MACD@tv-basicstudies"]
+});
+
+// Yeni hazır kontrolü
+const checkReady = setInterval(() => {
+    if (tvWidget && tvWidget._ready) {
+        clearInterval(checkReady);
+        onWidgetReady();
+    }
+}, 300);
+
+function onWidgetReady() {
+    document.getElementById('status').innerHTML = `✅ Grafik yüklendi: ${symbol} ${tfSelect.toUpperCase()} • Canlı sinyal akışı başladı!`;
+    
+    setInterval(() => {
+        try {
+            if (tvWidget && tvWidget._innerWindow) {
+                const chart = tvWidget._innerWindow().chart();
+                if (chart) {
+                    const price = chart.getVisiblePriceRange()?.max;
+                    if (price && price !== currentPrice) {
+                        currentPrice = price;
+                        document.getElementById('price-text').innerHTML = '$' + parseFloat(price).toFixed(price > 1 ? 2 : 6);
+                    }
+                }
+            }
+        } catch(e) {}
+    }, 1500);
+}
             
             // Şimdi WebSocket bağlantısını kur
             if (ws) ws.close();
@@ -1411,6 +1394,7 @@ async def price_sources_debug(request: Request):
 if __name__ == "__main__":
     import uvicorn
     uvicorn.run(app, host="0.0.0.0", port=8000)
+
 
 
 
