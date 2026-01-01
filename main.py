@@ -1336,11 +1336,82 @@ async def login(request: Request):
         resp.set_cookie("user_email", email, max_age=2592000, httponly=True, samesite="lax")
         return resp
     return RedirectResponse("/login")
+#=============================================================
+@app.get("/debug/sources", response_class=HTMLResponse)
+async def price_sources_debug(request: Request):
+    user = request.cookies.get("user_email")
+    if not user:
+        return RedirectResponse("/login")
+
+    visitor_stats_html = get_visitor_stats_html()
+
+    return f"""<!DOCTYPE html>
+<html lang="tr">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Fiyat Kaynakları İzleyici | ICT SMART PRO</title>
+    <style>
+        body {{ background: #000; color: #fff; font-family: sans-serif; padding: 20px; }}
+        .container {{ max-width: 1000px; margin: auto; }}
+        h1 {{ color: #00dbde; text-align: center; }}
+        table {{ width: 100%; border-collapse: collapse; margin: 20px 0; }}
+        th, td {{ padding: 15px; text-align: left; border-bottom: 1px solid #333; }}
+        th {{ background: #ffffff11; }}
+        .healthy {{ color: #00ff88; }}
+        .unhealthy {{ color: #ff4444; }}
+        .status {{ font-weight: bold; }}
+    </style>
+</head>
+<body>
+    {get_visitor_stats_html()}
+    <div class="container">
+        <h1>🔴 CANLI FİYAT KAYNAKLARI MONİTÖRÜ</h1>
+        <p>Toplam takip edilen coin: <strong id="total-coins">Yükleniyor...</strong></p>
+        <table>
+            <thead>
+                <tr>
+                    <th>Borsa</th>
+                    <th>Durum</th>
+                    <th>Son Güncelleme</th>
+                    <th>Kapsadığı Coin Sayısı</th>
+                    <th>Hata (varsa)</th>
+                </tr>
+            </thead>
+            <tbody id="sources-table">
+                <tr><td colspan="5">Bağlantı kuruluyor...</td></tr>
+            </tbody>
+        </table>
+        <p style="text-align:center"><a href="/" style="color:#00dbde">← Ana Sayfa</a></p>
+    </div>
+    <script>
+        const ws = new WebSocket((location.protocol==='https:'?'wss':'ws')+'://'+location.host+'/ws/price_sources');
+        ws.onmessage = function(e) {{
+            const data = JSON.parse(e.data);
+            document.getElementById('total-coins').innerText = data.total_symbols;
+
+            const table = document.getElementById('sources-table');
+            table.innerHTML = Object.entries(data.sources).map(([source, info]) => `
+                <tr>
+                    <td><strong>${{source.toUpperCase()}}</strong></td>
+                    <td class="status ${{info.healthy ? 'healthy' : 'unhealthy'}}">
+                        ${{info.healthy ? '✅ Çalışıyor' : '❌ Bağlantı Sorunu'}}
+                    </td>
+                    <td>${{info.last_update || 'Bilinmiyor'}}</td>
+                    <td>${{info.symbols_count || 0}}</td>
+                    <td style="color:#ff8888">${{info.last_error || '-'}}</td>
+                </tr>
+            `).join('');
+        }};
+    </script>
+</body>
+</html>"""
 
 # ==================== BAŞLATMA ====================
 if __name__ == "__main__":
     import uvicorn
     uvicorn.run(app, host="0.0.0.0", port=8000)
+
 
 
 
