@@ -59,7 +59,7 @@ def get_best_price(symbol: str) -> Dict[str, Any]:
             "updated": data.get("updated", "N/A")
         }
 
- def get_all_prices_snapshot(limit: int = 50) -> Dict[str, Any]:
+    def get_all_prices_snapshot(limit: int = 50) -> Dict[str, Any]:
     with price_pool_lock:
         # DEBUG: Tüm price_pool'u logla
         logger.debug(f"get_all_prices_snapshot: price_pool boyutu = {len(price_pool)}")
