@@ -364,6 +364,7 @@ async def broadcast_worker():
                     all_subscribers[tf] -= disconnected
 
             elif msg_type == "pump_radar":
+                # DOĞRU KULLANIM: Global değişkenleri doğrudan kullan
                 top_gainers.clear()
                 top_gainers.extend(payload.get("top_gainers", [])[:10])
                 last_update = payload.get("last_update", "N/A")
