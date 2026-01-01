@@ -630,10 +630,10 @@ async def home_page(request: Request):
                         
                         html += `
                             <tr>
-                                <td>#${index + 1}</td>
-                                <td><strong>${coin.symbol}</strong></td>
-                                <td>$${formatPrice(coin.price)}</td>
-                                <td class="${changeClass}">${changeSign}${coin.change.toFixed(2)}%</td>
+                                <td>#${{index + 1}}</td>
+                                <td><strong>${{coin.symbol}}</strong></td>
+                                <td>$${{(coin.price >= 1 ? coin.price.toFixed(2) : coin.price.toFixed(6))}}</td>
+                                <td class="${{changeClass}}">${{changeSign}}${{coin.change.toFixed(2)}}%</td>
                             </tr>
                         `;
                     }});
@@ -644,14 +644,6 @@ async def home_page(request: Request):
                     console.error('Hata:', error);
                 }}
             }};
-            
-            function formatPrice(price) {{
-                if (price >= 1) {{
-                    return price.toFixed(2);
-                }} else {{
-                    return price.toFixed(6);
-                }}
-            }}
         </script>
     </body>
     </html>
@@ -855,18 +847,15 @@ async def signal_page(request: Request):
                 const tvSymbol = getTradingViewSymbol(currentSymbol);
                 const interval = timeframeMap[currentTimeframe] || "5";
                 
-                // WebSocket'i kapat
                 if (signalWs) {{
                     signalWs.close();
                     signalWs = null;
                 }}
                 
-                // TradingView widget'ı yenile
                 if (tradingViewWidget) {{
                     tradingViewWidget.remove();
                 }}
                 
-                // Yeni TradingView widget oluştur
                 tradingViewWidget = new TradingView.widget({{
                     width: "100%",
                     height: "100%",
@@ -879,46 +868,47 @@ async def signal_page(request: Request):
                     container_id: "tradingview_widget"
                 }});
                 
-                // WebSocket bağlantısı
                 const protocol = window.location.protocol === 'https:' ? 'wss://' : 'ws://';
                 signalWs = new WebSocket(protocol + window.location.host + '/ws/signal/' + currentSymbol + '/' + currentTimeframe);
                 
                 signalWs.onopen = function() {{
                     document.getElementById('connection-status').innerHTML = '✅ ' + currentSymbol + ' ' + currentTimeframe.toUpperCase() + ' canlı sinyal başladı!';
                 }};
-        signalWs.onmessage = function(event) {{
-    try {{
-        if (event.data.includes('heartbeat')) return;
-        
-        const data = JSON.parse(event.data);
-        const card = document.getElementById('signal-card');
-        const text = document.getElementById('signal-text');
-        const details = document.getElementById('signal-details');
-        
-        text.innerHTML = data.signal || "⏸️ Sinyal bekleniyor...";
-        
-        details.innerHTML = `
-            <strong>${{data.pair || currentSymbol + '/USDT'}}</strong><br>
-            💰 Fiyat: <strong>$${(data.current_price || 0).toFixed(4)}</strong><br>
-            📊 Skor: <strong>${{data.score || '?'}}/100</strong> | ${{data.killzone || 'Normal'}}
-        `;
-        
-        if (data.signal && (data.signal.includes('ALIM') || data.signal.includes('YÜKSELİŞ'))) {{
-            card.className = 'signal-card green';
-            text.style.color = '#00ff88';
-        }} else if (data.signal && (data.signal.includes('SATIM') || data.signal.includes('DÜŞÜŞ'))) {{
-            card.className = 'signal-card red';
-            text.style.color = '#ff4444';
-        }} else {{
-            card.className = 'signal-card';
-            text.style.color = '#ffd700';
-        }}
-        
-    }} catch (error) {{
-        console.error('Hata:', error);
-    }}
-}};
-             
+                
+                signalWs.onmessage = function(event) {{
+                    try {{
+                        if (event.data.includes('heartbeat')) return;
+                        
+                        const data = JSON.parse(event.data);
+                        const card = document.getElementById('signal-card');
+                        const text = document.getElementById('signal-text');
+                        const details = document.getElementById('signal-details');
+                        
+                        text.innerHTML = data.signal || "⏸️ Sinyal bekleniyor...";
+                        
+                        details.innerHTML = `
+                            <strong>${{data.pair || currentSymbol + '/USDT'}}</strong><br>
+                            💰 Fiyat: <strong>$${{(data.current_price || 0).toFixed(data.current_price < 1 ? 6 : 4)}}</strong><br>
+                            📊 Skor: <strong>${{data.score || '?'}}/100</strong> | ${{data.killzone || 'Normal'}}
+                        `;
+                        
+                        if (data.signal && (data.signal.includes('ALIM') || data.signal.includes('YÜKSELİŞ'))) {{
+                            card.className = 'signal-card green';
+                            text.style.color = '#00ff88';
+                        }} else if (data.signal && (data.signal.includes('SATIM') || data.signal.includes('DÜŞÜŞ'))) {{
+                            card.className = 'signal-card red';
+                            text.style.color = '#ff4444';
+                        }} else {{
+                            card.className = 'signal-card';
+                            text.style.color = '#ffd700';
+                        }}
+                        
+                    }} catch (error) {{
+                        console.error('Hata:', error);
+                    }}
+                }};
+            }}
+            
             async function analyzeChartWithAI() {{
                 const btn = document.querySelector('button[onclick="analyzeChartWithAI()"]');
                 const box = document.getElementById('ai-box');
@@ -954,7 +944,6 @@ async def signal_page(request: Request):
                 }}
             }}
             
-            // Sayfa yüklendiğinde otomatik bağlan
             setTimeout(connectSignal, 1000);
         </script>
     </body>
@@ -1152,11 +1141,11 @@ async def all_signals_page(request: Request):
                             
                             html += `
                                 <tr>
-                                    <td>#${index + 1}</td>
+                                    <td>#${{index + 1}}</td>
                                     <td><strong>${{signal.pair ? signal.pair.replace('USDT', '/USDT') : 'N/A'}}</strong></td>
                                     <td class="${{signalClass}}">${{signal.signal || '⏸️ Bekle'}}</td>
                                     <td><strong>${{signal.score || '?'}}/100</strong></td>
-                                    <td>$${{(signal.current_price || 0).toFixed(4)}}</td>
+                                    <td>$${{(signal.current_price || 0).toFixed(signal.current_price < 1 ? 6 : 4)}}</td>
                                 </tr>
                             `;
                         }});
@@ -1169,7 +1158,6 @@ async def all_signals_page(request: Request):
                 }};
             }}
             
-            // Otomatik başlat
             setTimeout(() => {{
                 document.getElementById('timeframe').value = '5m';
                 connectAllSignals();
@@ -1192,7 +1180,6 @@ async def analyze_chart_endpoint(request: Request):
         
         logger.info(f"Analiz isteği: {symbol} @ {timeframe}")
         
-        # Binance bağlantısı kontrolü
         binance_client = get_binance_client()
         if not binance_client:
             return JSONResponse({
@@ -1200,15 +1187,12 @@ async def analyze_chart_endpoint(request: Request):
                 "success": False
             }, status_code=503)
         
-        # Sembolü formatla
         ccxt_symbol = f"{symbol}/USDT"
         
-        # Zaman dilimi eşleme
         interval_map = {"5m": "5m", "15m": "15m", "1h": "1h", "4h": "4h", "1d": "1d"}
         ccxt_timeframe = interval_map.get(timeframe, "5m")
         
         try:
-            # Kline verilerini al
             klines = await binance_client.fetch_ohlcv(
                 ccxt_symbol, 
                 timeframe=ccxt_timeframe, 
@@ -1221,16 +1205,13 @@ async def analyze_chart_endpoint(request: Request):
                     "success": False
                 }, status_code=404)
             
-            # DataFrame oluştur
             df = pd.DataFrame(klines, columns=['timestamp','open','high','low','close','volume'])
             df.iloc[:,1:] = df.iloc[:,1:].apply(pd.to_numeric, errors='coerce')
             df = df.dropna()
             
-            # Teknik analiz yap
             analysis = generate_technical_analysis(df, symbol, timeframe)
             
             if not analysis:
-                # Fallback analiz
                 last_price = float(df['close'].iloc[-1])
                 analysis = {
                     "pair": f"{symbol}/USDT",
@@ -1242,7 +1223,6 @@ async def analyze_chart_endpoint(request: Request):
                     "killzone": "Normal"
                 }
             
-            # Analiz raporu oluştur
             analysis_report = f"""
 🔍 <strong>{analysis['pair']}</strong> - <strong>{analysis['timeframe']}</strong>
 
@@ -1610,6 +1590,5 @@ if __name__ == "__main__":
         host=host, 
         port=port, 
         log_level="info",
-        access_log=False  # Railway'de access log'ları kapat
+        access_log=False
     )
-
