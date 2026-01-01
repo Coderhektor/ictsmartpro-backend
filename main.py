@@ -190,32 +190,49 @@ async def home(request: Request):
 <div class="container">
     <h1>ICT SMART PRO</h1>
     <div class="update" id="update">Veri yükleniyor...</div>
-    <table><thead><tr><th>SIRA</th><th>COİN</th><th>FİYAT</th><th>24S DEĞİŞİM</th></tr></thead>
-    <tbody id="table-body"><tr><td colspan="4" style="padding:80px;color:#888">Pump radar yükleniyor...</td></tr></tbody></table>
-    <a href="/signal" class="btn">🚀 Tek Coin Canlı Sinyal + Grafik</a>
-    <a href="/signal/all" class="btn">🔥 Tüm Coinleri Tara</a>
-</div>
+    <!-- Ana sayfadaki tablo bölümünü güncelle -->
+<table><thead><tr>
+    <th>SIRA</th>
+    <th>COİN</th>
+    <th>FİYAT</th>
+    <th>24S DEĞİŞİM</th>
+    <th>HACİM (24s)</th>
+</tr></thead>
+<tbody id="table-body">
+    <tr><td colspan="5" style="padding:80px;color:#888">Pump radar yükleniyor...</td></tr>
+</tbody></table>
+
 <script>
 const ws = new WebSocket((location.protocol==='https:'?'wss':'ws')+'://'+location.host+'/ws/pump_radar');
-ws.onmessage = function(e) {{
-    try {{
+ws.onmessage = function(e) {
+    try {
         const d = JSON.parse(e.data);
-        document.getElementById('update').innerHTML = `Son Güncelleme: <strong>${{d.last_update || 'Şimdi'}}</strong>`;
+        document.getElementById('update').innerHTML = `Son Güncelleme: <strong>${d.last_update || 'Şimdi'}</strong>`;
         const t = document.getElementById('table-body');
-        if (!d.top_gainers || d.top_gainers.length === 0) {{
-            t.innerHTML = '<tr><td colspan="4" style="padding:80px;color:#ffd700">😴 Şu anda pump yok</td></tr>';
+        
+        if (!d.top_gainers || d.top_gainers.length === 0) {
+            t.innerHTML = '<tr><td colspan="5" style="padding:80px;color:#ffd700">😴 Şu anda pump yok</td></tr>';
             return;
-        }}
+        }
+        
         t.innerHTML = d.top_gainers.slice(0,10).map((c,i)=>`
             <tr>
-                <td>#${{i+1}}</td>
-                <td><strong>${{c.symbol}}</strong></td>
-                <td>$${{c.price.toLocaleString('en-US',{{minimumFractionDigits:c.price>1?2:6,maximumFractionDigits:c.price>1?2:6}})}}</td>
-                <td class="${{c.change>0?'green':'red'}}">${{c.change>0?'+' : ''}}${{c.change.toFixed(2)}}%</td>
+                <td>#${i+1}</td>
+                <td><strong>${c.symbol}</strong></td>
+                <td>$${formatPrice(c.price)}</td>
+                <td class="${c.change>0?'green':'red'}">${c.change>0?'+' : ''}${c.change.toFixed(2)}%</td>
+                <td>$${(c.volume || 0).toLocaleString('en-US', {minimumFractionDigits: 0})}</td>
             </tr>
         `).join('');
-    }} catch(err) {{console.error(err);}}
-}};
+    } catch(err) {console.error(err);}
+};
+
+function formatPrice(price) {
+    if (price > 1000) return price.toLocaleString('en-US', {minimumFractionDigits: 2, maximumFractionDigits: 2});
+    if (price > 1) return price.toLocaleString('en-US', {minimumFractionDigits: 3, maximumFractionDigits: 3});
+    return price.toLocaleString('en-US', {minimumFractionDigits: 6, maximumFractionDigits: 6});
+}
+
 ws.onopen = () => document.getElementById('update').innerHTML = '✅ Pump radar bağlantısı kuruldu';
 ws.onerror = () => document.getElementById('update').innerHTML = '❌ Pump radar bağlantısı hatası';
 ws.onclose = () => document.getElementById('update').innerHTML = '🔌 Pump radar bağlantısı kesildi';
@@ -683,3 +700,4 @@ async def health_check():
 if __name__ == "__main__":
     import uvicorn
     uvicorn.run(app, host="0.0.0.0", port=8000, log_level="info")
+
