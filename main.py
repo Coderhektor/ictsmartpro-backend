@@ -15,7 +15,7 @@ from core import (
     initialize, cleanup, single_subscribers, all_subscribers,
     pump_radar_subscribers,
     shared_signals, active_strong_signals, top_gainers, last_update, rt_ticker,
-    get_binance_client, price_sources_status, price_pool  # price_pool ve price_sources_status eklendi
+    get_binance_client, price_sources_status, price_pool
 )
 from utils import all_usdt_symbols
 
@@ -85,7 +85,7 @@ async def lifespan(app: FastAPI):
 
 app = FastAPI(lifespan=lifespan, title="ICT SMART PRO", version="3.0 - STABLE")
 
-# price_sources_subscribers set'i tanımla
+# price_sources_subscribers tanımla
 price_sources_subscribers = set()
 
 # ==================== PRICE SOURCES WEBSOCKET ====================
@@ -122,8 +122,6 @@ async def count_visitors(request: Request, call_next):
     return response
 
 # ==================== WEBSOCKETS ====================
-# (tüm WebSocket endpoint'leri aynı kaldı, değişiklik yok)
-
 @app.websocket("/ws/signal/{pair}/{timeframe}")
 async def ws_signal(websocket: WebSocket, pair: str, timeframe: str):
     await websocket.accept()
@@ -349,7 +347,6 @@ async def signal(request: Request):
             const tvSymbol = "BINANCE:" + symbol;
             const interval = tfMap[tfSelect] || "5";
 
-            // Grafik temizle ve yeniden yükle
             if (tvWidget) {{
                 tvWidget.remove();
                 tvWidget = null;
@@ -368,7 +365,6 @@ async def signal(request: Request):
                 studies: ["RSI@tv-basicstudies", "MACD@tv-basicstudies"]
             }});
 
-            // Widget hazır olana kadar bekle
             const readyCheck = setInterval(() => {{
                 if (tvWidget && tvWidget._ready) {{
                     clearInterval(readyCheck);
@@ -392,7 +388,6 @@ async def signal(request: Request):
                 }}, 2000);
             }}
 
-            // WebSocket sinyal bağlantısı
             if (ws) ws.close();
             ws = new WebSocket((location.protocol==='https:'?'wss':'ws')+'://'+location.host+'/ws/signal/'+symbol+'/'+tfSelect);
 
@@ -437,7 +432,6 @@ async def signal(request: Request):
         }}
 
         async function analyzeChartWithAI() {{
-            // mevcut kodun aynen kalıyor (değişiklik gerekmiyor)
             const btn = document.getElementById('analyze-btn');
             const box = document.getElementById('ai-box');
             const comment = document.getElementById('ai-comment');
@@ -446,13 +440,13 @@ async def signal(request: Request):
             box.style.display = 'block';
             comment.innerHTML = "📊 Analiz yapılıyor...";
             try {{
-                const symbol = "BINANCE:" + document.getElementById('pair').value.trim().toUpperCase();
+                const symbol = document.getElementById('pair').value.trim().toUpperCase();
                 if (!symbol.endsWith("USDT")) symbol += "USDT";
                 const timeframe = document.getElementById('tf').value;
                 const response = await fetch('/api/analyze-chart', {{
                     method: 'POST',
                     headers: {{'Content-Type': 'application/json'}},
-                    body: JSON.stringify({{symbol: symbol.replace("BINANCE:", ""), timeframe: timeframe}})
+                    body: JSON.stringify({{symbol: symbol.replace("USDT", ""), timeframe: timeframe}})
                 }});
                 const data = await response.json();
                 if (data.analysis) {{
@@ -461,29 +455,418 @@ async def signal(request: Request):
                     comment.innerHTML = "❌ Analiz alınamadı: " + (data.detail || 'Bilinmeyen hata');
                 }}
             }} catch (err) {{
-                comment.innerHTML = "❌ Bağlantı hatası: " + err.message;
+                comment.innerHTML = "❌ Bağlantı hatası. Tekrar deneyin.<br>" + err.message;
             }} finally {{
                 btn.disabled = false;
                 btn.innerHTML = "🤖 GRAFİĞİ GPT-4o İLE ANALİZ ET";
             }}
         }}
 
-        // Sayfa yüklendiğinde ilk grafik
-        document.addEventListener("DOMContentLoaded", () => {{
-            connect(); // başlangıçta otomatik bağlansın
-        }});
+        // Sayfa yüklendiğinde otomatik bağlan
+        document.addEventListener("DOMContentLoaded", connect);
     </script>
 </body>
 </html>"""
     return HTMLResponse(content=html_content)
 
-# ==================== DİĞER ENDPOINT'LER (değişmedi) ====================
-# /api/analyze-chart, /signal/all, /api/visitor-stats, /admin/visitor-dashboard,
-# /api/gpt-analyze, /health, /login, /debug/sources
+# ==================== API ENDPOINTS ====================
+@app.post("/api/analyze-chart")
+async def analyze_chart(request: Request):
+    # (kod aynı, değişiklik yok)
+    try:
+        body = await request.json()
+        symbol = body.get("symbol", "BTCUSDT").upper()
+        timeframe = body.get("timeframe", "5m")
+        logger.info(f"Analiz için veri çekiliyor: {symbol} {timeframe}")
+        binance_client = get_binance_client()
+        if not binance_client:
+            return JSONResponse({"analysis": "❌ Binance bağlantısı kurulamadı. Lütfen daha sonra tekrar deneyin.", "success": False})
+        try:
+            interval_map = {"1m": "1m", "3m": "3m", "5m": "5m", "15m": "15m", "30m": "30m", "1h": "1h", "4h": "4h", "1d": "1d", "1w": "1w"}
+            interval = interval_map.get(timeframe, "5m")
+            ccxt_symbol = symbol.replace('USDT', '/USDT')
+            logger.info(f"{ccxt_symbol} için {interval} verisi çekiliyor...")
+            klines = await binance_client.fetch_ohlcv(ccxt_symbol, timeframe=interval, limit=150)
+            logger.info(f"{len(klines)} mum verisi alındı")
+            if not klines or len(klines) < 100:
+                return JSONResponse({"analysis": f"❌ {symbol} için yeterli veri bulunamadı. (Alınan: {len(klines) if klines else 0} mum)", "success": False})
+        except Exception as e:
+            logger.error(f"Binance veri hatası: {e}")
+            return JSONResponse({"analysis": f"❌ Veri alınamadı: {str(e)[:100]}", "success": False})
+        df = pd.DataFrame(klines)
+        if len(df.columns) >= 6:
+            df = df.iloc[:, :6]
+            df.columns = ['timestamp', 'open', 'high', 'low', 'close', 'volume']
+        elif len(df.columns) >= 5:
+            df = df.iloc[:, :5]
+            df.columns = ['timestamp', 'open', 'high', 'low', 'close']
+            df['volume'] = 1000
+        else:
+            return JSONResponse({"analysis": f"❌ Geçersiz veri formatı", "success": False})
+        for col in ['timestamp', 'open', 'high', 'low', 'close', 'volume']:
+            if col in df.columns:
+                df[col] = pd.to_numeric(df[col], errors='coerce')
+        df = df.dropna(subset=['open', 'high', 'low', 'close'])
+        if len(df) < 100:
+            logger.warning(f"{symbol}: Sadece {len(df)} mum temizlendi")
+            df = df.tail(min(100, len(df)))
+        signal = None
+        try:
+            from indicators import generate_ict_signal, generate_simple_signal
+            signal = generate_ict_signal(df, symbol, timeframe)
+            if not signal:
+                logger.info(f"{symbol}: Ana sinyal üretilemedi, basit sinyal deneniyor...")
+                signal = generate_simple_signal(df, symbol, timeframe)
+        except Exception as e:
+            logger.error(f"Sinyal üretim hatası: {e}")
+            last_price = df['close'].iloc[-1] if len(df) > 0 else 0
+            signal = {
+                "pair": symbol.replace("USDT", "/USDT"),
+                "timeframe": timeframe.upper(),
+                "current_price": round(last_price, 4),
+                "signal": "⏸️ ANALİZ BEKLENİYOR",
+                "score": 50,
+                "last_update": datetime.utcnow().strftime("%H:%M:%S UTC"),
+                "killzone": "Normal",
+                "triggers": "Veri analiz ediliyor",
+                "strength": "ORTA"
+            }
+        if not signal:
+            analysis = f"""🔍 {symbol} {timeframe} Grafik Analizi
+📊 Durum: <strong>Sinyal tespit edilemedi</strong>
+🤔 Sebep: Piyasa nötr veya sinyal kriterleri sağlanmıyor.
 
-# (kodun geri kalanı tamamen aynı, buraya kadar kopyala-yapıştır yapabilirsin)
+💡 Tavsiye:
+• Farklı zaman dilimi deneyin (15m, 1h)
+• Başka bir coin analiz edin
+• Piyasa volatilitesini bekleyin
 
-# ==================== BAŞLATMA ====================
+⚠️ Bu bir yatırım tavsiyesi değildir."""
+        else:
+            analysis = f"""🔍 {symbol} {timeframe} Grafik Analizi
+
+🎯 SİNYAL: <strong>{signal['signal']}</strong>
+
+📊 Skor: <strong>{signal['score']}/100</strong> ({signal['strength']})
+💰 Fiyat: <strong>${signal['current_price']}</strong>
+🕐 Killzone: <strong>{signal['killzone']}</strong>
+🕒 Güncelleme: {signal['last_update']}
+
+🎯 Tetikleyenler:
+{signal['triggers']}
+
+📈 Teknik Analiz:
+{symbol} {timeframe} grafiğinde {signal['signal'].replace('🚀', '').replace('🔥', '').replace('⏸️', '').strip()} sinyali tespit edildi.
+
+ICT stratejisine göre:
+• RSI6 ve SMA50 analizi yapıldı
+• Killzone: {signal['killzone']}
+• Güven skoru: {signal['score']}/100
+
+💡 Öneri:
+{symbol} için {signal['signal']} sinyali mevcut.
+Ancak kendi araştırmanızı yapın ve risk yönetimi uygulayın.
+
+⚠️ Uyarı: Bu bir yatırım tavsiyesi değildir.
+Yalnızca teknik analiz yorumudur."""
+        return JSONResponse({"analysis": analysis, "signal_data": signal or {}, "success": True})
+    except Exception as e:
+        logger.error(f"Analiz hatası: {e}", exc_info=True)
+        return JSONResponse({"analysis": f"""❌ Analiz hatası:
+Hata: {str(e)[:100]}
+
+Lütfen:
+• Coin adını kontrol edin
+• Sayfayı yenileyin
+• Daha sonra tekrar deneyin""", "success": False}, status_code=500)
+
+# ==================== TÜM COİNLER SAYFASI ====================
+@app.get("/signal/all", response_class=HTMLResponse)
+async def signal_all(request: Request):
+    user = request.cookies.get("user_email")
+    if not user:
+        return RedirectResponse("/login")
+    visitor_stats_html = get_visitor_stats_html()
+    html_content = f"""<!DOCTYPE html>
+<html lang="tr">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width,initial-scale=1.0,maximum-scale=1.0,user-scalable=no">
+    <title>TÜM COİNLER | ICT SMART PRO</title>
+    <style>
+        body {{background:linear-gradient(135deg,#0a0022,#1a0033,#000);color:#fff;font-family:sans-serif;margin:0;padding:20px 0;min-height:100vh;}}
+        .container {{max-width:1200px;margin:auto;padding:20px;}}
+        h1 {{font-size:clamp(2rem,5vw,3rem);text-align:center;background:linear-gradient(90deg,#00dbde,#fc00ff,#00dbde);-webkit-background-clip:text;-webkit-text-fill-color:transparent;}}
+        .controls {{background:#ffffff11;border-radius:20px;padding:20px;text-align:center;margin:20px 0;}}
+        select {{width:90%;max-width:400px;padding:15px;margin:10px;font-size:1.2rem;border:none;border-radius:12px;background:#333;color:#fff;}}
+        #status {{color:#00ffff;text-align:center;margin:15px;}}
+        table {{width:100%;border-collapse:collapse;margin:30px 0;}}
+        th {{background:#ffffff11;padding:15px;text-align:left;}}
+        tr {{border-bottom:1px solid #333;}}
+        tr:hover {{background:#00ffff11;}}
+        .green {{color:#00ff88;}}
+        .red {{color:#ff4444;}}
+    </style>
+</head>
+<body>
+    <div style="position:fixed;top:15px;left:15px;background:#000000cc;padding:10px 20px;border-radius:20px;color:#00ff88;z-index:1000;">
+        Hoş geldin, {user}
+    </div>
+    {visitor_stats_html}
+    <div class="container">
+        <h1>🔥 TÜM COİN SİNYALLERİ</h1>
+        <div class="controls">
+            <select id="tf" onchange="connect()">
+                <option value="5m">5 Dakika</option>
+                <option value="15m">15 Dakika</option>
+                <option value="1h">1 Saat</option>
+                <option value="4h">4 Saat</option>
+                <option value="1d">1 Gün</option>
+            </select>
+            <div id="status">Zaman dilimi seçin...</div>
+        </div>
+        <div id="table-container">
+            <table>
+                <thead><tr><th>#</th><th>COİN</th><th>SİNYAL</th><th>SKOR</th><th>FİYAT</th><th>ZAMAN</th></tr></thead>
+                <tbody id="signal-table">
+                    <tr><td colspan="6" style="padding:50px;text-align:center;color:#888">Zaman dilimi seçin...</td></tr>
+                </tbody>
+            </table>
+        </div>
+        <div style="text-align:center;margin-top:30px">
+            <a href="/" style="color:#00dbde;margin-right:20px">← Ana Sayfa</a>
+            <a href="/signal" style="color:#00dbde">Tek Coin Sinyal →</a>
+        </div>
+    </div>
+    <script>
+        let ws = null;
+        function connect() {{
+            const timeframe = document.getElementById('tf').value;
+            document.getElementById('status').innerHTML = `${{timeframe.toUpperCase()}} sinyalleri yükleniyor...`;
+            if (ws) ws.close();
+            ws = new WebSocket((location.protocol==='https:'?'wss':'ws')+'://'+location.host+'/ws/all/'+timeframe);
+            ws.onopen = () => {{
+                document.getElementById('status').innerHTML = `✅ ${{timeframe.toUpperCase()}} canlı sinyal akışı başladı!`;
+            }};
+            ws.onmessage = e => {{
+                const data = JSON.parse(e.data);
+                const table = document.getElementById('signal-table');
+                if (!data || data.length === 0) {{
+                    table.innerHTML = '<tr><td colspan="6" style="padding:50px;text-align:center;color:#ffd700">😴 Şu anda sinyal yok</td></tr>';
+                    return;
+                }}
+                table.innerHTML = data.map((sig,i)=>`
+                    <tr>
+                        <td>#${{i+1}}</td>
+                        <td><strong>${{sig.pair || 'N/A'}}</strong></td>
+                        <td class="${{sig.signal && sig.signal.includes('ALIM') ? 'green' : sig.signal && sig.signal.includes('SATIM') ? 'red' : ''}}">
+                            ${{sig.signal || 'Bekle'}}
+                        </td>
+                        <td>${{sig.score || '?'}}/100</td>
+                        <td>$${{sig.current_price ? sig.current_price.toFixed(4) : 'N/A'}}</td>
+                        <td>${{sig.last_update || ''}}</td>
+                    </tr>
+                `).join('');
+            }};
+            ws.onerror = () => {{
+                document.getElementById('status').innerHTML = "❌ WebSocket bağlantı hatası";
+            }};
+            ws.onclose = () => {{
+                document.getElementById('status').innerHTML = "🔌 Bağlantı kapandı. Yeniden bağlanmak için zaman dilimi seçin.";
+            }};
+        }}
+    </script>
+</body>
+</html>"""
+    return HTMLResponse(content=html_content)
+
+# ==================== DİĞER ENDPOINT'LER (tamamen aynı) ====================
+@app.get("/api/visitor-stats")
+async def get_visitor_stats():
+    stats = visitor_counter.get_stats()
+    return JSONResponse(stats)
+
+@app.get("/admin/visitor-dashboard")
+async def visitor_dashboard(request: Request):
+    user = request.cookies.get("user_email")
+    if not user:
+        return RedirectResponse("/login")
+    stats = visitor_counter.get_stats()
+    page_views_html = ""
+    for page, views in stats['page_views'].items():
+        page_views_html += f"<tr><td>{page}</td><td>{views}</td></tr>"
+    html_content = f"""<!DOCTYPE html>
+<html lang="tr">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Ziyaretçi İstatistikleri | ICT SMART PRO</title>
+    <style>
+        body {{background:linear-gradient(135deg,#0a0022,#1a0033,#000);color:#fff;font-family:sans-serif;padding:20px;}}
+        .container {{max-width:1200px;margin:auto;}}
+        h1 {{color:#00dbde;text-align:center;}}
+        .stats-grid {{display:grid;grid-template-columns:repeat(auto-fit,minmax(250px,1fr));gap:20px;margin:30px 0;}}
+        .stat-card {{background:#ffffff11;padding:20px;border-radius:15px;text-align:center;}}
+        .stat-card h3 {{color:#00ffff;margin-top:0;}}
+        .stat-card .number {{font-size:2.5rem;font-weight:bold;color:#00ff88;}}
+        table {{width:100%;border-collapse:collapse;margin-top:30px;}}
+        th,td {{padding:12px;text-align:left;border-bottom:1px solid #333;}}
+        th {{background:#ffffff11;color:#00dbde;}}
+        .back-btn {{display:inline-block;margin:20px 0;padding:10px 20px;background:#00dbde;color:#fff;text-decoration:none;border-radius:8px;}}
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>📊 Ziyaretçi İstatistikleri</h1>
+        <div class="stats-grid">
+            <div class="stat-card"><h3>Toplam Ziyaret</h3><div class="number">{stats['total_visits']}</div></div>
+            <div class="stat-card"><h3>Aktif Kullanıcılar</h3><div class="number">{stats['active_users']}</div></div>
+            <div class="stat-card"><h3>Bugünkü Ziyaretler</h3><div class="number">{stats['today_visits']}</div></div>
+            <div class="stat-card"><h3>Bugünkü Benzersiz</h3><div class="number">{stats['today_unique']}</div></div>
+        </div>
+        <h2>Sayfa Görüntülemeleri</h2>
+        <table>
+            <thead><tr><th>Sayfa</th><th>Görüntülenme</th></tr></thead>
+            <tbody>{page_views_html}</tbody>
+        </table>
+        <p style="color:#888;margin-top:20px">Son Güncelleme: {stats['last_updated']}</p>
+        <a href="/" class="back-btn">← Ana Sayfaya Dön</a>
+    </div>
+</body>
+</html>"""
+    return HTMLResponse(content=html_content)
+
+@app.post("/api/gpt-analyze")
+async def gpt_analyze_endpoint(image_file: UploadFile = File(...)):
+    if not openai_client:
+        return JSONResponse({"error": "OpenAI API anahtarı tanımlı değil", "tip": "OPENAI_API_KEY environment variable'ını ayarlayın"}, status_code=501)
+    try:
+        image_data = await image_file.read()
+        image_b64 = base64.b64encode(image_data).decode('utf-8')
+        response = openai_client.chat.completions.create(
+            model="gpt-4o",
+            messages=[{"role": "user", "content": [{"type": "text", "text": "Bu grafik bir kripto para birimine ait. Lütfen teknik analiz yap ve şu konuları değerlendir:\n1. Genel trend\n2. Önemli destek/direnç seviyeleri\n3. Mum formasyonları\n4. RSI ve MACD durumu\n5. Potansiyel alım/satım seviyeleri\n\nYanıtını Türkçe olarak ver, net ve anlaşılır ol."}, {"type": "image_url", "image_url": {"url": f"data:image/png;base64,{image_b64}"}}]}],
+            max_tokens=1000
+        )
+        analysis = response.choices[0].message.content
+        return JSONResponse({"analysis": analysis, "success": True})
+    except Exception as e:
+        logger.error(f"GPT analiz hatası: {e}")
+        return JSONResponse({"error": "GPT analiz başarısız", "detail": str(e)}, status_code=500)
+
+@app.get("/health")
+async def health():
+    stats = visitor_counter.get_stats()
+    return {
+        "status": "ok",
+        "symbols": len(all_usdt_symbols) if all_usdt_symbols else 0,
+        "realtime_coins": len(rt_ticker.get("tickers", [])),
+        "strong_5m": len(active_strong_signals.get("5m", [])),
+        "openai_available": openai_client is not None,
+        "visitor_stats": {
+            "total_visits": stats["total_visits"],
+            "active_users": stats["active_users"],
+            "today_visits": stats["today_visits"]
+        }
+    }
+
+@app.get("/login", response_class=HTMLResponse)
+async def login_page():
+    return """<!DOCTYPE html>
+<html lang="tr">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Giriş Yap | ICT SMART PRO</title>
+    <style>
+        body {{background:linear-gradient(135deg,#0a0022,#1a0033,#000);color:#fff;font-family:sans-serif;min-height:100vh;display:flex;align-items:center;justify-content:center;}}
+        .login-box {{background:#000000cc;padding:40px;border-radius:20px;text-align:center;max-width:400px;width:90%;}}
+        h2 {{color:#00dbde;margin-bottom:30px;}}
+        input {{width:100%;padding:15px;margin:10px 0;border:none;border-radius:12px;background:#333;color:#fff;font-size:1.1rem;}}
+        button {{width:100%;padding:15px;background:linear-gradient(45deg,#fc00ff,#00dbde);border:none;border-radius:12px;color:#fff;font-weight:bold;font-size:1.2rem;cursor:pointer;margin-top:20px;}}
+    </style>
+</head>
+<body>
+    <div class="login-box">
+        <h2>🔐 ICT SMART PRO</h2>
+        <form method="post" action="/login">
+            <input name="email" type="email" placeholder="E-posta adresiniz" required>
+            <button type="submit">🚀 Giriş Yap</button>
+        </form>
+        <p style="margin-top:20px;color:#888">Demo için herhangi bir e-posta kullanabilirsiniz</p>
+    </div>
+</body>
+</html>"""
+
+@app.post("/login")
+async def login(request: Request):
+    form = await request.form()
+    email = form.get("email", "").strip().lower()
+    if "@" in email:
+        resp = RedirectResponse("/", status_code=303)
+        resp.set_cookie("user_email", email, max_age=2592000, httponly=True, samesite="lax")
+        return resp
+    return RedirectResponse("/login")
+
+@app.get("/debug/sources", response_class=HTMLResponse)
+async def price_sources_debug(request: Request):
+    user = request.cookies.get("user_email")
+    if not user:
+        return RedirectResponse("/login")
+    visitor_stats_html = get_visitor_stats_html()
+    return f"""<!DOCTYPE html>
+<html lang="tr">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Fiyat Kaynakları İzleyici | ICT SMART PRO</title>
+    <style>
+        body {{background:#000;color:#fff;font-family:sans-serif;padding:20px;}}
+        .container {{max-width:1000px;margin:auto;}}
+        h1 {{color:#00dbde;text-align:center;}}
+        table {{width:100%;border-collapse:collapse;margin:20px 0;}}
+        th,td {{padding:15px;text-align:left;border-bottom:1px solid #333;}}
+        th {{background:#ffffff11;}}
+        .healthy {{color:#00ff88;}}
+        .unhealthy {{color:#ff4444;}}
+        .status {{font-weight:bold;}}
+    </style>
+</head>
+<body>
+    {visitor_stats_html}
+    <div class="container">
+        <h1>🔴 CANLI FİYAT KAYNAKLARI MONİTÖRÜ</h1>
+        <p>Toplam takip edilen coin: <strong id="total-coins">Yükleniyor...</strong></p>
+        <table>
+            <thead><tr><th>Borsa</th><th>Durum</th><th>Son Güncelleme</th><th>Kapsadığı Coin Sayısı</th><th>Hata (varsa)</th></tr></thead>
+            <tbody id="sources-table">
+                <tr><td colspan="5">Bağlantı kuruluyor...</td></tr>
+            </tbody>
+        </table>
+        <p style="text-align:center"><a href="/" style="color:#00dbde">← Ana Sayfa</a></p>
+    </div>
+    <script>
+        const ws = new WebSocket((location.protocol==='https:'?'wss':'ws')+'://'+location.host+'/ws/price_sources');
+        ws.onmessage = function(e) {{
+            const data = JSON.parse(e.data);
+            document.getElementById('total-coins').innerText = data.total_symbols;
+            const table = document.getElementById('sources-table');
+            table.innerHTML = Object.entries(data.sources).map(([source,info])=>`
+                <tr>
+                    <td><strong>${{source.toUpperCase()}}</strong></td>
+                    <td class="status ${{info.healthy ? 'healthy' : 'unhealthy'}}">
+                        ${{info.healthy ? '✅ Çalışıyor' : '❌ Bağlantı Sorunu'}}
+                    </td>
+                    <td>${{info.last_update || 'Bilinmiyor'}}</td>
+                    <td>${{info.symbols_count || 0}}</td>
+                    <td style="color:#ff8888">${{info.last_error || '-'}}</td>
+                </tr>
+            `).join('');
+        }};
+    </script>
+</body>
+</html>"""
+
 if __name__ == "__main__":
     import uvicorn
     uvicorn.run(app, host="0.0.0.0", port=8000)
