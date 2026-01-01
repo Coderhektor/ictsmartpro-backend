@@ -1238,7 +1238,7 @@ async def signal_page(request: Request):
             .chart-container {{
                 width: 100%;
                 height: 80vh;
-                min-height: 700px;
+                min-height: 1000px;
                 background: rgba(10, 0, 34, 0.9);
                 border-radius: 16px;
                 margin: 30px 0;
@@ -1610,6 +1610,7 @@ if __name__ == "__main__":
         log_level="info",
         access_log=False
     )
+
 
 
 
