@@ -193,8 +193,8 @@ async def fetch_ohlcv(symbol: str, timeframe: str = "5m", limit: int = 150):
         logger.debug(f"OHLCV hatası {symbol}/{timeframe}: {e}")
         return []
 
-# ==================== REALTIME PRICE TASK ====================
- async def realtime_price_task():
+    # ==================== REALTIME PRICE TASK ====================
+     async def realtime_price_task():
     logger.info("📊 Realtime fiyat broadcast başladı")
     
     # İlk başta 10 saniye bekle (fiyatların dolması için)
