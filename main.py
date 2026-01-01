@@ -816,7 +816,12 @@ async def debug_sources(request: Request):
         return RedirectResponse("/login")
     return HTMLResponse(f"""<!DOCTYPE html>
 <html><head><meta charset="utf-8"><title>🔍 Fiyat Kaynakları - Debug</title>
-<style>body{{background:#000;color:#fff;padding:20px;font-family:sans-serif}}table{{width:100%;border-collapse:collapse}}th,td{{padding:12px;text-align:left;border-bottom:1px solid #333}}th{{background:#00dbde22}}</style>
+<style>
+body{{background:#000;color:#fff;padding:20px;font-family:sans-serif}}
+table{{width:100%;border-collapse:collapse}}
+th,td{{padding:12px;text-align:left;border-bottom:1px solid #333}}
+th{{background:#00dbde22}}
+</style>
 </head><body>
 {get_visitor_stats_html()}
 <h2>🟢 Fiyat Kaynakları Durumu</h2>
@@ -828,14 +833,14 @@ const ws = new WebSocket((location.protocol==='https:'?'wss':'ws')+'://'+locatio
 ws.onmessage=e=>{{
     try{{
         const d=JSON.parse(e.data);
-        document.getElementById('total').innerText=`📈 Toplam ${d.total_symbols.toLocaleString()} coin aktif`;
+        document.getElementById('total').innerText=`📈 Toplam ${{d.total_symbols.toLocaleString()}} coin aktif`;
         const t=document.getElementById('tbl');
         t.innerHTML=Object.entries(d.sources).map(([k,v])=>`
-            <tr style="background:${v.healthy?'#00ff8822':'#ff444422'}">
-                <td><strong>${k.toUpperCase()}</strong></td>
-                <td>${v.healthy?'✅ SAĞLIKLI':'❌ HATA'}</td>
-                <td>${v.last_update||'Asla'}</td>
-                <td><strong>${v.symbols_count||0}</strong></td>
+            <tr style="background:${{v.healthy ? '#00ff8822' : '#ff444422'}}">
+                <td><strong>${{k.toUpperCase()}}</strong></td>
+                <td>${{v.healthy ? '✅ SAĞLIKLI' : '❌ HATA'}}</td>
+                <td>${{v.last_update || 'Asla'}}</td>
+                <td><strong>${{v.symbols_count || 0}}</strong></td>
             </tr>
         `).join('');
     }}catch(err){{console.error(err);}}
@@ -867,4 +872,5 @@ async def health_check():
 if __name__ == "__main__":
     import uvicorn
     uvicorn.run(app, host="0.0.0.0", port=8000, log_level="info", reload=False)
+
 
