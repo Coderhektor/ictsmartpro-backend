@@ -335,24 +335,27 @@ async def broadcast_worker():
                 signal_data = payload["signal"]
                 channel = f"{symbol}:{tf}"
 
-                logger.debug(f"Broadcast → {channel} | {len(single_subscribers.get(channel, []))} abone")
+                logger.debug(f"Broadcast → {channel}")
 
+                # 1. Tekil abonelere gönder
                 if channel in single_subscribers:
                     disconnected = set()
-                    for ws in single_subscribers[channel]:
+                    for ws in list(single_subscribers[channel]):
                         try:
                             await ws.send_json(signal_data)
                         except Exception:
                             disconnected.add(ws)
                     single_subscribers[channel] -= disconnected
 
+                # 2. Güçlü sinyalleri güncelle
                 strong = [s for s in shared_signals[tf].values() if s.get("score", 0) >= 80]
                 strong.sort(key=lambda x: x.get("score", 0), reverse=True)
                 active_strong_signals[tf] = strong[:20]
 
+                # 3. Tüm coin abonelere gönder
                 if tf in all_subscribers:
                     disconnected = set()
-                    for ws in all_subscribers[tf]:
+                    for ws in list(all_subscribers[tf]):
                         try:
                             await ws.send_json(active_strong_signals[tf][:15])
                         except Exception:
@@ -360,17 +363,24 @@ async def broadcast_worker():
                     all_subscribers[tf] -= disconnected
 
             elif msg_type == "pump_radar":
-                global top_gainers, last_update
-                top_gainers = payload.get("top_gainers", [])[:10]
+                # GLOBAL değişkenleri kullan
+                from core import top_gainers, last_update, pump_radar_subscribers
+                
+                top_gainers.clear()
+                top_gainers.extend(payload.get("top_gainers", [])[:10])
                 last_update = payload.get("last_update", "N/A")
 
-                disconnected = set()
-                for ws in pump_radar_subscribers:
+                # pump_radar_subscribers'ı list() ile kopyala
+                disconnected = []
+                for ws in list(pump_radar_subscribers):
                     try:
                         await ws.send_json(payload)
                     except Exception:
-                        disconnected.add(ws)
-                pump_radar_subscribers -= disconnected
+                        disconnected.append(ws)
+                
+                # Disconnected'ları temizle
+                for ws in disconnected:
+                    pump_radar_subscribers.discard(ws)
 
             signal_queue.task_done()
             
@@ -379,7 +389,6 @@ async def broadcast_worker():
         except Exception as e:
             logger.error(f"Broadcast worker hatası: {e}")
             await asyncio.sleep(1)
-
 # ==================== EXCHANGE STREAMS (FALLBACK) ====================
 try:
     from exchanges.binance_ws import binance_ticker_stream
