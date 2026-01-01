@@ -293,53 +293,92 @@ function getTvSymbol() {{
 function getWsSymbol() {{
     return document.getElementById('pair').value.trim().toUpperCase();
 }}
-
-async function connect() {{
+#=========================================================================================================
+async function connect() {
     const symbol = getWsSymbol();
     const tfSelect = document.getElementById('tf').value;
     const tvSymbol = getTvSymbol();
     const interval = tfMap[tfSelect] || "5";
 
-    if (ws) ws.close();
-    if (tvWidget) {{ tvWidget.remove(); tvWidget = null; }}
-    document.getElementById('tradingview_widget').innerHTML = '';
+    // Eski WebSocket'i kapat
+    if (ws) {
+        ws.close();
+        ws = null;
+    }
 
-    tvWidget = new TradingView.widget({{
-        autosize: true, symbol: tvSymbol, interval: interval, timezone: "Etc/UTC",
-        theme: "dark", style: "1", locale: "tr", container_id: "tradingview_widget",
+    // Eski TradingView widget'ını temizle
+    if (tvWidget) {
+        tvWidget.remove();
+        tvWidget = null;
+    }
+    // Container'ı boşaltmaya GEREK YOK → TradingView zaten temizliyor
+    // document.getElementById('tradingview_widget').innerHTML = '';  ← Bu satırı SİL!
+
+    // Yeni widget oluştur
+    tvWidget = new TradingView.widget({
+        autosize: true,
+        symbol: tvSymbol,
+        interval: interval,
+        timezone: "Etc/UTC",
+        theme: "dark",
+        style: "1",
+        locale: "tr",
+        container_id: "tradingview_widget",
         studies: ["RSI@tv-basicstudies", "MACD@tv-basicstudies"]
-    }});
+    });
 
-    tvWidget.onChartReady(() => {{
-        document.getElementById('status').innerHTML = `✅ Grafik yüklendi: ${{symbol}} ${{tfSelect.toUpperCase()}}`;
-    }});
+    tvWidget.onChartReady(() => {
+        document.getElementById('status').innerHTML = `✅ Grafik yüklendi: ${symbol} ${tfSelect.toUpperCase()}`;
+    });
 
-    ws = new WebSocket((location.protocol==='https:'?'wss':'ws')+'://'+location.host+'/ws/signal/' + symbol + '/' + tfSelect);
-    ws.onopen = () => document.getElementById('status').innerHTML = `✅ ${{symbol}} ${{tfSelect.toUpperCase()}} canlı sinyal akışı başladı!`;
-    ws.onmessage = (e) => {{
+    // Yeni WebSocket bağlantısı
+    ws = new WebSocket((location.protocol === 'https:' ? 'wss' : 'ws') + '://' + location.host + '/ws/signal/' + symbol + '/' + tfSelect);
+
+    ws.onopen = () => {
+        document.getElementById('status').innerHTML = `✅ ${symbol} ${tfSelect.toUpperCase()} canlı sinyal akışı başladı!`;
+    };
+
+    ws.onmessage = (e) => {
         if (e.data.includes('heartbeat') || e.data.includes('ping')) return;
-        try {{
+        try {
             const d = JSON.parse(e.data);
             const card = document.getElementById('signal-card');
             const text = document.getElementById('signal-text');
             const details = document.getElementById('signal-details');
+
             text.innerHTML = d.signal || "⏸️ Sinyal bekleniyor...";
             details.innerHTML = `
-                <strong>${{d.pair || symbol + '/USDT'}}</strong><br>
-                💰 Fiyat: <strong>$${{(d.current_price||0).toLocaleString('en-US',{{minimumFractionDigits:4,maximumFractionDigits:6}})}}</strong><br>
-                📊 Skor: <strong>${{d.score||'?'}}/100</strong> | ${{d.killzone||'Normal'}}<br>
-                🕒 ${{d.last_update ? 'Son: ' + d.last_update : ''}}<br>
-                <small>🎯 ${{d.triggers || 'Veri yükleniyor...'}}</small>
+                <strong>${d.pair || symbol + '/USDT'}</strong><br>
+                💰 Fiyat: <strong>$${(d.current_price || 0).toLocaleString('en-US', {minimumFractionDigits: 4, maximumFractionDigits: 6})}</strong><br>
+                📊 Skor: <strong>${d.score || '?'}/100</strong> | ${d.killzone || 'Normal'}<br>
+                🕒 ${d.last_update ? 'Son: ' + d.last_update : ''}<br>
+                <small>🎯 ${d.triggers || 'Veri yükleniyor...'}</small>
             `;
-            if (d.signal && d.signal.includes('ALIM')) {{ card.className='green'; text.style.color='#00ff88'; }}
-            else if (d.signal && d.signal.includes('SATIM')) {{ card.className='red'; text.style.color='#ff4444'; }}
-            else {{ card.className='neutral'; text.style.color='#ffd700'; }}
-        }} catch(err) {{ console.error(err); }}
-    }};
-    ws.onerror = () => document.getElementById('status').innerHTML = "❌ WebSocket bağlantı hatası";
-    ws.onclose = () => document.getElementById('status').innerHTML = "🔌 Sinyal bağlantısı kapandı. Yeniden bağlanmak için butona tıklayın.";
-}}
 
+            if (d.signal && d.signal.includes('ALIM')) {
+                card.className = 'green';
+                text.style.color = '#00ff88';
+            } else if (d.signal && d.signal.includes('SATIM')) {
+                card.className = 'red';
+                text.style.color = '#ff4444';
+            } else {
+                card.className = 'neutral';
+                text.style.color = '#ffd700';
+            }
+        } catch (err) {
+            console.error('Sinyal parse hatası:', err);
+        }
+    };
+
+    ws.onerror = () => {
+        document.getElementById('status').innerHTML = "❌ WebSocket bağlantı hatası";
+    };
+
+    ws.onclose = () => {
+        document.getElementById('status').innerHTML = "🔌 Sinyal bağlantısı kapandı. Yeniden bağlanmak için butona tıklayın.";
+    };
+}
+#=================================================================================================================================
 async function analyzeChartWithAI() {{
     const btn = document.getElementById('analyze-btn');
     const box = document.getElementById('ai-box');
@@ -455,7 +494,7 @@ document.addEventListener("DOMContentLoaded", () => {{
 </script>
 </body></html>"""
     return HTMLResponse(content=html_content)
-
+#====================================================================================================================
 # API Endpoints
 @app.post("/api/analyze-chart")
 async def analyze_chart(request: Request):
@@ -634,3 +673,4 @@ async def health_check():
 if __name__ == "__main__":
     import uvicorn
     uvicorn.run(app, host="0.0.0.0", port=8000, log_level="info")
+
