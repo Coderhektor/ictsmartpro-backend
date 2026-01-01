@@ -829,13 +829,18 @@ async def signal_page(request: Request):
             let currentSymbol = "BTC";
             let currentTimeframe = "5m";
             
-            const timeframeMap = {{
-                "5m": "5",
-                "15m": "15",
-                "1h": "60",
-                "4h": "240",
-                "1d": "D"
-            }};
+           const timeframeMap = {{
+            "1m": "1",
+            "3m": "3",
+            "5m": "5",
+            "15m": "15",
+            "30m": "30",
+            "1h": "60",
+            "4h": "240",
+            "1d": "D",
+            "1W": "W",
+            "1M": "M"
+           }};
             
             function getTradingViewSymbol(pair) {{
                 let symbol = pair.trim().toUpperCase();
@@ -1597,4 +1602,5 @@ if __name__ == "__main__":
         log_level="info",
         access_log=False
     )
+
 
