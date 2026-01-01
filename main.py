@@ -707,7 +707,7 @@ Piyasa verileri Binance'tan canlı çekilmiştir ({datetime.now().strftime('%H:%
             "success": False
         }, status_code=500)
 
- @app.post("/api/gpt-analyze")
+@app.post("/api/gpt-analyze")
 async def gpt_analyze_endpoint(image_file: UploadFile = File(...)):
     if not openai_client:
         return JSONResponse({
@@ -867,3 +867,4 @@ async def health_check():
 if __name__ == "__main__":
     import uvicorn
     uvicorn.run(app, host="0.0.0.0", port=8000, log_level="info", reload=False)
+
