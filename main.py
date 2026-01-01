@@ -1371,7 +1371,6 @@ async def signal_page(request: Request):
     return HTMLResponse(content=html)
 
 # ... (diğer sayfalar aynı kalıyor: /signal/all, /login, vs.)
-
 @app.post("/api/analyze-chart")
 async def analyze_chart_endpoint(request: Request):
     try:
@@ -1388,7 +1387,12 @@ async def analyze_chart_endpoint(request: Request):
                 "success": False
             }, status_code=503)
         
-        ccxt_symbol = f"{symbol}/USDT"
+        # DÜZELTME BURADA: Slash kaldır ve USDT ekle
+        if symbol.endswith("/USDT"):
+            symbol = symbol.replace("/USDT", "")
+        if not symbol.endswith("USDT"):
+            symbol += "USDT"
+        ccxt_symbol = symbol  # Artık BNBUSDT, BTCUSDT gibi doğru format
         
         interval_map = {"5m": "5m", "15m": "15m", "1h": "1h", "4h": "4h", "1d": "1d"}
         ccxt_timeframe = interval_map.get(timeframe, "5m")
@@ -1402,7 +1406,7 @@ async def analyze_chart_endpoint(request: Request):
             
             if not klines or len(klines) < 50:
                 return JSONResponse({
-                    "analysis": f"❌ {symbol} için yeterli veri yok.",
+                    "analysis": f"❌ {symbol.replace('USDT', '')} için yeterli veri yok.",
                     "success": False
                 }, status_code=404)
             
@@ -1410,10 +1414,10 @@ async def analyze_chart_endpoint(request: Request):
             df.iloc[:,1:] = df.iloc[:,1:].apply(pd.to_numeric, errors='coerce')
             df = df.dropna()
             
-            analysis = generate_ict_signal(df, symbol, timeframe)
+            analysis = generate_ict_signal(df, symbol.replace("USDT", ""), timeframe)
             
             if not analysis:
-                analysis = generate_technical_analysis(df, symbol, timeframe)
+                analysis = generate_technical_analysis(df, symbol.replace("USDT", ""), timeframe)
                 if not analysis:
                     return JSONResponse({
                         "analysis": "Sinyal üretilemedi.",
@@ -1445,19 +1449,18 @@ Saat: {analysis['last_update']}
             })
             
         except Exception as e:
-            logger.error(f"Elite veri hatası: {e}")
+            logger.error(f"Elite veri hatası ({ccxt_symbol}): {e}")
             return JSONResponse({
-                "analysis": f"Veri alınamadı: {str(e)}",
+                "analysis": f"❌ Veri alınamadı: {str(e)}",
                 "success": False
             }, status_code=404)
             
     except Exception as e:
         logger.error(f"Elite analiz hatası: {e}")
         return JSONResponse({
-            "analysis": f"Hata: {str(e)}",
+            "analysis": f"❌ Hata: {str(e)}",
             "success": False
         }, status_code=500)
-
 # Diğer endpoint'ler (gpt-analyze, visitor-stats, vs.) aynı kalıyor...
 
 if __name__ == "__main__":
@@ -1476,3 +1479,4 @@ if __name__ == "__main__":
         log_level="info",
         access_log=False
     )
+
