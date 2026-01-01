@@ -1408,9 +1408,25 @@ async def price_sources_debug(request: Request):
     </script>
 </body>
 </html>"""
-
+@app.get("/debug")
+async def debug_info():
+    from core import price_pool, get_all_prices_snapshot, price_sources_status
+    import json
+    
+    snapshot = get_all_prices_snapshot()
+    
+    return {
+        "status": "running",
+        "price_pool_size": len(price_pool),
+        "price_pool_keys": list(price_pool.keys())[:5],
+        "snapshot_tickers": len(snapshot.get("tickers", {})),
+        "snapshot_keys": list(snapshot.get("tickers", {}).keys())[:5],
+        "price_sources": price_sources_status,
+        "timestamp": datetime.utcnow().isoformat()
+    }
 # ==================== BAŞLATMA ====================
 if __name__ == "__main__":
     import uvicorn
     uvicorn.run(app, host="0.0.0.0", port=8000) 
+
 
