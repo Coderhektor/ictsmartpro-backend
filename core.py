@@ -1,4 +1,3 @@
-# core.py — TAMAMEN DÜZELTİLMİŞ VERSİYON
 import asyncio
 import logging
 from collections import defaultdict
@@ -59,15 +58,13 @@ def get_best_price(symbol: str) -> Dict[str, Any]:
             "updated": data.get("updated", "N/A")
         }
 
-    def get_best_price(symbol: str) -> Dict[str, Any]:
+# ✅ DÜZELTME: Girinti sıfırlandı (en solda)
+def get_all_prices_snapshot(limit: int = 50) -> Dict[str, Any]:
     with price_pool_lock:
-        # DEBUG: Tüm price_pool'u logla
         logger.debug(f"get_all_prices_snapshot: price_pool boyutu = {len(price_pool)}")
         
-        # Eğer price_pool boşsa, MANUEL TEST VERİLERİ EKLE
         if len(price_pool) == 0:
             logger.warning("⚠️ price_pool BOŞ! Manuel test verileri ekleniyor...")
-            # Acil test verileri
             test_data = [
                 ("BTCUSDT", 87658.77, 2.5),
                 ("ETHUSDT", 3500.50, 1.8),
@@ -86,11 +83,8 @@ def get_best_price(symbol: str) -> Dict[str, Any]:
             
             logger.info(f"✅ {len(test_data)} manuel test fiyatı eklendi")
         
-        # Şimdi normal işleme devam et
         valid_symbols = {sym: data for sym, data in price_pool.items() 
                         if data.get("best_price", 0) > 0}
-        
-        logger.debug(f"Valid symbols: {len(valid_symbols)}")
         
         sorted_symbols = sorted(
             valid_symbols.items(),
@@ -116,8 +110,6 @@ def get_best_price(symbol: str) -> Dict[str, Any]:
                 "sources": list(sources_dict.keys())
             }
 
-        logger.debug(f"get_all_prices_snapshot: {len(tickers)} ticker döndürüldü")
-        
         return {
             "tickers": tickers,
             "last_update": datetime.now(timezone.utc).strftime("%H:%M:%S UTC")
@@ -198,72 +190,52 @@ async def fetch_ohlcv(symbol: str, timeframe: str = "5m", limit: int = 150):
         return []
 
 # ==================== REALTIME PRICE TASK ====================
- async def realtime_price_task():
+async def realtime_price_task():
     logger.info("📊 Realtime fiyat broadcast başladı")
-    
-    # İlk broadcast için 3 saniye bekle
     await asyncio.sleep(3)
-    
     counter = 0
     while True:
         try:
-            # Fiyat snapshot'ını al
             data = get_all_prices_snapshot(limit=50)
-            
-            # DEBUG log
             ticker_count = len(data.get("tickers", {}))
-            if counter % 10 == 0:  # Her 10. broadcast'ta log
+            if counter % 10 == 0:
                 if ticker_count > 0:
                     first_symbol = list(data["tickers"].keys())[0]
                     first_price = data["tickers"][first_symbol]["price"]
                     logger.info(f"📡 Broadcast #{counter}: {ticker_count} coin | Örnek: {first_symbol} = ${first_price:.2f}")
                 else:
                     logger.warning(f"⚠️ Broadcast #{counter}: HİÇ coin yok!")
-            
-            # Broadcast yap
             await rt_ticker.broadcast(data)
-            
             counter += 1
             await asyncio.sleep(3)
-            
         except Exception as e:
             logger.error(f"Realtime task hatası: {e}")
             await asyncio.sleep(5)
+
 # ==================== PUMP RADAR TASK ====================
 async def pump_radar_task():
     logger.info("🔥 Pump radar başladı")
     while True:
         try:
             gains = []
-            
             with price_pool_lock:
                 for symbol, data in price_pool.items():
                     price = data.get("best_price", 0)
                     if price <= 0:
                         continue
-                    
                     sources_dict = data.get("sources", {})
                     if not sources_dict:
                         continue
-                    
-                    changes = []
-                    for source_info in sources_dict.values():
-                        change_val = source_info.get("change_24h")
-                        if change_val is not None:
-                            changes.append(change_val)
-                    
+                    changes = [source_info.get("change_24h") for source_info in sources_dict.values() if source_info.get("change_24h") is not None]
                     if not changes:
                         continue
-                    
                     avg_change = sum(changes) / len(changes)
-                    
                     if abs(avg_change) >= 2.0:
                         gains.append({
                             "symbol": symbol.replace("USDT", ""),
                             "price": price,
                             "change": round(avg_change, 2)
                         })
-            
             if gains:
                 gains.sort(key=lambda x: x["change"], reverse=True)
                 payload = {
@@ -271,9 +243,7 @@ async def pump_radar_task():
                     "last_update": datetime.now(timezone.utc).strftime("%H:%M:%S UTC")
                 }
                 await signal_queue.put(("pump_radar", payload))
-            
             await asyncio.sleep(20)
-            
         except Exception as e:
             logger.error(f"Pump radar hatası: {e}")
             await asyncio.sleep(20)
@@ -371,9 +341,6 @@ async def broadcast_worker():
                 signal_data = payload["signal"]
                 channel = f"{symbol}:{tf}"
 
-                logger.debug(f"Broadcast → {channel}")
-
-                # 1. Tekil abonelere gönder
                 if channel in single_subscribers:
                     disconnected = set()
                     for ws in list(single_subscribers[channel]):
@@ -383,12 +350,10 @@ async def broadcast_worker():
                             disconnected.add(ws)
                     single_subscribers[channel] -= disconnected
 
-                # 2. Güçlü sinyalleri güncelle
                 strong = [s for s in shared_signals[tf].values() if s.get("score", 0) >= 80]
                 strong.sort(key=lambda x: x.get("score", 0), reverse=True)
                 active_strong_signals[tf] = strong[:20]
 
-                # 3. Tüm coin abonelere gönder
                 if tf in all_subscribers:
                     disconnected = set()
                     for ws in list(all_subscribers[tf]):
@@ -399,24 +364,17 @@ async def broadcast_worker():
                     all_subscribers[tf] -= disconnected
 
             elif msg_type == "pump_radar":
-                # GLOBAL değişkenleri kullan
-                from core import top_gainers, last_update, pump_radar_subscribers
-                
                 top_gainers.clear()
                 top_gainers.extend(payload.get("top_gainers", [])[:10])
                 last_update = payload.get("last_update", "N/A")
 
-                # pump_radar_subscribers'ı list() ile kopyala
-                disconnected = []
+                disconnected = set()
                 for ws in list(pump_radar_subscribers):
                     try:
                         await ws.send_json(payload)
                     except Exception:
-                        disconnected.append(ws)
-                
-                # Disconnected'ları temizle
-                for ws in disconnected:
-                    pump_radar_subscribers.discard(ws)
+                        disconnected.add(ws)
+                pump_radar_subscribers -= disconnected
 
             signal_queue.task_done()
             
@@ -425,7 +383,8 @@ async def broadcast_worker():
         except Exception as e:
             logger.error(f"Broadcast worker hatası: {e}")
             await asyncio.sleep(1)
-# ==================== EXCHANGE STREAMS (FALLBACK) ====================
+
+# ==================== EXCHANGE STREAMS ====================
 try:
     from exchanges.binance_ws import binance_ticker_stream
     from exchanges.bybit_ws import bybit_ticker_stream
@@ -455,7 +414,6 @@ async def initialize():
     ]
     background_tasks.extend(tasks)
     logger.info("✅ Tüm background task'lar başlatıldı")
-    return tasks
 
 async def cleanup():
     logger.info("🛑 Core kapanıyor...")
@@ -472,19 +430,8 @@ async def cleanup():
 
 # ==================== EXPORT ====================
 __all__ = [
-    'single_subscribers',
-    'all_subscribers',
-    'pump_radar_subscribers',
-    'shared_signals',
-    'active_strong_signals',
-    'top_gainers',
-    'last_update',
-    'rt_ticker',
-    'get_binance_client',
-    'get_best_price',
-    'update_price',
-    'get_all_prices_snapshot',
-    'fetch_ohlcv',
-    'initialize',
-    'cleanup'
+    'single_subscribers', 'all_subscribers', 'pump_radar_subscribers',
+    'shared_signals', 'active_strong_signals', 'top_gainers', 'last_update',
+    'rt_ticker', 'get_binance_client', 'get_best_price', 'update_price',
+    'get_all_prices_snapshot', 'fetch_ohlcv', 'initialize', 'cleanup'
 ]
