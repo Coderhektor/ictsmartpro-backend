@@ -310,6 +310,7 @@ async def signal_page(request: Request):
     </div>
 </div>
 <script>
+<script>
 let ws = null;
 let tvWidget = null;
 const tfMap = {{"1m":"1","3m":"3","5m":"5","15m":"15","30m":"30","1h":"60","4h":"240","1d":"D","1w":"W"}};
@@ -323,29 +324,17 @@ function getTvSymbol() {{
 function getWsSymbol() {{
     return document.getElementById('pair').value.trim().toUpperCase();
 }}
-#=========================================================================================================
-async function connect() {
+
+async function connect() {{
     const symbol = getWsSymbol();
     const tfSelect = document.getElementById('tf').value;
     const tvSymbol = getTvSymbol();
     const interval = tfMap[tfSelect] || "5";
 
-    // Eski WebSocket'i kapat
-    if (ws) {
-        ws.close();
-        ws = null;
-    }
+    if (ws) {{ ws.close(); ws = null; }}
+    if (tvWidget) {{ tvWidget.remove(); tvWidget = null; }}
 
-    // Eski TradingView widget'ını temizle
-    if (tvWidget) {
-        tvWidget.remove();
-        tvWidget = null;
-    }
-    // Container'ı boşaltmaya GEREK YOK → TradingView zaten temizliyor
-    // document.getElementById('tradingview_widget').innerHTML = '';  ← Bu satırı SİL!
-
-    // Yeni widget oluştur
-    tvWidget = new TradingView.widget({
+    tvWidget = new TradingView.widget({{
         autosize: true,
         symbol: tvSymbol,
         interval: interval,
@@ -355,22 +344,21 @@ async function connect() {
         locale: "tr",
         container_id: "tradingview_widget",
         studies: ["RSI@tv-basicstudies", "MACD@tv-basicstudies"]
-    });
+    }});
 
-    tvWidget.onChartReady(() => {
-        document.getElementById('status').innerHTML = `✅ Grafik yüklendi: ${symbol} ${tfSelect.toUpperCase()}`;
-    });
+    tvWidget.onChartReady(() => {{
+        document.getElementById('status').innerHTML = `✅ Grafik yüklendi: ${{symbol}} ${{tfSelect.toUpperCase()}}`;
+    }});
 
-    // Yeni WebSocket bağlantısı
     ws = new WebSocket((location.protocol === 'https:' ? 'wss' : 'ws') + '://' + location.host + '/ws/signal/' + symbol + '/' + tfSelect);
 
-    ws.onopen = () => {
-        document.getElementById('status').innerHTML = `✅ ${symbol} ${tfSelect.toUpperCase()} canlı sinyal akışı başladı!`;
-    };
+    ws.onopen = () => {{
+        document.getElementById('status').innerHTML = `✅ ${{symbol}} ${{tfSelect.toUpperCase()}} canlı sinyal akışı başladı!`;
+    }};
 
-    ws.onmessage = (e) => {
+    ws.onmessage = (e) => {{
         if (e.data.includes('heartbeat') || e.data.includes('ping')) return;
-        try {
+        try {{
             const d = JSON.parse(e.data);
             const card = document.getElementById('signal-card');
             const text = document.getElementById('signal-text');
@@ -378,61 +366,39 @@ async function connect() {
 
             text.innerHTML = d.signal || "⏸️ Sinyal bekleniyor...";
             details.innerHTML = `
-                <strong>${d.pair || symbol + '/USDT'}</strong><br>
-                💰 Fiyat: <strong>$${(d.current_price || 0).toLocaleString('en-US', {minimumFractionDigits: 4, maximumFractionDigits: 6})}</strong><br>
-                📊 Skor: <strong>${d.score || '?'}/100</strong> | ${d.killzone || 'Normal'}<br>
-                🕒 ${d.last_update ? 'Son: ' + d.last_update : ''}<br>
-                <small>🎯 ${d.triggers || 'Veri yükleniyor...'}</small>
+                <strong>${{d.pair || symbol + '/USDT'}}</strong><br>
+                💰 Fiyat: <strong>$${{(d.current_price || 0).toLocaleString('en-US', {{minimumFractionDigits: 4, maximumFractionDigits: 6}})}}</strong><br>
+                📊 Skor: <strong>${{d.score || '?'}}/100</strong> | ${{d.killzone || 'Normal'}}<br>
+                🕒 ${{d.last_update ? 'Son: ' + d.last_update : ''}}<br>
+                <small>🎯 ${{d.triggers || 'Veri yükleniyor...'}}</small>
             `;
 
-            if (d.signal && d.signal.includes('ALIM')) {
+            if (d.signal && d.signal.includes('ALIM')) {{
                 card.className = 'green';
                 text.style.color = '#00ff88';
-            } else if (d.signal && d.signal.includes('SATIM')) {
+            }} else if (d.signal && d.signal.includes('SATIM')) {{
                 card.className = 'red';
                 text.style.color = '#ff4444';
-            } else {
+            }} else {{
                 card.className = 'neutral';
                 text.style.color = '#ffd700';
-            }
-        } catch (err) {
+            }}
+        }} catch (err) {{
             console.error('Sinyal parse hatası:', err);
-        }
-    };
+        }}
+    }};
 
-    ws.onerror = () => {
+    ws.onerror = () => {{
         document.getElementById('status').innerHTML = "❌ WebSocket bağlantı hatası";
-    };
+    }};
 
-    ws.onclose = () => {
+    ws.onclose = () => {{
         document.getElementById('status').innerHTML = "🔌 Sinyal bağlantısı kapandı. Yeniden bağlanmak için butona tıklayın.";
-    };
-}
-#=================================================================================================================================
-async function analyzeChartWithAI() {{
-    const btn = document.getElementById('analyze-btn');
-    const box = document.getElementById('ai-box');
-    const comment = document.getElementById('ai-comment');
-    btn.disabled = true; btn.innerHTML = "⏳ Analiz ediliyor..."; box.style.display = 'block';
-    comment.innerHTML = "📊 Grafik verileri analiz ediliyor...";
-    try {{
-        const symbol = getWsSymbol();
-        const timeframe = document.getElementById('tf').value;
-        const res = await fetch('/api/analyze-chart', {{method:'POST',headers:{{'Content-Type':'application/json'}},body:JSON.stringify({{symbol,timeframe}})}});
-        const data = await res.json();
-        comment.innerHTML = data.success ? data.analysis.replace(/\\n/g,'<br>') : (data.analysis || "❌ Analiz alınamadı");
-    }} catch(err) {{
-        comment.innerHTML = `❌ Hata: ${{err.message || 'Bilinmeyen'}}<br>Yeniden deneyin.`;
-    }} finally {{
-        btn.disabled = false; btn.innerHTML = "🤖 GRAFİĞİ ANALİZ ET";
-    }}
+    }};
 }}
 
 document.addEventListener("DOMContentLoaded", () => setTimeout(connect, 500));
 </script>
-</body></html>"""
-    return HTMLResponse(content=html_content)
-
 @app.get("/signal/all", response_class=HTMLResponse)
 async def signal_all_page(request: Request):
     user = request.cookies.get("user_email")
@@ -703,5 +669,6 @@ async def health_check():
 if __name__ == "__main__":
     import uvicorn
     uvicorn.run(app, host="0.0.0.0", port=8000, log_level="info")
+
 
 
