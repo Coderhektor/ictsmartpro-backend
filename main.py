@@ -1526,7 +1526,7 @@ async def signal_page(request: Request):
             }}
             .chart-container {{
                 width: 100%;
-                height: 80vh;
+                height: 200vh;
                 min-height: 1000px;
                 background: rgba(10, 0, 34, 0.9);
                 border-radius: 16px;
@@ -1692,7 +1692,7 @@ async def signal_page(request: Request):
                 
                 tradingViewWidget = new TradingView.widget({{
                     width: "100%",
-                    height: "100%",
+                    height: "900%",
                     symbol: tvSymbol,
                     interval: interval,
                     timezone: "Etc/UTC",
@@ -1917,3 +1917,4 @@ if __name__ == "__main__":
         log_level="info", 
         access_log=False
     )
+
