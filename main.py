@@ -8,9 +8,12 @@ import json
 import pandas as pd
 import hashlib
 import os
+
 from fastapi import FastAPI, WebSocket, WebSocketDisconnect, Request, UploadFile, File
 from fastapi.responses import HTMLResponse, RedirectResponse, JSONResponse
+
 from openai import OpenAI
+from collections import defaultdict
 
 # Core bileşenler
 from core import (
@@ -111,27 +114,54 @@ async def ws_price_sources(websocket: WebSocket):
             await websocket.send_json({"sources": price_sources_status, "total_symbols": len(price_pool)})
     except WebSocketDisconnect:
         price_sources_subscribers.discard(websocket)
+#========================================================================================================
+ 
+
+app = FastAPI()
+
+# Aboneler: channel → set(websocket)
+single_subscribers = defaultdict(set)
+
+# Sinyaller: timeframe → {symbol: signal_dict}
+shared_signals = defaultdict(dict)  # ← BURASI DÜZELTİLDİ!
 
 @app.websocket("/ws/signal/{pair}/{timeframe}")
 async def ws_signal(websocket: WebSocket, pair: str, timeframe: str):
     await websocket.accept()
+
+    # Sembolü temizle
     symbol = pair.upper().replace("/", "").replace("-", "").strip()
     if not symbol.endswith("USDT"):
         symbol += "USDT"
+
     channel = f"{symbol}:{timeframe}"
+
+    # Abone ekle
     single_subscribers[channel].add(websocket)
-    sig = shared_signals.get(timeframe, {}).get(symbol)
-    if sig:
-        await websocket.send_json(sig)
+
+    # Mevcut sinyali varsa hemen gönder
+    current_signal = shared_signals[timeframe].get(symbol)
+    if current_signal:
+        try:
+            await websocket.send_json(current_signal)
+        except Exception as e:
+            print(f"İlk sinyal gönderilemedi ({channel}): {e}")
+
     try:
+        # Heartbeat döngüsü
         while True:
             await asyncio.sleep(15)
             await websocket.send_json({"heartbeat": True})
     except WebSocketDisconnect:
-        pass
+        print(f"İstemci ayrıldı: {channel}")
+    except Exception as e:
+        print(f"WebSocket hatası ({channel}): {e}")
     finally:
+        # Temizlik - güvenli discard
         single_subscribers[channel].discard(websocket)
+        print(f"Abone temizlendi: {channel} (kalan: {len(single_subscribers[channel])})")
 
+#==========================================================================
 @app.websocket("/ws/all/{timeframe}")
 async def ws_all(websocket: WebSocket, timeframe: str):
     supported = ["1m", "3m", "5m", "15m", "30m", "1h", "4h", "1d", "1w"]
@@ -673,4 +703,5 @@ async def health_check():
 if __name__ == "__main__":
     import uvicorn
     uvicorn.run(app, host="0.0.0.0", port=8000, log_level="info")
+
 
