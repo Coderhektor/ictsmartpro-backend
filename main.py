@@ -1151,7 +1151,7 @@ async def home_page(request: Request):
     """
     
     return HTMLResponse(content=html)
-
+#=============================================================
 @app.get("/signal")
 async def signal_page(request: Request):
     user = request.cookies.get("user_email")
@@ -1168,22 +1168,169 @@ async def signal_page(request: Request):
         <meta name="viewport" content="width=device-width, initial-scale=1.0">
         <title>Tek Coin Sinyal - ICT SMART PRO</title>
         <style>
-            body {{background: linear-gradient(135deg, #0a0022, #1a0033, #000); color: white; font-family: Arial, sans-serif; margin: 0; padding: 20px; min-height: 100vh;}}
-            .container {{max-width: 1000px; margin: 0 auto;}}
-            .header {{text-align: center; padding: 30px 0;}}
-            .title {{font-size: 2.5rem; background: linear-gradient(90deg, #00dbde, #fc00ff); -webkit-background-clip: text; -webkit-text-fill-color: transparent; margin-bottom: 20px;}}
-            .controls {{background: rgba(255, 255, 255, 0.05); padding: 20px; border-radius: 10px; margin: 20px 0; text-align: center;}}
-            input, select, button {{width: 100%; max-width: 400px; padding: 12px; margin: 10px 0; border: none; border-radius: 8px; background: rgba(255, 255, 255, 0.1); color: white; font-size: 1rem;}}
-            button {{background: linear-gradient(45deg, #fc00ff, #00dbde); font-weight: bold; cursor: pointer; margin: 10px 5px; display: inline-block; width: auto; min-width: 200px;}}
-            .signal-card {{background: rgba(0, 0, 0, 0.5); padding: 30px; border-radius: 10px; margin: 30px 0; text-align: center; border-left: 5px solid #ffd700;}}
+            body {{
+                background: linear-gradient(135deg, #0a0022, #1a0033, #000);
+                color: white;
+                font-family: Arial, sans-serif;
+                margin: 0;
+                padding: 20px;
+                min-height: 100vh;
+            }}
+            .container {{
+                max-width: 1000px;
+                margin: 0 auto;
+            }}
+            .header {{
+                text-align: center;
+                padding: 30px 0;
+            }}
+            .title {{
+                font-size: 2.5rem;
+                background: linear-gradient(90deg, #00dbde, #fc00ff);
+                -webkit-background-clip: text;
+                -webkit-text-fill-color: transparent;
+                margin-bottom: 20px;
+            }}
+            .controls {{
+                background: rgba(255, 255, 255, 0.05);
+                padding: 20px;
+                border-radius: 10px;
+                margin: 20px 0;
+                text-align: center;
+            }}
+            button {{
+                background: linear-gradient(45deg, #fc00ff, #00dbde);
+                font-weight: bold;
+                cursor: pointer;
+                margin: 10px 5px;
+                display: inline-block;
+                width: auto;
+                min-width: 200px;
+                padding: 12px;
+                border: none;
+                border-radius: 8px;
+                color: white;
+                font-size: 1rem;
+            }}
+            .signal-card {{
+                background: rgba(0, 0, 0, 0.5);
+                padding: 30px;
+                border-radius: 10px;
+                margin: 30px 0;
+                text-align: center;
+                border-left: 5px solid #ffd700;
+            }}
             .signal-card.green {{ border-left-color: #00ff88; }}
             .signal-card.red {{ border-left-color: #ff4444; }}
-            .signal-text {{font-size: 2rem; font-weight: bold; margin-bottom: 15px;}}
-            .ai-analysis {{background: rgba(13, 0, 51, 0.9); border-radius: 10px; padding: 25px; margin: 20px 0; border: 2px solid #00dbde; display: none;}}
-            .chart-container {{width: 100%; height: 700px; background: rgba(10, 0, 34, 0.8); border-radius: 10px; margin: 30px 0; overflow: hidden;}} <!-- YÜKSEKLİK ARTIRILDI -->
-            .navigation {{text-align: center; margin-top: 30px;}}
-            .nav-link {{color: #00dbde; text-decoration: none; margin: 0 15px;}}
-            .user-info {{position: fixed; top: 15px; left: 15px; background: rgba(0, 0, 0, 0.7); padding: 10px 20px; border-radius: 10px; color: #00ff88;}}
+            .signal-text {{
+                font-size: 2rem;
+                font-weight: bold;
+                margin-bottom: 15px;
+            }}
+            .ai-analysis {{
+                background: rgba(13, 0, 51, 0.9);
+                border-radius: 10px;
+                padding: 25px;
+                margin: 20px 0;
+                border: 2px solid #00dbde;
+                display: none;
+            }}
+            .chart-container {{
+                width: 100%;
+                height: 80vh;
+                min-height: 700px;
+                background: rgba(10, 0, 34, 0.9);
+                border-radius: 16px;
+                margin: 30px 0;
+                overflow: hidden;
+                box-shadow: 0 0 30px rgba(0, 219, 222, 0.2);
+            }}
+            .navigation {{
+                text-align: center;
+                margin-top: 30px;
+            }}
+            .nav-link {{
+                color: #00dbde;
+                text-decoration: none;
+                margin: 0 15px;
+            }}
+            .user-info {{
+                position: fixed;
+                top: 15px;
+                left: 15px;
+                background: rgba(0, 0, 0, 0.7);
+                padding: 10px 20px;
+                border-radius: 10px;
+                color: #00ff88;
+            }}
+
+            /* COIN GİRİŞ KUTUSU - RENKLİ */
+            input#pair {{
+                background-color: #1a0033;
+                color: #00ff88;
+                border: 2px solid #00dbde;
+                border-radius: 12px;
+                padding: 14px 18px;
+                font-size: 1.2rem;
+                font-weight: bold;
+                width: 100%;
+                max-width: 400px;
+                box-sizing: border-box;
+                transition: all 0.3s ease;
+            }}
+            input#pair::placeholder {{
+                color: #00dbdeaa;
+                font-weight: normal;
+            }}
+            input#pair:focus {{
+                outline: none;
+                border-color: #fc00ff;
+                background-color: #2a0044;
+                box-shadow: 0 0 20px rgba(252, 0, 255, 0.5);
+                color: #ffffff;
+            }}
+            input#pair:hover {{
+                border-color: #fc00ff88;
+                box-shadow: 0 0 15px rgba(252, 0, 255, 0.3);
+            }}
+
+            /* TIMEFRAME SELECT - RENKLİ */
+            select#timeframe {{
+                background-color: #1a0033;
+                color: #00ff88;
+                border: 2px solid #00dbde;
+                border-radius: 12px;
+                padding: 14px 40px 14px 18px;
+                font-size: 1.2rem;
+                font-weight: bold;
+                min-width: 220px;
+                appearance: none;
+                background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='14' height='10' viewBox='0 0 14 10'%3E%3Cpath fill='%2300ff88' d='M1 1l6 6 6-6' stroke='%2300ff88' stroke-width='2'/%3E%3C/svg%3E");
+                background-repeat: no-repeat;
+                background-position: right 18px center;
+                background-size: 14px;
+                cursor: pointer;
+                transition: all 0.3s ease;
+            }}
+            select#timeframe:hover {{
+                background-color: #2a0044;
+                border-color: #fc00ff;
+                box-shadow: 0 0 15px rgba(252, 0, 255, 0.3);
+            }}
+            select#timeframe:focus {{
+                outline: none;
+                border-color: #fc00ff;
+                box-shadow: 0 0 20px rgba(252, 0, 255, 0.5);
+            }}
+            select#timeframe option {{
+                background-color: #0f0022;
+                color: #ffffff;
+                padding: 12px;
+            }}
+            select#timeframe option:hover {{
+                background-color: #fc00ff !important;
+                color: #000000 !important;
+            }}
         </style>
         <script src="https://s3.tradingview.com/tv.js"></script>
     </head>
@@ -1199,40 +1346,16 @@ async def signal_page(request: Request):
             <div class="controls">
                 <input type="text" id="pair" placeholder="Coin (örn: BTC)" value="BTC">
                 <select id="timeframe">
-                <option value="1m">1 Dakika</option>
-                <option value="3m">3 Dakika</option>
-                <option value="5m" selected>5 Dakika</option>
-                <option value="15m">15 Dakika</option>
-                <option value="30m">30 Dakika</option>
-                <option value="1h">1 Saat</option>
-                <option value="4h">4 Saat</option>
-                <option value="1d">1 Gün</option>
-                <option value="1W">1 Hafta</option>
-                <option value="1M">1 Ay</option>
-
-                select#timeframe {
-    background-color: #1a0033;
-    color: #00ff88;
-    border: 2px solid #00dbde;
-    border-radius: 12px;
-    padding: 14px 40px 14px 18px;
-    font-size: 1.2rem;
-    font-weight: bold;
-    min-width: 220px;
-    appearance: none;
-    background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='14' height='10' viewBox='0 0 14 10'%3E%3Cpath fill='%2300ff88' d='M1 1l6 6 6-6' stroke='%2300ff88' stroke-width='2'/%3E%3C/svg%3E");
-    background-repeat: no-repeat;
-    background-position: right 18px center;
-    background-size: 14px;
-    cursor: pointer;
-    transition: all 0.3s ease;
-}
-
-select#timeframe:focus {
-    outline: none;
-    border-color: #fc00ff;
-    box-shadow: 0 0 20px rgba(252, 0, 255, 0.5);
-}
+                    <option value="1m">1 Dakika</option>
+                    <option value="3m">3 Dakika</option>
+                    <option value="5m" selected>5 Dakika</option>
+                    <option value="15m">15 Dakika</option>
+                    <option value="30m">30 Dakika</option>
+                    <option value="1h">1 Saat</option>
+                    <option value="4h">4 Saat</option>
+                    <option value="1d">1 Gün</option>
+                    <option value="1W">1 Hafta</option>
+                    <option value="1M">1 Ay</option>
                 </select>
                 <div>
                     <button onclick="connectSignal()">🔴 CANLI SİNYAL BAĞLANTISI KUR</button>
@@ -1271,42 +1394,25 @@ select#timeframe:focus {
             let currentSymbol = "BTC";
             let currentTimeframe = "5m";
             
-           const timeframeMap = {{
-            "1m": "1",
-            "3m": "3",
-            "5m": "5",
-            "15m": "15",
-            "30m": "30",
-            "1h": "60",
-            "4h": "240",
-            "1d": "D",
-            "1W": "W",
-            "1M": "M"
-           }};
+            const timeframeMap = {{
+                "1m": "1", "3m": "3", "5m": "5", "15m": "15", "30m": "30",
+                "1h": "60", "4h": "240", "1d": "D", "1W": "W", "1M": "M"
+            }};
             
             function getTradingViewSymbol(pair) {{
                 let symbol = pair.trim().toUpperCase();
-                if (!symbol.endsWith("USDT")) {{
-                    symbol += "USDT";
-                }}
+                if (!symbol.endsWith("USDT")) symbol += "USDT";
                 return "BINANCE:" + symbol;
             }}
             
-            async function connectSignal() {{
+            function connectSignal() {{
                 currentSymbol = document.getElementById('pair').value.trim().toUpperCase();
                 currentTimeframe = document.getElementById('timeframe').value;
-                
                 const tvSymbol = getTradingViewSymbol(currentSymbol);
                 const interval = timeframeMap[currentTimeframe] || "5";
                 
-                if (signalWs) {{
-                    signalWs.close();
-                    signalWs = null;
-                }}
-                
-                if (tradingViewWidget) {{
-                    tradingViewWidget.remove();
-                }}
+                if (signalWs) {{ signalWs.close(); signalWs = null; }}
+                if (tradingViewWidget) {{ tradingViewWidget.remove(); }}
                 
                 tradingViewWidget = new TradingView.widget({{
                     width: "100%",
@@ -1317,7 +1423,14 @@ select#timeframe:focus {
                     theme: "dark",
                     style: "1",
                     locale: "tr",
-                    container_id: "tradingview_widget"
+                    container_id: "tradingview_widget",
+                    overrides: {{
+                        "paneProperties.backgroundType": "solid",
+                        "paneProperties.background": "#000000",
+                        "scalesProperties.textColor": "#FFFFFF",
+                        "paneProperties.vertGridProperties.color": "#333333",
+                        "paneProperties.horzGridProperties.color": "#333333"
+                    }}
                 }});
                 
                 const protocol = window.location.protocol === 'https:' ? 'wss://' : 'ws://';
@@ -1330,7 +1443,6 @@ select#timeframe:focus {
                 signalWs.onmessage = function(event) {{
                     try {{
                         if (event.data.includes('heartbeat')) return;
-                        
                         const data = JSON.parse(event.data);
                         const card = document.getElementById('signal-card');
                         const text = document.getElementById('signal-text');
@@ -1341,7 +1453,7 @@ select#timeframe:focus {
                         details.innerHTML = `
                             <strong>${{data.pair || currentSymbol + '/USDT'}}</strong><br>
                             💰 Fiyat: <strong>$${{(data.current_price || 0).toFixed(data.current_price < 1 ? 6 : 4)}}</strong><br>
-                            📊 Skor: <strong>${{data.score || '?'}}/100</strong> | ${{data.killzone || 'Normal'}}
+                            📊 Skor: <strong>${{data.score || '?'}} / 100</strong> | ${{data.killzone || 'Normal'}}
                         `;
                         
                         if (data.signal && (data.signal.includes('ALIM') || data.signal.includes('YÜKSELİŞ'))) {{
@@ -1354,10 +1466,7 @@ select#timeframe:focus {
                             card.className = 'signal-card';
                             text.style.color = '#ffd700';
                         }}
-                        
-                    }} catch (error) {{
-                        console.error('Hata:', error);
-                    }}
+                    }} catch (e) {{ console.error(e); }}
                 }};
             }}
             
@@ -1365,29 +1474,18 @@ select#timeframe:focus {
                 const btn = document.querySelector('button[onclick="analyzeChartWithAI()"]');
                 const box = document.getElementById('ai-box');
                 const comment = document.getElementById('ai-comment');
-                
                 btn.disabled = true;
                 btn.innerHTML = "⏳ Analiz ediliyor...";
                 box.style.display = 'block';
                 comment.innerHTML = "📊 Teknik analiz oluşturuluyor...";
-                
                 try {{
                     const response = await fetch('/api/analyze-chart', {{
                         method: 'POST',
                         headers: {{ 'Content-Type': 'application/json' }},
-                        body: JSON.stringify({{ 
-                            symbol: currentSymbol, 
-                            timeframe: currentTimeframe 
-                        }})
+                        body: JSON.stringify({{ symbol: currentSymbol, timeframe: currentTimeframe }})
                     }});
-                    
                     const data = await response.json();
-                    
-                    if (data.success) {{
-                        comment.innerHTML = data.analysis.replace(/\\n/g, '<br>');
-                    }} else {{
-                        comment.innerHTML = '<strong style="color:#ff4444">❌ Analiz hatası:</strong><br>' + data.analysis;
-                    }}
+                    comment.innerHTML = data.success ? data.analysis.replace(/\\n/g, '<br>') : '<strong style="color:#ff4444">❌ Hata:</strong><br>' + data.analysis;
                 }} catch (err) {{
                     comment.innerHTML = '<strong style="color:#ff4444">❌ Bağlantı hatası:</strong><br>' + err.message;
                 }} finally {{
@@ -1403,7 +1501,6 @@ select#timeframe:focus {
     """
     
     return HTMLResponse(content=html)
-
 # ... (diğer sayfalar aynı kalıyor: /signal/all, /login, vs.)
 @app.post("/api/analyze-chart")
 async def analyze_chart_endpoint(request: Request):
@@ -1513,6 +1610,7 @@ if __name__ == "__main__":
         log_level="info",
         access_log=False
     )
+
 
 
 
