@@ -295,17 +295,17 @@ function getTvSymbol() {{
 function getWsSymbol() {{
     return document.getElementById('pair').value.trim().toUpperCase();
 }}
-
-async function connect() {{
+async function connect() {
     const symbol = getWsSymbol();
     const tfSelect = document.getElementById('tf').value;
     const tvSymbol = getTvSymbol();
     const interval = tfMap[tfSelect] || "5";
 
-    if (ws) {{ ws.close(); ws = null; }}
-    if (tvWidget) {{ tvWidget.remove(); tvWidget = null; }}
+    if (ws) { ws.close(); ws = null; }
+    if (tvWidget) { tvWidget.remove(); tvWidget = null; }
 
-    tvWidget = new TradingView.widget({{
+    // Widget'ı oluştur
+    tvWidget = new TradingView.widget({
         autosize: true,
         symbol: tvSymbol,
         interval: interval,
@@ -315,21 +315,31 @@ async function connect() {{
         locale: "tr",
         container_id: "tradingview_widget",
         studies: ["RSI@tv-basicstudies", "MACD@tv-basicstudies"]
-    }});
+    });
 
-    tvWidget.onChartReady(() => {{
-        document.getElementById('status').innerHTML = `✅ Grafik yüklendi: ${{symbol}} ${{tfSelect.toUpperCase()}}`;
-    }});
+    // YENİ DOĞRU YÖNTEM: ready() veya on('chartReady')
+    // 1. Tercih edilen: ready()
+    if (typeof tvWidget.ready === 'function') {
+        tvWidget.ready(() => {
+            document.getElementById('status').innerHTML = `✅ Grafik yüklendi: ${symbol} ${tfSelect.toUpperCase()}`;
+        });
+    } else {
+        // 2. Fallback: event listener
+        tvWidget.on('chartReady', () => {
+            document.getElementById('status').innerHTML = `✅ Grafik yüklendi: ${symbol} ${tfSelect.toUpperCase()}`;
+        });
+    }
 
+    // WebSocket bağlantısı
     ws = new WebSocket((location.protocol === 'https:' ? 'wss' : 'ws') + '://' + location.host + '/ws/signal/' + symbol + '/' + tfSelect);
 
-    ws.onopen = () => {{
-        document.getElementById('status').innerHTML = `✅ ${{symbol}} ${{tfSelect.toUpperCase()}} canlı sinyal akışı başladı!`;
-    }};
+    ws.onopen = () => {
+        document.getElementById('status').innerHTML = `✅ ${symbol} ${tfSelect.toUpperCase()} canlı sinyal akışı başladı!`;
+    };
 
-    ws.onmessage = (e) => {{
+    ws.onmessage = (e) => {
         if (e.data.includes('heartbeat') || e.data.includes('ping')) return;
-        try {{
+        try {
             const d = JSON.parse(e.data);
             const card = document.getElementById('signal-card');
             const text = document.getElementById('signal-text');
@@ -337,36 +347,36 @@ async function connect() {{
 
             text.innerHTML = d.signal || "⏸️ Sinyal bekleniyor...";
             details.innerHTML = `
-                <strong>${{d.pair || symbol + '/USDT'}}</strong><br>
-                💰 Fiyat: <strong>$${{(d.current_price || 0).toLocaleString('en-US', {{minimumFractionDigits: 4, maximumFractionDigits: 6}})}}</strong><br>
-                📊 Skor: <strong>${{d.score || '?'}}/100</strong> | ${{d.killzone || 'Normal'}}<br>
-                🕒 ${{d.last_update ? 'Son: ' + d.last_update : ''}}<br>
-                <small>🎯 ${{d.triggers || 'Veri yükleniyor...'}}</small>
+                <strong>${d.pair || symbol + '/USDT'}</strong><br>
+                💰 Fiyat: <strong>$${(d.current_price || 0).toLocaleString('en-US', {minimumFractionDigits: 4, maximumFractionDigits: 6})}</strong><br>
+                📊 Skor: <strong>${d.score || '?'}/100</strong> | ${d.killzone || 'Normal'}<br>
+                🕒 ${d.last_update ? 'Son: ' + d.last_update : ''}<br>
+                <small>🎯 ${d.triggers || 'Veri yükleniyor...'}</small>
             `;
 
-            if (d.signal && d.signal.includes('ALIM')) {{
+            if (d.signal && d.signal.includes('ALIM')) {
                 card.className = 'green';
                 text.style.color = '#00ff88';
-            }} else if (d.signal && d.signal.includes('SATIM')) {{
+            } else if (d.signal && d.signal.includes('SATIM')) {
                 card.className = 'red';
                 text.style.color = '#ff4444';
-            }} else {{
+            } else {
                 card.className = 'neutral';
                 text.style.color = '#ffd700';
-            }}
-        }} catch (err) {{
+            }
+        } catch (err) {
             console.error('Sinyal parse hatası:', err);
-        }}
-    }};
+        }
+    };
 
-    ws.onerror = () => {{
+    ws.onerror = () => {
         document.getElementById('status').innerHTML = "❌ WebSocket bağlantı hatası";
-    }};
+    };
 
-    ws.onclose = () => {{
+    ws.onclose = () => {
         document.getElementById('status').innerHTML = "🔌 Sinyal bağlantısı kapandı. Yeniden bağlanmak için butona tıklayın.";
-    }};
-}}
+    };
+}
 
 document.addEventListener("DOMContentLoaded", () => setTimeout(connect, 500));
 </script>
@@ -533,3 +543,4 @@ async def analyze_chart(request: Request):
 if __name__ == "__main__":
     import uvicorn
     uvicorn.run(app, host="0.0.0.0", port=8000, log_level="info")
+
