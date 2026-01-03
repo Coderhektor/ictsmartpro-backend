@@ -1,4 +1,4 @@
-# main.py — ICT SMART PRO v3.0 | RAILWAY UYUMLU, TAM ÇALIŞAN VERSİYON
+# main.py — ICT SMART PRO v3.0 | RAILWAY UYUMLU, TAM ÇALIŞAN
 import base64
 import logging
 import asyncio
@@ -14,11 +14,10 @@ from fastapi import FastAPI, WebSocket, WebSocketDisconnect, Request, Response
 from fastapi.responses import HTMLResponse, RedirectResponse, JSONResponse
 from openai import OpenAI
 
-# CORE IMPORTS — Sadece core.py'de gerçekten var olanlar
+# CORE IMPORTS — core.py'de gerçekten var olanlar
 from core import (
     initialize, cleanup,
-    top_gainers, last_update, rt_ticker, price_pool,
-    get_all_prices_snapshot
+    top_gainers, last_update, rt_ticker, price_pool
 )
 
 # indicators.py opsiyonel
@@ -191,7 +190,7 @@ async def ws_realtime_price(websocket: WebSocket):
     await rt_ticker.subscribe(websocket)
     try:
         while True:
-            data = await get_all_prices_snapshot(limit=50)
+            data = await price_pool.snapshot(limit=50)  # doğrudan snapshot kullanıldı
             await websocket.send_json(data)
             await asyncio.sleep(5)
     except WebSocketDisconnect:
