@@ -694,10 +694,10 @@ async def home(request: Request):
         </table>
 
         <div class="btn-container">
-        <a href="/signal/" class="btn">🚀 Tek Coin Canlı Sinyal + Grafik</a>
-        <a href="/signal/all/" class="btn">🔥 Tüm Coinleri Tara</a>
-        <a href="/realtime/" class="btn">📊 Canlı Fiyat Takibi</a>
-        <a href="/admin/" class="btn">⚙️ Admin Paneli</a>
+            <a href="/signal" class="btn">🚀 Tek Coin Canlı Sinyal + Grafik</a>
+            <a href="/signal/all" class="btn">🔥 Tüm Coinleri Tara</a>
+            <a href="/realtime" class="btn">📊 Canlı Fiyat Takibi</a>
+            <a href="/admin" class="btn">⚙️ Admin Paneli</a>
         </div>
 
         <div style="display:flex;justify-content:center;gap:20px;flex-wrap:wrap;margin:40px 0;">
@@ -796,18 +796,6 @@ async def home(request: Request):
 </html>"""
     return HTMLResponse(content=html_content)
 
-@app.get("/signal/", response_class=HTMLResponse)  # <-- / ekle
-async def signal_page(request: Request):
-
-@app.get("/signal/all/", response_class=HTMLResponse)  # <-- / ekle
-async def all_signals_page(request: Request):
-
-@app.get("/realtime/", response_class=HTMLResponse)  # <-- / ekle
-async def realtime_price_page(request: Request):
-
-@app.get("/admin/", response_class=HTMLResponse)  # <-- / ekle
-async def admin_panel(request: Request):
-
 # Diğer endpoint'ler (analyze-chart, signal, all, realtime, admin vs.) tamamen aynı kalıyor,
 # çünkü hata sadece ana sayfadaki JavaScript template literal'lerinden kaynaklanıyordu.
 
@@ -835,5 +823,3 @@ if __name__ == "__main__":
     logger.info(f"👷 Workers: {uvicorn_config['workers']}")
 
     uvicorn.run(**uvicorn_config)
-
-
