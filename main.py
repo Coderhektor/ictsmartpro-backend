@@ -15,6 +15,13 @@ from fastapi.templating import Jinja2Templates
 import uvicorn
 import os
 import hashlib
+import logging
+
+# Logger'ı oluştur
+logger = logging.getLogger("uvicorn")
+# Opsiyonel: log seviyesini ayarla
+logger.setLevel(logging.INFO)
+
 # indicators.py'den sınıfı import et (dosyanın en üstüne zaten var ama emin ol)
 from indicators import GrokIndicatorsPro as GrokIndicators, generate_ict_signal, generate_simple_signal
 # Core modülleri
@@ -1303,6 +1310,7 @@ if __name__ == "__main__":
     logger.info(f"👷 Workers: {uvicorn_config['workers']}")
 
     uvicorn.run(**uvicorn_config)
+
 
 
 
