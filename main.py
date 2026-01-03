@@ -694,10 +694,10 @@ async def home(request: Request):
         </table>
 
         <div class="btn-container">
-            <a href="/signal" class="btn">🚀 Tek Coin Canlı Sinyal + Grafik</a>
-            <a href="/signal/all" class="btn">🔥 Tüm Coinleri Tara</a>
-            <a href="/realtime" class="btn">📊 Canlı Fiyat Takibi</a>
-            <a href="/admin" class="btn">⚙️ Admin Paneli</a>
+        <a href="/signal/" class="btn">🚀 Tek Coin Canlı Sinyal + Grafik</a>
+        <a href="/signal/all/" class="btn">🔥 Tüm Coinleri Tara</a>
+        <a href="/realtime/" class="btn">📊 Canlı Fiyat Takibi</a>
+        <a href="/admin/" class="btn">⚙️ Admin Paneli</a>
         </div>
 
         <div style="display:flex;justify-content:center;gap:20px;flex-wrap:wrap;margin:40px 0;">
@@ -823,3 +823,4 @@ if __name__ == "__main__":
     logger.info(f"👷 Workers: {uvicorn_config['workers']}")
 
     uvicorn.run(**uvicorn_config)
+
