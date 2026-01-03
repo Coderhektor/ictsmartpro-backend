@@ -1131,12 +1131,12 @@ async def analyze_chart(request: Request):
         symbol = body.get("symbol", "BTCUSDT").upper()
         timeframe = body.get("timeframe", "5m")
 
-        logger.info(f"Teknik analiz talebi: {symbol} - {timeframe}")
+        logger.info(f"AI Analiz talebi alındı: {symbol} {timeframe}")
 
         if not symbol.endswith("USDT"):
             symbol += "USDT"
 
-        # Borsa bağlantılarını al
+        # Borsa client'larını al
         binance_client = get_binance_client()
         bybit_client = get_bybit_client()
         okex_client = get_okex_client()
@@ -1152,145 +1152,138 @@ async def analyze_chart(request: Request):
         interval = interval_map.get(timeframe, "5m")
         ccxt_symbol = symbol.replace('USDT', '/USDT')
 
-        # Sadece gerçek borsalardan veri çek (CoinGecko fallback kaldırıldı)
+        # Borsalardan veri çek
         for client, name in zip(clients, client_names):
             if client:
                 try:
                     klines = await client.fetch_ohlcv(ccxt_symbol, timeframe=interval, limit=200)
-                    if klines and len(klines) >= 50:
+                    if klines and len(klines) > 50:
                         klines_list.append((name, klines))
-                        logger.info(f"{name} → {len(klines)} mum başarıyla alındı ({symbol})")
+                        logger.info(f"{name}: {len(klines)} mum alındı ({symbol})")
                 except Exception as e:
-                    logger.warning(f"{name} veri çekme hatası: {e}")
+                    logger.warning(f"{name} OHLCV hatası ({symbol}): {e}")
+
+        # CoinGecko fallback
+        if not klines_list:
+            logger.info(f"Borsalar başarısız, CoinGecko fallback kullanılıyor: {symbol}")
+            coingecko_klines = await fetch_coingecko_ohlcv(symbol, timeframe)
+            if coingecko_klines and len(coingecko_klines) > 50:
+                klines_list.append(("CoinGecko", coingecko_klines))
+                logger.info(f"CoinGecko: {len(coingecko_klines)} mum alındı ({symbol})")
 
         if not klines_list:
             return JSONResponse({
                 "success": False,
-                "analysis": f"❌ Şu anda {symbol} için gerçek zamanlı veri alınamıyor.\nBorsa bağlantılarında geçici bir sorun olabilir. Lütfen birkaç dakika sonra tekrar deneyin.\n\n⚠️ Bu bir yatırım tavsiyesi değildir."
-            }, status_code=503)
+                "analysis": f"❌ {symbol} için hiçbir kaynaktan veri alınamadı. Lütfen sembolü kontrol edin.\n⚠️ Bu bir yatırım tavsiyesi değildir."
+            }, status_code=500)
 
-        # En güncel ve en çok veri içeren kaynağı seç
-        source_name, klines = max(klines_list, key=lambda x: (x[1][-1][0] if x[1] else 0, len(x[1])))
+        source_name, klines = max(klines_list, key=lambda x: len(x[1]))
 
-        # DataFrame hazırla
-        df = pd.DataFrame(klines, columns=['timestamp', 'open', 'high', 'low', 'close', 'volume'])
-        df['timestamp'] = pd.to_datetime(df['timestamp'], unit='ms')
-        df = df.sort_values('timestamp').tail(150).reset_index(drop=True)
+        # DataFrame oluştur
+        df = pd.DataFrame(klines)
+        if len(df.columns) >= 6:
+            df = df.iloc[:, :6]
+            df.columns = ['timestamp', 'open', 'high', 'low', 'close', 'volume']
+        elif len(df.columns) >= 5:
+            df = df.iloc[:, :5]
+            df.columns = ['timestamp', 'open', 'high', 'low', 'close']
+            df['volume'] = 1000
+        else:
+            return JSONResponse({
+                "success": False,
+                "analysis": "❌ Veri formatı hatalı.\n⚠️ Bu bir yatırım tavsiyesi değildir."
+            }, status_code=500)
+
+        df['timestamp'] = pd.to_numeric(df['timestamp'], errors='coerce')
+        if df['timestamp'].max() > 1e10:
+            df['timestamp'] = pd.to_datetime(df['timestamp'], unit='ms')
+        else:
+            df['timestamp'] = pd.to_datetime(df['timestamp'], unit='s')
+
+        for col in ['open', 'high', 'low', 'close', 'volume']:
+            if col in df.columns:
+                df[col] = pd.to_numeric(df[col], errors='coerce')
+
+        df = df.dropna(subset=['open', 'high', 'low', 'close'])
+        df = df.sort_values('timestamp').tail(150)
 
         if len(df) < 50:
             return JSONResponse({
                 "success": False,
-                "analysis": "❌ Yeterli veri alınamadı. Lütfen daha yüksek timeframe seçin.\n\n⚠️ Bu bir yatırım tavsiyesi değildir."
+                "analysis": f"❌ Yeterli veri yok ({len(df)} mum). Daha uzun timeframe deneyin.\n⚠️ Bu bir yatırım tavsiyesi değildir."
             }, status_code=500)
 
-        # Grok analiz motorunu başlat
+        # === KRİTİK DÜZELTME: GrokIndicators nesnesini burada oluştur ===
         analyzer = GrokIndicators()
 
-        # Ana ICT/SMC sinyal
+        # Sinyal üret
         try:
             signal = generate_ict_signal(df.copy(), symbol, timeframe)
         except Exception as e:
-            logger.warning(f"ICT sinyal hatası, basit moda geçiliyor: {e}")
+            logger.warning(f"ICT sinyal üretilemedi, basit sinyal kullanılıyor: {e}")
             signal = generate_simple_signal(df.copy(), symbol, timeframe)
 
-        # Tüm paternleri tespit et ve güçlü olanları öne çıkar
+        # Tetiklenen paternleri çek
         patterns = analyzer.detect_all_patterns(df)
-        
-        strong_positive = []
-        strong_negative = []
-        moderate_positive = []
-        moderate_negative = []
+        triggered_positive = []
+        triggered_negative = []
 
         for key, value in patterns.items():
             if isinstance(value, pd.Series) and len(value) > 0 and value.iloc[-1]:
-                key_lower = key.lower()
-                title = key.replace('_', ' ').title()
+                if any(pos in key.lower() for pos in ['bull', 'buy', 'positive', 'up', 'long', 'choch_bull', 'sweep_bull', 'breaker_bull', 'mitigation_bull', 'golden', 'crt_buy', 'fvg_up', 'rsi6_crossover']):
+                    triggered_positive.append(f"✅ {key.replace('_', ' ').title()}")
+                elif any(neg in key.lower() for neg in ['bear', 'sell', 'negative', 'down', 'short', 'choch_bear', 'sweep_bear', 'breaker_bear', 'mitigation_bear', 'death', 'crt_sell', 'fvg_down', 'rsi6_crossunder']):
+                    triggered_negative.append(f"⚠️ {key.replace('_', ' ').title()}")
 
-                if any(trig in key_lower for trig in ['smc_choch', 'liquidity_sweep', 'breaker', 'mitigation']):
-                    if 'bull' in key_lower or 'choch_bull' in key_lower:
-                        strong_positive.append(f"🔥 **{title}**")
-                    elif 'bear' in key_lower or 'choch_bear' in key_lower:
-                        strong_negative.append(f"🔥 **{title}**")
-                elif any(trig in key_lower for trig in ['golden_cross', 'crt_buy', 'fvg_up', 'bullish_engulfing', 'morning_star']):
-                    if 'bull' in key_lower or 'buy' in key_lower:
-                        strong_positive.append(f"🚀 {title}")
-                    elif 'bear' in key_lower or 'sell' in key_lower:
-                        strong_negative.append(f"🔻 {title}")
-                else:
-                    if 'bull' in key_lower or 'positive' in key_lower or 'up' in key_lower:
-                        moderate_positive.append(f"✅ {title}")
-                    elif 'bear' in key_lower or 'negative' in key_lower or 'down' in key_lower:
-                        moderate_negative.append(f"⚠️ {title}")
+        triggers_detail = ""
+        if triggered_positive:
+            triggers_detail += "**Pozitif Tetikleyiciler:**\n" + "\n".join(triggered_positive) + "\n\n"
+        if triggered_negative:
+            triggers_detail += "**Negatif Tetikleyiciler:**\n" + "\n".join(triggered_negative) + "\n\n"
+        if not triggered_positive and not triggered_negative:
+            triggers_detail = "😐 Henüz belirgin bir tetikleyici oluşmadı.\n"
 
-        # Tetikleyicileri birleştir
-        triggers_text = ""
-        if strong_positive:
-            triggers_text += "**ÇOK GÜÇLÜ YÜKSELİŞ TETİKLEYİCİLERİ:**\n" + "\n".join(strong_positive) + "\n\n"
-        if strong_negative:
-            triggers_text += "**ÇOK GÜÇLÜ DÜŞÜŞ TETİKLEYİCİLERİ:**\n" + "\n".join(strong_negative) + "\n\n"
-        if moderate_positive:
-            triggers_text += "**Destekleyici Yükseliş Sinyalleri:**\n" + "\n".join(moderate_positive) + "\n\n"
-        if moderate_negative:
-            triggers_text += "**Destekleyici Düşüş Sinyalleri:**\n" + "\n".join(moderate_negative) + "\n\n"
-        if not (strong_positive or strong_negative or moderate_positive or moderate_negative):
-            triggers_text = "😐 Şu anda belirgin bir yön baskısı gözlenmiyor. Piyasa konsolidasyon aşamasında olabilir.\n\n"
-
-        # Anlık fiyat (en güvenilir şekilde)
         current_price = float(df['close'].iloc[-1])
-        price_change_1h = ((current_price - df['close'].iloc[-12 if timeframe in ['5m'] else -1]) / df['close'].iloc[-12 if timeframe in ['5m'] else -1]) * 100 if len(df) > 12 else 0
 
-        # Analiz raporu (profesyonel ve güvenilir ton)
-        analysis_text = f"""📊 **ICT SMART PRO - PROFESYONEL TEKNİK ANALİZ RAPORU**
+        analysis_text = f"""🔍 **{symbol.replace('USDT', '/USDT')} - {timeframe.upper()} Detaylı Teknik Analiz**
 
-**Coin:** {symbol.replace('USDT', '/USDT')}  
-**Zaman Dilimi:** {timeframe.upper()}  
-**Veri Kaynağı:** {source_name} (Gerçek Zamanlı Borsa Verisi)  
-**Son Mum Zamanı:** {df['timestamp'].iloc[-1].strftime('%d %b %Y %H:%M UTC')}  
+📊 **Veri Kaynağı:** {source_name} • **Mum Sayısı:** {len(df)}
 
-💰 **Anlık Fiyat:** ${current_price:,.4f}  
-📈 **Son Değişim:** {'+' if price_change_1h >= 0 else ''}{price_change_1h:.2f}% (yaklaşık son 1 saat)
+🎯 **ANA SİNYAL:** <strong style="font-size:1.3em;">{signal.get('signal', '⏸️ BEKLE')}</strong>
 
-🎯 **ANA SİNYAL:**  
-<strong style="font-size:1.4em; color:{'#00ff88' if 'AL' in signal.get('signal', '') else '#ff4444' if 'SAT' in signal.get('signal', '') else '#ffd700'}">
-{signal.get('signal', '⏸️ BEKLE')}
-</strong>
+📈 **Skor:** {signal.get('score', 50)}/100 → <strong>{signal.get('strength', 'ORTA')}</strong>
+💰 **Anlık Fiyat:** ${current_price:,.6f}
+🕐 **Killzone:** {signal.get('killzone', 'Normal')}
 
-**Güç Seviyesi:** {signal.get('strength', 'ORTA')} | **Toplam Skor:** {signal.get('score', 50)}/100  
-**Killzone Durumu:** {signal.get('killzone', 'Normal')}
+🔥 **Tetiklenen Paternler:**
 
-🔥 **Akıllı Para Kavramları (SMC) ve ICT Analizi:**
+{triggers_detail}
 
-{triggers_text}
+💡 **Kısa Yorum:**
+{symbol.replace('USDT', '')} şu anda {signal.get('signal', 'BEKLE').replace('🚀 AL', 'güçlü yükseliş').replace('🔻 SAT', 'güçlü düşüş').replace('⏸️ BEKLE', 'bekleme')} sinyali veriyor.
 
-💡 **Genel Değerlendirme:**
-{symbol.replace('USDT', '')} şu anda {signal.get('signal', 'BEKLE').replace('🚀 AL', 'güçlü alım baskısı altında').replace('🔻 SAT', 'güçlü satış baskısı altında').replace('⏸️ BEKLE', 'belirsiz bir seyir izliyor')}.
-
-Yüksek skorlu sinyallerde pozisyon alınabilir ancak her zaman sıkı risk yönetimi uygulanmalıdır.
-
-⚠️ **YASAL UYARI:**  
-Bu analiz yalnızca teknik verilere dayanmaktadır ve **kesinlikle yatırım tavsiyesi değildir**. Kripto para piyasaları son derece risklidir. Tüm işlemler kendi sorumluluğunuzdadır. Kaybetmeyi göze alamayacağınız parayla işlem yapmayın.
+⚠️ **ÖNEMLİ UYARI:** Bu bir yatırım tavsiyesi değildir. Kripto para piyasaları yüksek volatiliteye sahiptir. Kendi araştırmanızı yapın ve yalnızca kaybetmeyi göze alabildiğiniz miktar ile işlem yapın.
 """
 
         return JSONResponse({
             "success": True,
-            "analysis": analysis_text.strip(),
+            "analysis": analysis_text,
             "signal_data": signal,
             "current_price": current_price,
-            "data_source": source_name,
-            "last_update": df['timestamp'].iloc[-1].isoformat()
+            "data_source": source_name
         })
 
     except json.JSONDecodeError:
         return JSONResponse({
             "success": False,
-            "analysis": "❌ Geçersiz istek formatı. Lütfen sayfayı yenileyip tekrar deneyin.\n\n⚠️ Bu bir yatırım tavsiyesi değildir."
+            "analysis": "❌ Geçersiz istek. Lütfen tekrar deneyin.\n⚠️ Bu bir yatırım tavsiyesi değildir."
         }, status_code=400)
 
     except Exception as e:
-        logger.error(f"Analiz endpoint'i kritik hata: {e}", exc_info=True)
+        logger.error(f"Analiz endpoint hatası: {e}", exc_info=True)
         return JSONResponse({
             "success": False,
-            "analysis": "❌ Sistemde geçici bir hata oluştu. Lütfen birkaç dakika sonra tekrar deneyin.\n\n⚠️ Bu bir yatırım tavsiyesi değildir."
+            "analysis": f"❌ Beklenmeyen hata: {str(e)[:150]}\n⚠️ Bu bir yatırım tavsiyesi değildir."
         }, status_code=500)
 #=========================================================================================================
 # Diğer endpoint'ler (analyze-chart, signal, all, realtime, admin vs.) tamamen aynı kalıyor,
@@ -1320,6 +1313,7 @@ if __name__ == "__main__":
     logger.info(f"👷 Workers: {uvicorn_config['workers']}")
 
     uvicorn.run(**uvicorn_config)
+
 
 
 
