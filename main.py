@@ -746,7 +746,7 @@ async def home(request: Request):
                             <td>#${{index + 1}}</td>
                             <td><strong>${{coin.symbol || coin.coin}}</strong></td>
                             <td>$${{(coin.price || 0).toFixed(4)}}</td>
-                            <td class="${{coin.change > 0 ? 'green' : 'red'}}">$${coin.change > 0 ? '+' : ''}${{(coin.change || 0).toFixed(2)}}%</td>
+                            <td class="${coin.change > 0 ? 'green' : 'red'}">$${coin.change > 0 ? '+' : ''}${(coin.change || 0).toFixed(2)}%</td>
                             <td><a href="https://www.tradingview.com/chart/?symbol=BINANCE:${{coin.symbol || coin.coin}}" target="_blank" style="color:var(--blue);text-decoration:none;font-weight:bold;">📈 Grafik Aç</a></td>
                         </tr>
                     `).join('');
@@ -1724,3 +1724,4 @@ if __name__ == "__main__":
     logger.info(f"👷 Workers: {uvicorn_config['workers']}")
 
     uvicorn.run(**uvicorn_config)
+
