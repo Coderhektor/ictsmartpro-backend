@@ -20,16 +20,15 @@ from indicators import GrokIndicatorsPro as GrokIndicators, generate_ict_signal,
 # Core modülleri
 try:
     from core import (
-    initialize,
-    cleanup,
-    rt_ticker,
-    top_gainers,
-    last_update,
-    price_pool  # opsiyonel: direkt snapshot almak için
-)
-except ImportError:
+        initialize,
+        cleanup,
+        rt_ticker,
+        top_gainers,
+        last_update,
+        price_pool  # opsiyonel: direkt snapshot almak için
+        )
+    except ImportError:
     print("⚠️ Core modülü bulunamadı, dummy değerler kullanılıyor...")
-
     # Dummy değerler
     single_subscribers = {}
     all_subscribers = {}
@@ -1309,6 +1308,7 @@ if __name__ == "__main__":
     logger.info(f"👷 Workers: {uvicorn_config['workers']}")
 
     uvicorn.run(**uvicorn_config)
+
 
 
 
