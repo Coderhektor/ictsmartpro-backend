@@ -6,7 +6,6 @@ from datetime import datetime
 from contextlib import asynccontextmanager
 from typing import Optional, Dict, List, Any
 import json
-from datetime import datetime
 import pandas as pd
 from fastapi import FastAPI, WebSocket, WebSocketDisconnect, Request, Response, UploadFile, File, HTTPException, Form
 from fastapi.responses import HTMLResponse, RedirectResponse, JSONResponse
@@ -15,21 +14,51 @@ from fastapi.templating import Jinja2Templates
 import uvicorn
 import os
 import hashlib
-import logging
 
-# Logger'ı oluştur
+# === Logger Setup ===
 logger = logging.getLogger("uvicorn")
-# Opsiyonel: log seviyesini ayarla
 logger.setLevel(logging.INFO)
 
-# indicators.py'den sınıfı import et (dosyanın en üstüne zaten var ama emin ol)
-from indicators import GrokIndicatorsPro as GrokIndicators, generate_ict_signal, generate_simple_signal
-# Core modülleri
+# === Global Dummy Definitions (fallback için önceden tanımla) ===
+# Bu, NameError riskini tamamen ortadan kaldırır
+GrokIndicators = None
+generate_ict_signal = None
+generate_simple_signal = None
+
+# === Indicators Modülü: Gerçek veya Dummy ===
 try:
     from indicators import GrokIndicatorsPro as GrokIndicators, generate_ict_signal, generate_simple_signal
-    logger.info("✅ Indicators modülü başarıyla yüklendi")  # ✅ 4 boşluk, try içinde
-except ImportError:
-    print("⚠️ Indicators modülü bulunamadı, dummy değerler kullanılıyor...")  # ✏️ Not: "Core" değil, "Indicators"
+    logger.info("✅ Indicators modülü başarıyla yüklendi")
+except ImportError as e:
+    logger.warning(f"⚠️ Indicators modülü yüklenemedi ({e}), dummy fonksiyonlar kullanılıyor...")
+
+    # Dummy GrokIndicators sınıfı
+    class GrokIndicators:
+        def __init__(self):
+            pass
+        def detect_all_patterns(self, df: pd.DataFrame) -> Dict[str, Any]:
+            return {}
+
+    # Dummy sinyal fonksiyonları
+    def generate_ict_signal(df: pd.DataFrame, symbol: str, timeframe: str) -> Dict[str, Any]:
+        return {
+            "signal": "NEUTRAL",
+            "reason": "Indicators modülü eksik",
+            "confidence": 0,
+            "entry_price": None,
+            "stop_loss": None,
+            "take_profit": None,
+            "timeframe": timeframe
+        }
+
+    def generate_simple_signal(df: pd.DataFrame, symbol: str, timeframe: str) -> Dict[str, Any]:
+        return {
+            "signal": "NEUTRAL",
+            "reason": "Indicators modülü eksik",
+            "rsi": 50,
+            "macd_hist": 0,
+            "timeframe": timeframe
+        }
     
     # Dummy fallback değerler
     single_subscribers = {}
@@ -1310,6 +1339,7 @@ if __name__ == "__main__":
     logger.info(f"👷 Workers: {uvicorn_config['workers']}")
 
     uvicorn.run(**uvicorn_config)
+
 
 
 
