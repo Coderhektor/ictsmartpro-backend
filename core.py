@@ -320,15 +320,64 @@ async def cleanup():
     await asyncio.gather(*background_tasks, return_exceptions=True)
     background_tasks.clear()
     logger.info("✅ Core temizlendi")
+    #========================================================
+# ==================== CLIENT FACTORY FONKSİYONLARI ====================
+async def get_binance_client():
+    """Analiz için async Binance client döner (OHLCV için)"""
+    try:
+        client = ccxt_async.binance({
+            'enableRateLimit': True,
+            'options': {'defaultType': 'future'}  # spot veya future seçebilirsin
+        })
+        await client.load_markets()
+        return client
+    except Exception as e:
+        logger.error(f"Binance client oluşturulamadı: {e}")
+        return None
+
+async def get_bybit_client():
+    """Analiz için async Bybit client döner"""
+    try:
+        client = ccxt_async.bybit({
+            'enableRateLimit': True,
+        })
+        await client.load_markets()
+        return client
+    except Exception as e:
+        logger.error(f"Bybit client oluşturulamadı: {e}")
+        return None
+
+async def get_okex_client():
+    """Analiz için async OKX client döner"""
+    try:
+        client = ccxt_async.okx({
+            'enableRateLimit': True,
+        })
+        await client.load_markets()
+        return client
+    except Exception as e:
+        logger.error(f"OKX client oluşturulamadı: {e}")
+        return None
+
+# get_coingecko_client artık gerekmiyor çünkü main.py'de pycoingecko kullanıyoruz
+# Ama main.py'de hata vermesin diye boş bir şey döndürelim
+def get_coingecko_client():
+    return None  # main.py'de zaten cg_client = CoinGeckoAPI()  
+
 
 # ==================== EXPORT ====================
 __all__ = [
     'rt_ticker',
     'top_gainers',
+    'top_losers',  # bu da eksik olabilir, ekleyelim
     'last_update',
     'initialize',
     'cleanup',
-    'price_pool',              # gerekirse dışarıdan snapshot almak için
+    'price_pool',
     'normalize_pool_key',
     'to_exchange_symbol',
+    'get_binance_client',
+    'get_bybit_client',
+    'get_okex_client',
+    'get_coingecko_client',
 ]
