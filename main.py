@@ -245,30 +245,30 @@ async def home(request: Request):
         <a href="/signal" class="btn">🚀 Tek Coin Canlı Sinyal + Grafik</a>
         <a href="/signal/all" class="btn">🔥 Tüm Coinleri Tara</a>
     </div>
-   <script>
+  <script>
     const ws = new WebSocket((location.protocol === 'https:' ? 'wss' : 'ws') + '://' + location.host + '/ws/realtime_price');
-    ws.onmessage = function(e) {
-        try {
+    ws.onmessage = function(e) {{
+        try {{
             const d = JSON.parse(e.data);
-            document.getElementById('update').innerHTML = `Son Güncelleme: <strong>${d.last_update || 'Şimdi'}</strong>`;
+            document.getElementById('update').innerHTML = `Son Güncelleme: <strong>${{d.last_update || 'Şimdi'}}</strong>`;
             const t = document.getElementById('table-body');
-            if (!d.tickers || Object.keys(d.tickers).length === 0) {
+            if (!d.tickers || Object.keys(d.tickers).length === 0) {{
                 t.innerHTML = '<tr><td colspan="4" style="padding:80px;color:#ffd700">⏳ Fiyatlar yükleniyor...</td></tr>';
                 return;
-            }
+            }}
             const tickers = Object.entries(d.tickers);
             t.innerHTML = tickers.slice(0, 10).map(([symbol, data], i) => `
                 <tr>
-                    <td>#${i+1}</td>
-                    <td><strong>${symbol.replace('USDT', '')}</strong></td>
+                    <td>#${{i+1}}</td>
+                    <td><strong>${{symbol.replace('USDT', '')}}</strong></td>
                     <td>$${{data.price.toFixed(data.price > 1 ? 2 : 6)}}</td>
                     <td class="{{data.change > 0 ? 'green' : 'red'}}">{{data.change > 0 ? '+' : ''}}{{data.change.toFixed(2)}}%</td>
                 </tr>
             `).join('');
-        } catch (err) {
+        }} catch (err) {{
             console.error('WebSocket veri hatası:', err);
-        }
-    };
+        }}
+    }};
     ws.onopen = () => document.getElementById('update').innerHTML = 'Canlı fiyatlar bağlandı...';
     ws.onerror = () => document.getElementById('update').innerHTML = '❌ Bağlantı hatası';
     ws.onclose = () => document.getElementById('update').innerHTML = '🔌 Bağlantı kesildi';
@@ -570,4 +570,5 @@ async def health():
 if __name__ == "__main__":
     import uvicorn
     uvicorn.run("main:app", host="0.0.0.0", port=int(os.getenv("PORT", 8000)), reload=False)
+
 
