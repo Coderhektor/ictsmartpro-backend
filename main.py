@@ -796,6 +796,18 @@ async def home(request: Request):
 </html>"""
     return HTMLResponse(content=html_content)
 
+@app.get("/signal/", response_class=HTMLResponse)  # <-- / ekle
+async def signal_page(request: Request):
+
+@app.get("/signal/all/", response_class=HTMLResponse)  # <-- / ekle
+async def all_signals_page(request: Request):
+
+@app.get("/realtime/", response_class=HTMLResponse)  # <-- / ekle
+async def realtime_price_page(request: Request):
+
+@app.get("/admin/", response_class=HTMLResponse)  # <-- / ekle
+async def admin_panel(request: Request):
+
 # Diğer endpoint'ler (analyze-chart, signal, all, realtime, admin vs.) tamamen aynı kalıyor,
 # çünkü hata sadece ana sayfadaki JavaScript template literal'lerinden kaynaklanıyordu.
 
@@ -823,4 +835,5 @@ if __name__ == "__main__":
     logger.info(f"👷 Workers: {uvicorn_config['workers']}")
 
     uvicorn.run(**uvicorn_config)
+
 
