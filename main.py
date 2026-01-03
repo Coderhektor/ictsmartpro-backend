@@ -15,7 +15,8 @@ from fastapi.templating import Jinja2Templates
 import uvicorn
 import os
 import hashlib
-
+# indicators.py'den sınıfı import et (dosyanın en üstüne zaten var ama emin ol)
+from indicators import GrokIndicators, generate_ict_signal, generate_simple_signal
 # Core modülleri
 try:
     from core import (
@@ -1323,5 +1324,6 @@ if __name__ == "__main__":
     logger.info(f"👷 Workers: {uvicorn_config['workers']}")
 
     uvicorn.run(**uvicorn_config)
+
 
 
