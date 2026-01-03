@@ -1,155 +1,228 @@
-# realtime_prices.py
-import ccxt
+# realtime_prices.py - ÜRETİM HAZIR, SON DOKUNUŞLU VERSİYON
+
+import ccxt.async_support as ccxt
+import pandas as pd
 import asyncio
-import aiohttp
 from datetime import datetime
-from typing import Dict, List, Optional
+from typing import Dict, Any, Set, List
 import logging
 
 logger = logging.getLogger(__name__)
+logging.basicConfig(level=logging.INFO, format="%(asctime)s | %(levelname)s | %(message)s")
 
-class RealTimePriceManager:
+
+def normalize_symbol(symbol: str) -> str:
+    """
+    Kullanıcı ne formatta yazarsa yazsın → BTC/USDT döndürür
+    Örnekler:
+        BTC         → BTC/USDT
+        btcusdt     → BTC/USDT
+        BTC-USDT    → BTC/USDT
+        btc/USDT    → BTC/USDT
+        BTC/USDT    → BTC/USDT
+    """
+    s = symbol.upper().replace('-', '').replace('/', '')
+    if s.endswith('USDT'):
+        base = s[:-4]  # USDT'yi çıkar
+    else:
+        base = s
+    return f"{base}/USDT"
+
+
+class GlobalPriceManager:
+    """
+    Singleton global fiyat yöneticisi.
+    Tüm kullanıcılar bu tek instance'ı paylaşır → ölçeklenebilir, düşük bellek tüketimi.
+    """
+    _instance = None
+    _lock = asyncio.Lock()
+
+    def __new__(cls):
+        if cls._instance is None:
+            cls._instance = super().__new__(cls)
+        return cls._instance
+
     def __init__(self):
-        self.exchanges = {}
-        self.prices_cache = {}
-        self.last_update = None
-        self.session = None
-        
-        # Popüler semboller
-        self.default_symbols = [
-            "BTC/USDT", "ETH/USDT", "BNB/USDT", "SOL/USDT", "XRP/USDT",
-            "ADA/USDT", "DOGE/USDT", "AVAX/USDT", "DOT/USDT", "MATIC/USDT",
-            "LTC/USDT", "TRX/USDT", "LINK/USDT", "UNI/USDT", "ATOM/USDT"
-        ]
-        
-    async def initialize(self):
-        """Exchange'leri başlat"""
-        try:
-            self.session = aiohttp.ClientSession()
-            
-            # Exchange'leri async olarak başlat
+        if not hasattr(self, 'initialized'):
             self.exchanges = {
                 'binance': ccxt.binance({
                     'enableRateLimit': True,
-                    'timeout': 10000
+                    'timeout': 10000,
+                    'options': {'defaultType': 'spot'}
                 }),
-                'bybit': ccxt.bybit({
-                    'enableRateLimit': True,
-                    'timeout': 10000
-                }),
-                'kucoin': ccxt.kucoin({
-                    'enableRateLimit': True,
-                    'timeout': 10000
-                })
+                'bybit': ccxt.bybit({'enableRateLimit': True}),
+                'okx': ccxt.okx({'enableRateLimit': True}),
             }
-            
-            logger.info("✅ Exchange'ler başlatıldı")
-            
-        except Exception as e:
-            logger.error(f"Exchange başlatma hatası: {e}")
-    
-    async def fetch_price_from_exchange(self, exchange_name: str, symbol: str) -> Optional[Dict]:
-        """Bir exchange'den fiyat çek"""
+            self.price_pool: Dict[str, pd.DataFrame] = {}  # key: BTCUSDT → DataFrame
+            self.running = False
+            self.all_symbols: Set[str] = set()  # Takip edilen normalized semboller: BTC/USDT
+            self.initialized = True
+
+    async def initialize(self):
+        async with GlobalPriceManager._lock:
+            if self.running:
+                return
+
+            for name, ex in self.exchanges.items():
+                try:
+                    await ex.load_markets()
+                    logger.info(f"✅ Global {name.upper()} markets yüklendi ({len(ex.symbols)} sembol)")
+                except Exception as e:
+                    logger.error(f"❌ Global {name.upper()} markets yükleme hatası: {e}")
+
+            self.running = True
+            asyncio.create_task(self._update_loop())
+            logger.info("✅ GlobalPriceManager başlatıldı ve sürekli güncelleme döngüsü çalışıyor")
+
+    async def _fetch_price(self, ex, ex_name: str, symbol: str) -> Dict[str, Any] | None:
         try:
-            exchange = self.exchanges.get(exchange_name)
-            if not exchange:
-                return None
-            
-            # Ticker verisini çek
-            ticker = exchange.fetch_ticker(symbol)
-            
+            ticker = await ex.fetch_ticker(symbol)
             return {
-                'symbol': symbol.replace('/', ''),
-                'price': float(ticker['last']),
-                'change_24h': float(ticker['percentage']),
-                'volume': float(ticker['baseVolume']),
-                'high_24h': float(ticker['high']),
-                'low_24h': float(ticker['low']),
-                'bid': float(ticker['bid']),
-                'ask': float(ticker['ask']),
-                'exchange': exchange_name,
-                'timestamp': datetime.now().isoformat()
+                'exchange': ex_name,
+                'price': float(ticker['last'] or 0),
+                'change_24h': float(ticker.get('percentage') or 0),
+                'volume_24h': float(
+                    ticker.get('baseVolume') or
+                    ticker.get('quoteVolume') or
+                    ticker.get('volume') or 0
+                ),
+                'timestamp': datetime.utcnow()
             }
-            
         except Exception as e:
-            logger.debug(f"{exchange_name} {symbol} fiyat çekme hatası: {e}")
+            logger.debug(f"[{ex_name}] {symbol} fetch hatası: {e}")
             return None
-    
-    async def fetch_all_prices(self, symbols: List[str] = None, limit: int = 50) -> Dict:
-        """Tüm sembollerin fiyatlarını çek"""
-        if symbols is None:
-            symbols = self.default_symbols
-        
-        all_prices = []
-        
-        # Her sembol için tüm exchange'lerden veri çek
-        for symbol in symbols[:limit]:
-            symbol_prices = []
-            
-            # Binance'den çek (primary)
-            binance_price = await self.fetch_price_from_exchange('binance', symbol)
-            if binance_price:
-                symbol_prices.append(binance_price)
-            
-            # Bybit'ten çek (fallback)
-            bybit_price = await self.fetch_price_from_exchange('bybit', symbol)
-            if bybit_price:
-                symbol_prices.append(bybit_price)
-            
-            # En iyi fiyatı seç (volume'a göre)
-            if symbol_prices:
-                best_price = max(symbol_prices, key=lambda x: x['volume'])
-                all_prices.append(best_price)
-        
-        # Cache'i güncelle
-        self.prices_cache = {p['symbol']: p for p in all_prices}
-        self.last_update = datetime.now()
-        
+
+    async def _update_symbol(self, symbol: str):
+        tasks = [
+            self._fetch_price(ex, name, symbol)
+            for name, ex in self.exchanges.items()
+        ]
+        results = await asyncio.gather(*tasks, return_exceptions=True)
+        valid = [r for r in results if isinstance(r, dict) and 'price' in r]
+
+        if valid:
+            df = pd.DataFrame(valid).set_index('exchange')
+            key = symbol.replace('/', '').upper()  # BTC/USDT → BTCUSDT
+            self.price_pool[key] = df
+
+    async def _update_loop(self):
+        """Tüm takip edilen sembolleri ardışık olarak günceller"""
+        while self.running:
+            if not self.all_symbols:
+                await asyncio.sleep(1)
+                continue
+
+            symbols_list = list(self.all_symbols)
+            for symbol in symbols_list:
+                await self._update_symbol(symbol)
+                await asyncio.sleep(0.1)  # Rate limit ve nazik davranış için
+
+            await asyncio.sleep(0.5)  # Tur arası hafif dinlenme
+
+    async def add_symbol(self, symbol: str):
+        """Yeni sembol ekle (normalize edilmiş halde)"""
+        normalized = normalize_symbol(symbol)
+        if normalized not in self.all_symbols:
+            self.all_symbols.add(normalized)
+            logger.info(f"🆕 Yeni sembol eklendi: {normalized} | Toplam takip: {len(self.all_symbols)}")
+            await self._update_symbol(normalized)  # Hemen ilk veriyi çek
+
+    def get_price(self, symbol: str) -> Dict[str, Any]:
+        """Ortalama fiyat ve kaynak detaylarını döndür"""
+        key = normalize_symbol(symbol).replace('/', '').upper()
+        if key in self.price_pool:
+            df = self.price_pool[key]
+            return {
+                'symbol': key,
+                'average_price': round(df['price'].mean(), 8),
+                'average_change_24h': round(df['change_24h'].mean(), 2),
+                'volume_24h_avg': round(df['volume_24h'].mean(), 2),
+                'sources': df[['price', 'change_24h', 'volume_24h', 'timestamp']].to_dict(orient='index'),
+                'last_update': df['timestamp'].max().isoformat() + 'Z',
+                'source_count': len(df)
+            }
         return {
-            "prices": all_prices,
-            "count": len(all_prices),
-            "last_update": self.last_update.isoformat(),
-            "source": "multi-exchange"
+            'symbol': key,
+            'error': 'Henüz veri yok veya sembol takip edilmiyor',
+            'tip': 'Birkaç saniye içinde güncellenecek'
         }
-    
-    async def get_price_snapshot(self, limit: int = 50) -> Dict:
-        """Cache'den fiyat snapshot'ı getir"""
-        # Cache boşsa veya 10 saniyeden eskiyse yenile
-        if (not self.prices_cache or 
-            not self.last_update or 
-            (datetime.now() - self.last_update).seconds > 10):
-            await self.fetch_all_prices(limit=limit)
-        
-        # Cache'den verileri al
-        prices = list(self.prices_cache.values())[:limit]
-        
-        return {
-            "prices": prices,
-            "count": len(prices),
-            "timestamp": datetime.now().isoformat(),
-            "cached": self.last_update.isoformat() if self.last_update else None
-        }
-    
+
     async def cleanup(self):
-        """Temizlik"""
-        if self.session:
-            await self.session.close()
+        self.running = False
+        for name, ex in self.exchanges.items():
+            try:
+                await ex.close()
+                logger.info(f"✅ {name.upper()} bağlantısı kapatıldı")
+            except Exception as e:
+                logger.warning(f"{name.upper()} kapatma hatası: {e}")
+        logger.info("✅ GlobalPriceManager tamamen kapatıldı")
 
-# Global instance
-price_manager = RealTimePriceManager()
 
-# main.py'de kullanmak için
-async def initialize_prices():
+# Global singleton instance
+price_manager = GlobalPriceManager()
+
+
+class UserPriceTracker:
+    """
+    Her kullanıcı için hafif bir wrapper.
+    Sadece hangi sembolleri takip ettiğini tutar.
+    """
+    def __init__(self, user_id: str):
+        self.user_id = user_id
+        self.tracked_symbols: Set[str] = set()  # Normalized formatta: BTC/USDT
+
+    async def track(self, symbol: str):
+        """Kullanıcı yeni bir coin takip etmek istediğinde"""
+        normalized = normalize_symbol(symbol)
+        if normalized not in self.tracked_symbols:
+            self.tracked_symbols.add(normalized)
+            await price_manager.add_symbol(normalized)  # Global managera ekle
+            logger.info(f"[{self.user_id}] → {normalized} takibe alındı")
+
+    def get_price(self, symbol: str) -> Dict[str, Any]:
+        return price_manager.get_price(symbol)
+
+    def get_all_tracked_prices(self) -> Dict[str, Any]:
+        """Kullanıcının takip ettiği tüm coinlerin fiyatlarını döndür"""
+        return {
+            sym: self.get_price(sym)
+            for sym in self.tracked_symbols
+        }
+
+    def list_tracked(self) -> List[str]:
+        return list(self.tracked_symbols)
+
+
+# Test / Örnek kullanım
+async def main():
     await price_manager.initialize()
 
-def get_all_prices_snapshot(limit=50):
-    """Main.py için sync wrapper"""
-    # Async fonksiyonu sync olarak çağır
-    loop = asyncio.get_event_loop()
-    if loop.is_running():
-        # Loop çalışıyorsa, future oluştur
-        import asyncio
-        return asyncio.create_task(price_manager.get_price_snapshot(limit))
-    else:
-        # Loop çalışmıyorsa, run kullan
-        return asyncio.run(price_manager.get_price_snapshot(limit))
+    # Kullanıcı 1
+    user1 = UserPriceTracker("user_42")
+    await user1.track('BTC')
+    await user1.track('ethusdt')
+    await user1.track('XRP-USDT')
+    await user1.track('Ada')
+
+    # Kullanıcı 2
+    user2 = UserPriceTracker("user_99")
+    await user2.track('SOL')
+    await user2.track('dogeusdt')
+    await user2.track('AVAX/USDT')
+
+    # Biraz bekle, veriler gelsin
+    await asyncio.sleep(20)
+
+    print("\n=== User 1 (user_42) ===")
+    print("BTC:", user1.get_price('BTC'))
+    print("ETH:", user1.get_price('ETHUSDT'))
+
+    print("\n=== User 2 (user_99) ===")
+    print("SOL:", user2.get_price('SOL'))
+    print("DOGE:", user2.get_price('DOGEUSDT'))
+
+    await price_manager.cleanup()
+
+
+if __name__ == "__main__":
+    asyncio.run(main())
