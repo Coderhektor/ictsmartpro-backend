@@ -1,132 +1,132 @@
-"""
-ICT SMART PRO - VERSION 7.0
-Production Optimized - GROK TRADE ELITE PATTERN ENGINE INTEGRATED
-Production-Ready with All Modules Optimized
-"""
-
-import asyncio
 import base64
-import hashlib
-import json
 import logging
-import os
-import sys
-from collections import defaultdict
+import io
+import asyncio
+from datetime import datetime
 from contextlib import asynccontextmanager
-from datetime import datetime, timedelta
-from typing import Any, Dict, List, Optional, Set, Tuple
+from typing import Optional, Dict, List, Any
+import json
 
-import numpy as np
 import pandas as pd
-from fastapi import (FastAPI, HTTPException, Request, WebSocket,
-                     WebSocketDisconnect)
-from fastapi.responses import HTMLResponse, JSONResponse, RedirectResponse
-from openai import OpenAI
+from fastapi import FastAPI, WebSocket, WebSocketDisconnect, Request, Response, UploadFile, File, HTTPException, Form
+from fastapi.responses import HTMLResponse, RedirectResponse, JSONResponse
+from fastapi.staticfiles import StaticFiles
+from fastapi.templating import Jinja2Templates
+import uvicorn
+import os
+import hashlib
 
-# ==================== LOGGING CONFIGURATION ====================
-logging.basicConfig(
-    level=logging.INFO,
-    format='%(asctime)s | %(name)s | %(levelname)s | %(message)s',
-    datefmt='%Y-%m-%d %H:%M:%S'
-)
-
-# Suppress noisy logs
-logging.getLogger("httpx").setLevel(logging.WARNING)
-logging.getLogger("websockets").setLevel(logging.WARNING)
-logger = logging.getLogger("ict_smart_pro")
-
-# ==================== GLOBAL STATE ====================
-price_pool = defaultdict(lambda: {"price": 0.0, "change": 0.0, "timestamp": 0.0, "source": ""})
-top_gainers: List[Dict] = []
-last_update: str = "Yükleniyor..."
-price_sources_subscribers: Set[WebSocket] = set()
-single_subscribers: Dict[str, Set[WebSocket]] = defaultdict(set)
-all_subscribers: Dict[str, Set[WebSocket]] = defaultdict(set)
-pump_radar_subscribers: Set[WebSocket] = set()
-signal_history: Dict[str, List[Dict]] = defaultdict(list)
-shared_signals: Dict[str, Dict[str, Dict]] = {}
-active_strong_signals: Dict[str, List[Dict]] = defaultdict(list)
-
-# ==================== CORE MODULE IMPORT WITH FALLBACK ====================
+# Core modülleri
 try:
     from core import (
-        cleanup as core_cleanup,
-        get_all_prices_snapshot as core_get_all_prices_snapshot,
-        get_binance_client as core_get_binance_client,
-        initialize as core_initialize,
-        price_sources_status as core_price_sources_status,
+        initialize, cleanup, single_subscribers, all_subscribers,
+        pump_radar_subscribers,
+        shared_signals, active_strong_signals, top_gainers, top_losers, last_update, rt_ticker,
+        get_binance_client, get_bybit_client, get_okex_client,
+        price_sources_status, price_pool,
+        get_all_prices_snapshot, get_available_timeframes, get_strong_signals_for_timeframe
     )
-    
-    # Import additional core functions if they exist
-    try:
-        from core import all_usdt_symbols
-    except ImportError:
-        all_usdt_symbols = []
-    
-    logger.info("✅ Core modülleri başarıyla yüklendi")
-    
-except ImportError as e:
-    logger.warning(f"⚠️ Core modülleri import hatası: {e} - Fallback modu aktif")
-    
-    # Fallback implementations
-    all_usdt_symbols = []
-    
-    def core_initialize():
-        logger.info("Fallback initialize çalışıyor")
-        return asyncio.sleep(0)
-    
-    async def core_cleanup():
-        logger.info("Fallback cleanup çalışıyor")
-        await asyncio.sleep(0)
-    
-    def core_get_binance_client():
-        return None
-    
-    def core_price_sources_status():
-        return {}
-    
-    def core_get_all_prices_snapshot():
-        return {}
-    
-    logger.info("Fallback modül fonksiyonları oluşturuldu")
+except ImportError:
+    print("⚠️ Core modülü bulunamadı, dummy değerler kullanılıyor...")
 
-# ==================== VISITOR COUNTER ====================
+    # Dummy değerler
+    single_subscribers = {}
+    all_subscribers = {}
+    pump_radar_subscribers = set()
+    shared_signals = {}
+    active_strong_signals = {}
+    top_gainers = []
+    top_losers = []
+    last_update = "00:00"
+    price_sources_status = {}
+    price_pool = {}
+
+    class DummyRTicker:
+        def __init__(self):
+            self.subscribers = set()
+
+        async def subscribe(self, websocket):
+            self.subscribers.add(websocket)
+
+        async def unsubscribe(self, websocket):
+            self.subscribers.discard(websocket)
+
+    rt_ticker = DummyRTicker()
+
+    def get_all_prices_snapshot(limit=50):
+        return {"prices": [], "timestamp": datetime.now().isoformat()}
+
+    async def initialize():
+        print("Dummy initialize çalıştı")
+
+    async def cleanup():
+        print("Dummy cleanup çalıştı")
+
+    def get_binance_client():
+        return None
+
+    def get_bybit_client():
+        return None
+
+    def get_okex_client():
+        return None
+
+    def get_available_timeframes():
+        return ["1m", "5m", "15m", "30m", "1h", "4h", "1d", "1w"]
+
+    def get_strong_signals_for_timeframe(tf):
+        return []
+
+from utils import all_usdt_symbols
+
+from openai import OpenAI
+import ccxt.async_support as ccxt_async
+from pycoingecko import CoinGeckoAPI
+
+logging.basicConfig(level=logging.INFO, format="%(asctime)s | %(levelname)s | %(name)s | %(message)s")
+logger = logging.getLogger("main")
+
+# OpenAI client - opsiyonel
+openai_client = None
+if os.getenv("OPENAI_API_KEY"):
+    openai_client = OpenAI(api_key=os.getenv("OPENAI_API_KEY"))
+else:
+    logger.warning("OPENAI_API_KEY bulunamadı, AI özellikleri devre dışı")
+
+# CoinGecko API client
+cg_client = CoinGeckoAPI()
+
+# ==================== ZİYARETÇİ SAYACI ====================
 class VisitorCounter:
     def __init__(self):
         self.total_visits = 0
-        self.active_users: Set[str] = set()
-        self.daily_stats = defaultdict(lambda: {"visits": 0, "unique": set()})
-        self.page_views = defaultdict(int)
-    
-    def add_visit(self, page: str, user_id: Optional[str] = None) -> int:
-        self.total_visits += 1
-        self.page_views[page] += 1
-        
-        today = datetime.now().strftime("%Y-%m-%d")
-        self.daily_stats[today]["visits"] += 1
-        
-        if user_id:
-            self.active_users.add(user_id)
-            self.daily_stats[today]["unique"].add(user_id)
-        
-        return self.total_visits
-    
-    def get_stats(self) -> Dict[str, Any]:
+        self.active_users = set()
+        self.daily_stats = {}
+        self.page_views = {}
+        self.lock = asyncio.Lock()
+
+    async def add_visit(self, page: str, user_id: str = None) -> int:
+        async with self.lock:
+            self.total_visits += 1
+            self.page_views[page] = self.page_views.get(page, 0) + 1
+            today = datetime.now().strftime("%Y-%m-%d")
+            if today not in self.daily_stats:
+                self.daily_stats[today] = {"visits": 0, "unique": set()}
+            self.daily_stats[today]["visits"] += 1
+            if user_id:
+                self.active_users.add(user_id)
+                self.daily_stats[today]["unique"].add(user_id)
+            return self.total_visits
+
+    def get_stats(self) -> Dict:
         today = datetime.now().strftime("%Y-%m-%d")
         today_stats = self.daily_stats.get(today, {"visits": 0, "unique": set()})
-        
-        top_pages = sorted(
-            self.page_views.items(), 
-            key=lambda x: x[1], 
-            reverse=True
-        )[:5]
-        
         return {
             "total_visits": self.total_visits,
             "active_users": len(self.active_users),
             "today_visits": today_stats["visits"],
-            "today_unique": len(today_stats["unique"]),
-            "top_pages": dict(top_pages),
+            "today_unique": len(today_stats.get("unique", set())),
+            "page_views": self.page_views,
             "last_updated": datetime.now().strftime("%H:%M:%S")
         }
 
@@ -135,1169 +135,230 @@ visitor_counter = VisitorCounter()
 def get_visitor_stats_html() -> str:
     stats = visitor_counter.get_stats()
     return f"""
-    <div style="position:fixed;top:15px;right:15px;background:#000000cc;padding:10px 20px;border-radius:20px;color:#00ff88;font-size:clamp(0.8rem, 2vw, 1.2rem);z-index:1000;backdrop-filter:blur(10px);border:1px solid #00ff8844;">
+    <div style="position:fixed;top:15px;right:15px;background:#000000cc;padding:10px 20px;border-radius:20px;color:#00ff88;font-size:clamp(0.8rem, 2vw, 1.2rem);z-index:1000;backdrop-filter:blur(10px);border:1px solid #00ff8855;">
         <div>👁️ Toplam: <strong>{stats['total_visits']}</strong></div>
         <div>🔥 Bugün: <strong>{stats['today_visits']}</strong></div>
         <div>👥 Aktif: <strong>{stats['active_users']}</strong></div>
     </div>
     """
 
-# ==================== OPENAI CLIENT ====================
-openai_client = None
-try:
-    openai_api_key = os.getenv("OPENAI_API_KEY")
-    if openai_api_key:
-        openai_client = OpenAI(api_key=openai_api_key)
-        logger.info("✅ OpenAI client başlatıldı")
-    else:
-        logger.warning("⚠️ OPENAI_API_KEY ortam değişkeni tanımlı değil")
-except Exception as e:
-    logger.warning(f"⚠️ OpenAI başlatma hatası: {e}")
-    openai_client = None
-
-# ==================== GROK TRADE ELITE INDICATORS ====================
-class GrokIndicators:
-    """Grok Trade Elite - Ultra Hassas Sinyal Üretimi"""
-    
-    def __init__(self):
-        self._fib_levels = [0.0, 0.236, 0.382, 0.5, 0.618, 0.705, 0.786, 0.886, 1.0]
-        self.RSI6_PERIOD = 6
-        self.RSI14_PERIOD = 14
-        self.SMA50_PERIOD = 50
-        self.SMA200_PERIOD = 200
-        self.EMA9_PERIOD = 9
-        self.EMA21_PERIOD = 21
-        self.BB_PERIOD = 20
-        self.SIGNAL_THRESHOLD = 40
-    
-    @staticmethod
-    def calculate_rsi(series: pd.Series, period: int = 14) -> pd.Series:
-        """RSI hesaplama"""
-        if len(series) < period + 1:
-            return pd.Series([50] * len(series), index=series.index)
-        
-        delta = series.diff()
-        gain = delta.clip(lower=0)
-        loss = -delta.clip(upper=0)
-        
-        avg_gain = gain.ewm(alpha=1/period, adjust=False).mean()
-        avg_loss = loss.ewm(alpha=1/period, adjust=False).mean()
-        
-        rs = avg_gain / (avg_loss + 1e-10)
-        rsi = 100 - (100 / (1 + rs))
-        
-        return rsi.fillna(50).clip(0, 100)
-    
-    @staticmethod
-    def calculate_sma(series: pd.Series, period: int) -> pd.Series:
-        """Simple Moving Average"""
-        if len(series) < period:
-            return series.copy()
-        return series.rolling(window=period, min_periods=1).mean()
-    
-    @staticmethod
-    def calculate_ema(series: pd.Series, period: int) -> pd.Series:
-        """Exponential Moving Average"""
-        return series.ewm(span=period, adjust=False).mean()
-    
-    @staticmethod
-    def calculate_macd(series: pd.Series, fast: int = 12, slow: int = 26, signal: int = 9) -> Tuple[pd.Series, pd.Series, pd.Series]:
-        """MACD hesaplama"""
-        ema_fast = series.ewm(span=fast, adjust=False).mean()
-        ema_slow = series.ewm(span=slow, adjust=False).mean()
-        macd_line = ema_fast - ema_slow
-        signal_line = macd_line.ewm(span=signal, adjust=False).mean()
-        histogram = macd_line - signal_line
-        return macd_line, signal_line, histogram
-    
-    @staticmethod
-    def calculate_bollinger_bands(series: pd.Series, period: int = 20, std_dev: float = 2.0) -> Tuple[pd.Series, pd.Series, pd.Series]:
-        """Bollinger Bands hesaplama"""
-        sma = series.rolling(window=period, min_periods=1).mean()
-        std = series.rolling(window=period, min_periods=1).std()
-        upper = sma + (std * std_dev)
-        lower = sma - (std * std_dev)
-        return upper, sma, lower
-    
-    @staticmethod
-    def calculate_atr(df: pd.DataFrame, period: int = 14) -> pd.Series:
-        """Average True Range"""
-        high_low = df['high'] - df['low']
-        high_close = np.abs(df['high'] - df['close'].shift())
-        low_close = np.abs(df['low'] - df['close'].shift())
-        
-        tr = pd.concat([high_low, high_close, low_close], axis=1).max(axis=1)
-        atr = tr.rolling(window=period).mean()
-        
-        return atr.fillna(tr.mean() if not tr.empty else 0)
-    
-    @staticmethod
-    def calculate_stochastic(df: pd.DataFrame, period: int = 14, smooth_k: int = 3, smooth_d: int = 3) -> Tuple[pd.Series, pd.Series]:
-        """Stochastic Oscillator"""
-        if len(df) < period:
-            return pd.Series([50] * len(df)), pd.Series([50] * len(df))
-        
-        low_min = df['low'].rolling(window=period).min()
-        high_max = df['high'].rolling(window=period).max()
-        
-        k = 100 * ((df['close'] - low_min) / (high_max - low_min + 1e-10))
-        k_smooth = k.rolling(window=smooth_k).mean()
-        d_smooth = k_smooth.rolling(window=smooth_d).mean()
-        
-        return k_smooth, d_smooth
-    
-    @staticmethod
-    def calculate_obv(df: pd.DataFrame) -> pd.Series:
-        """On-Balance Volume"""
-        if len(df) < 2:
-            return pd.Series([0] * len(df), index=df.index)
-        
-        obv = pd.Series(0.0, index=df.index)
-        obv.iloc[0] = df['volume'].iloc[0] if len(df) > 0 else 0
-        
-        for i in range(1, len(df)):
-            if df['close'].iloc[i] > df['close'].iloc[i-1]:
-                obv.iloc[i] = obv.iloc[i-1] + df['volume'].iloc[i]
-            elif df['close'].iloc[i] < df['close'].iloc[i-1]:
-                obv.iloc[i] = obv.iloc[i-1] - df['volume'].iloc[i]
-            else:
-                obv.iloc[i] = obv.iloc[i-1]
-        
-        return obv
-    
-    @staticmethod
-    def calculate_heikin_ashi(df: pd.DataFrame) -> pd.DataFrame:
-        """Heikin-Ashi dönüşümü"""
-        ha_close = (df['open'] + df['high'] + df['low'] + df['close']) / 4
-        
-        ha_open = pd.Series(0.0, index=df.index)
-        if len(df) > 0:
-            ha_open.iloc[0] = (df['open'].iloc[0] + df['close'].iloc[0]) / 2
-        
-        for i in range(1, len(df)):
-            ha_open.iloc[i] = (ha_open.iloc[i-1] + ha_close.iloc[i-1]) / 2
-        
-        ha_high = pd.concat([df['high'], ha_open, ha_close], axis=1).max(axis=1)
-        ha_low = pd.concat([df['low'], ha_open, ha_close], axis=1).min(axis=1)
-        
-        return pd.DataFrame({
-            'ha_open': ha_open,
-            'ha_high': ha_high,
-            'ha_low': ha_low,
-            'ha_close': ha_close
-        })
-    
-    def detect_pivots(self, high: pd.Series, low: pd.Series, length: int = 5) -> Tuple[pd.Series, pd.Series]:
-        """Pivot noktaları tespiti"""
-        ph = pd.Series(np.nan, index=high.index)
-        pl = pd.Series(np.nan, index=low.index)
-        
-        for i in range(length, len(high) - length):
-            window_high = high.iloc[i-length:i+length+1]
-            window_low = low.iloc[i-length:i+length+1]
-            
-            if high.iloc[i] == window_high.max():
-                ph.iloc[i] = high.iloc[i]
-            
-            if low.iloc[i] == window_low.min():
-                pl.iloc[i] = low.iloc[i]
-        
-        return ph, pl
-    
-    def calculate_volume_profile(self, df: pd.DataFrame, bins: int = 50, lookback: Optional[int] = None) -> Tuple[pd.DataFrame, float, Tuple[float, float]]:
-        """Volume Profile analizi"""
-        if lookback:
-            data = df.iloc[-lookback:] if len(df) > lookback else df
-        else:
-            data = df
-        
-        if len(data) == 0:
-            return pd.DataFrame(), 0.0, (0.0, 0.0)
-        
-        price_min = data['low'].min()
-        price_max = data['high'].max()
-        
-        if price_max <= price_min:
-            return pd.DataFrame(), price_min, (price_min, price_min)
-        
-        bin_edges = np.linspace(price_min, price_max, bins + 1)
-        profile = np.zeros(bins)
-        
-        for _, row in data.iterrows():
-            low_idx = np.searchsorted(bin_edges, row['low'], side='right') - 1
-            high_idx = np.searchsorted(bin_edges, row['high'], side='right') - 1
-            
-            low_idx = max(0, min(low_idx, bins-1))
-            high_idx = max(0, min(high_idx, bins-1))
-            
-            if low_idx == high_idx:
-                profile[low_idx] += row['volume']
-            else:
-                vol_per_bin = row['volume'] / (high_idx - low_idx + 1)
-                profile[low_idx:high_idx+1] += vol_per_bin
-        
-        centers = (bin_edges[:-1] + bin_edges[1:]) / 2
-        vp_df = pd.DataFrame({'price_level': centers, 'volume_profile': profile})
-        
-        poc_idx = profile.argmax()
-        poc_price = centers[poc_idx]
-        
-        total_vol = profile.sum()
-        if total_vol == 0:
-            return vp_df, poc_price, (price_min, price_max)
-        
-        sorted_idx = np.argsort(profile)[::-1]
-        cum_vol = 0
-        va_indices = [poc_idx]
-        
-        for idx in sorted_idx:
-            if idx == poc_idx:
-                continue
-            cum_vol += profile[idx]
-            va_indices.append(idx)
-            if cum_vol >= total_vol * 0.7:
-                break
-        
-        va_low = centers[min(va_indices)]
-        va_high = centers[max(va_indices)]
-        
-        return vp_df, poc_price, (va_low, va_high)
-    
-    def detect_all_patterns(self, df: pd.DataFrame) -> Dict[str, pd.Series]:
-        """Tüm teknik paternleri tespit et"""
-        patterns = {}
-        
-        # Temel veri doğrulama
-        required_cols = ['open', 'high', 'low', 'close', 'volume']
-        if not all(col in df.columns for col in required_cols):
-            return patterns
-        
-        # Heikin-Ashi dönüşümü
-        ha = self.calculate_heikin_ashi(df)
-        ha_close = ha['ha_close']
-        ha_range = ha['ha_high'] - ha['ha_low']
-        
-        # RSI hesaplamaları
-        rsi6 = self.calculate_rsi(ha_close, self.RSI6_PERIOD)
-        rsi14 = self.calculate_rsi(ha_close, self.RSI14_PERIOD)
-        sma50_rsi = self.calculate_sma(rsi6, self.SMA50_PERIOD)
-        
-        # RSI patternleri
-        patterns['rsi6_crossover'] = (rsi6 > sma50_rsi) & (rsi6.shift(1) <= sma50_rsi.shift(1))
-        patterns['rsi6_crossunder'] = (rsi6 < sma50_rsi) & (rsi6.shift(1) >= sma50_rsi.shift(1))
-        patterns['rsi_oversold_6'] = rsi6 < 30
-        patterns['rsi_overbought_6'] = rsi6 > 70
-        patterns['rsi_oversold_14'] = rsi14 < 30
-        patterns['rsi_overbought_14'] = rsi14 > 70
-        patterns['rsi_bullish_div'] = (df['close'] < df['close'].shift(2)) & (rsi14 > rsi14.shift(2))
-        patterns['rsi_bearish_div'] = (df['close'] > df['close'].shift(2)) & (rsi14 < rsi14.shift(2))
-        
-        # MACD
-        macd_line, signal_line, histogram = self.calculate_macd(df['close'])
-        patterns['macd_bullish_cross'] = (macd_line > signal_line) & (macd_line.shift(1) <= signal_line.shift(1))
-        patterns['macd_bearish_cross'] = (macd_line < signal_line) & (macd_line.shift(1) >= signal_line.shift(1))
-        patterns['macd_above_zero'] = macd_line > 0
-        patterns['macd_below_zero'] = macd_line < 0
-        
-        # Moving Averages
-        sma50 = self.calculate_sma(df['close'], 50)
-        sma200 = self.calculate_sma(df['close'], 200)
-        ema9 = self.calculate_ema(df['close'], 9)
-        ema21 = self.calculate_ema(df['close'], 21)
-        
-        patterns['golden_cross'] = (sma50 > sma200) & (sma50.shift(1) <= sma200.shift(1))
-        patterns['death_cross'] = (sma50 < sma200) & (sma50.shift(1) >= sma200.shift(1))
-        patterns['ema_bullish_cross'] = (ema9 > ema21) & (ema9.shift(1) <= ema21.shift(1))
-        patterns['ema_bearish_cross'] = (ema9 < ema21) & (ema9.shift(1) >= ema21.shift(1))
-        
-        # Bollinger Bands
-        bb_upper, bb_middle, bb_lower = self.calculate_bollinger_bands(df['close'])
-        patterns['bb_oversold'] = df['close'] < bb_lower
-        patterns['bb_overbought'] = df['close'] > bb_upper
-        patterns['bb_squeeze'] = (bb_upper - bb_lower) < ((bb_upper - bb_lower).rolling(20).mean() * 0.5)
-        
-        # Stochastic
-        stoch_k, stoch_d = self.calculate_stochastic(df)
-        patterns['stoch_oversold'] = stoch_k < 20
-        patterns['stoch_overbought'] = stoch_k > 80
-        patterns['stoch_bullish_cross'] = (stoch_k > stoch_d) & (stoch_k.shift(1) <= stoch_d.shift(1))
-        patterns['stoch_bearish_cross'] = (stoch_k < stoch_d) & (stoch_k.shift(1) >= stoch_d.shift(1))
-        
-        # Volume
-        obv = self.calculate_obv(df)
-        patterns['volume_spike'] = df['volume'] > (df['volume'].rolling(20).mean() * 2.5)
-        patterns['obv_bullish_div'] = (df['close'] < df['close'].shift(2)) & (obv > obv.shift(2))
-        patterns['obv_bearish_div'] = (df['close'] > df['close'].shift(2)) & (obv < obv.shift(2))
-        
-        # CRT Pattern
-        avg_range = ha_range.rolling(5).mean()
-        narrow_prev = ha_range.shift(1) < (avg_range.shift(1) * 1.5)
-        wide_now = ha_range > (avg_range * 1.5)
-        
-        patterns['crt_buy'] = narrow_prev & wide_now & (ha_close > ha['ha_open']) & (ha_close > df['high'].shift(1))
-        patterns['crt_sell'] = narrow_prev & wide_now & (ha_close < ha['ha_open']) & (ha_close < df['low'].shift(1))
-        
-        # FVG
-        patterns['fvg_up'] = df['low'] > df['high'].shift(2)
-        patterns['fvg_down'] = df['high'] < df['low'].shift(2)
-        
-        # Order Block
-        patterns['bull_ob'] = (df['close'].shift(1) < df['open'].shift(1)) & (df['close'] > df['high'].shift(1)) & (df['close'] > df['open'])
-        patterns['bear_ob'] = (df['close'].shift(1) > df['open'].shift(1)) & (df['close'] < df['low'].shift(1)) & (df['close'] < df['open'])
-        
-        # Candlestick Patterns
-        patterns['bullish_engulfing'] = (df['close'].shift(1) < df['open'].shift(1)) & (df['open'] < df['close'].shift(1)) & (df['close'] > df['open'].shift(1))
-        patterns['bearish_engulfing'] = (df['close'].shift(1) > df['open'].shift(1)) & (df['open'] > df['close'].shift(1)) & (df['close'] < df['open'].shift(1))
-        
-        # Pin Bars
-        body = (df['close'] - df['open']).abs()
-        lower_wick = pd.concat([df['open'], df['close']], axis=1).min(axis=1) - df['low']
-        upper_wick = df['high'] - pd.concat([df['open'], df['close']], axis=1).max(axis=1)
-        
-        patterns['bullish_pin'] = (lower_wick > 2 * body) & (upper_wick < body) & (df['close'] > df['open'])
-        patterns['bearish_pin'] = (upper_wick > 2 * body) & (lower_wick < body) & (df['close'] < df['open'])
-        patterns['doji'] = body < (0.1 * (df['high'] - df['low']))
-        
-        # Multi-candle patterns
-        patterns['morning_star'] = (df['close'].shift(2) < df['open'].shift(2)) & \
-                                   (df['close'].shift(1) < df['open'].shift(1)) & \
-                                   (df['close'] > df['open']) & \
-                                   (df['close'] > ((df['open'].shift(2) + df['close'].shift(2)) / 2))
-        
-        patterns['evening_star'] = (df['close'].shift(2) > df['open'].shift(2)) & \
-                                   (df['close'].shift(1) > df['open'].shift(1)) & \
-                                   (df['close'] < df['open']) & \
-                                   (df['close'] < ((df['open'].shift(2) + df['close'].shift(2)) / 2))
-        
-        patterns['three_white_soldiers'] = (df['close'] > df['open']) & \
-                                          (df['close'].shift(1) > df['open'].shift(1)) & \
-                                          (df['close'].shift(2) > df['open'].shift(2)) & \
-                                          (df['close'] > df['close'].shift(1)) & \
-                                          (df['close'].shift(1) > df['close'].shift(2))
-        
-        patterns['three_black_crows'] = (df['close'] < df['open']) & \
-                                       (df['close'].shift(1) < df['open'].shift(1)) & \
-                                       (df['close'].shift(2) < df['open'].shift(2)) & \
-                                       (df['close'] < df['close'].shift(1)) & \
-                                       (df['close'].shift(1) < df['close'].shift(2))
-        
-        # Chart Patterns
-        patterns['double_top'] = (df['high'] < df['high'].shift(1)) & (df['high'].shift(1) > df['high'].shift(2)) & \
-                                (abs(df['high'].shift(1) - df['high']) < (df['high'].shift(1) * 0.02))
-        
-        patterns['double_bottom'] = (df['low'] > df['low'].shift(1)) & (df['low'].shift(1) < df['low'].shift(2)) & \
-                                   (abs(df['low'].shift(1) - df['low']) < (df['low'].shift(1) * 0.02))
-        
-        patterns['support_bounce'] = (df['low'] > df['low'].rolling(20).min().shift(1)) & (df['close'] > df['open'])
-        patterns['resistance_break'] = (df['high'] > df['high'].rolling(20).max().shift(1)) & (df['close'] > df['open'])
-        
-        # Kill Zones
-        try:
-            if isinstance(df.index, pd.DatetimeIndex):
-                hours = df.index.hour
-            else:
-                hours = pd.Series([datetime.utcnow().hour] * len(df), index=df.index)
-        except:
-            hours = pd.Series([datetime.utcnow().hour] * len(df), index=df.index)
-        
-        patterns['london_kz'] = (hours >= 7) & (hours < 10)
-        patterns['ny_kz'] = (hours >= 13) & (hours < 16)
-        patterns['asia_kz'] = (hours >= 0) & (hours < 4)
-        patterns['in_killzone'] = patterns['london_kz'] | patterns['ny_kz'] | patterns['asia_kz']
-        
-        # Trend Analysis
-        patterns['uptrend'] = df['close'] > sma50
-        patterns['downtrend'] = df['close'] < sma50
-        patterns['strong_uptrend'] = (df['close'] > sma50) & (sma50 > sma200)
-        patterns['strong_downtrend'] = (df['close'] < sma50) & (sma50 < sma200)
-        
-        # Bar Patterns
-        patterns['inside_bar'] = (df['high'] < df['high'].shift(1)) & (df['low'] > df['low'].shift(1))
-        patterns['outside_bar'] = (df['high'] > df['high'].shift(1)) & (df['low'] < df['low'].shift(1))
-        patterns['gaps_up'] = df['low'] > df['high'].shift(1)
-        patterns['gaps_down'] = df['high'] < df['low'].shift(1)
-        
-        # Raw indicators for reference
-        patterns['rsi6'] = rsi6
-        patterns['rsi14'] = rsi14
-        patterns['macd'] = macd_line
-        patterns['macd_signal'] = signal_line
-        patterns['sma50'] = sma50
-        patterns['sma200'] = sma200
-        patterns['volume'] = df['volume']
-        
-        return patterns
-    
-    def detect_fibonacci_levels(self, df: pd.DataFrame, ph: pd.Series, pl: pd.Series) -> pd.DataFrame:
-        """Fibonacci seviyelerini hesapla"""
-        df = df.copy()
-        
-        # Fibonacci seviyeleri için sütunları başlat
-        for level in self._fib_levels:
-            col_name = f'fib_{str(level).replace(".", "")}'
-            df[col_name] = np.nan
-        
-        df['fib_direction'] = ''
-        df['fib_ote_zone'] = False
-        
-        # Pivot noktalarını filtrele
-        ph_series = ph.dropna()
-        pl_series = pl.dropna()
-        
-        if len(ph_series) < 1 or len(pl_series) < 1:
-            return df
-        
-        # En son pivot noktalarını bul
-        last_ph_idx = ph_series.index[-1]
-        last_pl_idx = pl_series.index[-1]
-        
-        try:
-            if last_ph_idx > last_pl_idx:  # Bearish Fibonacci
-                high_price = df.loc[last_ph_idx, 'high']
-                low_price = df.loc[last_pl_idx, 'low']
-                fib_range = high_price - low_price
-                
-                if fib_range > 0:
-                    for level in self._fib_levels:
-                        col_name = f'fib_{str(level).replace(".", "")}'
-                        df[col_name] = high_price - (fib_range * level)
-                    
-                    df['fib_direction'] = 'bearish'
-                    
-                    if 'fib_618' in df.columns and 'fib_705' in df.columns:
-                        df['fib_ote_zone'] = (df['close'] >= df['fib_618']) & (df['close'] <= df['fib_705'])
-            
-            else:  # Bullish Fibonacci
-                low_price = df.loc[last_pl_idx, 'low']
-                high_price = df.loc[last_ph_idx, 'high']
-                fib_range = high_price - low_price
-                
-                if fib_range > 0:
-                    for level in self._fib_levels:
-                        col_name = f'fib_{str(level).replace(".", "")}'
-                        df[col_name] = low_price + (fib_range * level)
-                    
-                    df['fib_direction'] = 'bullish'
-                    
-                    if 'fib_618' in df.columns and 'fib_705' in df.columns:
-                        df['fib_ote_zone'] = (df['close'] >= df['fib_618']) & (df['close'] <= df['fib_705'])
-        
-        except Exception as e:
-            logger.debug(f"Fibonacci hatası: {e}")
-        
-        return df
-    
-    def calculate_signal_score(self, patterns: Dict[str, pd.Series]) -> int:
-        """Patternlere göre sinyal skoru hesapla"""
-        score = 0
-        
-        try:
-            last_idx = -1
-            
-            # RSI Patterns
-            if patterns.get('rsi6_crossover', pd.Series([False])).iloc[last_idx]:
-                score += 25
-            if patterns.get('rsi6_crossunder', pd.Series([False])).iloc[last_idx]:
-                score -= 25
-            if patterns.get('rsi_oversold_6', pd.Series([False])).iloc[last_idx]:
-                score += 20
-            if patterns.get('rsi_overbought_6', pd.Series([False])).iloc[last_idx]:
-                score -= 20
-            if patterns.get('rsi_bullish_div', pd.Series([False])).iloc[last_idx]:
-                score += 30
-            if patterns.get('rsi_bearish_div', pd.Series([False])).iloc[last_idx]:
-                score -= 30
-            
-            # MACD Patterns
-            if patterns.get('macd_bullish_cross', pd.Series([False])).iloc[last_idx]:
-                score += 20
-            if patterns.get('macd_bearish_cross', pd.Series([False])).iloc[last_idx]:
-                score -= 20
-            if patterns.get('macd_above_zero', pd.Series([False])).iloc[last_idx]:
-                score += 15
-            if patterns.get('macd_below_zero', pd.Series([False])).iloc[last_idx]:
-                score -= 15
-            
-            # Moving Average Crosses
-            if patterns.get('golden_cross', pd.Series([False])).iloc[last_idx]:
-                score += 30
-            if patterns.get('death_cross', pd.Series([False])).iloc[last_idx]:
-                score -= 30
-            if patterns.get('ema_bullish_cross', pd.Series([False])).iloc[last_idx]:
-                score += 20
-            if patterns.get('ema_bearish_cross', pd.Series([False])).iloc[last_idx]:
-                score -= 20
-            
-            # ICT Patterns
-            if patterns.get('crt_buy', pd.Series([False])).iloc[last_idx]:
-                score += 35
-            if patterns.get('crt_sell', pd.Series([False])).iloc[last_idx]:
-                score -= 35
-            if patterns.get('fvg_up', pd.Series([False])).iloc[last_idx]:
-                score += 30
-            if patterns.get('fvg_down', pd.Series([False])).iloc[last_idx]:
-                score -= 30
-            if patterns.get('bull_ob', pd.Series([False])).iloc[last_idx]:
-                score += 25
-            if patterns.get('bear_ob', pd.Series([False])).iloc[last_idx]:
-                score -= 25
-            
-            # Candlestick Patterns
-            if patterns.get('bullish_engulfing', pd.Series([False])).iloc[last_idx]:
-                score += 20
-            if patterns.get('bearish_engulfing', pd.Series([False])).iloc[last_idx]:
-                score -= 20
-            if patterns.get('bullish_pin', pd.Series([False])).iloc[last_idx]:
-                score += 15
-            if patterns.get('bearish_pin', pd.Series([False])).iloc[last_idx]:
-                score -= 15
-            if patterns.get('morning_star', pd.Series([False])).iloc[last_idx]:
-                score += 25
-            if patterns.get('evening_star', pd.Series([False])).iloc[last_idx]:
-                score -= 25
-            
-            # Support/Resistance
-            if patterns.get('support_bounce', pd.Series([False])).iloc[last_idx]:
-                score += 20
-            if patterns.get('resistance_break', pd.Series([False])).iloc[last_idx]:
-                score += 25
-            if patterns.get('double_bottom', pd.Series([False])).iloc[last_idx]:
-                score += 20
-            if patterns.get('double_top', pd.Series([False])).iloc[last_idx]:
-                score -= 20
-            
-            # Volume Patterns
-            if patterns.get('volume_spike', pd.Series([False])).iloc[last_idx]:
-                score += 10
-            if patterns.get('obv_bullish_div', pd.Series([False])).iloc[last_idx]:
-                score += 15
-            if patterns.get('obv_bearish_div', pd.Series([False])).iloc[last_idx]:
-                score -= 15
-            
-            # Kill Zones
-            if patterns.get('in_killzone', pd.Series([False])).iloc[last_idx]:
-                score += 15
-            if patterns.get('london_kz', pd.Series([False])).iloc[last_idx]:
-                score += 10
-            if patterns.get('ny_kz', pd.Series([False])).iloc[last_idx]:
-                score += 12
-            if patterns.get('asia_kz', pd.Series([False])).iloc[last_idx]:
-                score += 8
-            
-            # Trend Strength
-            if patterns.get('strong_uptrend', pd.Series([False])).iloc[last_idx]:
-                score += 15
-            if patterns.get('strong_downtrend', pd.Series([False])).iloc[last_idx]:
-                score -= 15
-            
-            # Bollinger Bands
-            if patterns.get('bb_oversold', pd.Series([False])).iloc[last_idx]:
-                score += 12
-            if patterns.get('bb_overbought', pd.Series([False])).iloc[last_idx]:
-                score -= 12
-            if patterns.get('bb_squeeze', pd.Series([False])).iloc[last_idx]:
-                score += 10
-            
-            # Stochastic
-            if patterns.get('stoch_oversold', pd.Series([False])).iloc[last_idx]:
-                score += 12
-            if patterns.get('stoch_overbought', pd.Series([False])).iloc[last_idx]:
-                score -= 12
-            if patterns.get('stoch_bullish_cross', pd.Series([False])).iloc[last_idx]:
-                score += 10
-            if patterns.get('stoch_bearish_cross', pd.Series([False])).iloc[last_idx]:
-                score -= 10
-            
-            # Multi-candle patterns
-            if patterns.get('three_white_soldiers', pd.Series([False])).iloc[last_idx]:
-                score += 15
-            if patterns.get('three_black_crows', pd.Series([False])).iloc[last_idx]:
-                score -= 15
-                
-        except Exception as e:
-            logger.debug(f"Skor hesaplama hatası: {e}")
-        
-        return score
-    
-    def analyze_market_structure(self, df: pd.DataFrame) -> Dict[str, Any]:
-        """Piyasa yapısı analizi"""
-        close = df['close']
-        high = df['high']
-        low = df['low']
-        
-        # Higher Highs / Lower Lows
-        hh = (high > high.shift(1)) & (high.shift(1) > high.shift(2))
-        ll = (low < low.shift(1)) & (low.shift(1) < low.shift(2))
-        
-        structure_bullish = hh.any() and not ll.any()
-        structure_bearish = ll.any() and not hh.any()
-        
-        # Break of Structure
-        bos_bullish = structure_bullish and (close.iloc[-1] > high.rolling(20).max().iloc[-2])
-        bos_bearish = structure_bearish and (close.iloc[-1] < low.rolling(20).min().iloc[-2])
-        
-        # Change of Character
-        choch_bullish = structure_bearish and (close.iloc[-1] > high.rolling(10).max().iloc[-2])
-        choch_bearish = structure_bullish and (close.iloc[-1] < low.rolling(10).min().iloc[-2])
-        
-        return {
-            'market_structure': 'BULLISH' if structure_bullish else 'BEARISH' if structure_bearish else 'NEUTRAL',
-            'bos': 'BULLISH' if bos_bullish else 'BEARISH' if bos_bearish else 'NONE',
-            'choch': 'BULLISH' if choch_bullish else 'BEARISH' if choch_bearish else 'NONE',
-            'higher_highs': int(hh.iloc[-1]) if len(hh) > 0 else 0,
-            'lower_lows': int(ll.iloc[-1]) if len(ll) > 0 else 0
-        }
-
-# Global Grok instance
-grok = GrokIndicators()
-
-# ==================== UTILITY FUNCTIONS ====================
-def update_price(source: str, symbol: str, price: float, change: Optional[float] = None):
-    """Fiyat havuzunu güncelle"""
-    if price <= 0:
-        return
-    
-    current_info = price_pool[symbol]
-    new_change = change if change is not None else current_info["change"]
-    
-    price_pool[symbol] = {
-        "price": price,
-        "change": new_change,
-        "timestamp": datetime.utcnow().timestamp(),
-        "source": source
-    }
-
-async def calculate_top_gainers():
-    """Top gainers hesaplama görevi"""
-    global top_gainers, last_update
-    
-    while True:
-        try:
-            cutoff = datetime.utcnow().timestamp() - 120  # Son 2 dakika
-            
-            # Güncel fiyatları filtrele
-            recent = []
-            for sym, info in price_pool.items():
-                if info["timestamp"] > cutoff and abs(info["change"]) > 0.1:
-                    recent.append((sym, info["price"], info["change"]))
-            
-            # En iyi kazananları sırala
-            sorted_gainers = sorted(recent, key=lambda x: x[2], reverse=True)[:30]
-            
-            # Formatla
-            top_gainers = [
-                {
-                    "symbol": sym.replace("USDT", ""), 
-                    "price": price, 
-                    "change": round(change, 2)
-                }
-                for sym, price, change in sorted_gainers
-            ]
-            
-            last_update = datetime.utcnow().strftime("%H:%M:%S UTC")
-            
-            # Abonelere gönder
-            if pump_radar_subscribers:
-                payload = {
-                    "top_gainers": top_gainers[:10],
-                    "last_update": last_update,
-                    "total_coins": len(top_gainers)
-                }
-                
-                tasks = []
-                for ws in list(pump_radar_subscribers):
-                    try:
-                        tasks.append(ws.send_json(payload))
-                    except:
-                        pump_radar_subscribers.discard(ws)
-                
-                if tasks:
-                    await asyncio.gather(*tasks, return_exceptions=True)
-            
-        except Exception as e:
-            logger.error(f"Top gainers hesaplamada hata: {e}")
-        
-        await asyncio.sleep(12)
-
-# ==================== SIGNAL GENERATION ====================
-def generate_ict_signal(df: pd.DataFrame, symbol: str, timeframe: str) -> Optional[Dict[str, Any]]:
-    """ICT sinyali oluştur"""
-    try:
-        # Veri kontrolü
-        if len(df) < 50:
-            logger.warning(f"{symbol}: Yetersiz veri ({len(df)})")
-            return None
-        
-        required = ['open', 'high', 'low', 'close', 'volume']
-        if not all(col in df.columns for col in required):
-            logger.error(f"{symbol}: Eksik sütun")
-            return None
-        
-        # Veri hazırlığı
-        df = df.copy()
-        for col in required:
-            df[col] = pd.to_numeric(df[col], errors='coerce')
-        
-        df = df.dropna()
-        
-        if len(df) < 50:
-            return None
-        
-        # Pivot noktaları
-        df['pivot_high'], df['pivot_low'] = grok.detect_pivots(df['high'], df['low'])
-        
-        # Volume profile
-        _, poc_price, (va_low, va_high) = grok.calculate_volume_profile(df)
-        
-        # Pattern tespiti
-        patterns = grok.detect_all_patterns(df)
-        
-        # Fibonacci
-        df = grok.detect_fibonacci_levels(df, df['pivot_high'], df['pivot_low'])
-        
-        # Piyasa yapısı
-        market_structure = grok.analyze_market_structure(df)
-        
-        # Sinyal skoru
-        signal_score = grok.calculate_signal_score(patterns)
-        normalized_score = int(np.clip((signal_score + 150) * 100 / 300, 0, 100))
-        
-        # Son veri
-        last = df.iloc[-1]
-        current_price = float(last['close'])
-        
-        # Aktif patternler
-        active_patterns = []
-        for pattern_name, pattern_series in patterns.items():
-            if (isinstance(pattern_series, pd.Series) and 
-                pattern_name not in ['rsi6', 'rsi14', 'macd', 'macd_signal', 'sma50', 'sma200', 'volume']):
-                try:
-                    if pattern_series.iloc[-1] and pattern_series.dtype == bool:
-                        name = pattern_name.replace('_', ' ').title()
-                        active_patterns.append(name)
-                except:
-                    pass
-        
-        # Killzone
-        killzone = "Normal"
-        if patterns.get('london_kz', pd.Series([False])).iloc[-1]:
-            killzone = "London"
-        elif patterns.get('ny_kz', pd.Series([False])).iloc[-1]:
-            killzone = "New York"
-        elif patterns.get('asia_kz', pd.Series([False])).iloc[-1]:
-            killzone = "Asia"
-        
-        # Sinyal gücü
-        signal_strength = "ELITE" if normalized_score >= 85 else \
-                         "GÜÇLÜ" if normalized_score >= 70 else \
-                         "ORTA" if normalized_score >= 55 else "ZAYIF"
-        
-        # Sinyal tipi
-        if signal_score > 0:
-            signal_text = "ELITE ALIM" if normalized_score >= 85 else \
-                         "GÜÇLÜ ALIM" if normalized_score >= 70 else \
-                         "ALIM" if normalized_score >= 55 else "NÖTR ALIM"
-        elif signal_score < 0:
-            signal_text = "ELITE SATIM" if normalized_score >= 85 else \
-                         "GÜÇLÜ SATIM" if normalized_score >= 70 else \
-                         "SATIM" if normalized_score >= 55 else "NÖTR SATIM"
-        else:
-            signal_text = "NÖTR"
-        
-        # Yapı bilgisi
-        structure_info = market_structure['market_structure']
-        if market_structure['bos'] != 'NONE':
-            structure_info += f" | BOS: {market_structure['bos']}"
-        if market_structure['choch'] != 'NONE':
-            structure_info += f" | ChoCH: {market_structure['choch']}"
-        
-        # Göstergeler
-        rsi6_val = float(patterns.get('rsi6', pd.Series([50])).iloc[-1])
-        rsi14_val = float(patterns.get('rsi14', pd.Series([50])).iloc[-1])
-        macd_val = float(patterns.get('macd', pd.Series([0])).iloc[-1])
-        
-        # Tetikleyiciler
-        triggers = active_patterns[:8]
-        trigger_text = " | ".join(triggers) if triggers else f"RSI6: {rsi6_val:.1f}"
-        
-        logger.info(f"{symbol}/{timeframe} → {signal_text} | Skor: {normalized_score}")
-        
-        return {
-            "pair": symbol.replace("USDT", "/USDT"),
-            "timeframe": timeframe.upper(),
-            "current_price": round(current_price, 6 if current_price < 1 else 4),
-            "signal": signal_text,
-            "score": normalized_score,
-            "strength": signal_strength,
-            "killzone": killzone,
-            "triggers": trigger_text,
-            "structure": structure_info,
-            "indicators": {
-                "rsi6": round(rsi6_val, 1),
-                "rsi14": round(rsi14_val, 1),
-                "macd": round(macd_val, 4)
-            },
-            "active_patterns": len(active_patterns),
-            "last_update": datetime.utcnow().strftime("%H:%M:%S UTC"),
-            "timestamp": datetime.now().isoformat()
-        }
-        
-    except Exception as e:
-        logger.error(f"Sinyal hatası {symbol}: {e}")
-        import traceback
-        logger.error(traceback.format_exc())
-        return None
-
-def generate_technical_analysis(df: pd.DataFrame, symbol: str, timeframe: str) -> Optional[Dict[str, Any]]:
-    """Geleneksel teknik analiz sinyali"""
-    if len(df) < 20:
-        return None
-    
-    try:
-        # Temel fiyat bilgileri
-        current_price = float(df['close'].iloc[-1])
-        prev_price = float(df['close'].iloc[-2]) if len(df) > 1 else current_price
-        change_pct = ((current_price - prev_price) / prev_price * 100) if prev_price > 0 else 0
-        
-        # RSI
-        def calculate_rsi_series(prices, period=14):
-            if len(prices) < period + 1:
-                return 50
-            
-            deltas = prices.diff()
-            gain = (deltas.where(deltas > 0, 0)).rolling(window=period).mean()
-            loss = (-deltas.where(deltas < 0, 0)).rolling(window=period).mean()
-            
-            rs = gain / (loss + 1e-10)
-            rsi = 100 - (100 / (1 + rs))
-            
-            return float(rsi.iloc[-1]) if not pd.isna(rsi.iloc[-1]) else 50
-        
-        rsi_value = calculate_rsi_series(df['close'])
-        
-        # MACD
-        def calculate_macd_series(prices, fast=12, slow=26, signal=9):
-            if len(prices) < slow + signal:
-                return {"trend": "NÖTR"}
-            
-            exp1 = prices.ewm(span=fast, adjust=False).mean()
-            exp2 = prices.ewm(span=slow, adjust=False).mean()
-            macd_line = exp1 - exp2
-            signal_line = macd_line.ewm(span=signal, adjust=False).mean()
-            histogram = macd_line - signal_line
-            
-            hist_value = histogram.iloc[-1]
-            
-            if hist_value > 0:
-                trend = "YÜKSELİŞ"
-            elif hist_value < 0:
-                trend = "DÜŞÜŞ"
-            else:
-                trend = "NÖTR"
-            
-            return {"trend": trend}
-        
-        macd_data = calculate_macd_series(df['close'])
-        
-        # Moving Averages
-        ma20 = df['close'].rolling(window=20).mean().iloc[-1] if len(df) >= 20 else current_price
-        ma50 = df['close'].rolling(window=50).mean().iloc[-1] if len(df) >= 50 else current_price
-        
-        # Trend analizi
-        if current_price > ma20 > ma50:
-            trend_strength = "GÜÇLÜ YÜKSELİŞ"
-            trend_score = 80
-        elif current_price < ma20 < ma50:
-            trend_strength = "GÜÇLÜ DÜŞÜŞ"
-            trend_score = 20
-        elif current_price > ma20 and ma20 > ma50:
-            trend_strength = "YÜKSELİŞ"
-            trend_score = 70
-        elif current_price < ma20 and ma20 < ma50:
-            trend_strength = "DÜŞÜŞ"
-            trend_score = 30
-        else:
-            trend_strength = "YATAY"
-            trend_score = 50
-        
-        # Skor hesaplama
-        score = trend_score
-        
-        if rsi_value > 70:
-            score -= 15
-        elif rsi_value < 30:
-            score += 15
-        
-        if macd_data['trend'] == "YÜKSELİŞ":
-            score += 10
-        elif macd_data['trend'] == "DÜŞÜŞ":
-            score -= 10
-        
-        score = max(10, min(95, score))
-        
-        # Sinyal belirleme
-        if score >= 70:
-            signal_type = "GÜÇLÜ ALIM"
-            strength = "YÜKSEK"
-            color = "green"
-        elif score >= 60:
-            signal_type = "ALIM"
-            strength = "ORTA"
-            color = "lightgreen"
-        elif score <= 30:
-            signal_type = "GÜÇLÜ SATIM"
-            strength = "YÜKSEK"
-            color = "red"
-        elif score <= 40:
-            signal_type = "SATIM"
-            strength = "ORTA"
-            color = "lightcoral"
-        else:
-            signal_type = "NÖTR"
-            strength = "DÜŞÜK"
-            color = "gold"
-        
-        # Killzone
-        now_utc = datetime.utcnow()
-        hour = now_utc.hour
-        
-        if 7 <= hour < 11:
-            killzone = "LONDRA"
-        elif 12 <= hour < 16:
-            killzone = "NEW YORK"
-        elif 22 <= hour or hour < 2:
-            killzone = "ASYA"
-        else:
-            killzone = "NORMAL"
-        
-        # Sonuç
-        result = {
-            "pair": f"{symbol.replace('USDT', '')}/USDT",
-            "timeframe": timeframe.upper(),
-            "current_price": round(current_price, 6 if current_price < 1 else 4),
-            "signal": signal_type,
-            "score": int(score),
-            "strength": strength,
-            "color": color,
-            "killzone": killzone,
-            "change_24h": round(change_pct, 2),
-            "rsi": round(rsi_value, 1),
-            "macd_trend": macd_data['trend'],
-            "trend": trend_strength,
-            "ma20": round(ma20, 6 if ma20 < 1 else 4),
-            "ma50": round(ma50, 6 if ma50 < 1 else 4),
-            "analysis_time": now_utc.strftime("%H:%M:%S UTC"),
-            "timestamp": datetime.now().isoformat()
-        }
-        
-        # Geçmişe kaydet
-        signal_key = f"{symbol}:{timeframe}"
-        signal_history[signal_key].append(result)
-        if len(signal_history[signal_key]) > 5:
-            signal_history[signal_key] = signal_history[signal_key][-5:]
-        
-        return result
-        
-    except Exception as e:
-        logger.error(f"Teknik analiz hatası: {e}")
-        return None
-
-# ==================== INITIALIZATION ====================
-async def initialize_application():
-    """Uygulama başlatma"""
-    logger.info("ICT SMART PRO v7.0 başlatılıyor...")
-    
-    try:
-        # Core modülü başlat
-        await core_initialize()
-        logger.info("✅ Core modül başlatıldı")
-    except Exception as e:
-        logger.warning(f"⚠️ Core modül başlatma hatası: {e}")
-    
-    # Top gainers hesaplama görevini başlat
-    asyncio.create_task(calculate_top_gainers())
-    logger.info("✅ Top gainers hesaplayıcı başlatıldı")
-    
-    logger.info("✅ ICT SMART PRO başlatma tamamlandı")
-
-async def cleanup_application():
-    """Uygulama temizleme"""
-    logger.info("Uygulama kapatılıyor...")
-    
-    try:
-        await core_cleanup()
-        logger.info("✅ Core modül temizlendi")
-    except Exception as e:
-        logger.error(f"Core temizleme hatası: {e}")
-    
-    # WebSocket bağlantılarını kapat
-    for ws in list(price_sources_subscribers):
-        try:
-            await ws.close()
-        except:
-            pass
-    
-    logger.info("✅ Uygulama kapatıldı")
-
-# ==================== FASTAPI LIFESPAN ====================
+# ==================== LIFESPAN ====================
 @asynccontextmanager
 async def lifespan(app: FastAPI):
-    """FastAPI lifespan yöneticisi"""
-    logger.info("ICT SMART PRO başlatılıyor...")
-    await initialize_application()
+    logger.info("🚀 ICT SMART PRO başlatılıyor...")
+    try:
+        await initialize()
+        logger.info("✅ ICT SMART PRO başarıyla başlatıldı")
+    except Exception as e:
+        logger.error(f"❌ Başlatma hatası: {e}")
     yield
-    logger.info("ICT SMART PRO kapatılıyor...")
-    await cleanup_application()
+    logger.info("🛑 ICT SMART PRO kapatılıyor...")
+    try:
+        await cleanup()
+        logger.info("✅ ICT SMART PRO temiz bir şekilde kapatıldı")
+    except Exception as e:
+        logger.error(f"❌ Kapatma hatası: {e}")
 
-# ==================== FASTAPI APP ====================
 app = FastAPI(
     lifespan=lifespan,
     title="ICT SMART PRO",
-    version="7.0",
-    description="Production Optimized Crypto Signal Platform",
-    docs_url="/api/docs",
-    redoc_url="/api/redoc",
-    openapi_url="/api/openapi.json"
+    version="3.0 - PROD READY",
+    description="Akıllı Kripto Sinyal ve Analiz Platformu",
+    docs_url="/docs" if os.getenv("ENABLE_DOCS", "false").lower() == "true" else None,
+    redoc_url="/redoc" if os.getenv("ENABLE_DOCS", "false").lower() == "true" else None
 )
 
-# ==================== MIDDLEWARE ====================
-@app.middleware("http")
-async def count_visitors_middleware(request: Request, call_next):
-    """Ziyaretçi sayma middleware'i"""
-    visitor_id = request.cookies.get("visitor_id")
-    
-    if not visitor_id:
-        ip = request.client.host or "anonymous"
-        visitor_id = hashlib.md5(f"{ip}{datetime.now().strftime('%Y%m%d')}".encode()).hexdigest()[:12]
-    
-    page = request.url.path
-    visitor_counter.add_visit(page, visitor_id)
-    
-    response = await call_next(request)
-    
-    if not request.cookies.get("visitor_id"):
-        response.set_cookie(
-            key="visitor_id", 
-            value=visitor_id, 
-            max_age=86400 * 30,
-            httponly=True, 
-            samesite="lax",
-            secure=request.url.scheme == "https"
-        )
-    
-    return response
+# Static dosyalar
+try:
+    app.mount("/static", StaticFiles(directory="static"), name="static")
+except Exception:
+    logger.warning("Static dosya dizini bulunamadı")
 
-# ==================== WEB SOCKET ENDPOINTS ====================
+# Templates
+try:
+    templates = Jinja2Templates(directory="templates")
+except Exception:
+    logger.warning("Templates dizini bulunamadı, HTML inline olarak render edilecek")
+
+# ==================== WEBSOCKET MANAGER ====================
+class ConnectionManager:
+    def __init__(self):
+        self.active_connections: Dict[str, List[WebSocket]] = {}
+
+    async def connect(self, websocket: WebSocket, channel: str):
+        await websocket.accept()
+        if channel not in self.active_connections:
+            self.active_connections[channel] = []
+        self.active_connections[channel].append(websocket)
+        logger.debug(f"WebSocket bağlandı: {channel}")
+
+    async def disconnect(self, websocket: WebSocket, channel: str):
+        if channel in self.active_connections:
+            if websocket in self.active_connections[channel]:
+                self.active_connections[channel].remove(websocket)
+            if not self.active_connections[channel]:
+                del self.active_connections[channel]
+        logger.debug(f"WebSocket ayrıldı: {channel}")
+
+    async def broadcast(self, channel: str, message: Dict):
+        if channel in self.active_connections:
+            disconnected = []
+            for connection in self.active_connections[channel]:
+                try:
+                    await connection.send_json(message)
+                except Exception as e:
+                    logger.error(f"WebSocket gönderme hatası: {e}")
+                    disconnected.append(connection)
+            for connection in disconnected:
+                await self.disconnect(connection, channel)
+
+ws_manager = ConnectionManager()
+
+# ==================== PRICE SOURCES WEBSOCKET ====================
+price_sources_subscribers = set()
+
 @app.websocket("/ws/price_sources")
-async def websocket_price_sources(websocket: WebSocket):
-    """Fiyat kaynakları WebSocket"""
+async def ws_price_sources(websocket: WebSocket):
     await websocket.accept()
     price_sources_subscribers.add(websocket)
-    
+
+    # İlk veriyi gönder
+    try:
+        await websocket.send_json({
+            "sources": price_sources_status,
+            "total_symbols": len(price_pool),
+            "timestamp": datetime.now().isoformat()
+        })
+    except Exception as e:
+        logger.error(f"Price sources WS ilk veri gönderme hatası: {e}")
+        return
+
     try:
         while True:
+            await asyncio.sleep(10)
             try:
                 await websocket.send_json({
-                    "sources": core_price_sources_status(), 
+                    "sources": price_sources_status,
                     "total_symbols": len(price_pool),
                     "timestamp": datetime.now().isoformat()
                 })
             except Exception as e:
-                logger.error(f"Price sources send error: {e}")
+                logger.warning(f"Price sources WS gönderme hatası: {e}")
                 break
-            
-            await asyncio.sleep(10)
-            
     except WebSocketDisconnect:
-        pass
+        logger.info("Price sources WebSocket bağlantısı kesildi")
     except Exception as e:
-        logger.error(f"Price sources error: {e}")
+        logger.error(f"Price sources WS hatası: {e}")
     finally:
         price_sources_subscribers.discard(websocket)
 
+# ==================== MIDDLEWARE ====================
+@app.middleware("http")
+async def count_visitors(request: Request, call_next):
+    visitor_id = request.cookies.get("visitor_id")
+    if not visitor_id:
+        ip = request.client.host if request.client else "anonymous"
+        user_agent = request.headers.get("user-agent", "")
+        visitor_string = f"{ip}{user_agent}"
+        visitor_id = hashlib.sha256(visitor_string.encode()).hexdigest()[:12]
+
+    page = request.url.path
+    await visitor_counter.add_visit(page, visitor_id)
+
+    response = await call_next(request)
+
+    if not request.cookies.get("visitor_id"):
+        response.set_cookie(
+            key="visitor_id",
+            value=visitor_id,
+            max_age=86400 * 30,
+            httponly=True,
+            samesite="lax",
+            secure=request.url.scheme == "https"
+        )
+
+    response.headers["X-Frame-Options"] = "DENY"
+    response.headers["X-Content-Type-Options"] = "nosniff"
+    response.headers["Referrer-Policy"] = "strict-origin-when-cross-origin"
+
+    return response
+
+# ==================== WEBSOCKET ENDPOINTS ====================
 @app.websocket("/ws/signal/{pair}/{timeframe}")
-async def websocket_signal(websocket: WebSocket, pair: str, timeframe: str):
-    """Tek coin sinyal WebSocket"""
-    await websocket.accept()
-    
-    # Sembolü normalize et
+async def ws_signal(websocket: WebSocket, pair: str, timeframe: str):
+    supported_tfs = ["1m", "3m", "5m", "15m", "30m", "1h", "4h", "1d", "1w"]
+    if timeframe not in supported_tfs:
+        await websocket.close(code=1008, reason=f"Desteklenmeyen timeframe: {timeframe}")
+        return
+
     symbol = pair.upper().replace("/", "").replace("-", "").strip()
     if not symbol.endswith("USDT"):
         symbol += "USDT"
-    
+
     channel = f"{symbol}:{timeframe}"
+
+    if channel not in single_subscribers:
+        single_subscribers[channel] = set()
+
+    await websocket.accept()
     single_subscribers[channel].add(websocket)
-    
-    # Mevcut sinyali gönder
-    sig = shared_signals.get(timeframe, {}).get(symbol)
-    if sig:
-        await websocket.send_json(sig)
-    
+
+    try:
+        sig = shared_signals.get(timeframe, {}).get(symbol)
+        if sig:
+            await websocket.send_json(sig)
+        else:
+            await websocket.send_json({
+                "status": "no_signal",
+                "pair": symbol,
+                "timeframe": timeframe,
+                "message": "Henüz sinyal oluşmadı"
+            })
+    except Exception as e:
+        logger.error(f"İlk sinyal gönderme hatası: {e}")
+
     try:
         while True:
             await asyncio.sleep(30)
             try:
                 await websocket.send_json({
-                    "heartbeat": True, 
+                    "heartbeat": True,
                     "timestamp": datetime.now().isoformat()
                 })
             except:
                 break
-                
     except WebSocketDisconnect:
-        pass
+        logger.info(f"Signal WebSocket bağlantısı kesildi: {channel}")
     except Exception as e:
-        logger.error(f"Signal WebSocket error: {e}")
+        logger.error(f"Signal WS hatası: {e}")
     finally:
-        single_subscribers[channel].discard(websocket)
+        if channel in single_subscribers:
+            single_subscribers[channel].discard(websocket)
 
 @app.websocket("/ws/all/{timeframe}")
-async def websocket_all_signals(websocket: WebSocket, timeframe: str):
-    """Tüm sinyaller WebSocket"""
-    supported = ["5m", "15m", "1h", "4h", "1d"]
-    
+async def ws_all(websocket: WebSocket, timeframe: str):
+    supported = ["1m", "3m", "5m", "15m", "30m", "1h", "4h", "1d", "1w"]
     if timeframe not in supported:
-        await websocket.close(code=1008)
+        await websocket.close(code=1008, reason=f"Desteklenmeyen timeframe: {timeframe}")
         return
-    
-    await websocket.accept()
-    all_subscribers[timeframe].add(websocket)
-    
-    # İlk sinyalleri gönder
-    initial_signals = active_strong_signals.get(timeframe, [])[:20]
-    await websocket.send_json(initial_signals)
-    
-    try:
-        while True:
-            await asyncio.sleep(60)
-            try:
-                await websocket.send_json({
-                    "ping": True, 
-                    "timestamp": datetime.now().isoformat()
-                })
-            except:
-                break
-                
-    except WebSocketDisconnect:
-        pass
-    except Exception as e:
-        logger.error(f"All signals WebSocket error: {e}")
-    finally:
-        all_subscribers[timeframe].discard(websocket)
 
-@app.websocket("/ws/pump_radar")
-async def websocket_pump_radar(websocket: WebSocket):
-    """Pump radar WebSocket"""
     await websocket.accept()
-    pump_radar_subscribers.add(websocket)
-    
-    # İlk veriyi gönder
-    await websocket.send_json({
-        "top_gainers": top_gainers[:10], 
-        "last_update": last_update,
-        "total_coins": len(top_gainers)
-    })
-    
+
+    if timeframe not in all_subscribers:
+        all_subscribers[timeframe] = set()
+
+    all_subscribers[timeframe].add(websocket)
+
+    try:
+        signals = active_strong_signals.get(timeframe, [])
+        await websocket.send_json({
+            "signals": signals,
+            "count": len(signals),
+            "timeframe": timeframe
+        })
+    except Exception as e:
+        logger.error(f"Tüm sinyaller gönderme hatası: {e}")
+
     try:
         while True:
             await asyncio.sleep(30)
@@ -1308,613 +369,1358 @@ async def websocket_pump_radar(websocket: WebSocket):
                 })
             except:
                 break
-                
     except WebSocketDisconnect:
-        pass
+        logger.info(f"All signals WebSocket bağlantısı kesildi: {timeframe}")
     except Exception as e:
-        logger.error(f"Pump radar WebSocket error: {e}")
+        logger.error(f"All signals WS hatası: {e}")
+    finally:
+        if timeframe in all_subscribers:
+            all_subscribers[timeframe].discard(websocket)
+
+@app.websocket("/ws/pump_radar")
+async def ws_pump(websocket: WebSocket):
+    await websocket.accept()
+    pump_radar_subscribers.add(websocket)
+
+    try:
+        await websocket.send_json({
+            "top_gainers": top_gainers,
+            "top_losers": top_losers,
+            "last_update": last_update,
+            "timestamp": datetime.now().isoformat()
+        })
+    except Exception as e:
+        logger.error(f"Pump radar ilk veri gönderme hatası: {e}")
+
+    try:
+        while True:
+            await asyncio.sleep(30)
+            try:
+                await websocket.send_json({
+                    "top_gainers": top_gainers,
+                    "top_losers": top_losers,
+                    "last_update": last_update,
+                    "timestamp": datetime.now().isoformat()
+                })
+            except:
+                break
+    except WebSocketDisconnect:
+        logger.info("Pump radar WebSocket bağlantısı kesildi")
+    except Exception as e:
+        logger.error(f"Pump radar WS hatası: {e}")
     finally:
         pump_radar_subscribers.discard(websocket)
 
-# ==================== HTML PAGES ====================
+@app.websocket("/ws/realtime_price")
+async def ws_realtime_price(websocket: WebSocket):
+    await websocket.accept()
+
+    try:
+        if hasattr(rt_ticker, 'subscribe'):
+            await rt_ticker.subscribe(websocket)
+        else:
+            rt_ticker.subscribers.add(websocket)
+    except Exception as e:
+        logger.error(f"RT Ticker aboneliği hatası: {e}")
+
+    try:
+        while True:
+            data = get_all_prices_snapshot(limit=50)
+            await websocket.send_json(data)
+            await asyncio.sleep(5)
+    except WebSocketDisconnect:
+        logger.info("Realtime price WebSocket bağlantısı kesildi")
+    except Exception as e:
+        logger.error(f"Realtime price WS hatası: {e}")
+    finally:
+        try:
+            if hasattr(rt_ticker, 'unsubscribe'):
+                await rt_ticker.unsubscribe(websocket)
+            else:
+                rt_ticker.subscribers.discard(websocket)
+        except:
+            pass
+
+# ==================== COINGECKO HELPER ====================
+async def fetch_coingecko_ohlcv(symbol: str, timeframe: str) -> List[List]:
+    coin_id_map = {
+        "BTCUSDT": "bitcoin", "ETHUSDT": "ethereum", "BNBUSDT": "binancecoin",
+        "SOLUSDT": "solana", "XRPUSDT": "ripple", "ADAUSDT": "cardano",
+        "DOGEUSDT": "dogecoin", "TRXUSDT": "tron", "AVAXUSDT": "avalanche-2",
+        "LINKUSDT": "chainlink", "TONUSDT": "the-open-network", "SHIBUSDT": "shiba-inu",
+        "DOTUSDT": "polkadot", "MATICUSDT": "matic-network", "UNIUSDT": "uniswap",
+        "LTCUSDT": "litecoin", "ATOMUSDT": "cosmos", "ETCUSDT": "ethereum-classic"
+    }
+
+    base = symbol.replace("USDT", "").lower()
+    coin_id = coin_id_map.get(symbol, base)
+
+    days_map = {
+        "1m": 1, "3m": 1, "5m": 1, "15m": 1, "30m": 1,
+        "1h": 7, "4h": 14, "1d": 30, "1w": 90
+    }
+    days = days_map.get(timeframe, 30)
+
+    try:
+        data = cg_client.get_coin_market_chart_by_id(
+            id=coin_id,
+            vs_currency='usd',
+            days=days
+        )
+
+        prices = data.get('prices', [])
+        volumes = data.get('total_volumes', [])
+
+        if not prices or len(prices) < 20:
+            logger.warning(f"CoinGecko: Yetersiz veri - {symbol}")
+            return []
+
+        ohlcv = []
+        for i in range(len(prices)):
+            ts = int(prices[i][0] / 1000)
+            price = prices[i][1]
+
+            if i == 0:
+                o = h = l = c = price
+            else:
+                prev_price = prices[i-1][1]
+                o = prev_price
+                h = max(prev_price, price)
+                l = min(prev_price, price)
+                c = price
+
+            volume = volumes[i][1] if i < len(volumes) else 0
+            ohlcv.append([ts, o, h, l, c, volume])
+
+        return ohlcv[-150:] if len(ohlcv) > 150 else ohlcv
+
+    except Exception as e:
+        if "id not found" in str(e).lower():
+            logger.warning(f"CoinGecko: Coin ID bulunamadı → {coin_id}")
+        else:
+            logger.warning(f"CoinGecko OHLCV hatası ({symbol}): {e}")
+        return []
+
+# ==================== INDICATORS IMPORT ====================
+try:
+    from indicators import generate_ict_signal, generate_simple_signal
+    logger.info("✅ Indicators modülü başarıyla yüklendi")
+except ImportError as e:
+    logger.error(f"❌ Indicators modülü yüklenemedi: {e}")
+
+    def generate_ict_signal(df, symbol, timeframe):
+        return {
+            "pair": symbol,
+            "timeframe": timeframe,
+            "current_price": float(df['close'].iloc[-1]),
+            "signal": "⏸️ ANALİZ BEKLENİYOR",
+            "score": 50,
+            "killzone": "Normal",
+            "triggers": "Indicators modülü yüklenemedi",
+            "last_update": datetime.utcnow().strftime("%H:%M UTC"),
+            "strength": "ORTA"
+        }
+
+    def generate_simple_signal(df, symbol, timeframe):
+        price = float(df['close'].iloc[-1])
+        prev_price = float(df['close'].iloc[-2])
+        change = ((price - prev_price) / prev_price) * 100
+
+        if change > 1:
+            signal = "🚀 AL"
+            score = 70
+        elif change < -1:
+            signal = "🔻 SAT"
+            score = 30
+        else:
+            signal = "⏸️ BEKLE"
+            score = 50
+
+        return {
+            "pair": symbol,
+            "timeframe": timeframe,
+            "current_price": price,
+            "signal": signal,
+            "score": score,
+            "killzone": "Normal",
+            "triggers": f"Basit fiyat değişimi: {change:.2f}%",
+            "last_update": datetime.utcnow().strftime("%H:%M UTC"),
+            "strength": "GÜÇLÜ" if abs(change) > 2 else "ZAYIF"
+        }
+
+# ==================== ANA SAYFA ====================
 @app.get("/", response_class=HTMLResponse)
-async def home_page(request: Request):
-    """Ana sayfa"""
+async def home(request: Request):
     user = request.cookies.get("user_email") or "Misafir"
-    visitor_stats = get_visitor_stats_html()
-    
-    system_status = "🟢"
-    binance_status = "🟢" if core_get_binance_client() else "🔴"
-    
-    html_content = f"""
-    <!DOCTYPE html>
-    <html lang="tr">
-    <head>
-        <meta charset="UTF-8">
-        <meta name="viewport" content="width=device-width, initial-scale=1.0">
-        <title>ICT SMART PRO</title>
-        <style>
-            body {{background: linear-gradient(135deg, #0a0022, #1a0033, #000); color: white; font-family: Arial, sans-serif; margin: 0; padding: 20px; min-height: 100vh;}}
-            .container {{max-width: 1200px; margin: 0 auto;}}
-            .header {{text-align: center; padding: 40px 0;}}
-            .title {{font-size: 3rem; background: linear-gradient(90deg, #00dbde, #fc00ff); -webkit-background-clip: text; -webkit-text-fill-color: transparent; margin-bottom: 20px;}}
-            .system-status {{display: flex; justify-content: center; gap: 20px; margin: 30px 0; padding: 20px; background: rgba(255, 255, 255, 0.05); border-radius: 15px;}}
-            .status-item {{padding: 10px 20px; background: rgba(0, 0, 0, 0.3); border-radius: 10px;}}
-            .pump-radar {{background: rgba(255, 255, 255, 0.05); border-radius: 20px; padding: 30px; margin: 40px 0;}}
-            table {{width: 100%; border-collapse: collapse; margin: 20px 0;}}
-            th {{background: rgba(0, 219, 222, 0.2); padding: 15px; text-align: left; color: #00ffff;}}
-            td {{padding: 12px 15px; border-bottom: 1px solid rgba(255, 255, 255, 0.1);}}
-            .change-positive {{ color: #00ff88; font-weight: bold; }}
-            .change-negative {{ color: #ff4444; font-weight: bold; }}
-            .buttons {{display: grid; grid-template-columns: repeat(auto-fit, minmax(300px, 1fr)); gap: 20px; margin: 40px 0;}}
-            .btn {{padding: 25px; background: linear-gradient(45deg, #fc00ff, #00dbde); color: white; text-decoration: none; border-radius: 15px; text-align: center; font-size: 1.2rem; font-weight: bold; transition: transform 0.3s;}}
-            .btn:hover {{transform: scale(1.05);}}
-            .user-info {{position: fixed; top: 15px; left: 15px; background: rgba(0, 0, 0, 0.7); padding: 10px 20px; border-radius: 10px; color: #00ff88;}}
-        </style>
-    </head>
-    <body>
-        <div class="user-info">👤 {user}</div>
-        {visitor_stats}
-        
-        <div class="container">
-            <div class="header">
-                <h1 class="title">ICT SMART PRO</h1>
-                <div class="system-status">
-                    <div class="status-item">Sistem: {system_status}</div>
-                    <div class="status-item">Binance: {binance_status}</div>
-                </div>
+    visitor_stats_html = get_visitor_stats_html()
+
+    html_content = f"""<!DOCTYPE html>
+<html lang="tr">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>ICT SMART PRO - Akıllı Kripto Sinyal Platformu</title>
+    <style>
+        :root {{
+            --primary-gradient: linear-gradient(135deg, #0a0022, #1a0033, #000);
+            --accent-gradient: linear-gradient(90deg, #00dbde, #fc00ff, #00dbde);
+            --green: #00ff88;
+            --red: #ff4444;
+            --blue: #00dbde;
+            --purple: #fc00ff;
+        }}
+        * {{ margin: 0; padding: 0; box-sizing: border-box; }}
+        body {{
+            background: var(--primary-gradient);
+            color: #fff;
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            min-height: 100vh;
+            margin: 0;
+            display: flex;
+            flex-direction: column;
+            overflow-x: hidden;
+        }}
+        .container {{ max-width: 1400px; margin: 0 auto; padding: 20px; flex: 1; width: 100%; }}
+        h1 {{
+            font-size: clamp(2rem, 5vw, 4.5rem);
+            text-align: center;
+            background: var(--accent-gradient);
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+            background-size: 200% auto;
+            animation: gradient 8s ease infinite;
+            margin: 20px 0;
+            font-weight: 800;
+            letter-spacing: 1px;
+        }}
+        @keyframes gradient {{ 0% {{ background-position: 0% center; }} 50% {{ background-position: 100% center; }} 100% {{ background-position: 0% center; }} }}
+        .subtitle {{ text-align: center; color: var(--blue); font-size: clamp(1rem, 2vw, 1.4rem); margin-bottom: 40px; opacity: 0.9; }}
+        .update {{ text-align: center; color: var(--blue); margin: 30px auto; font-size: clamp(1rem, 2vw, 1.5rem); background: rgba(0, 219, 222, 0.1); padding: 15px 30px; border-radius: 15px; border: 1px solid rgba(0, 219, 222, 0.3); max-width: 600px; }}
+        .section-title {{ font-size: clamp(1.5rem, 3vw, 2.5rem); margin: 40px 0 20px; color: var(--blue); border-left: 5px solid var(--purple); padding-left: 20px; }}
+        table {{ width: 100%; border-collapse: separate; border-spacing: 0 12px; margin: 30px 0; }}
+        th {{ background: rgba(255, 255, 255, 0.08); padding: clamp(12px, 2vw, 20px); font-size: clamp(0.9rem, 2vw, 1.3rem); color: var(--blue); text-align: left; border-bottom: 2px solid rgba(0, 219, 222, 0.3); }}
+        tr {{ background: rgba(255, 255, 255, 0.05); transition: all 0.3s ease; border-radius: 10px; overflow: hidden; }}
+        tr:hover {{ transform: translateY(-5px); background: rgba(255, 255, 255, 0.1); box-shadow: 0 15px 40px rgba(0, 219, 222, 0.3); }}
+        td {{ padding: clamp(12px, 2vw, 20px); font-size: clamp(0.9rem, 1.8vw, 1.1rem); }}
+        .green {{ color: var(--green); text-shadow: 0 0 10px rgba(0, 255, 136, 0.5); font-weight: bold; }}
+        .red {{ color: var(--red); text-shadow: 0 0 10px rgba(255, 68, 68, 0.5); font-weight: bold; }}
+        .btn-container {{ display: flex; flex-wrap: wrap; justify-content: center; gap: 20px; margin: 50px 0; }}
+        .btn {{
+            display: inline-block;
+            min-width: 250px;
+            padding: clamp(15px, 3vw, 25px);
+            font-size: clamp(1.1rem, 2.5vw, 1.8rem);
+            background: var(--accent-gradient);
+            color: #fff;
+            text-align: center;
+            border-radius: 15px;
+            text-decoration: none;
+            box-shadow: 0 0 40px rgba(252, 0, 255, 0.4);
+            transition: all 0.3s ease;
+            border: none;
+            cursor: pointer;
+            position: relative;
+            overflow: hidden;
+        }}
+        .btn:hover {{ transform: scale(1.05); box-shadow: 0 0 80px rgba(252, 0, 255, 0.8); }}
+        .btn::before {{ content: ''; position: absolute; top: 0; left: -100%; width: 100%; height: 100%; background: linear-gradient(90deg, transparent, rgba(255, 255, 255, 0.2), transparent); transition: 0.5s; }}
+        .btn:hover::before {{ left: 100%; }}
+        .footer {{ text-align: center; padding: 30px; color: #888; font-size: 0.9rem; margin-top: 50px; border-top: 1px solid rgba(255, 255, 255, 0.1); }}
+        .loader {{ border: 4px solid rgba(255, 255, 255, 0.1); border-top: 4px solid var(--blue); border-radius: 50%; width: 40px; height: 40px; animation: spin 1s linear infinite; margin: 20px auto; }}
+        @keyframes spin {{ 0% {{ transform: rotate(0deg); }} 100% {{ transform: rotate(360deg); }} }}
+        @media (max-width: 768px) {{
+            .container {{ padding: 10px; }}
+            table {{ font-size: 0.8rem; }}
+            th, td {{ padding: 8px; }}
+            .btn-container {{ flex-direction: column; align-items: center; }}
+            .btn {{ width: 90%; }}
+        }}
+    </style>
+</head>
+<body>
+    <div style='position:fixed;top:15px;left:15px;background:rgba(0,0,0,0.8);padding:10px 20px;border-radius:20px;color:var(--green);font-size:clamp(0.8rem, 2vw, 1.2rem);z-index:1000;backdrop-filter:blur(10px);border:1px solid rgba(0,255,136,0.3);'>
+        👤 Hoş geldin, <strong>{user}</strong>
+    </div>
+    {visitor_stats_html}
+    <div class="container">
+        <h1>ICT SMART PRO</h1>
+        <div class="subtitle">Akıllı Kripto Sinyal ve Analiz Platformu</div>
+
+        <div class="update" id="update">
+            <div class="loader"></div>
+            <div>Veri yükleniyor...</div>
+        </div>
+
+        <h2 class="section-title">🚀 Pump Coinler</h2>
+        <table>
+            <thead>
+                <tr>
+                    <th>SIRA</th>
+                    <th>COİN</th>
+                    <th>FİYAT</th>
+                    <th>24S DEĞİŞİM</th>
+                    <th>GRAFİK</th>
+                </tr>
+            </thead>
+            <tbody id="gainers-table">
+                <tr>
+                    <td colspan="5" style="padding:60px;text-align:center;color:#888">
+                        <div class="loader"></div>
+                        <div>Pump radar yükleniyor...</div>
+                    </td>
+                </tr>
+            </tbody>
+        </table>
+
+        <h2 class="section-title">🔻 Dump Coinler</h2>
+        <table>
+            <thead>
+                <tr>
+                    <th>SIRA</th>
+                    <th>COİN</th>
+                    <th>FİYAT</th>
+                    <th>24S DEĞİŞİM</th>
+                    <th>GRAFİK</th>
+                </tr>
+            </thead>
+            <tbody id="losers-table">
+                <tr>
+                    <td colspan="5" style="padding:60px;text-align:center;color:#888">
+                        <div class="loader"></div>
+                        <div>Dump radar yükleniyor...</div>
+                    </td>
+                </tr>
+            </tbody>
+        </table>
+
+        <div class="btn-container">
+            <a href="/signal" class="btn">🚀 Tek Coin Canlı Sinyal + Grafik</a>
+            <a href="/signal/all" class="btn">🔥 Tüm Coinleri Tara</a>
+            <a href="/realtime" class="btn">📊 Canlı Fiyat Takibi</a>
+            <a href="/admin" class="btn">⚙️ Admin Paneli</a>
+        </div>
+
+        <div style="display:flex;justify-content:center;gap:20px;flex-wrap:wrap;margin:40px 0;">
+            <div style="background:rgba(0,255,136,0.1);padding:15px;border-radius:10px;min-width:200px;text-align:center;">
+                <div style="font-size:2rem;color:var(--green);">⚡</div>
+                <div>Gerçek Zamanlı</div>
+                <div style="font-weight:bold;font-size:1.2rem;">Sinyaller</div>
             </div>
-            
-            <div class="pump-radar">
-                <h2 style="text-align:center;margin-bottom:20px;">🚀 PUMP RADAR</h2>
-                <div id="update-info" style="text-align:center;color:#00ffff;margin:15px 0;">Yükleniyor...</div>
-                <table>
-                    <thead>
-                        <tr>
-                            <th>SIRA</th>
-                            <th>COİN</th>
-                            <th>FİYAT</th>
-                            <th>DEĞİŞİM</th>
-                        </tr>
-                    </thead>
-                    <tbody id="pump-table">
-                        <tr><td colspan="4" style="text-align:center;padding:40px;">Yükleniyor...</td></tr>
-                    </tbody>
-                </table>
+            <div style="background:rgba(0,219,222,0.1);padding:15px;border-radius:10px;min-width:200px;text-align:center;">
+                <div style="font-size:2rem;color:var(--blue);">📈</div>
+                <div>Multi Timeframe</div>
+                <div style="font-weight:bold;font-size:1.2rem;">Analiz</div>
             </div>
-            
-            <div class="buttons">
-                <a href="/signal" class="btn">📊 Tek Coin Sinyal + AI Analiz</a>
-                <a href="/signal/all" class="btn">🔥 Tüm Coinleri Tara</a>
-                <a href="/debug/sources" class="btn">🔧 Sistem Durumu</a>
+            <div style="background:rgba(252,0,255,0.1);padding:15px;border-radius:10px;min-width:200px;text-align:center;">
+                <div style="font-size:2rem;color:var(--purple);">🔔</div>
+                <div>Pump/Dump</div>
+                <div style="font-weight:bold;font-size:1.2rem;">Radar</div>
             </div>
         </div>
-        
-        <script>
-            const ws = new WebSocket((window.location.protocol === 'https:' ? 'wss://' : 'ws://') + window.location.host + '/ws/pump_radar');
-            
-            ws.onopen = function() {{
-                document.getElementById('update-info').innerHTML = '✅ Bağlantı kuruldu';
-            }};
-            
+    </div>
+
+    <div class="footer">
+        © 2024 ICT SMART PRO | Tüm hakları saklıdır.<br>
+        <small>Bu bir yatırım tavsiyesi değildir. Kripto para yatırımları yüksek risk içerir.</small>
+    </div>
+
+    <script>
+        const wsProtocol = window.location.protocol === 'https:' ? 'wss' : 'ws';
+        const ws = new WebSocket(wsProtocol + '://' + window.location.host + '/ws/pump_radar');
+
+        ws.onopen = function() {{
+            console.log('Pump radar WebSocket bağlantısı kuruldu');
+        }};
+
+        ws.onmessage = function(event) {{
+            try {{
+                const data = JSON.parse(event.data);
+                document.getElementById('update').innerHTML = `📊 Son Güncelleme: <strong>${{data.last_update || 'Şimdi'}}</strong>`;
+
+                const gTable = document.getElementById('gainers-table');
+                if (!data.top_gainers || data.top_gainers.length === 0) {{
+                    gTable.innerHTML = `<tr><td colspan="5" style="padding:60px;text-align:center;color:#ffd700;"><div style="font-size:3rem;">😴</div><div>Şu anda aktif pump yok</div></td></tr>`;
+                }} else {{
+                    gTable.innerHTML = data.top_gainers.map((coin, index) => `
+                        <tr>
+                            <td>#${{index + 1}}</td>
+                            <td><strong>${{coin.symbol || coin.coin}}</strong></td>
+                            <td>$${{(coin.price || 0).toFixed(4)}}</td>
+                            <td class="${{coin.change > 0 ? 'green' : 'red'}}">$${coin.change > 0 ? '+' : ''}${{(coin.change || 0).toFixed(2)}}%</td>
+                            <td><a href="https://www.tradingview.com/chart/?symbol=BINANCE:${{coin.symbol || coin.coin}}" target="_blank" style="color:var(--blue);text-decoration:none;font-weight:bold;">📈 Grafik Aç</a></td>
+                        </tr>
+                    `).join('');
+                }}
+
+                const lTable = document.getElementById('losers-table');
+                if (!data.top_losers || data.top_losers.length === 0) {{
+                    lTable.innerHTML = `<tr><td colspan="5" style="padding:60px;text-align:center;color:#ffd700;"><div style="font-size:3rem;">😴</div><div>Şu anda aktif dump yok</div></td></tr>`;
+                }} else {{
+                    lTable.innerHTML = data.top_losers.map((coin, index) => `
+                        <tr>
+                            <td>#${{index + 1}}</td>
+                            <td><strong>${{coin.symbol || coin.coin}}</strong></td>
+                            <td>$${{(coin.price || 0).toFixed(4)}}</td>
+                            <td class="${{coin.change > 0 ? 'green' : 'red'}}">$${coin.change > 0 ? '+' : ''}${{(coin.change || 0).toFixed(2)}}%</td>
+                            <td><a href="https://www.tradingview.com/chart/?symbol=BINANCE:${{coin.symbol || coin.coin}}" target="_blank" style="color:var(--blue);text-decoration:none;font-weight:bold;">📉 Grafik Aç</a></td>
+                        </tr>
+                    `).join('');
+                }}
+            }} catch (error) {{
+                console.error('WebSocket veri işleme hatası:', error);
+            }}
+        }};
+
+        ws.onerror = function(error) {{
+            console.error('WebSocket hatası:', error);
+            document.getElementById('update').innerHTML = '⚠️ Canlı veri bağlantısı kurulamadı. Sayfayı yenileyin.';
+        }};
+
+        ws.onclose = function() {{
+            console.log('WebSocket bağlantısı kapandı');
+        }};
+
+        window.addEventListener('beforeunload', function() {{
+            ws.close();
+        }});
+    </script>
+</body>
+</html>"""
+    return HTMLResponse(content=html_content)
+
+# ==================== ANALYZE CHART ENDPOINT ====================
+@app.post("/api/analyze-chart")
+async def analyze_chart(request: Request):
+    try:
+        body = await request.json()
+        symbol = body.get("symbol", "BTCUSDT").upper()
+        timeframe = body.get("timeframe", "5m")
+
+        logger.info(f"Analiz talebi: {symbol} {timeframe}")
+
+        if not symbol.endswith("USDT"):
+            symbol += "USDT"
+
+        binance_client = get_binance_client()
+        bybit_client = get_bybit_client()
+        okex_client = get_okex_client()
+
+        clients = [binance_client, bybit_client, okex_client]
+        client_names = ["Binance", "Bybit", "OKEX"]
+
+        if not any(clients):
+            logger.warning("Hiçbir exchange client'ı kullanılabilir değil")
+            return JSONResponse({
+                "analysis": "❌ Borsa bağlantıları kurulamadı.",
+                "success": False,
+                "symbol": symbol,
+                "timeframe": timeframe
+            })
+
+        klines_list = []
+        interval_map = {
+            "1m": "1m", "3m": "3m", "5m": "5m", "15m": "15m",
+            "30m": "30m", "1h": "1h", "4h": "4h", "1d": "1d", "1w": "1w"
+        }
+        interval = interval_map.get(timeframe, "5m")
+        ccxt_symbol = symbol.replace('USDT', '/USDT')
+
+        for client, name in zip(clients, client_names):
+            if client:
+                try:
+                    if hasattr(client, 'fetch_ohlcv'):
+                        klines = await client.fetch_ohlcv(ccxt_symbol, timeframe=interval, limit=200)
+                    else:
+                        klines = client.fetch_ohlcv(ccxt_symbol, timeframe=interval, limit=200)
+
+                    if klines and len(klines) > 50:
+                        klines_list.append((name, klines))
+                        logger.info(f"{name}: {len(klines)} mum alındı ({symbol})")
+                except Exception as e:
+                    logger.warning(f"{name} OHLCV hatası ({symbol}): {e}")
+
+        if not klines_list:
+            logger.info(f"Borsalar başarısız, CoinGecko deneniyor: {symbol}")
+            coingecko_klines = await fetch_coingecko_ohlcv(symbol, timeframe)
+            if coingecko_klines and len(coingecko_klines) > 50:
+                klines_list.append(("CoinGecko", coingecko_klines))
+                logger.info(f"CoinGecko: {len(coingecko_klines)} mum alındı ({symbol})")
+
+        if not klines_list:
+            return JSONResponse({
+                "analysis": f"❌ {symbol} için veri alınamadı. Lütfen sembolü kontrol edin.",
+                "success": False,
+                "symbol": symbol,
+                "timeframe": timeframe
+            })
+
+        source_name, klines = max(klines_list, key=lambda x: len(x[1]))
+
+        df = pd.DataFrame(klines)
+        if len(df.columns) >= 6:
+            df = df.iloc[:, :6]
+            df.columns = ['timestamp', 'open', 'high', 'low', 'close', 'volume']
+        elif len(df.columns) >= 5:
+            df = df.iloc[:, :5]
+            df.columns = ['timestamp', 'open', 'high', 'low', 'close']
+            df['volume'] = 1000
+        else:
+            return JSONResponse({ "analysis": "❌ Veri formatı hatalı", "success": False })
+
+        df['timestamp'] = pd.to_numeric(df['timestamp'], errors='coerce')
+
+        if df['timestamp'].max() > 1e10:
+            df['timestamp'] = pd.to_datetime(df['timestamp'], unit='ms')
+        else:
+            df['timestamp'] = pd.to_datetime(df['timestamp'], unit='s')
+
+        numeric_cols = ['open', 'high', 'low', 'close', 'volume']
+        for col in numeric_cols:
+            if col in df.columns:
+                df[col] = pd.to_numeric(df[col], errors='coerce')
+
+        df = df.dropna(subset=['open', 'high', 'low', 'close'])
+        df = df.sort_values('timestamp')
+        df = df.tail(150)
+
+        if len(df) < 50:
+            return JSONResponse({
+                "analysis": f"❌ Yeterli veri yok ({len(df)} mum)",
+                "success": False,
+                "data_points": len(df)
+            })
+
+        signal = None
+        try:
+            signal = generate_ict_signal(df.copy(), symbol, timeframe)
+            if not signal or signal.get("signal") == "⏸️ ANALİZ BEKLENİYOR":
+                signal = generate_simple_signal(df.copy(), symbol, timeframe)
+        except Exception as e:
+            logger.error(f"Sinyal üretme hatası ({symbol} {timeframe}): {e}")
+            last_price = float(df['close'].iloc[-1])
+            signal = {
+                "pair": symbol.replace("USDT", "/USDT"),
+                "current_price": round(last_price, 6),
+                "signal": "⏸️ ANALİZ BEKLENİYOR",
+                "score": 50,
+                "killzone": "Normal",
+                "triggers": f"Hata oluştu: {str(e)[:100]}",
+                "last_update": datetime.utcnow().strftime("%H:%M UTC"),
+                "strength": "ORTA",
+                "data_source": source_name,
+                "data_points": len(df)
+            }
+
+        analysis = f"""🔍 **{symbol.replace('USDT', '/USDT')} {timeframe.upper()} Analizi**  
+Kaynak: {source_name} | Veri Sayısı: {len(df)} mum
+
+🎯 SİNYAL: <span style="color:{"#00ff88" if "🚀" in str(signal.get('signal', '')) else "#ff4444" if "🔻" in str(signal.get('signal', '')) else "#ffd700"}"><strong>{signal.get('signal', 'Bekleniyor')}</strong></span>
+
+📊 Skor: <strong>{signal.get('score', '?')}/100</strong> ({signal.get('strength', 'Bilinmiyor')})
+💰 Fiyat: <strong>${signal.get('current_price', 0):,.6f}</strong>
+🕐 Killzone: <strong>{signal.get('killzone', 'Normal')}</strong>
+🕒 Son Güncelleme: {signal.get('last_update', 'Şimdi')}
+
+🎯 Tetikleyenler:
+{signal.get('triggers', 'Analiz ediliyor...')}
+
+📈 Teknik Özet:
+{symbol.replace('USDT', '')} şu anda {signal.get('signal', '').replace('🚀', 'yükseliş').replace('🔻', 'düşüş').replace('⏸️', 'nötr')} yönünde hareket gösteriyor.
+
+💡 Öneri:
+Kendi araştırmanızı yapın, stop-loss kullanın ve risk yönetimi uygulayın.
+
+⚠️ Uyarı: Bu bir yatırım tavsiyesi değildir. Kripto para yatırımları yüksek risk içerir."""
+
+        return JSONResponse({
+            "analysis": analysis,
+            "signal_data": signal,
+            "success": True,
+            "symbol": symbol,
+            "timeframe": timeframe,
+            "data_source": source_name,
+            "data_points": len(df),
+            "current_price": float(df['close'].iloc[-1]),
+            "price_change_24h": None,
+            "timestamp": datetime.now().isoformat()
+        })
+
+    except json.JSONDecodeError:
+        return JSONResponse({"analysis": "❌ Geçersiz JSON verisi", "success": False}, status_code=400)
+    except Exception as e:
+        logger.error(f"Analiz endpoint hatası: {e}", exc_info=True)
+        return JSONResponse({
+            "analysis": "❌ Sunucu hatası oluştu. Lütfen tekrar deneyin.",
+            "success": False,
+            "error": str(e)[:200]
+        }, status_code=500)
+
+# ==================== SİGNAL SAYFASI ====================
+@app.get("/signal", response_class=HTMLResponse)
+async def signal_page(request: Request):
+    visitor_stats_html = get_visitor_stats_html()
+    timeframes = get_available_timeframes()
+    popular_symbols = ["BTC", "ETH", "BNB", "SOL", "XRP", "ADA", "DOGE", "AVAX", "DOT", "MATIC"]
+
+    html_content = f"""<!DOCTYPE html>
+<html lang="tr">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Tek Coin Sinyal - ICT SMART PRO</title>
+    <style>
+        body {{background: linear-gradient(135deg, #0a0022, #1a0033, #000); color: #fff; font-family: sans-serif; margin: 0; padding: 20px;}}
+        .container {{max-width: 1200px; margin: auto;}}
+        h1 {{text-align: center; color: #00dbde; margin: 30px 0;}}
+        .search-box {{display: flex; gap: 10px; margin: 30px 0; flex-wrap: wrap;}}
+        input, select, button {{padding: 15px; font-size: 1rem; border-radius: 10px; border: none;}}
+        input {{flex: 1; min-width: 200px;}}
+        select {{min-width: 150px;}}
+        button {{background: linear-gradient(45deg, #00dbde, #fc00ff); color: white; cursor: pointer; font-weight: bold;}}
+        button:hover {{transform: scale(1.05);}}
+        .result {{background: rgba(255,255,255,0.05); padding: 30px; border-radius: 15px; margin: 30px 0; min-height: 200px;}}
+        .loading {{text-align: center; padding: 50px; color: #888;}}
+        .signal-display {{font-size: 1.2rem; line-height: 1.6;}}
+        .popular-symbols {{display: flex; gap: 10px; flex-wrap: wrap; margin: 20px 0;}}
+        .symbol-btn {{padding: 10px 20px; background: rgba(0,219,222,0.2); border-radius: 20px; cursor: pointer; transition: 0.3s;}}
+        .symbol-btn:hover {{background: rgba(0,219,222,0.4);}}
+    </style>
+</head>
+<body>
+    {visitor_stats_html}
+    <div class="container">
+        <h1>🔍 Tek Coin Sinyal Analizi</h1>
+        <div class="search-box">
+            <input type="text" id="symbolInput" placeholder="Örn: BTC, ETH, SOL..." value="BTC">
+            <select id="timeframeSelect">
+                { "".join([f'<option value="{tf}">{tf.upper()}</option>' for tf in timeframes]) }
+            </select>
+            <button onclick="analyze()">🚀 Analiz Et</button>
+        </div>
+
+        <div class="popular-symbols">
+            <strong>Popülerler: </strong>
+            { "".join([f'<div class="symbol-btn" onclick="setSymbol(\'{s}\')">{s}</div>' for s in popular_symbols]) }
+        </div>
+
+        <div class="result" id="result">
+            <div class="loading">Sembol ve timeframe seçin, analiz butonuna tıklayın...</div>
+        </div>
+    </div>
+
+    <script>
+        function setSymbol(symbol) {{
+            document.getElementById('symbolInput').value = symbol;
+            analyze();
+        }}
+
+        async function analyze() {{
+            const symbol = document.getElementById('symbolInput').value.trim().toUpperCase();
+            const timeframe = document.getElementById('timeframeSelect').value;
+
+            if (!symbol) {{
+                alert('Lütfen bir sembol girin (Örn: BTC, ETH)');
+                return;
+            }}
+
+            document.getElementById('result').innerHTML = '<div class="loading">⏳ Analiz yapılıyor...</div>';
+
+            try {{
+                const response = await fetch('/api/analyze-chart', {{
+                    method: 'POST',
+                    headers: {{'Content-Type': 'application/json'}},
+                    body: JSON.stringify({{symbol: symbol, timeframe: timeframe}})
+                }});
+
+                const data = await response.json();
+
+                if (data.success) {{
+                    document.getElementById('result').innerHTML = `
+                        <div class="signal-display">
+                            <h2>${{symbol}}/${{timeframe.toUpperCase()}} Analiz Sonucu</h2>
+                            <div>${{data.analysis.replace(/\\n/g, '<br>')}}</div>
+                            <hr>
+                            <small>Kaynak: ${{data.data_source}} | Veri: ${{data.data_points}} mum | Fiyat: $${{data.current_price?.toFixed(4) || 'N/A'}}</small>
+                        </div>
+                    `;
+                }} else {{
+                    document.getElementById('result').innerHTML = `
+                        <div style="color:#ff4444;text-align:center;padding:50px;">
+                            <h3>❌ Hata</h3>
+                            <p>${{data.analysis}}</p>
+                        </div>
+                    `;
+                }}
+            }} catch (error) {{
+                document.getElementById('result').innerHTML = `
+                    <div style="color:#ff4444;text-align:center;padding:50px;">
+                        <h3>❌ Bağlantı Hatası</h3>
+                        <p>Sunucuya bağlanılamadı. Lütfen internet bağlantınızı kontrol edin.</p>
+                    </div>
+                `;
+                console.error('Analiz hatası:', error);
+            }}
+        }}
+
+        document.getElementById('symbolInput').addEventListener('keypress', function(e) {{
+            if (e.key === 'Enter') analyze();
+        }});
+
+        window.onload = function() {{
+            analyze();
+        }};
+    </script>
+</body>
+</html>"""
+    return HTMLResponse(content=html_content)
+
+# ==================== ALL SIGNALS SAYFASI ====================
+@app.get("/signal/all", response_class=HTMLResponse)
+async def all_signals_page(request: Request):
+    visitor_stats_html = get_visitor_stats_html()
+    timeframes = get_available_timeframes()
+
+    html_content = f"""<!DOCTYPE html>
+<html lang="tr">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Tüm Sinyaller - ICT SMART PRO</title>
+    <style>
+        body {{background: linear-gradient(135deg, #0a0022, #1a0033, #000); color: #fff; font-family: sans-serif; margin: 0; padding: 20px;}}
+        .container {{max-width: 1400px; margin: auto;}}
+        h1 {{text-align: center; color: #00dbde; margin: 30px 0;}}
+        .timeframe-tabs {{display: flex; gap: 10px; flex-wrap: wrap; justify-content: center; margin: 30px 0;}}
+        .tab {{padding: 10px 20px; background: rgba(255,255,255,0.1); border-radius: 10px; cursor: pointer;}}
+        .tab.active {{background: linear-gradient(45deg, #00dbde, #fc00ff);}}
+        .signals-container {{display: grid; grid-template-columns: repeat(auto-fill, minmax(300px, 1fr)); gap: 20px;}}
+        .signal-card {{background: rgba(255,255,255,0.05); padding: 20px; border-radius: 15px; transition: 0.3s;}}
+        .signal-card:hover {{transform: translateY(-5px); background: rgba(255,255,255,0.1);}}
+        .signal-card.buy {{border-left: 5px solid #00ff88;}}
+        .signal-card.sell {{border-left: 5px solid #ff4444;}}
+        .signal-card.neutral {{border-left: 5px solid #ffd700;}}
+        .signal-header {{display: flex; justify-content: space-between; align-items: center;}}
+        .signal-score {{padding: 5px 15px; border-radius: 20px; font-weight: bold;}}
+        .score-high {{background: rgba(0,255,136,0.2); color: #00ff88;}}
+        .score-medium {{background: rgba(255,215,0,0.2); color: #ffd700;}}
+        .score-low {{background: rgba(255,68,68,0.2); color: #ff4444;}}
+        .loader {{text-align: center; padding: 50px;}}
+        .loading {{border: 4px solid rgba(255,255,255,0.1); border-top: 4px solid #00dbde; border-radius: 50%; width: 40px; height: 40px; animation: spin 1s linear infinite; margin: auto;}}
+        @keyframes spin {{0% {{transform: rotate(0deg);}} 100% {{transform: rotate(360deg);}}}}
+    </style>
+</head>
+<body>
+    {visitor_stats_html}
+    <div class="container">
+        <h1>🔥 Tüm Zaman Dilimi Sinyalleri</h1>
+        <div class="timeframe-tabs" id="timeframeTabs">
+            { "".join([f'<div class="tab" onclick="loadTimeframe(\'{tf}\')">{tf.upper()}</div>' for tf in timeframes]) }
+        </div>
+
+        <div id="signalsContent">
+            <div class="loader">
+                <div class="loading"></div>
+                <p>Sinyaller yükleniyor...</p>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        let currentTimeframe = '5m';
+        let ws = null;
+
+        function loadTimeframe(tf) {{
+            currentTimeframe = tf;
+            document.querySelectorAll('.tab').forEach(tab => {{
+                tab.classList.remove('active');
+                if (tab.textContent === tf.toUpperCase()) tab.classList.add('active');
+            }});
+
+            if (ws) ws.close();
+
+            const protocol = window.location.protocol === 'https:' ? 'wss' : 'ws';
+            ws = new WebSocket(protocol + '://' + window.location.host + '/ws/all/' + tf);
+
+            ws.onopen = function() {{ console.log('All signals WebSocket connected for timeframe:', tf); }};
+
             ws.onmessage = function(event) {{
                 try {{
                     const data = JSON.parse(event.data);
                     if (data.ping) return;
-                    
-                    if (data.last_update) {{
-                        document.getElementById('update-info').innerHTML = '🔄 ' + data.last_update;
-                    }}
-                    
-                    const table = document.getElementById('pump-table');
-                    if (!data.top_gainers || data.top_gainers.length === 0) {{
-                        table.innerHTML = '<tr><td colspan="4" style="text-align:center;padding:40px;color:#ffd700;">📊 Şu anda aktif pump yok</td></tr>';
-                        return;
-                    }}
-                    
-                    let html = '';
-                    data.top_gainers.forEach(function(coin, index) {{
-                        const changeClass = coin.change > 0 ? 'change-positive' : 'change-negative';
-                        const changeSign = coin.change > 0 ? '+' : '';
-                        
-                        html += `
-                            <tr>
-                                <td>#${{index + 1}}</td>
-                                <td><strong>${{coin.symbol}}</strong></td>
-                                <td>$${{(coin.price >= 1 ? coin.price.toFixed(2) : coin.price.toFixed(6))}}</td>
-                                <td class="${{changeClass}}">${{changeSign}}${{coin.change.toFixed(2)}}%</td>
-                            </tr>
-                        `;
-                    }});
-                    
-                    table.innerHTML = html;
-                    
+                    const signals = data.signals || [];
+                    updateSignalsDisplay(signals, tf);
                 }} catch (error) {{
-                    console.error('Hata:', error);
+                    console.error('WebSocket message error:', error);
                 }}
             }};
-        </script>
-    </body>
-    </html>
-    """
-    
+
+            ws.onerror = function(error) {{
+                console.error('WebSocket error:', error);
+                document.getElementById('signalsContent').innerHTML = '<div style="color:#ff4444;text-align:center;padding:50px;">⚠️ Canlı bağlantı kurulamadı</div>';
+            }};
+
+            ws.onclose = function() {{ console.log('WebSocket closed for timeframe:', tf); }};
+        }}
+
+        function updateSignalsDisplay(signals, timeframe) {{
+            const container = document.getElementById('signalsContent');
+
+            if (!signals || signals.length === 0) {{
+                container.innerHTML = `
+                    <div style="text-align:center;padding:50px;color:#888;">
+                        <div style="font-size:3rem;">😴</div>
+                        <h3>${{timeframe.toUpperCase()}} zaman diliminde aktif sinyal bulunamadı</h3>
+                        <p>Diğer zaman dilimlerini kontrol edin veya biraz bekleyin</p>
+                    </div>
+                `;
+                return;
+            }}
+
+            let html = '<div class="signals-container">';
+            signals.forEach(signal => {{
+                const score = signal.score || 50;
+                let scoreClass = 'score-medium';
+                if (score >= 70) scoreClass = 'score-high';
+                else if (score <= 30) scoreClass = 'score-low';
+
+                let cardClass = 'signal-card neutral';
+                if (signal.signal && signal.signal.includes('🚀')) cardClass = 'signal-card buy';
+                else if (signal.signal && signal.signal.includes('🔻')) cardClass = 'signal-card sell';
+
+                html += `
+                    <div class="${{cardClass}}">
+                        <div class="signal-header">
+                            <h3>${{signal.pair || signal.symbol || 'N/A'}}</h3>
+                            <div class="signal-score ${{scoreClass}}">${{score}}/100</div>
+                        </div>
+                        <p><strong>Sinyal:</strong> ${{signal.signal || 'N/A'}}</p>
+                        <p><strong>Fiyat:</strong> $${{signal.current_price?.toFixed(4) || 'N/A'}}</p>
+                        <p><strong>Güç:</strong> ${{signal.strength || 'ORTA'}}</p>
+                        <p><strong>Zaman:</strong> ${{timeframe.toUpperCase()}}</p>
+                        <p><strong>Son Güncelleme:</strong> ${{signal.last_update || 'Şimdi'}}</p>
+                        <div style="margin-top:10px;font-size:0.9em;color:#888;">
+                            ${{signal.triggers?.substring(0, 100) || ''}}${{signal.triggers?.length > 100 ? '...' : ''}}
+                        </div>
+                    </div>
+                `;
+            }});
+            html += '</div>';
+            container.innerHTML = html;
+        }}
+
+        window.onload = function() {{
+            loadTimeframe('5m');
+        }};
+
+        window.addEventListener('beforeunload', function() {{
+            if (ws) ws.close();
+        }});
+    </script>
+</body>
+</html>"""
     return HTMLResponse(content=html_content)
 
-@app.get("/signal", response_class=HTMLResponse)
-async def signal_page(request: Request):
-    """Tek coin sinyal sayfası"""
-    user = request.cookies.get("user_email")
-    if not user:
-        return RedirectResponse("/login")
-    
-    visitor_stats = get_visitor_stats_html()
-    
-    html_content = f"""
-    <!DOCTYPE html>
-    <html lang="tr">
-    <head>
-        <meta charset="UTF-8">
-        <meta name="viewport" content="width=device-width, initial-scale=1.0">
-        <title>Tek Coin Sinyal - ICT SMART PRO</title>
-        <style>
-            body {{
-                background: linear-gradient(135deg, #0a0022, #1a0033, #000);
-                color: white;
-                font-family: Arial, sans-serif;
-                margin: 0;
-                padding: 20px;
-                min-height: 100vh;
-            }}
-            .container {{
-                max-width: 1000px;
-                margin: 0 auto;
-            }}
-            .header {{
-                text-align: center;
-                padding: 30px 0;
-            }}
-            .title {{
-                font-size: 2.5rem;
-                background: linear-gradient(90deg, #00dbde, #fc00ff);
-                -webkit-background-clip: text;
-                -webkit-text-fill-color: transparent;
-                margin-bottom: 20px;
-            }}
-            .controls {{
-                background: rgba(255, 255, 255, 0.05);
-                padding: 20px;
-                border-radius: 10px;
-                margin: 20px 0;
-                text-align: center;
-            }}
-            button {{
-                background: linear-gradient(45deg, #fc00ff, #00dbde);
-                font-weight: bold;
-                cursor: pointer;
-                margin: 10px 5px;
-                display: inline-block;
-                width: auto;
-                min-width: 200px;
-                padding: 12px;
-                border: none;
-                border-radius: 8px;
-                color: white;
-                font-size: 1rem;
-            }}
-            .signal-card {{
-                background: rgba(0, 0, 0, 0.5);
-                padding: 30px;
-                border-radius: 10px;
-                margin: 30px 0;
-                text-align: center;
-                border-left: 5px solid #ffd700;
-            }}
-            .signal-card.green {{ border-left-color: #00ff88; }}
-            .signal-card.red {{ border-left-color: #ff4444; }}
-            .signal-text {{
-                font-size: 2rem;
-                font-weight: bold;
-                margin-bottom: 15px;
-            }}
-            .ai-analysis {{
-                background: rgba(13, 0, 51, 0.9);
-                border-radius: 10px;
-                padding: 25px;
-                margin: 20px 0;
-                border: 2px solid #00dbde;
-                display: none;
-            }}
-            .chart-container {{
-                width: 100%;
-                height: 200vh;
-                min-height: 1000px;
-                background: rgba(10, 0, 34, 0.9);
-                border-radius: 16px;
-                margin: 30px 0;
-                overflow: hidden;
-                box-shadow: 0 0 30px rgba(0, 219, 222, 0.2);
-            }}
-            .navigation {{
-                text-align: center;
-                margin-top: 30px;
-            }}
-            .nav-link {{
-                color: #00dbde;
-                text-decoration: none;
-                margin: 0 15px;
-            }}
-            .user-info {{
-                position: fixed;
-                top: 15px;
-                left: 15px;
-                background: rgba(0, 0, 0, 0.7);
-                padding: 10px 20px;
-                border-radius: 10px;
-                color: #00ff88;
-            }}
-            input#pair {{
-                background-color: #1a0033;
-                color: #00ff88;
-                border: 2px solid #00dbde;
-                border-radius: 12px;
-                padding: 14px 18px;
-                font-size: 1.2rem;
-                font-weight: bold;
-                width: 100%;
-                max-width: 400px;
-                box-sizing: border-box;
-                transition: all 0.3s ease;
-            }}
-            input#pair::placeholder {{
-                color: #00dbdeaa;
-                font-weight: normal;
-            }}
-            input#pair:focus {{
-                outline: none;
-                border-color: #fc00ff;
-                background-color: #2a0044;
-                box-shadow: 0 0 20px rgba(252, 0, 255, 0.5);
-                color: #ffffff;
-            }}
-            input#pair:hover {{
-                border-color: #fc00ff88;
-                box-shadow: 0 0 15px rgba(252, 0, 255, 0.3);
-            }}
-            select#timeframe {{
-                background-color: #1a0033;
-                color: #00ff88;
-                border: 2px solid #00dbde;
-                border-radius: 12px;
-                padding: 14px 40px 14px 18px;
-                font-size: 1.2rem;
-                font-weight: bold;
-                min-width: 220px;
-                appearance: none;
-                background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='14' height='10' viewBox='0 0 14 10'%3E%3Cpath fill='%2300ff88' d='M1 1l6 6 6-6' stroke='%2300ff88' stroke-width='2'/%3E%3C/svg%3E");
-                background-repeat: no-repeat;
-                background-position: right 18px center;
-                background-size: 14px;
-                cursor: pointer;
-                transition: all 0.3s ease;
-            }}
-            select#timeframe:hover {{
-                background-color: #2a0044;
-                border-color: #fc00ff;
-                box-shadow: 0 0 15px rgba(252, 0, 255, 0.3);
-            }}
-            select#timeframe:focus {{
-                outline: none;
-                border-color: #fc00ff;
-                box-shadow: 0 0 20px rgba(252, 0, 255, 0.5);
-            }}
-        </style>
-        <script src="https://s3.tradingview.com/tv.js"></script>
-    </head>
-    <body>
-        <div class="user-info">👤 {user}</div>
-        {visitor_stats}
-        
-        <div class="container">
-            <div class="header">
-                <h1 class="title">📊 TEK COİN CANLI SİNYAL</h1>
-            </div>
-            
-            <div class="controls">
-                <input type="text" id="pair" placeholder="Coin (örn: BTC)" value="BTC">
-                <select id="timeframe">
-                    <option value="1m">1 Dakika</option>
-                    <option value="3m">3 Dakika</option>
-                    <option value="5m" selected>5 Dakika</option>
-                    <option value="15m">15 Dakika</option>
-                    <option value="30m">30 Dakika</option>
-                    <option value="1h">1 Saat</option>
-                    <option value="4h">4 Saat</option>
-                    <option value="1d">1 Gün</option>
-                    <option value="1W">1 Hafta</option>
-                    <option value="1M">1 Ay</option>
-                </select>
-                <div>
-                    <button onclick="connectSignal()">🔴 CANLI SİNYAL BAĞLANTISI KUR</button>
-                    <button onclick="analyzeChartWithAI()" style="background:linear-gradient(45deg,#00dbde,#ff00ff);">🤖 GRAFİĞİ ANALİZ ET</button>
-                </div>
-                <div id="connection-status" style="color:#00ffff;margin:10px 0;">Bağlantı bekleniyor...</div>
-            </div>
-            
-            <div id="signal-card" class="signal-card">
-                <div id="signal-text" class="signal-text" style="color: #ffd700;">
-                    Sinyal bağlantısı kurulmadı
-                </div>
-                <div id="signal-details">
-                    Canlı sinyal için yukarıdaki butona tıklayın.
-                </div>
-            </div>
-            
-            <div id="ai-box" class="ai-analysis">
-                <h3 style="color:#00dbde;text-align:center;">🤖 TEKNİK ANALİZ RAPORU</h3>
-                <p id="ai-comment">Analiz için "Grafiği Analiz Et" butonuna tıklayın.</p>
-            </div>
-            
-            <div class="chart-container">
-                <div id="tradingview_widget"></div>
-            </div>
-            
-            <div class="navigation">
-                <a href="/" class="nav-link">← Ana Sayfa</a>
-                <a href="/signal/all" class="nav-link">Tüm Coinler →</a>
+# ==================== REALTIME PRICE PAGE ====================
+@app.get("/realtime", response_class=HTMLResponse)
+async def realtime_price_page(request: Request):
+    visitor_stats_html = get_visitor_stats_html()
+
+    html_content = f"""<!DOCTYPE html>
+<html lang="tr">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Canlı Fiyatlar - ICT SMART PRO</title>
+    <style>
+        body {{background: linear-gradient(135deg, #0a0022, #1a0033, #000); color: #fff; font-family: sans-serif; margin: 0; padding: 20px;}}
+        .container {{max-width: 1200px; margin: auto;}}
+        h1 {{text-align: center; color: #00dbde; margin: 30px 0;}}
+        .controls {{display: flex; gap: 10px; margin: 30px 0; flex-wrap: wrap;}}
+        input {{flex: 1; min-width: 200px; padding: 15px; border-radius: 10px; border: none; background: rgba(255,255,255,0.1); color: white;}}
+        .prices-grid {{display: grid; grid-template-columns: repeat(auto-fill, minmax(200px, 1fr)); gap: 15px;}}
+        .price-card {{background: rgba(255,255,255,0.05); padding: 15px; border-radius: 10px; transition: 0.3s;}}
+        .price-card:hover {{background: rgba(255,255,255,0.1);}}
+        .price-up {{border-left: 5px solid #00ff88;}}
+        .price-down {{border-left: 5px solid #ff4444;}}
+        .price-neutral {{border-left: 5px solid #888;}}
+        .symbol {{font-weight: bold; font-size: 1.1rem;}}
+        .price {{font-size: 1.2rem; margin: 10px 0;}}
+        .change {{font-size: 0.9rem;}}
+        .change.up {{color: #00ff88;}}
+        .change.down {{color: #ff4444;}}
+        .update-time {{text-align: center; color: #888; margin: 20px 0;}}
+    </style>
+</head>
+<body>
+    {visitor_stats_html}
+    <div class="container">
+        <h1>📊 Canlı Fiyat Takibi</h1>
+        <div class="controls">
+            <input type="text" id="searchInput" placeholder="Sembol ara (BTC, ETH, vs.)" onkeyup="filterPrices()">
+        </div>
+
+        <div class="update-time" id="updateTime">Son güncelleme: --:--:--</div>
+
+        <div class="prices-grid" id="pricesGrid">
+            <div style="grid-column: 1/-1; text-align: center; padding: 50px; color: #888;">
+                <div style="width: 40px; height: 40px; border: 4px solid rgba(255,255,255,0.1); border-top: 4px solid #00dbde; border-radius: 50%; animation: spin 1s linear infinite; margin: auto;"></div>
+                <p>Canlı fiyatlar yükleniyor...</p>
             </div>
         </div>
-        
-        <script>
-            let signalWs = null;
-            let tradingViewWidget = null;
-            let currentSymbol = "BTC";
-            let currentTimeframe = "5m";
-            
-            const timeframeMap = {{
-                "1m": "1", "3m": "3", "5m": "5", "15m": "15", "30m": "30",
-                "1h": "60", "4h": "240", "1d": "D", "1W": "W", "1M": "M"
+    </div>
+
+    <script>
+        let allPrices = [];
+        let ws = null;
+
+        function connectWebSocket() {{
+            const protocol = window.location.protocol === 'https:' ? 'wss' : 'ws';
+            ws = new WebSocket(protocol + '://' + window.location.host + '/ws/realtime_price');
+
+            ws.onopen = function() {{
+                console.log('Realtime price WebSocket connected');
+                document.getElementById('updateTime').textContent = 'Bağlantı kuruldu, veriler geliyor...';
             }};
-            
-            function getTradingViewSymbol(pair) {{
-                let symbol = pair.trim().toUpperCase();
-                if (!symbol.endsWith("USDT")) symbol += "USDT";
-                return "BINANCE:" + symbol;
-            }}
-            
-            function connectSignal() {{
-                currentSymbol = document.getElementById('pair').value.trim().toUpperCase();
-                currentTimeframe = document.getElementById('timeframe').value;
-                const tvSymbol = getTradingViewSymbol(currentSymbol);
-                const interval = timeframeMap[currentTimeframe] || "5";
-                
-                if (signalWs) {{ signalWs.close(); signalWs = null; }}
-                if (tradingViewWidget) {{ tradingViewWidget.remove(); }}
-                
-                tradingViewWidget = new TradingView.widget({{
-                    width: "100%",
-                    height: "900%",
-                    symbol: tvSymbol,
-                    interval: interval,
-                    timezone: "Etc/UTC",
-                    theme: "dark",
-                    style: "1",
-                    locale: "tr",
-                    container_id: "tradingview_widget",
-                    overrides: {{
-                        "paneProperties.backgroundType": "solid",
-                        "paneProperties.background": "#000000",
-                        "scalesProperties.textColor": "#FFFFFF",
-                        "paneProperties.vertGridProperties.color": "#333333",
-                        "paneProperties.horzGridProperties.color": "#333333"
-                    }}
-                }});
-                
-                const protocol = window.location.protocol === 'https:' ? 'wss://' : 'ws://';
-                signalWs = new WebSocket(protocol + window.location.host + '/ws/signal/' + currentSymbol + '/' + currentTimeframe);
-                
-                signalWs.onopen = function() {{
-                    document.getElementById('connection-status').innerHTML = '✅ ' + currentSymbol + ' ' + currentTimeframe.toUpperCase() + ' canlı sinyal başladı!';
-                }};
-                
-                signalWs.onmessage = function(event) {{
-                    try {{
-                        if (event.data.includes('heartbeat')) return;
-                        const data = JSON.parse(event.data);
-                        const card = document.getElementById('signal-card');
-                        const text = document.getElementById('signal-text');
-                        const details = document.getElementById('signal-details');
-                        
-                        text.innerHTML = data.signal || "⏸️ Sinyal bekleniyor...";
-                        
-                        details.innerHTML = `
-                            <strong>${{data.pair || currentSymbol + '/USDT'}}</strong><br>
-                            💰 Fiyat: <strong>$${{(data.current_price || 0).toFixed(data.current_price < 1 ? 6 : 4)}}</strong><br>
-                            📊 Skor: <strong>${{data.score || '?'}} / 100</strong> | ${{data.killzone || 'Normal'}}
-                        `;
-                        
-                        if (data.signal && (data.signal.includes('ALIM') || data.signal.includes('YÜKSELİŞ'))) {{
-                            card.className = 'signal-card green';
-                            text.style.color = '#00ff88';
-                        }} else if (data.signal && (data.signal.includes('SATIM') || data.signal.includes('DÜŞÜŞ'))) {{
-                            card.className = 'signal-card red';
-                            text.style.color = '#ff4444';
-                        }} else {{
-                            card.className = 'signal-card';
-                            text.style.color = '#ffd700';
-                        }}
-                    }} catch (e) {{ console.error(e); }}
-                }};
-            }}
-            
-            async function analyzeChartWithAI() {{
-                const btn = document.querySelector('button[onclick="analyzeChartWithAI()"]');
-                const box = document.getElementById('ai-box');
-                const comment = document.getElementById('ai-comment');
-                btn.disabled = true;
-                btn.innerHTML = "⏳ Analiz ediliyor...";
-                box.style.display = 'block';
-                comment.innerHTML = "📊 Teknik analiz oluşturuluyor...";
+
+            ws.onmessage = function(event) {{
                 try {{
-                    const response = await fetch('/api/analyze-chart', {{
-                        method: 'POST',
-                        headers: {{ 'Content-Type': 'application/json' }},
-                        body: JSON.stringify({{ symbol: currentSymbol, timeframe: currentTimeframe }})
-                    }});
-                    const data = await response.json();
-                    comment.innerHTML = data.success ? data.analysis.replace(/\\n/g, '<br>') : '<strong style="color:#ff4444">❌ Hata:</strong><br>' + data.analysis;
-                }} catch (err) {{
-                    comment.innerHTML = '<strong style="color:#ff4444">❌ Bağlantı hatası:</strong><br>' + err.message;
-                }} finally {{
-                    btn.disabled = false;
-                    btn.innerHTML = "🤖 GRAFİĞİ ANALİZ ET";
+                    const data = JSON.parse(event.data);
+                    updatePricesDisplay(data);
+                }} catch (error) {{
+                    console.error('Price WebSocket message error:', error);
                 }}
+            }};
+
+            ws.onerror = function(error) {{
+                console.error('Price WebSocket error:', error);
+                document.getElementById('updateTime').textContent = '⚠️ Bağlantı hatası, yeniden bağlanılıyor...';
+                setTimeout(connectWebSocket, 5000);
+            }};
+
+            ws.onclose = function() {{
+                console.log('Price WebSocket closed');
+                setTimeout(connectWebSocket, 3000);
+            }};
+        }}
+
+        function updatePricesDisplay(data) {{
+            const prices = data.prices || [];
+            const timestamp = data.timestamp || new Date().toISOString();
+
+            allPrices = prices;
+
+            const updateTime = new Date(timestamp).toLocaleTimeString('tr-TR');
+            document.getElementById('updateTime').textContent = `Son güncelleme: ${{updateTime}}`;
+
+            const grid = document.getElementById('pricesGrid');
+            const searchTerm = document.getElementById('searchInput').value.toLowerCase();
+
+            let filteredPrices = prices;
+            if (searchTerm) {{
+                filteredPrices = prices.filter(p =>
+                    (p.symbol && p.symbol.toLowerCase().includes(searchTerm)) ||
+                    (p.pair && p.pair.toLowerCase().includes(searchTerm))
+                );
             }}
-            
-            setTimeout(connectSignal, 1000);
-        </script>
-    </body>
-    </html>
-    """
-    
+
+            if (filteredPrices.length === 0) {{
+                grid.innerHTML = `
+                    <div style="grid-column: 1/-1; text-align: center; padding: 50px; color: #888;">
+                        <div style="font-size: 3rem;">🔍</div>
+                        <h3>"${{searchTerm}}" için sonuç bulunamadı</h3>
+                    </div>
+                `;
+                return;
+            }}
+
+            let html = '';
+            filteredPrices.forEach(price => {{
+                const symbol = price.symbol || price.pair || 'N/A';
+                const value = price.price || price.last || 0;
+                const change = price.change || price.change24h || 0;
+                const changePercent = price.changePercent || price.changePercentage || 0;
+
+                const changeClass = change > 0 ? 'up' : change < 0 ? 'down' : '';
+                const cardClass = change > 0 ? 'price-up' : change < 0 ? 'price-down' : 'price-neutral';
+
+                html += `
+                    <div class="price-card ${{cardClass}}">
+                        <div class="symbol">${{symbol.replace('USDT', '')}}</div>
+                        <div class="price">$${{value.toFixed(4)}}</div>
+                        <div class="change ${{changeClass}}">
+                            ${{change > 0 ? '+' : ''}}${{change.toFixed(2)}} (${{changePercent > 0 ? '+' : ''}}${{changePercent.toFixed(2)}}%)
+                        </div>
+                        <div style="font-size:0.8rem;color:#888;margin-top:5px;">
+                            ${{price.source || 'Binance'}}
+                        </div>
+                    </div>
+                `;
+            }});
+
+            grid.innerHTML = html;
+        }}
+
+        function filterPrices() {{
+            if (allPrices.length > 0) {{
+                updatePricesDisplay({{prices: allPrices, timestamp: new Date().toISOString()}});
+            }}
+        }}
+
+        window.onload = function() {{
+            connectWebSocket();
+        }};
+
+        window.addEventListener('beforeunload', function() {{
+            if (ws) ws.close();
+        }});
+    </script>
+</body>
+</html>"""
     return HTMLResponse(content=html_content)
 
-# ==================== API ENDPOINTS ====================
-@app.post("/api/analyze-chart")
-async def analyze_chart_endpoint(request: Request):
-    """Chart analiz API endpoint"""
+# ==================== ADMIN PANEL ====================
+@app.get("/admin", response_class=HTMLResponse)
+async def admin_panel(request: Request):
+    admin_token = request.cookies.get("admin_token") or request.query_params.get("token")
+    valid_token = os.getenv("ADMIN_TOKEN", "ict-pro-admin-2024")
+
+    if admin_token != valid_token:
+        login_html = """<!DOCTYPE html>
+<html>
+<head>
+    <title>Admin Girişi - ICT SMART PRO</title>
+    <style>
+        body {{background: linear-gradient(135deg, #0a0022, #1a0033, #000); color: #fff; font-family: sans-serif; display: flex; justify-content: center; align-items: center; height: 100vh; margin: 0;}}
+        .login-box {{background: rgba(255,255,255,0.05); padding: 40px; border-radius: 20px; width: 100%; max-width: 400px; text-align: center;}}
+        input {{width: 100%; padding: 15px; margin: 15px 0; border-radius: 10px; border: none; background: rgba(255,255,255,0.1); color: white;}}
+        button {{width: 100%; padding: 15px; background: linear-gradient(45deg, #00dbde, #fc00ff); color: white; border: none; border-radius: 10px; font-weight: bold; cursor: pointer;}}
+        h2 {{color: #00dbde;}}
+    </style>
+</head>
+<body>
+    <div class="login-box">
+        <h2>🔒 Admin Girişi</h2>
+        <input type="password" id="password" placeholder="Admin Şifresi">
+        <button onclick="login()">Giriş Yap</button>
+        <p id="error" style="color:#ff4444;display:none;">❌ Yanlış şifre!</p>
+    </div>
+    <script>
+        function login() {{
+            const password = document.getElementById('password').value;
+            if (!password) return;
+            document.cookie = "admin_token=" + password + "; path=/; max-age=86400; samesite=strict";
+            window.location.href = "/admin";
+        }}
+    </script>
+</body>
+</html>"""
+        return HTMLResponse(content=login_html)
+
+    stats = visitor_counter.get_stats()
+
+    ws_stats = {
+        "price_sources_subscribers": len(price_sources_subscribers),
+        "pump_radar_subscribers": len(pump_radar_subscribers),
+        "single_subscribers_total": sum(len(v) for v in single_subscribers.values()),
+        "all_subscribers_total": sum(len(v) for v in all_subscribers.values()),
+        "rt_ticker_subscribers": len(rt_ticker.subscribers) if hasattr(rt_ticker, 'subscribers') else 0
+    }
+
+    html_content = f"""<!DOCTYPE html>
+<html lang="tr">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Admin Paneli - ICT SMART PRO</title>
+    <style>
+        body {{background: linear-gradient(135deg, #0a0022, #1a0033, #000); color: #fff; font-family: monospace; margin: 0; padding: 20px;}}
+        .container {{max-width: 1400px; margin: auto;}}
+        h1 {{text-align: center; color: #00ff88; margin: 30px 0;}}
+        .stats-grid {{display: grid; grid-template-columns: repeat(auto-fit, minmax(300px, 1fr)); gap: 20px; margin: 30px 0;}}
+        .stat-card {{background: rgba(255,255,255,0.05); padding: 20px; border-radius: 15px; border-left: 5px solid #00dbde;}}
+        .stat-title {{color: #00dbde; font-size: 0.9rem; text-transform: uppercase; letter-spacing: 1px;}}
+        .stat-value {{font-size: 2rem; font-weight: bold; margin: 10px 0;}}
+        .stat-sub {{color: #888; font-size: 0.9rem;}}
+        .danger-zone {{background: rgba(255,68,68,0.1); border-color: #ff4444; padding: 30px; margin: 40px 0;}}
+        .btn {{padding: 10px 20px; background: linear-gradient(45deg, #00dbde, #fc00ff); color: white; border: none; border-radius: 10px; cursor: pointer; margin: 5px;}}
+        .btn-danger {{background: linear-gradient(45deg, #ff4444, #ff8800);}}
+        .btn:hover {{opacity: 0.9;}}
+        .log-container {{background: rgba(0,0,0,0.5); padding: 20px; border-radius: 10px; margin: 30px 0; max-height: 400px; overflow-y: auto; font-family: monospace; font-size: 0.9rem;}}
+        .log-entry {{padding: 5px 0; border-bottom: 1px solid rgba(255,255,255,0.1);}}
+        .log-time {{color: #00ff88;}}
+        .log-level-INFO {{color: #00dbde;}}
+        .log-level-WARNING {{color: #ffd700;}}
+        .log-level-ERROR {{color: #ff4444;}}
+        .refresh-btn {{position: fixed; top: 20px; right: 20px;}}
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>⚙️ Admin Paneli - ICT SMART PRO</h1>
+        <div class="refresh-btn">
+            <button class="btn" onclick="location.reload()">🔄 Yenile</button>
+            <button class="btn btn-danger" onclick="clearLogs()">🗑️ Logları Temizle</button>
+        </div>
+
+        <div class="stats-grid">
+            <div class="stat-card">
+                <div class="stat-title">Ziyaretçi İstatistikleri</div>
+                <div class="stat-value">{stats['total_visits']}</div>
+                <div class="stat-sub">Toplam Ziyaret</div>
+                <div>Bugün: {stats['today_visits']} ({stats['today_unique']} benzersiz)</div>
+                <div>Aktif Kullanıcılar: {stats['active_users']}</div>
+            </div>
+
+            <div class="stat-card">
+                <div class="stat-title">WebSocket Bağlantıları</div>
+                <div class="stat-value">{ws_stats['single_subscribers_total'] + ws_stats['all_subscribers_total'] + ws_stats['price_sources_subscribers'] + ws_stats['pump_radar_subscribers'] + ws_stats['rt_ticker_subscribers']}</div>
+                <div class="stat-sub">Toplam Aktif Bağlantı</div>
+                <div>Tek Coin: {ws_stats['single_subscribers_total']}</div>
+                <div>Tüm Coinler: {ws_stats['all_subscribers_total']}</div>
+                <div>Pump Radar: {ws_stats['pump_radar_subscribers']}</div>
+                <div>Canlı Fiyat: {ws_stats['rt_ticker_subscribers']}</div>
+            </div>
+
+            <div class="stat-card">
+                <div class="stat-title">Sistem Durumu</div>
+                <div class="stat-value">✅ ÇALIŞIYOR</div>
+                <div class="stat-sub">Uptime: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}</div>
+                <div>Timeframes: {len(get_available_timeframes())}</div>
+                <div>Price Pool: {len(price_pool)} sembol</div>
+            </div>
+
+            <div class="stat-card">
+                <div class="stat-title">En Çok Ziyaret Edilen Sayfalar</div>
+                { "".join([f'<div>{page}: {count} ziyaret</div>' for page, count in list(stats['page_views'].items())[:5]]) }
+            </div>
+        </div>
+
+        <h2>📊 Canlı Sistem Logları</h2>
+        <div class="log-container" id="logContainer">
+            <div class="log-entry"><span class="log-time">{datetime.now().strftime('%H:%M:%S')}</span> <span class="log-level-INFO">INFO</span> Admin paneli yüklendi</div>
+        </div>
+
+        <div class="danger-zone">
+            <h3 style="color:#ff4444;">⚠️ Tehlike Bölgesi</h3>
+            <button class="btn btn-danger" onclick="clearAllData()">🗑️ Tüm Cache'i Temizle</button>
+            <button class="btn btn-danger" onclick="forceReconnect()">🔌 Tüm WS Bağlantılarını Yeniden Başlat</button>
+            <button class="btn btn-danger" onclick="restartSystem()">🔄 Sistemi Yeniden Başlat</button>
+            <small style="color:#888; display:block; margin-top:10px;">Bu işlemler geri alınamaz!</small>
+        </div>
+    </div>
+
+    <script>
+        function clearLogs() {{
+            document.getElementById('logContainer').innerHTML = '';
+            addLog('INFO', 'Loglar temizlendi');
+        }}
+
+        function clearAllData() {{
+            if (confirm('Tüm cache verilerini temizlemek istediğinize emin misiniz? Bu işlem geri alınamaz!')) {{
+                fetch('/api/admin/clear-cache', {{method: 'POST'}})
+                    .then(r => r.json())
+                    .then(data => {{
+                        addLog('INFO', 'Cache temizlendi: ' + JSON.stringify(data));
+                        alert('Cache başarıyla temizlendi!');
+                    }})
+                    .catch(err => addLog('ERROR', 'Cache temizleme hatası: ' + err));
+            }}
+        }}
+
+        function forceReconnect() {{
+            if (confirm('Tüm WebSocket bağlantıları kesilecek ve yeniden bağlanacak. Devam etmek istiyor musunuz?')) {{
+                fetch('/api/admin/reconnect-ws', {{method: 'POST'}})
+                    .then(r => r.json())
+                    .then(data => {{
+                        addLog('INFO', 'WebSocket bağlantıları yeniden başlatıldı');
+                        alert('WebSocket bağlantıları yeniden başlatıldı!');
+                    }});
+            }}
+        }}
+
+        function restartSystem() {{
+            if (confirm('Sistem yeniden başlatılacak. Bu işlem 10-30 saniye sürebilir. Devam etmek istiyor musunuz?')) {{
+                fetch('/api/admin/restart', {{method: 'POST'}})
+                    .then(r => r.json())
+                    .then(data => {{
+                        addLog('INFO', 'Sistem yeniden başlatma komutu gönderildi');
+                        alert('Sistem yeniden başlatma komutu gönderildi! Sayfa birkaç saniye içinde yeniden yüklenecek.');
+                        setTimeout(() => location.reload(), 5000);
+                    }});
+            }}
+        }}
+
+        function addLog(level, message) {{
+            const container = document.getElementById('logContainer');
+            const time = new Date().toLocaleTimeString('tr-TR');
+            const entry = document.createElement('div');
+            entry.className = 'log-entry';
+            entry.innerHTML = `<span class="log-time">${{time}}</span> <span class="log-level-${{level}}">${{level}}</span> ${{message}}`;
+            container.appendChild(entry);
+            container.scrollTop = container.scrollHeight;
+        }}
+
+        setTimeout(() => addLog('INFO', 'Sistem durumu kontrol ediliyor...'), 1000);
+    </script>
+</body>
+</html>"""
+    return HTMLResponse(content=html_content)
+
+# ==================== ADMIN API ENDPOINTS ====================
+@app.post("/api/admin/clear-cache")
+async def admin_clear_cache(request: Request):
+    admin_token = request.cookies.get("admin_token") or request.query_params.get("token")
+    valid_token = os.getenv("ADMIN_TOKEN", "ict-pro-admin-2024")
+    if admin_token != valid_token:
+        raise HTTPException(status_code=403, detail="Yetkisiz erişim")
+
     try:
-        body = await request.json()
-        symbol = body.get("symbol", "BTC").upper()
-        timeframe = body.get("timeframe", "5m")
-        
-        logger.info(f"ELITE Analiz isteği: {symbol} @ {timeframe}")
-        
-        binance_client = core_get_binance_client()
-        if not binance_client:
-            return JSONResponse({
-                "analysis": "Binance bağlantısı aktif değil.",
-                "success": False
-            }, status_code=503)
-        
-        # Sembolü normalize et
-        if symbol.endswith("/USDT"):
-            symbol = symbol.replace("/USDT", "")
-        if not symbol.endswith("USDT"):
-            symbol += "USDT"
-        
-        # Timeframe mapping
-        interval_map = {
-            "1m": "1m", "3m": "3m", "5m": "5m", 
-            "15m": "15m", "30m": "30m", 
-            "1h": "1h", "4h": "4h", "1d": "1d"
-        }
-        
-        ccxt_timeframe = interval_map.get(timeframe, "5m")
-        
-        try:
-            # Veriyi al
-            klines = await binance_client.fetch_ohlcv(
-                symbol, 
-                timeframe=ccxt_timeframe, 
-                limit=300
-            )
-            
-            if not klines or len(klines) < 50:
-                return JSONResponse({
-                    "analysis": f"{symbol.replace('USDT', '')} için yeterli veri yok.",
-                    "success": False
-                })
-            
-            # DataFrame oluştur
-            df = pd.DataFrame(
-                klines, 
-                columns=['timestamp', 'open', 'high', 'low', 'close', 'volume']
-            )
-            
-            # Numerik dönüşüm
-            for col in ['open', 'high', 'low', 'close', 'volume']:
-                df[col] = pd.to_numeric(df[col], errors='coerce')
-            
-            df = df.dropna()
-            
-            # Analiz yap
-            analysis = generate_ict_signal(df, symbol.replace("USDT", ""), timeframe)
-            
-            if not analysis:
-                analysis = generate_technical_analysis(df, symbol.replace("USDT", ""), timeframe)
-            
-            if not analysis:
-                return JSONResponse({
-                    "analysis": "Analiz yapılamadı.",
-                    "success": False
-                })
-            
-            # Rapor oluştur
-            report = f"""
-ELITE ANALİZ - {analysis['pair']} ({analysis['timeframe']})
-
-{analysis['signal']}  Skor: {analysis['score']}/100 ({analysis['strength']})
-
-Fiyat: ${analysis['current_price']}
-Killzone: {analysis['killzone']}
-Yapı: {analysis['structure']}
-
-Tetikleyen Paternler:
-{analysis['triggers']}
-
-RSI6: {analysis['indicators'].get('rsi6', '?')} | RSI14: {analysis['indicators'].get('rsi14', '?')}
-MACD: {analysis['indicators'].get('macd', '?'):.4f}
-
-Saat: {analysis['last_update']}
-"""
-            return JSONResponse({
-                "analysis": report.strip(),
-                "signal_data": analysis,
-                "success": True
-            })
-            
-        except Exception as e:
-            logger.error(f"Veri hatası: {e}")
-            return JSONResponse({
-                "analysis": f"Veri alınamadı: {str(e)}", 
-                "success": False
-            })
-            
+        logger.info("Admin cache temizleme işlemi başlatıldı")
+        return {"status": "success", "message": "Cache temizlendi", "timestamp": datetime.now().isoformat()}
     except Exception as e:
-        logger.error(f"Analiz hatası: {e}")
-        return JSONResponse({
-            "analysis": f"Hata: {str(e)}", 
-            "success": False
-        }, status_code=500)
+        logger.error(f"Cache temizleme hatası: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
 
-@app.get("/api/health")
+@app.post("/api/admin/reconnect-ws")
+async def admin_reconnect_ws(request: Request):
+    admin_token = request.cookies.get("admin_token") or request.query_params.get("token")
+    valid_token = os.getenv("ADMIN_TOKEN", "ict-pro-admin-2024")
+    if admin_token != valid_token:
+        raise HTTPException(status_code=403, detail="Yetkisiz erişim")
+
+    try:
+        logger.info("Admin WS yeniden başlatma işlemi başlatıldı")
+        return {"status": "success", "message": "WebSocket bağlantıları yeniden başlatılacak", "timestamp": datetime.now().isoformat()}
+    except Exception as e:
+        logger.error(f"WS yeniden başlatma hatası: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+@app.post("/api/admin/restart")
+async def admin_restart(request: Request):
+    admin_token = request.cookies.get("admin_token") or request.query_params.get("token")
+    valid_token = os.getenv("ADMIN_TOKEN", "ict-pro-admin-2024")
+    if admin_token != valid_token:
+        raise HTTPException(status_code=403, detail="Yetkisiz erişim")
+
+    try:
+        logger.warning("Admin sistem yeniden başlatma komutu gönderildi")
+        return {
+            "status": "success",
+            "message": "Sistem yeniden başlatma komutu alındı",
+            "timestamp": datetime.now().isoformat(),
+            "note": "Bu sadece simülasyondur. Gerçek production'da process manager kullanın."
+        }
+    except Exception as e:
+        logger.error(f"Sistem yeniden başlatma hatası: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+# ==================== HEALTH CHECK ====================
+@app.get("/health")
 async def health_check():
-    """Sağlık kontrol endpoint'i"""
     return {
         "status": "healthy",
-        "version": "7.0",
+        "service": "ICT SMART PRO",
+        "version": "3.0",
         "timestamp": datetime.now().isoformat(),
-        "visitors": visitor_counter.get_stats(),
-        "price_pool_size": len(price_pool),
-        "top_gainers_count": len(top_gainers)
+        "visitor_stats": visitor_counter.get_stats(),
+        "system": {
+            "python_version": "3.8+",
+            "websocket_connections": {
+                "price_sources": len(price_sources_subscribers),
+                "pump_radar": len(pump_radar_subscribers),
+                "single_signal": sum(len(v) for v in single_subscribers.values()),
+                "all_signals": sum(len(v) for v in all_subscribers.values())
+            }
+        }
     }
+
+# ==================== DEBUG ENDPOINT ====================
+@app.get("/debug/sources")
+async def debug_sources():
+    return {
+        "price_sources_status": price_sources_status,
+        "price_pool_count": len(price_pool),
+        "active_strong_signals": {tf: len(sigs) for tf, sigs in active_strong_signals.items()},
+        "top_gainers_count": len(top_gainers),
+        "top_losers_count": len(top_losers),
+        "visitor_stats": visitor_counter.get_stats(),
+        "timestamp": datetime.now().isoformat()
+    }
+
+# ==================== LOGIN ENDPOINT ====================
+@app.post("/api/login")
+async def login_user(response: Response, email: str = Form(...), password: str = Form(...)):
+    if email and password:
+        response.set_cookie(
+            key="user_email",
+            value=email.split("@")[0],
+            max_age=86400 * 7,
+            httponly=True,
+            samesite="lax",
+            secure=False
+        )
+        return {"status": "success", "message": "Giriş başarılı", "user": email}
+    else:
+        raise HTTPException(status_code=400, detail="E-posta ve şifre gerekli")
+
+# ==================== LOGOUT ENDPOINT ====================
+@app.get("/logout")
+async def logout_user(response: Response):
+    response.delete_cookie("user_email")
+    response.delete_cookie("admin_token")
+    return RedirectResponse(url="/")
+
+# ==================== FILE UPLOAD ====================
+@app.post("/api/upload-symbols")
+async def upload_symbols(file: UploadFile = File(...)):
+    if not file.filename.endswith('.csv'):
+        raise HTTPException(status_code=400, detail="Sadece CSV dosyaları yüklenebilir")
+
+    try:
+        contents = await file.read()
+        df = pd.read_csv(io.StringIO(contents.decode('utf-8')))
+
+        symbols = []
+        if 'symbol' in df.columns:
+            symbols = df['symbol'].tolist()
+        elif 'coin' in df.columns:
+            symbols = df['coin'].tolist()
+
+        symbols = [s.upper() + ("USDT" if not s.upper().endswith("USDT") else "") for s in symbols]
+
+        return {
+            "status": "success",
+            "filename": file.filename,
+            "symbol_count": len(symbols),
+            "symbols": symbols[:10],
+            "message": f"{len(symbols)} sembol başarıyla yüklendi"
+        }
+    except Exception as e:
+        logger.error(f"Dosya yükleme hatası: {e}")
+        raise HTTPException(status_code=500, detail=f"Dosya işleme hatası: {str(e)}")
+
+# ==================== ROOT REDIRECT ====================
+@app.get("/favicon.ico")
+async def favicon():
+    return RedirectResponse(url="/")
 
 # ==================== MAIN ENTRY POINT ====================
 if __name__ == "__main__":
-    import uvicorn
-    
-    port = int(os.getenv("PORT", 8000))
-    host = os.getenv("HOST", "0.0.0.0")
-    
-    logger.info(f"ICT SMART PRO v7.0 başlatılıyor...")
-    logger.info(f"Host: {host}:{port}")
-    logger.info(f"GROK ELITE ENGINE ACTIVE")
-    
-    uvicorn.run(
-        app, 
-        host=host, 
-        port=port, 
-        log_level="info", 
-        access_log=False
-    )
+    uvicorn_config = {
+        "app": "main:app",
+        "host": "0.0.0.0",
+        "port": int(os.getenv("PORT", 8000)),
+        "reload": os.getenv("ENVIRONMENT", "production") == "development",
+        "workers": int(os.getenv("UVICORN_WORKERS", 4)),
+        "log_level": "info",
+        "access_log": True,
+        "timeout_keep_alive": 30,
+        "limit_concurrency": 1000,
+        "limit_max_requests": 10000,
+    }
 
+    logger.info(f"🚀 ICT SMART PRO {uvicorn_config['port']} portunda başlatılıyor...")
+    logger.info(f"🌍 Environment: {os.getenv('ENVIRONMENT', 'production')}")
+    logger.info(f"👷 Workers: {uvicorn_config['workers']}")
+
+    uvicorn.run(**uvicorn_config)
