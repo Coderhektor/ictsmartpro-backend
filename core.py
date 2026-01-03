@@ -146,10 +146,11 @@ background_tasks: List[asyncio.Task] = []
 shutdown_evt = asyncio.Event()
 
 # ==================== SYMBOL YÜKLEME (REST) ====================
-async def load_symbols():
+ async def load_symbols():
     """
     Binance REST ile aktif USDT paritelerini yükler, havuz anahtarı formatına çevirir.
     """
+    global all_usdt_symbols  # Bu satırı EN ÜSTE TAŞI (önce kullanım yok diye)
     try:
         binance_rest = ccxt_async.binance({'enableRateLimit': True})
         await binance_rest.load_markets()
@@ -159,17 +160,13 @@ async def load_symbols():
         ]
         # Havuz formatına çeviri: BTC/USDT -> BTCUSDT
         normalized = [normalize_pool_key(s) for s in pairs]
-        # Abonelik ve yük için makul bir üst sınır
-        # (gerekirse konfigürasyona alınabilir)
         max_symbols = 150
-        global all_usdt_symbols
-        all_usdt_symbols = normalized[:max_symbols]
+        all_usdt_symbols = normalized[:max_symbols]  # Artık güvenli
         await binance_rest.close()
         logger.info(f"✅ {len(all_usdt_symbols)} USDT çifti yüklendi")
     except Exception as e:
         logger.warning(f"Symbol yükleme hatası: {e}")
         # Fallback
-        global all_usdt_symbols
         all_usdt_symbols = ["BTCUSDT", "ETHUSDT", "SOLUSDT", "XRPUSDT", "BNBUSDT"]
 
 # ==================== WEBSOCKET STREAMS (GERÇEK ZAMANLI) ====================
