@@ -1122,7 +1122,180 @@ async def signal_page(request: Request):
 </body>
 </html>"""
     return HTMLResponse(content=html_content)
+#=========================================================================================================
+@app.post("/api/analyze-chart")
+async def analyze_chart(request: Request):
+    try:
+        body = await request.json()
+        symbol = body.get("symbol", "BTCUSDT").upper()
+        timeframe = body.get("timeframe", "5m")
 
+        logger.info(f"AI Analiz talebi alındı: {symbol} {timeframe}")
+
+        if not symbol.endswith("USDT"):
+            symbol += "USDT"
+
+        # Borsa client'larını al
+        binance_client = get_binance_client()
+        bybit_client = get_bybit_client()
+        okex_client = get_okex_client()
+
+        clients = [binance_client, bybit_client, okex_client]
+        client_names = ["Binance", "Bybit", "OKX"]
+
+        klines_list = []
+        interval_map = {
+            "1m": "1m", "3m": "3m", "5m": "5m", "15m": "15m",
+            "30m": "30m", "1h": "1h", "4h": "4h", "1d": "1d", "1w": "1w"
+        }
+        interval = interval_map.get(timeframe, "5m")
+        ccxt_symbol = symbol.replace('USDT', '/USDT')
+
+        # Borsalardan veri çekmeye çalış
+        for client, name in zip(clients, client_names):
+            if client:
+                try:
+                    klines = await client.fetch_ohlcv(ccxt_symbol, timeframe=interval, limit=200)
+                    if klines and len(klines) > 50:
+                        klines_list.append((name, klines))
+                        logger.info(f"{name}: {len(klines)} mum alındı ({symbol})")
+                except Exception as e:
+                    logger.warning(f"{name} OHLCV hatası ({symbol}): {e}")
+
+        # Eğer borsalardan veri alınamadıysa CoinGecko fallback
+        if not klines_list:
+            logger.info(f"Borsalar başarısız, CoinGecko deneniyor: {symbol}")
+            coingecko_klines = await fetch_coingecko_ohlcv(symbol, timeframe)
+            if coingecko_klines and len(coingecko_klines) > 50:
+                klines_list.append(("CoinGecko", coingecko_klines))
+                logger.info(f"CoinGecko: {len(coingecko_klines)} mum alındı ({symbol})")
+
+        # Hala veri yoksa hata dön
+        if not klines_list:
+            return JSONResponse({
+                "success": False,
+                "analysis": f"❌ {symbol} için hiçbir kaynaktan veri alınamadı. Sembolü ve internet bağlantısını kontrol edin."
+            }, status_code=500)
+
+        # En iyi kaynağı seç (en çok mum olan)
+        source_name, klines = max(klines_list, key=lambda x: len(x[1]))
+
+        # DataFrame oluştur
+        df = pd.DataFrame(klines)
+        if len(df.columns) >= 6:
+            df = df.iloc[:, :6]
+            df.columns = ['timestamp', 'open', 'high', 'low', 'close', 'volume']
+        elif len(df.columns) >= 5:
+            df = df.iloc[:, :5]
+            df.columns = ['timestamp', 'open', 'high', 'low', 'close']
+            df['volume'] = 1000
+        else:
+            return JSONResponse({
+                "success": False,
+                "analysis": "❌ Alınan veri formatı hatalı."
+            }, status_code=500)
+
+        df['timestamp'] = pd.to_numeric(df['timestamp'], errors='coerce')
+        if df['timestamp'].max() > 1e10:
+            df['timestamp'] = pd.to_datetime(df['timestamp'], unit='ms')
+        else:
+            df['timestamp'] = pd.to_datetime(df['timestamp'], unit='s')
+
+        numeric_cols = ['open', 'high', 'low', 'close', 'volume']
+        for col in numeric_cols:
+            if col in df.columns:
+                df[col] = pd.to_numeric(df[col], errors='coerce')
+
+        df = df.dropna(subset=['open', 'high', 'low', 'close'])
+        df = df.sort_values('timestamp').tail(150)
+
+        if len(df) < 50:
+            return JSONResponse({
+                "success": False,
+                "analysis": f"❌ Yeterli veri yok ({len(df)} mum). Daha uzun timeframe deneyin."
+            }, status_code=500)
+
+        # Sinyal üret (indicators.py'den)
+        try:
+            signal = generate_ict_signal(df.copy(), symbol, timeframe)
+        except Exception as e:
+            logger.warning(f"ICT sinyal üretilemedi, basit sinyal kullanılıyor: {e}")
+            signal = generate_simple_signal(df.copy(), symbol, timeframe)
+
+        # Tetiklenen paternleri detaylı listele
+        patterns = grok.detect_all_patterns(df)
+        triggered_positive = []
+        triggered_negative = []
+
+        for key, value in patterns.items():
+            if isinstance(value, pd.Series) and len(value) > 0 and value.iloc[-1]:
+                if any(pos in key.lower() for pos in ['bull', 'buy', 'positive', 'up', 'long', 'choch_bull', 'sweep_bull', 'breaker_bull', 'mitigation_bull']):
+                    triggered_positive.append(f"✅ {key.replace('_', ' ').title()}")
+                elif any(neg in key.lower() for neg in ['bear', 'sell', 'negative', 'down', 'short', 'choch_bear', 'sweep_bear', 'breaker_bear', 'mitigation_bear']):
+                    triggered_negative.append(f"⚠️ {key.replace('_', ' ').title()}")
+
+        triggers_detail = ""
+        if triggered_positive:
+            triggers_detail += "**Pozitif Tetikleyiciler:**\n" + "\n".join(triggered_positive) + "\n\n"
+        if triggered_negative:
+            triggers_detail += "**Negatif Tetikleyiciler:**\n" + "\n".join(triggered_negative) + "\n\n"
+        if not triggered_positive and not triggered_negative:
+            triggers_detail = "Henüz güçlü bir tetikleyici patern oluşmadı.\n"
+
+        # Piyasa yapısı
+        market_structure = signal.get('market_structure', {})
+        trend_text = market_structure.get('trend', 'Nötr')
+        strength_text = market_structure.get('strength', 'Orta')
+
+        # Güncel fiyat
+        current_price = float(df['close'].iloc[-1])
+
+        # Detaylı analiz metni
+        analysis_text = f"""🔍 **{symbol.replace('USDT', '/USDT')} - {timeframe.upper()} Detaylı Teknik Analiz**
+
+📊 **Kaynak:** {source_name} • **Veri Sayısı:** {len(df)} mum
+
+🎯 **ANA SİNYAL:** <strong style="font-size:1.3em;">{signal.get('signal', '⏸️ BEKLE')}</strong>
+
+📈 **Skor:** {signal.get('score', 50)}/100 → <strong>{signal.get('strength', 'ORTA')}</strong>
+💰 **Güncel Fiyat:** ${current_price:,.6f}
+🕐 **Killzone:** {signal.get('killzone', 'Normal')}
+🌍 **Piyasa Yapısı:** {trend_text} ({strength_text})
+
+🔥 **Tetiklenen Paternler ve Analiz:**
+
+{triggers_detail}
+
+💡 **Yorum:**
+{symbol.replace('USDT', '')} şu anda {signal.get('signal', '').replace('🚀 AL', 'güçlü yükseliş').replace('🔻 SAT', 'güçlü düşüş').replace('⏸️ BEKLE', 'bekleme')} sinyali veriyor.
+
+Risk yönetimi yapmadan işlem açmayın. Stop-loss zorunlu!
+
+⚠️ **UYARI:** Bu bir yatırım tavsiyesi değildir. Kripto para piyasaları yüksek risk içerir. Kendi araştırmanızı yapın ve yalnızca kaybetmeyi göze alabildiğiniz miktarla işlem yapın.
+"""
+
+        return JSONResponse({
+            "success": True,
+            "analysis": analysis_text,
+            "signal_data": signal,
+            "current_price": current_price,
+            "data_source": source_name,
+            "data_points": len(df)
+        })
+
+    except json.JSONDecodeError:
+        return JSONResponse({
+            "success": False,
+            "analysis": "❌ Geçersiz istek formatı. Lütfen tekrar deneyin.\n⚠️ Bu bir yatırım tavsiyesi değildir."
+        }, status_code=400)
+
+    except Exception as e:
+        logger.error(f"Analiz endpoint hatası: {e}", exc_info=True)
+        return JSONResponse({
+            "success": False,
+            "analysis": f"❌ Sunucuda beklenmeyen bir hata oluştu.\nDetay: {str(e)[:200]}\n⚠️ Bu bir yatırım tavsiyesi değildir."
+        }, status_code=500)
+#=========================================================================================================
 # Diğer endpoint'ler (analyze-chart, signal, all, realtime, admin vs.) tamamen aynı kalıyor,
 # çünkü hata sadece ana sayfadaki JavaScript template literal'lerinden kaynaklanıyordu.
 
@@ -1150,4 +1323,5 @@ if __name__ == "__main__":
     logger.info(f"👷 Workers: {uvicorn_config['workers']}")
 
     uvicorn.run(**uvicorn_config)
+
 
