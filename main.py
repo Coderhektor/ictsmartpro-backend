@@ -18,6 +18,7 @@ import hashlib
 # indicators.py'den sınıfı import et (dosyanın en üstüne zaten var ama emin ol)
 from indicators import GrokIndicatorsPro as GrokIndicators, generate_ict_signal, generate_simple_signal
 # Core modülleri
+# Core modülleri
 try:
     from core import (
         initialize,
@@ -26,10 +27,11 @@ try:
         top_gainers,
         last_update,
         price_pool  # opsiyonel: direkt snapshot almak için
-        )
+    )
 except ImportError:
     print("⚠️ Core modülü bulunamadı, dummy değerler kullanılıyor...")
-    # Dummy değerler
+    
+    # Dummy fallback değerler (core yoksa app çökmesin)
     single_subscribers = {}
     all_subscribers = {}
     pump_radar_subscribers = set()
@@ -1308,6 +1310,7 @@ if __name__ == "__main__":
     logger.info(f"👷 Workers: {uvicorn_config['workers']}")
 
     uvicorn.run(**uvicorn_config)
+
 
 
 
