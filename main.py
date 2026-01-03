@@ -418,22 +418,25 @@ from realtime_prices import price_manager, get_all_prices_snapshot
 async def ws_realtime_price(websocket: WebSocket):
     await websocket.accept()
     
-    # Abone ol
-    rt_ticker.subscribers.add(websocket)
-    
     try:
         while True:
-            # GERÇEK veriyi çek
-            data = await price_manager.get_price_snapshot(limit=50)
-            await websocket.send_json(data)
-            await asyncio.sleep(3)  # 3 saniyede bir
+            # Tüm aktif sembollerin fiyatlarını al
+            snapshot = {}
+            for sym in price_manager.all_symbols:
+                snapshot[sym.replace('/', '')] = price_manager.get_price(sym)
+            
+            await websocket.send_json({
+                "type": "full_update",
+                "prices": snapshot,
+                "count": len(snapshot),
+                "timestamp": datetime.utcnow().isoformat() + 'Z'
+            })
+            await asyncio.sleep(3)
             
     except WebSocketDisconnect:
-        rt_ticker.subscribers.discard(websocket)
+        logger.info("Realtime price WS kapandı")
     except Exception as e:
-        logger.error(f"Realtime price error: {e}")
-        rt_ticker.subscribers.discard(websocket)
-
+        logger.error(f"Realtime WS hata: {e}")
 
 # ==================== COINGECKO HELPER ====================
 async def fetch_coingecko_ohlcv(symbol: str, timeframe: str) -> List[List]:
@@ -1306,6 +1309,7 @@ if __name__ == "__main__":
     logger.info(f"👷 Workers: {uvicorn_config['workers']}")
 
     uvicorn.run(**uvicorn_config)
+
 
 
 
