@@ -27,7 +27,7 @@ try:
         last_update,
         price_pool  # opsiyonel: direkt snapshot almak için
         )
-    except ImportError:
+except ImportError:
     print("⚠️ Core modülü bulunamadı, dummy değerler kullanılıyor...")
     # Dummy değerler
     single_subscribers = {}
@@ -1308,6 +1308,7 @@ if __name__ == "__main__":
     logger.info(f"👷 Workers: {uvicorn_config['workers']}")
 
     uvicorn.run(**uvicorn_config)
+
 
 
 
