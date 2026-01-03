@@ -15,6 +15,9 @@ import uvicorn
 import os
 import hashlib
 
+# === GLOBAL DEFAULT FUNCTIONS (her zaman tanımlı olsun) ===
+def get_available_timeframes():
+    return ["1m", "3m", "5m", "15m", "30m", "1h", "4h", "1d", "1w"]
 # === Logger Setup ===
 logger = logging.getLogger("uvicorn")
 logger.setLevel(logging.INFO)
@@ -1339,6 +1342,7 @@ if __name__ == "__main__":
     logger.info(f"👷 Workers: {uvicorn_config['workers']}")
 
     uvicorn.run(**uvicorn_config)
+
 
 
 
