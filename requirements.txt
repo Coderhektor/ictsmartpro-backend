@@ -12,3 +12,4 @@ httpx>=0.27.0                       # Bazı async işlemlerde kullanılabilir
 websockets>=12.0                    # WebSocket desteği için
 python-dotenv>=1.0.0                # .env dosyası yönetimi (API key'ler için önerilir)
 loguru>=0.7.0                       # Daha güzel ve renkli loglar (isteğe bağlı ama çok faydalı)
+pycoingecko
