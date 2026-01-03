@@ -411,36 +411,29 @@ async def ws_pump(websocket: WebSocket):
         logger.error(f"Pump radar WS hatası: {e}")
     finally:
         pump_radar_subscribers.discard(websocket)
+#===================================================================
+from realtime_prices import price_manager, get_all_prices_snapshot
 
 @app.websocket("/ws/realtime_price")
 async def ws_realtime_price(websocket: WebSocket):
     await websocket.accept()
-
-    try:
-        if hasattr(rt_ticker, 'subscribe'):
-            await rt_ticker.subscribe(websocket)
-        else:
-            rt_ticker.subscribers.add(websocket)
-    except Exception as e:
-        logger.error(f"RT Ticker aboneliği hatası: {e}")
-
+    
+    # Abone ol
+    rt_ticker.subscribers.add(websocket)
+    
     try:
         while True:
-            data = get_all_prices_snapshot(limit=50)
+            # GERÇEK veriyi çek
+            data = await price_manager.get_price_snapshot(limit=50)
             await websocket.send_json(data)
-            await asyncio.sleep(5)
+            await asyncio.sleep(3)  # 3 saniyede bir
+            
     except WebSocketDisconnect:
-        logger.info("Realtime price WebSocket bağlantısı kesildi")
+        rt_ticker.subscribers.discard(websocket)
     except Exception as e:
-        logger.error(f"Realtime price WS hatası: {e}")
-    finally:
-        try:
-            if hasattr(rt_ticker, 'unsubscribe'):
-                await rt_ticker.unsubscribe(websocket)
-            else:
-                rt_ticker.subscribers.discard(websocket)
-        except:
-            pass
+        logger.error(f"Realtime price error: {e}")
+        rt_ticker.subscribers.discard(websocket)
+
 
 # ==================== COINGECKO HELPER ====================
 async def fetch_coingecko_ohlcv(symbol: str, timeframe: str) -> List[List]:
@@ -1313,6 +1306,7 @@ if __name__ == "__main__":
     logger.info(f"👷 Workers: {uvicorn_config['workers']}")
 
     uvicorn.run(**uvicorn_config)
+
 
 
 
