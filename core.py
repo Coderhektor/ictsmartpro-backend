@@ -146,7 +146,7 @@ background_tasks: List[asyncio.Task] = []
 shutdown_evt = asyncio.Event()
 
 # ==================== SYMBOL YÜKLEME (REST) ====================
- async def load_symbols():
+    async def load_symbols():
     """
     Binance REST ile aktif USDT paritelerini yükler, havuz anahtarı formatına çevirir.
     """
