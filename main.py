@@ -18,14 +18,13 @@ import hashlib
 # indicators.py'den sınıfı import et (dosyanın en üstüne zaten var ama emin ol)
 from indicators import GrokIndicatorsPro as GrokIndicators, generate_ict_signal, generate_simple_signal
 # Core modülleri
-# Core modülleri
 try:
-     from indicators import GrokIndicatorsPro as GrokIndicators, generate_ict_signal, generate_simple_signal
-    logger.info("✅ Indicators modülü başarıyla yüklendi")
+    from indicators import GrokIndicatorsPro as GrokIndicators, generate_ict_signal, generate_simple_signal
+    logger.info("✅ Indicators modülü başarıyla yüklendi")  # ✅ 4 boşluk, try içinde
 except ImportError:
-    print("⚠️ Core modülü bulunamadı, dummy değerler kullanılıyor...")
+    print("⚠️ Indicators modülü bulunamadı, dummy değerler kullanılıyor...")  # ✏️ Not: "Core" değil, "Indicators"
     
-    # Dummy fallback değerler (core yoksa app çökmesin)
+    # Dummy fallback değerler
     single_subscribers = {}
     all_subscribers = {}
     pump_radar_subscribers = set()
@@ -50,7 +49,7 @@ except ImportError:
     rt_ticker = DummyRTicker()
 
     def get_all_prices_snapshot(limit=50):
-        return {"prices": [], "timestamp": datetime.now().isoformat()}
+        return {"prices": {}, "timestamp": datetime.now().isoformat()}  # ✅ "prices": [] değil, dict bekleniyor genelde
 
     async def initialize():
         print("Dummy initialize çalıştı")
@@ -1304,6 +1303,7 @@ if __name__ == "__main__":
     logger.info(f"👷 Workers: {uvicorn_config['workers']}")
 
     uvicorn.run(**uvicorn_config)
+
 
 
 
