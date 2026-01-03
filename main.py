@@ -2,7 +2,7 @@ import base64
 import logging
 import io
 import asyncio
-from datetime import datetime
+from datetime import datetime, timezone
 from contextlib import asynccontextmanager
 from typing import Optional, Dict, List, Any
 import json
@@ -15,61 +15,53 @@ import uvicorn
 import os
 import hashlib
 
-# ==================== LOGGER SETUP ====================
+# ==================== LOGGER ====================
 logger = logging.getLogger("uvicorn")
 logger.setLevel(logging.INFO)
 
-# ==================== GLOBAL FALLBACKS (Core veya indicators yüklense bile her zaman tanımlı!) ====================
-# → Bu, NameError riskini tamamen ortadan kaldırır.
+# ==================== GLOBAL FALLBACKS (HER ZAMAN TANIMLI!) ====================
+# → NameError riskini tamamen ortadan kaldırır
 
-# Fonksiyonlar (her durumda tanımlı)
 def get_available_timeframes():
     return ["1m", "3m", "5m", "15m", "30m", "1h", "4h", "1d", "1w"]
 
-# Dummy sınıflar/fonksiyonlar (indicators yoksa aktif olur)
+# Dummy fonksiyonlar
+def get_binance_client(): return None
+def get_bybit_client(): return None
+def get_okex_client(): return None
+def get_strong_signals_for_timeframe(tf): return []
+
 class GrokIndicators:
     def __init__(self): pass
     def detect_all_patterns(self, df: pd.DataFrame) -> Dict[str, Any]:
         return {}
 
 def generate_ict_signal(df: pd.DataFrame, symbol: str, timeframe: str) -> Dict[str, Any]:
+    price = float(df['close'].iloc[-1]) if not df.empty else 0.0
     return {
         "pair": symbol,
         "timeframe": timeframe,
-        "current_price": float(df['close'].iloc[-1]) if not df.empty else 0.0,
+        "current_price": price,
         "signal": "⏸️ ANALİZ BEKLENİYOR",
         "score": 50,
         "killzone": "Normal",
         "triggers": "Indicators modülü eksik",
-        "last_update": datetime.utcnow().strftime("%H:%M UTC"),
+        "last_update": datetime.now(timezone.utc).strftime("%H:%M UTC"),
         "strength": "ORTA"
     }
 
 def generate_simple_signal(df: pd.DataFrame, symbol: str, timeframe: str) -> Dict[str, Any]:
     if len(df) < 2:
-        return {
-            "pair": symbol,
-            "timeframe": timeframe,
-            "current_price": 0.0,
-            "signal": "⏸️ VERİ YOK",
-            "score": 0,
-            "killzone": "N/A",
-            "triggers": "Yetersiz fiyat verisi",
-            "last_update": datetime.utcnow().strftime("%H:%M UTC"),
-            "strength": "ZAYIF"
-        }
+        return generate_ict_signal(df, symbol, timeframe)
     price = float(df['close'].iloc[-1])
-    prev_price = float(df['close'].iloc[-2])
-    change = ((price - prev_price) / prev_price) * 100
-    if change > 1:
-        signal = "🚀 AL"
-        score = 70
-    elif change < -1:
-        signal = "🔻 SAT"
-        score = 30
+    prev = float(df['close'].iloc[-2])
+    change = ((price - prev) / prev) * 100
+    if change > 1.5:
+        signal, score, strength = "🚀 AL", 75, "GÜÇLÜ"
+    elif change < -1.5:
+        signal, score, strength = "🔻 SAT", 25, "ZAYIF"
     else:
-        signal = "⏸️ BEKLE"
-        score = 50
+        signal, score, strength = "⏸️ BEKLE", 50, "ORTA"
     return {
         "pair": symbol,
         "timeframe": timeframe,
@@ -77,18 +69,12 @@ def generate_simple_signal(df: pd.DataFrame, symbol: str, timeframe: str) -> Dic
         "signal": signal,
         "score": score,
         "killzone": "Normal",
-        "triggers": f"Basit fiyat değişimi: {change:.2f}%",
-        "last_update": datetime.utcnow().strftime("%H:%M UTC"),
-        "strength": "GÜÇLÜ" if abs(change) > 2 else "ZAYIF"
+        "triggers": f"Değişim: {change:.2f}%",
+        "last_update": datetime.now(timezone.utc).strftime("%H:%M UTC"),
+        "strength": strength
     }
 
-# Dummy client fonksiyonları (core içinde mevcut değil, sadece main.py için)
-def get_binance_client(): return None
-def get_bybit_client(): return None
-def get_okex_client(): return None
-def get_strong_signals_for_timeframe(tf): return []
-
-# Dummy state (core importu başarısızsa kullanılır)
+# Dummy state
 single_subscribers = {}
 all_subscribers = {}
 pump_radar_subscribers = set()
@@ -101,60 +87,33 @@ price_sources_status = {}
 price_pool = {}
 
 class DummyRTicker:
-    def __init__(self):
-        self.subscribers = set()
-    async def subscribe(self, websocket):
-        self.subscribers.add(websocket)
-    async def unsubscribe(self, websocket):
-        self.subscribers.discard(websocket)
+    def __init__(self): self.subscribers = set()
+    async def subscribe(self, ws): self.subscribers.add(ws)
+    async def unsubscribe(self, ws): self.subscribers.discard(ws)
 rt_ticker = DummyRTicker()
 
-async def initialize():
-    logger.info("🔄 Dummy initialize çalıştı")
-async def cleanup():
-    logger.info("🔄 Dummy cleanup çalıştı")
+async def initialize(): logger.info("🔄 Dummy initialize")
+async def cleanup(): logger.info("🔄 Dummy cleanup")
 
-# ==================== CORE MODULE (GERÇEK ZAMANLI) ====================
+# ==================== CORE MODULE ====================
 try:
-    from core import (
-        rt_ticker,
-        top_gainers,
-        last_update,
-        initialize,
-        cleanup,
-        price_pool
-    )
-    # Core'da olmayan ama main.py’de gerekli olan global’ler:
-    top_losers = []  # core’da pump radar sadece gainers üretiyor; dump için kendi hesaplayacağız
-    price_sources_status = {}  # core’dan gelmiyor → dummy kalacak (opsiyonel: ileride eklenebilir)
-    logger.info("✅ Core modülü başarıyla yüklendi")
+    from core import rt_ticker, top_gainers, last_update, initialize, cleanup, price_pool
+    logger.info("✅ Core modülü yüklendi")
 except ImportError as e:
-    logger.warning(f"⚠️ Core modülü yüklenemedi ({e}), dummy mod aktif")
+    logger.warning(f"⚠️ Core yüklenemedi: {e}")
 
 # ==================== INDICATORS MODULE ====================
 try:
     from indicators import GrokIndicatorsPro as GrokIndicators, generate_ict_signal, generate_simple_signal
-    logger.info("✅ Indicators modülü başarıyla yüklendi")
+    logger.info("✅ Indicators modülü yüklendi")
 except ImportError as e:
-    logger.warning(f"⚠️ Indicators modülü yüklenemedi ({e}), dummy fonksiyonlar kullanılıyor")
+    logger.warning(f"⚠️ Indicators yüklenemedi: {e}")
 
-# ==================== DIŞ BAĞIMLILIKLAR ====================
-from openai import OpenAI
+# ==================== EXTERNAL CLIENTS ====================
 from pycoingecko import CoinGeckoAPI
-
-# Optional: OpenAI
-openai_client = None
-if os.getenv("OPENAI_API_KEY"):
-    openai_client = OpenAI(api_key=os.getenv("OPENAI_API_KEY"))
-    logger.info("✅ OpenAI istemcisi hazır")
-else:
-    logger.warning("⚠️ OPENAI_API_KEY bulunamadı → AI analiz kapalı")
-
-# CoinGecko
 cg_client = CoinGeckoAPI()
-logger.info("✅ CoinGecko istemcisi hazır")
 
-# ==================== ZİYARETÇİ SAYACI ====================
+# ==================== VISITOR COUNTER ====================
 class VisitorCounter:
     def __init__(self):
         self.total_visits = 0
@@ -176,651 +135,139 @@ class VisitorCounter:
                 self.daily_stats[today]["unique"].add(user_id)
             return self.total_visits
 
-    def get_stats(self) -> Dict:
+    def get_stats(self):
         today = datetime.now().strftime("%Y-%m-%d")
-        today_stats = self.daily_stats.get(today, {"visits": 0, "unique": set()})
+        d = self.daily_stats.get(today, {"visits": 0, "unique": set()})
         return {
             "total_visits": self.total_visits,
             "active_users": len(self.active_users),
-            "today_visits": today_stats["visits"],
-            "today_unique": len(today_stats.get("unique", set())),
+            "today_visits": d["visits"],
+            "today_unique": len(d["unique"]),
             "page_views": self.page_views,
             "last_updated": datetime.now().strftime("%H:%M:%S")
         }
 
 visitor_counter = VisitorCounter()
 
-def get_visitor_stats_html() -> str:
-    stats = visitor_counter.get_stats()
+def get_visitor_stats_html():
+    s = visitor_counter.get_stats()
     return f"""
-<div style="position:fixed;top:15px;right:15px;background:#000000cc;padding:10px 20px;border-radius:20px;color:#00ff88;font-size:clamp(0.8rem, 2vw, 1.2rem);z-index:1000;backdrop-filter:blur(10px);border:1px solid #00ff8855;">
-<div>👁️ Toplam: <strong>{stats['total_visits']}</strong></div>
-<div>🔥 Bugün: <strong>{stats['today_visits']}</strong></div>
-<div>👥 Aktif: <strong>{stats['active_users']}</strong></div>
-</div>
-"""
+<div style="position:fixed;top:15px;right:15px;background:#000000cc;padding:10px 20px;border-radius:20px;color:#00ff88;font-size:clamp(0.8rem,2vw,1.2rem);z-index:1000;backdrop-filter:blur(10px);border:1px solid #00ff8855;">
+<div>👁️ Toplam: <strong>{s['total_visits']}</strong></div>
+<div>🔥 Bugün: <strong>{s['today_visits']}</strong></div>
+<div>👥 Aktif: <strong>{s['active_users']}</strong></div>
+</div>"""
 
-# ==================== LIFESPAN (STARTUP/SHUTDOWN) ====================
+# ==================== LIFESPAN ====================
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     logger.info("🚀 ICT SMART PRO başlatılıyor...")
-    try:
-        await initialize()
-        logger.info("✅ ICT SMART PRO başarıyla başlatıldı")
-    except Exception as e:
-        logger.error(f"❌ Başlatma hatası: {e}")
+    await initialize()
     yield
     logger.info("🛑 ICT SMART PRO kapatılıyor...")
-    try:
-        await cleanup()
-        logger.info("✅ ICT SMART PRO temiz bir şekilde kapatıldı")
-    except Exception as e:
-        logger.error(f"❌ Kapatma hatası: {e}")
+    await cleanup()
 
-# ==================== FASTAPI APP ====================
-app = FastAPI(
-    lifespan=lifespan,
-    title="ICT SMART PRO",
-    version="3.1 - PRODUCTION READY",
-    description="Akıllı Kripto Sinyal ve Analiz Platformu",
-    docs_url="/docs" if os.getenv("ENABLE_DOCS", "false").lower() == "true" else None,
-    redoc_url="/redoc" if os.getenv("ENABLE_DOCS", "false").lower() == "true" else None
-)
+app = FastAPI(lifespan=lifespan, title="ICT SMART PRO", version="3.2 PROD")
 
-# Static & Templates
-try:
-    app.mount("/static", StaticFiles(directory="static"), name="static")
-except Exception:
-    logger.warning("⚠️ static dizini eksik")
-
-try:
-    templates = Jinja2Templates(directory="templates")
-except Exception:
-    logger.warning("⚠️ templates dizini eksik")
-
-# ==================== MIDDLEWARE: ZİYARETÇİ SAYACI VE GÜVENLİK ====================
+# ==================== MIDDLEWARE ====================
 @app.middleware("http")
 async def count_visitors(request: Request, call_next):
-    visitor_id = request.cookies.get("visitor_id")
-    if not visitor_id:
-        ip = request.client.host if request.client else "anonymous"
-        user_agent = request.headers.get("user-agent", "")
-        visitor_string = f"{ip}{user_agent}"
-        visitor_id = hashlib.sha256(visitor_string.encode()).hexdigest()[:12]
-    page = request.url.path
-    await visitor_counter.add_visit(page, visitor_id)
-
-    response = await call_next(request)
-
+    vid = request.cookies.get("visitor_id") or hashlib.sha256(
+        f"{request.client.host}{request.headers.get('user-agent','')}".encode()
+    ).hexdigest()[:12]
+    await visitor_counter.add_visit(request.url.path, vid)
+    res = await call_next(request)
     if not request.cookies.get("visitor_id"):
-        response.set_cookie(
-            key="visitor_id",
-            value=visitor_id,
-            max_age=86400 * 30,
-            httponly=True,
-            samesite="lax",
-            secure=request.url.scheme == "https"
-        )
-    response.headers["X-Frame-Options"] = "DENY"
-    response.headers["X-Content-Type-Options"] = "nosniff"
-    response.headers["Referrer-Policy"] = "strict-origin-when-cross-origin"
-    return response
+        res.set_cookie("visitor_id", vid, max_age=2592000, httponly=True, samesite="lax")
+    return res
 
-# ==================== WEBSOCKET HELPERS ====================
-class ConnectionManager:
-    def __init__(self):
-        self.active_connections: Dict[str, List[WebSocket]] = {}
-
-    async def connect(self, websocket: WebSocket, channel: str):
-        await websocket.accept()
-        if channel not in self.active_connections:
-            self.active_connections[channel] = []
-        self.active_connections[channel].append(websocket)
-
-    async def disconnect(self, websocket: WebSocket, channel: str):
-        if channel in self.active_connections:
-            self.active_connections[channel].remove(websocket)
-            if not self.active_connections[channel]:
-                del self.active_connections[channel]
-
-    async def broadcast(self, channel: str, message: Dict):
-        if channel in self.active_connections:
-            disconnected = []
-            for connection in self.active_connections[channel]:
-                try:
-                    await connection.send_json(message)
-                except Exception:
-                    disconnected.append(connection)
-            for connection in disconnected:
-                await self.disconnect(connection, channel)
-
-ws_manager = ConnectionManager()
-
-# ==================== WEBSOCKET ENDPOINTS ====================
-
+# ==================== WEBSOCKETS ====================
 @app.websocket("/ws/pump_radar")
 async def ws_pump(websocket: WebSocket):
     await websocket.accept()
     pump_radar_subscribers.add(websocket)
     try:
-        # Core sadece gainers üretiyor → losers'u kendimiz hesaplayalım (negatif gainers)
-        losers = [
-            {**g, "change": -abs(g["change"])} for g in top_gainers
-        ][:len(top_gainers)]  # geçici simülasyon
+        # Core sadece gainers üretir → losers simülasyon
+        losers = [{**g, "change": -abs(g["change"])} for g in top_gainers][:len(top_gainers)]
         await websocket.send_json({
             "top_gainers": top_gainers,
             "top_losers": losers,
             "last_update": last_update,
-            "timestamp": datetime.now().isoformat()
+            "timestamp": datetime.now(timezone.utc).isoformat()
         })
         while True:
             await asyncio.sleep(30)
-            losers = [
-                {**g, "change": -abs(g["change"])} for g in top_gainers
-            ][:len(top_gainers)]
+            losers = [{**g, "change": -abs(g["change"])} for g in top_gainers][:len(top_gainers)]
             await websocket.send_json({
                 "top_gainers": top_gainers,
                 "top_losers": losers,
                 "last_update": last_update,
-                "timestamp": datetime.now().isoformat()
+                "timestamp": datetime.now(timezone.utc).isoformat()
             })
     except WebSocketDisconnect:
-        logger.info("🔌 Pump radar WS bağlantısı koptu")
+        pass
     finally:
         pump_radar_subscribers.discard(websocket)
 
 @app.websocket("/ws/signal/{pair}/{timeframe}")
 async def ws_signal(websocket: WebSocket, pair: str, timeframe: str):
-    supported_tfs = ["1m", "3m", "5m", "15m", "30m", "1h", "4h", "1d", "1w"]
-    if timeframe not in supported_tfs:
-        await websocket.close(code=1008, reason=f"Desteklenmeyen timeframe: {timeframe}")
+    tf = timeframe.lower()
+    if tf not in get_available_timeframes():
+        await websocket.close(code=1008, reason="Desteklenmeyen timeframe")
         return
-
-    symbol = pair.upper().replace("/", "").replace("-", "").strip()
+    symbol = pair.upper().replace("/", "").replace("-", "")
     if not symbol.endswith("USDT"):
         symbol += "USDT"
-
-    channel = f"{symbol}:{timeframe}"
-    if channel not in single_subscribers:
-        single_subscribers[channel] = set()
     await websocket.accept()
-    single_subscribers[channel].add(websocket)
-
     try:
-        # İlk sinyal gönderimi (dummy/simülasyon)
+        price = await price_pool.get_best_price(symbol) if hasattr(price_pool, 'get_best_price') else 0.0
         await websocket.send_json({
             "pair": symbol,
-            "timeframe": timeframe,
-            "current_price": await price_pool.get_best_price(symbol),
+            "timeframe": tf.upper(),
+            "current_price": price,
             "signal": "⏸️ Bekleniyor",
             "score": 50,
             "killzone": "Normal",
-            "triggers": "Sinyal mekanizması aktif",
-            "last_update": datetime.utcnow().strftime("%H:%M UTC"),
+            "triggers": "Sinyal bağlantısı aktif"
         })
-        # Heartbeat
         while True:
             await asyncio.sleep(30)
-            await websocket.send_json({"heartbeat": True, "timestamp": datetime.now().isoformat()})
+            price = await price_pool.get_best_price(symbol) if hasattr(price_pool, 'get_best_price') else 0.0
+            await websocket.send_json({"heartbeat": True, "price": price})
     except WebSocketDisconnect:
-        logger.info(f"🔌 Signal WS kapandı: {channel}")
-    finally:
-        single_subscribers[channel].discard(websocket)
+        pass
 
-@app.websocket("/ws/all/{timeframe}")
-async def ws_all(websocket: WebSocket, timeframe: str):
-    if timeframe not in get_available_timeframes():
-        await websocket.close(code=1008, reason=f"Desteklenmeyen timeframe: {timeframe}")
-        return
-    await websocket.accept()
-    if timeframe not in all_subscribers:
-        all_subscribers[timeframe] = set()
-    all_subscribers[timeframe].add(websocket)
-    try:
-        await websocket.send_json({"signals": [], "count": 0, "timeframe": timeframe})
-        while True:
-            await asyncio.sleep(30)
-            await websocket.send_json({"ping": True, "timestamp": datetime.now().isoformat()})
-    except WebSocketDisconnect:
-        logger.info(f"🔌 All signals WS kapandı: {timeframe}")
-    finally:
-        all_subscribers[timeframe].discard(websocket)
-
-# ==================== COINGECKO HELPER ====================
+# ==================== HELPERS ====================
 async def fetch_coingecko_ohlcv(symbol: str, timeframe: str) -> List[List]:
     coin_id_map = {
         "BTCUSDT": "bitcoin", "ETHUSDT": "ethereum", "BNBUSDT": "binancecoin",
         "SOLUSDT": "solana", "XRPUSDT": "ripple", "ADAUSDT": "cardano",
-        "DOGEUSDT": "dogecoin", "TRXUSDT": "tron", "AVAXUSDT": "avalanche-2",
-        "LINKUSDT": "chainlink", "TONUSDT": "the-open-network", "SHIBUSDT": "shiba-inu",
-        "DOTUSDT": "polkadot", "MATICUSDT": "matic-network", "UNIUSDT": "uniswap",
-        "LTCUSDT": "litecoin", "ATOMUSDT": "cosmos", "ETCUSDT": "ethereum-classic"
+        "DOGEUSDT": "dogecoin", "TRXUSDT": "tron", "AVAXUSDT": "avalanche-2"
     }
-    base = symbol.replace("USDT", "").lower()
-    coin_id = coin_id_map.get(symbol, base)
-    days_map = {
-        "1m": 1, "3m": 1, "5m": 1, "15m": 1, "30m": 1,
-        "1h": 7, "4h": 14, "1d": 30, "1w": 90
-    }
-    days = days_map.get(timeframe, 30)
-
+    coin_id = coin_id_map.get(symbol, symbol.replace("USDT", "").lower())
+    days = {"1m":1,"3m":1,"5m":1,"15m":1,"30m":1,"1h":7,"4h":14,"1d":30,"1w":90}.get(timeframe, 30)
     try:
-        data = cg_client.get_coin_market_chart_by_id(
-            id=coin_id, vs_currency='usd', days=days
-        )
+        data = cg_client.get_coin_market_chart_by_id(coin_id, "usd", days=days)
         prices = data.get('prices', [])
         volumes = data.get('total_volumes', [])
-        if not prices or len(prices) < 20:
-            logger.warning(f"CoinGecko: Yetersiz veri - {symbol}")
-            return []
-
         ohlcv = []
         for i in range(len(prices)):
             ts = int(prices[i][0] / 1000)
-            price = prices[i][1]
-            if i == 0:
-                o = h = l = c = price
-            else:
-                prev_price = prices[i-1][1]
-                o = prev_price
-                h = max(prev_price, price)
-                l = min(prev_price, price)
-                c = price
-            volume = volumes[i][1] if i < len(volumes) else 0
-            ohlcv.append([ts, o, h, l, c, volume])
-        return ohlcv[-150:] if len(ohlcv) > 150 else ohlcv
+            p = prices[i][1]
+            o = h = l = c = p
+            if i > 0:
+                o = prices[i-1][1]
+                h = max(o, p)
+                l = min(o, p)
+                c = p
+            v = volumes[i][1] if i < len(volumes) else 0
+            ohlcv.append([ts, o, h, l, c, v])
+        return ohlcv[-150:]
     except Exception as e:
-        if "id not found" in str(e).lower():
-            logger.warning(f"CoinGecko: Coin ID bulunamadı → {coin_id}")
-        else:
-            logger.warning(f"CoinGecko OHLCV hatası ({symbol}): {e}")
+        logger.warning(f"CoinGecko OHLCV hatası: {e}")
         return []
 
-# ==================== ANA SAYFA ====================
-@app.get("/", response_class=HTMLResponse)
-async def home(request: Request):
-    user = request.cookies.get("user_email") or "Misafir"
-    visitor_stats_html = get_visitor_stats_html()
-    html_content = f"""<!DOCTYPE html>
-<html lang="tr">
-<head>
-<meta charset="UTF-8">
-<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-<title>ICT SMART PRO - Akıllı Kripto Sinyal Platformu</title>
-<style>
-:root {{
---primary-gradient: linear-gradient(135deg, #0a0022, #1a0033, #000);
---accent-gradient: linear-gradient(90deg, #00dbde, #fc00ff, #00dbde);
---green: #00ff88;
---red: #ff4444;
---blue: #00dbde;
---purple: #fc00ff;
-}}
-* {{ margin: 0; padding: 0; box-sizing: border-box; }}
-body {{
-background: var(--primary-gradient);
-color: #fff;
-font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
-min-height: 100vh;
-margin: 0;
-display: flex;
-flex-direction: column;
-overflow-x: hidden;
-}}
-.container {{ max-width: 1400px; margin: 0 auto; padding: 20px; flex: 1; width: 100%; }}
-h1 {{
-font-size: clamp(2rem, 5vw, 4.5rem);
-text-align: center;
-background: var(--accent-gradient);
--webkit-background-clip: text;
--webkit-text-fill-color: transparent;
-background-size: 200% auto;
-animation: gradient 8s ease infinite;
-margin: 20px 0;
-font-weight: 800;
-letter-spacing: 1px;
-}}
-@keyframes gradient {{ 0% {{ background-position: 0% center; }} 50% {{ background-position: 100% center; }} 100% {{ background-position: 0% center; }} }}
-.subtitle {{ text-align: center; color: var(--blue); font-size: clamp(1rem, 2vw, 1.4rem); margin-bottom: 40px; opacity: 0.9; }}
-.update {{ text-align: center; color: var(--blue); margin: 30px auto; font-size: clamp(1rem, 2vw, 1.5rem); background: rgba(0, 219, 222, 0.1); padding: 15px 30px; border-radius: 15px; border: 1px solid rgba(0, 219, 222, 0.3); max-width: 600px; }}
-.section-title {{ font-size: clamp(1.5rem, 3vw, 2.5rem); margin: 40px 0 20px; color: var(--blue); border-left: 5px solid var(--purple); padding-left: 20px; }}
-table {{ width: 100%; border-collapse: separate; border-spacing: 0 12px; margin: 30px 0; }}
-th {{ background: rgba(255, 255, 255, 0.08); padding: clamp(12px, 2vw, 20px); font-size: clamp(0.9rem, 2vw, 1.3rem); color: var(--blue); text-align: left; border-bottom: 2px solid rgba(0, 219, 222, 0.3); }}
-tr {{ background: rgba(255, 255, 255, 0.05); transition: all 0.3s ease; border-radius: 10px; overflow: hidden; }}
-tr:hover {{ transform: translateY(-5px); background: rgba(255, 255, 255, 0.1); box-shadow: 0 15px 40px rgba(0, 219, 222, 0.3); }}
-td {{ padding: clamp(12px, 2vw, 20px); font-size: clamp(0.9rem, 1.8vw, 1.1rem); }}
-.green {{ color: var(--green); text-shadow: 0 0 10px rgba(0, 255, 136, 0.5); font-weight: bold; }}
-.red {{ color: var(--red); text-shadow: 0 0 10px rgba(255, 68, 68, 0.5); font-weight: bold; }}
-.btn-container {{ display: flex; flex-wrap: wrap; justify-content: center; gap: 20px; margin: 50px 0; }}
-.btn {{
-display: inline-block;
-min-width: 250px;
-padding: clamp(15px, 3vw, 25px);
-font-size: clamp(1.1rem, 2.5vw, 1.8rem);
-background: var(--accent-gradient);
-color: #fff;
-text-align: center;
-border-radius: 15px;
-text-decoration: none;
-box-shadow: 0 0 40px rgba(252, 0, 255, 0.4);
-transition: all 0.3s ease;
-border: none;
-cursor: pointer;
-position: relative;
-overflow: hidden;
-}}
-.btn:hover {{ transform: scale(1.05); box-shadow: 0 0 80px rgba(252, 0, 255, 0.8); }}
-.btn::before {{ content: ''; position: absolute; top: 0; left: -100%; width: 100%; height: 100%; background: linear-gradient(90deg, transparent, rgba(255, 255, 255, 0.2), transparent); transition: 0.5s; }}
-.btn:hover::before {{ left: 100%; }}
-.footer {{ text-align: center; padding: 30px; color: #888; font-size: 0.9rem; margin-top: 50px; border-top: 1px solid rgba(255, 255, 255, 0.1); }}
-.loader {{ border: 4px solid rgba(255, 255, 255, 0.1); border-top: 4px solid var(--blue); border-radius: 50%; width: 40px; height: 40px; animation: spin 1s linear infinite; margin: 20px auto; }}
-@keyframes spin {{ 0% {{ transform: rotate(0deg); }} 100% {{ transform: rotate(360deg); }} }}
-@media (max-width: 768px) {{
-.container {{ padding: 10px; }}
-table {{ font-size: 0.8rem; }}
-th, td {{ padding: 8px; }}
-.btn-container {{ flex-direction: column; align-items: center; }}
-.btn {{ width: 90%; }}
-}}
-</style>
-</head>
-<body>
-<div style='position:fixed;top:15px;left:15px;background:rgba(0,0,0,0.8);padding:10px 20px;border-radius:20px;color:var(--green);font-size:clamp(0.8rem, 2vw, 1.2rem);z-index:1000;backdrop-filter:blur(10px);border:1px solid rgba(0,255,136,0.3);'>
-👤 Hoş geldin, <strong>{user}</strong>
-</div>
-{visitor_stats_html}
-<div class="container">
-<h1>ICT SMART PRO</h1>
-<div class="subtitle">Akıllı Kripto Sinyal ve Analiz Platformu</div>
-<div class="update" id="update">
-<div class="loader"></div>
-<div>Veri yükleniyor...</div>
-</div>
-<h2 class="section-title">🚀 Pump Coinler</h2>
-<table>
-<thead>
-<tr>
-<th>SIRA</th>
-<th>COİN</th>
-<th>FİYAT</th>
-<th>24S DEĞİŞİM</th>
-<th>GRAFİK</th>
-</tr>
-</thead>
-<tbody id="gainers-table">
-<tr>
-<td colspan="5" style="padding:60px;text-align:center;color:#888">
-<div class="loader"></div>
-<div>Pump radar yükleniyor...</div>
-</td>
-</tr>
-</tbody>
-</table>
-<h2 class="section-title">🔻 Dump Coinler</h2>
-<table>
-<thead>
-<tr>
-<th>SIRA</th>
-<th>COİN</th>
-<th>FİYAT</th>
-<th>24S DEĞİŞİM</th>
-<th>GRAFİK</th>
-</tr>
-</thead>
-<tbody id="losers-table">
-<tr>
-<td colspan="5" style="padding:60px;text-align:center;color:#888">
-<div class="loader"></div>
-<div>Dump radar yükleniyor...</div>
-</td>
-</tr>
-</tbody>
-</table>
-<div class="btn-container">
-<a href="/signal" class="btn">🚀 Tek Coin Canlı Sinyal + Grafik</a>
-<a href="/signal/all" class="btn">🔥 Tüm Coinleri Tara</a>
-<a href="/realtime" class="btn">📊 Canlı Fiyat Takibi</a>
-<a href="/admin" class="btn">⚙️ Admin Paneli</a>
-</div>
-<div style="display:flex;justify-content:center;gap:20px;flex-wrap:wrap;margin:40px 0;">
-<div style="background:rgba(0,255,136,0.1);padding:15px;border-radius:10px;min-width:200px;text-align:center;">
-<div style="font-size:2rem;color:var(--green);">⚡</div>
-<div>Gerçek Zamanlı</div>
-<div style="font-weight:bold;font-size:1.2rem;">Sinyaller</div>
-</div>
-<div style="background:rgba(0,219,222,0.1);padding:15px;border-radius:10px;min-width:200px;text-align:center;">
-<div style="font-size:2rem;color:var(--blue);">📈</div>
-<div>Multi Timeframe</div>
-<div style="font-weight:bold;font-size:1.2rem;">Analiz</div>
-</div>
-<div style="background:rgba(252,0,255,0.1);padding:15px;border-radius:10px;min-width:200px;text-align:center;">
-<div style="font-size:2rem;color:var(--purple);">🔔</div>
-<div>Pump/Dump</div>
-<div style="font-weight:bold;font-size:1.2rem;">Radar</div>
-</div>
-</div>
-</div>
-<div class="footer">
-© 2024 ICT SMART PRO | Tüm hakları saklıdır.<br>
-<small>Bu bir yatırım tavsiyesi değildir. Kripto para yatırımları yüksek risk içerir.</small>
-</div>
-<script>
-const wsProtocol = window.location.protocol === 'https:' ? 'wss' : 'ws';
-const ws = new WebSocket(wsProtocol + '://' + window.location.host + '/ws/pump_radar');
-ws.onopen = function() {{
-    console.log('✅ Pump radar WS bağlantısı kuruldu');
-}};
-ws.onmessage = function(event) {{
-    try {{
-        const data = JSON.parse(event.data);
-        document.getElementById('update').innerHTML = `📊 Son Güncelleme: <strong>${{data.last_update || 'Şimdi'}}</strong>`;
-        const gTable = document.getElementById('gainers-table');
-        const lTable = document.getElementById('losers-table');
-        const gainers = data.top_gainers || [];
-        const losers = data.top_losers || [];
-        gTable.innerHTML = gainers.length ? gainers.slice(0,10).map((coin, i) => `
-            <tr>
-                <td>#${{i+1}}</td>
-                <td><strong>${{coin.symbol}}</strong></td>
-                <td>$${{coin.price.toFixed(4)}}</td>
-                <td class="green">+${{coin.change.toFixed(2)}}%</td>
-                <td><a href="https://www.tradingview.com/chart/?symbol=BINANCE:${{coin.symbol}}USDT" target="_blank" style="color:var(--blue);">📈</a></td>
-            </tr>`).join('') :
-            `<tr><td colspan="5" style="padding:40px;text-align:center;color:#ffd700;">😴 Şimdilik pump yok</td></tr>`;
-        lTable.innerHTML = losers.length ? losers.slice(0,10).map((coin, i) => `
-            <tr>
-                <td>#${{i+1}}</td>
-                <td><strong>${{coin.symbol}}</strong></td>
-                <td>$${{coin.price.toFixed(4)}}</td>
-                <td class="red">${{coin.change > 0 ? '+' : ''}}${{coin.change.toFixed(2)}}%</td>
-                <td><a href="https://www.tradingview.com/chart/?symbol=BINANCE:${{coin.symbol}}USDT" target="_blank" style="color:var(--blue);">📉</a></td>
-            </tr>`).join('') :
-            `<tr><td colspan="5" style="padding:40px;text-align:center;color:#ffd700;">😴 Şimdilik dump yok</td></tr>`;
-    }} catch (e) {{ console.error('WS parse hatası:', e); }}
-}};
-ws.onerror = function(e) {{
-    console.error('❌ WS hata:', e);
-    document.getElementById('update').innerHTML = '⚠️ Pump radar bağlantısı kesildi';
-}};
-ws.onclose = function() {{
-    console.warn('🔌 WS bağlantısı kapandı');
-}};
-window.addEventListener('beforeunload', () => ws.close());
-</script>
-</body>
-</html>"""
-    return HTMLResponse(content=html_content)
-
-# ==================== TEK COİN SİNYAL SAYFASI ====================
-@app.get("/signal/", response_class=HTMLResponse)
-async def signal_page(request: Request):
-    user = request.cookies.get("user_email") or "Misafir"
-    visitor_stats_html = get_visitor_stats_html()
-    timeframes = get_available_timeframes()
-    html_content = f"""<!DOCTYPE html>
-<html lang="tr">
-<head>
-<meta charset="UTF-8">
-<meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>Tek Coin Sinyal - ICT SMART PRO</title>
-<style>
-body {{
-background: linear-gradient(135deg, #0a0022, #1a0033, #000);
-color: white;
-font-family: Arial, sans-serif;
-margin: 0;
-padding: 20px;
-min-height: 100vh;
-}}
-.container {{ max-width: 1000px; margin: 0 auto; }}
-.header {{ text-align: center; padding: 30px 0; }}
-.title {{ font-size: 2.5rem; background: linear-gradient(90deg, #00dbde, #fc00ff); -webkit-background-clip: text; -webkit-text-fill-color: transparent; margin-bottom: 20px; }}
-.controls {{ background: rgba(255,255,255,0.05); padding: 20px; border-radius: 10px; margin: 20px 0; text-align: center; }}
-button {{
-background: linear-gradient(45deg, #fc00ff, #00dbde);
-font-weight: bold;
-cursor: pointer;
-margin: 10px 5px;
-display: inline-block;
-min-width: 200px;
-padding: 12px;
-border: none;
-border-radius: 8px;
-color: white;
-font-size: 1rem;
-}}
-.signal-card {{
-background: rgba(0,0,0,0.5); padding:30px; border-radius:10px; margin:30px 0; text-align:center; border-left:5px solid #ffd700;
-}}
-.signal-card.green {{ border-left-color: #00ff88; }}
-.signal-card.red {{ border-left-color: #ff4444; }}
-.signal-text {{ font-size: 2rem; font-weight: bold; margin-bottom:15px; }}
-.ai-analysis {{
-background: rgba(13,0,51,0.9); border-radius:10px; padding:25px; margin:20px 0; border:2px solid #00dbde; display:none;
-}}
-.chart-container {{
-width:100%; height:80vh; min-height:1000px; background:rgba(10,0,34,0.9); border-radius:16px; margin:30px 0; overflow:hidden;
-box-shadow:0 0 30px rgba(0,219,222,0.2);
-}}
-.navigation {{ text-align:center; margin-top:30px; }}
-.nav-link {{ color:#00dbde; text-decoration:none; margin:0 15px; }}
-.user-info {{ position:fixed; top:15px; left:15px; background:rgba(0,0,0,0.7); padding:10px 20px; border-radius:10px; color:#00ff88; }}
-input#pair {{
-background-color:#1a0033; color:#00ff88; border:2px solid #00dbde; border-radius:12px; padding:14px 18px;
-font-size:1.2rem; font-weight:bold; width:100%; max-width:400px;
-}}
-select#timeframe {{
-background-color:#1a0033; color:#00ff88; border:2px solid #00dbde; border-radius:12px; padding:14px 40px 14px 18px;
-font-size:1.2rem; min-width:220px; appearance:none;
-background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='14' height='10'%3E%3Cpath fill='%2300ff88' d='M1 1l6 6 6-6' stroke='%2300ff88' stroke-width='2'/%3E%3C/svg%3E");
-background-repeat:no-repeat; background-position:right 18px center; background-size:14px;
-}}
-</style>
-<script src="https://s3.tradingview.com/tv.js"></script>
-</head>
-<body>
-<div class="user-info">👤 Hoş geldin, <strong>{user}</strong></div>
-{visitor_stats_html}
-<div class="container">
-<div class="header"><h1 class="title">📊 TEK COİN CANLI SİNYAL</h1></div>
-<div class="controls">
-<input type="text" id="pair" placeholder="Coin (örn: BTC)" value="BTC">
-<select id="timeframe">
-{" ".join([f'<option value="{tf}"{" selected" if tf == "5m" else ""}>{tf.upper()}</option>' for tf in timeframes])}
-</select>
-<div>
-<button onclick="connectSignal()">🔴 CANLI SİNYAL BAĞLANTISI KUR</button>
-<button onclick="analyzeChartWithAI()" style="background:linear-gradient(45deg,#00dbde,#ff00ff);">🤖 GRAFİĞİ ANALİZ ET</button>
-</div>
-<div id="connection-status" style="color:#00ffff;margin:10px 0;">Bağlantı bekleniyor...</div>
-</div>
-<div id="signal-card" class="signal-card">
-<div id="signal-text" class="signal-text" style="color:#ffd700;">Sinyal bağlantısı kurulmadı</div>
-<div id="signal-details">Canlı sinyal için yukarıdaki butona tıklayın.</div>
-</div>
-<div id="ai-box" class="ai-analysis">
-<h3 style="color:#00dbde;text-align:center;">🤖 TEKNİK ANALİZ RAPORU</h3>
-<p id="ai-comment">Analiz için "Grafiği Analiz Et" butonuna tıklayın.</p>
-</div>
-<div class="chart-container"><div id="tradingview_widget"></div></div>
-<div class="navigation">
-<a href="/" class="nav-link">← Ana Sayfa</a>
-<a href="/signal/all/" class="nav-link">Tüm Coinler →</a>
-</div>
-</div>
-<script>
-let signalWs = null;
-let tradingViewWidget = null;
-let currentSymbol = "BTC";
-let currentTimeframe = "5m";
-const timeframeMap = {{ "1m":"1","3m":"3","5m":"5","15m":"15","30m":"30","1h":"60","4h":"240","1d":"D","1w":"W" }};
-function getTradingViewSymbol(pair) {{
-    return "BINANCE:" + pair.trim().toUpperCase().replace('USDT','') + 'USDT';
-}}
-function connectSignal() {{
-    currentSymbol = document.getElementById('pair').value.trim().toUpperCase();
-    currentTimeframe = document.getElementById('timeframe').value;
-    const tvSymbol = getTradingViewSymbol(currentSymbol);
-    const interval = timeframeMap[currentTimeframe] || "5";
-    if (signalWs) {{ signalWs.close(); }}
-    if (tradingViewWidget) {{ tradingViewWidget.remove(); }}
-    tradingViewWidget = new TradingView.widget({{
-        width: "100%", height: "100%",
-        symbol: tvSymbol, interval: interval,
-        timezone: "Etc/UTC", theme: "dark", style: "1", locale: "tr",
-        container_id: "tradingview_widget",
-        overrides: {{ "paneProperties.background": "#000000", "scalesProperties.textColor": "#FFFFFF" }}
-    }});
-    const protocol = window.location.protocol === 'https:' ? 'wss://' : 'ws://';
-    signalWs = new WebSocket(protocol + window.location.host + '/ws/signal/' + currentSymbol + '/' + currentTimeframe);
-    signalWs.onopen = () => {{
-        document.getElementById('connection-status').innerHTML = '✅ ' + currentSymbol + ' ' + currentTimeframe.toUpperCase() + ' bağlantısı kuruldu';
-    }};
-    signalWs.onmessage = (event) => {{
-        if (event.data.includes('heartbeat')) return;
-        try {{
-            const data = JSON.parse(event.data);
-            const card = document.getElementById('signal-card');
-            const text = document.getElementById('signal-text');
-            const details = document.getElementById('signal-details');
-            text.innerHTML = data.signal || "⏸️ Sinyal bekleniyor";
-            details.innerHTML = `<strong>${{data.pair}}</strong><br>💰 Fiyat: <strong>$${{data.current_price?.toFixed(6) || '?'}}</strong><br>📊 Skor: <strong>${{data.score || '?}}/100</strong>`;
-            card.className = 'signal-card ' + (data.signal?.includes('AL') ? 'green' : data.signal?.includes('SAT') ? 'red' : '');
-            text.style.color = data.signal?.includes('AL') ? '#00ff88' : data.signal?.includes('SAT') ? '#ff4444' : '#ffd700';
-        }} catch(e) {{ console.error(e); }}
-    }};
-}}
-async function analyzeChartWithAI() {{
-    const btn = document.querySelector('button[onclick="analyzeChartWithAI()"]');
-    const box = document.getElementById('ai-box');
-    const comment = document.getElementById('ai-comment');
-    btn.disabled = true;
-    btn.innerHTML = "⏳ Analiz ediliyor...";
-    box.style.display = 'block';
-    comment.innerHTML = "📊 Teknik analiz oluşturuluyor...";
-    try {{
-        const res = await fetch('/api/analyze-chart', {{
-            method: 'POST',
-            headers: {{ 'Content-Type': 'application/json' }},
-            body: JSON.stringify({{ symbol: currentSymbol, timeframe: currentTimeframe }})
-        }});
-        const d = await res.json();
-        comment.innerHTML = d.success ? d.analysis.replace(/\
-/g, '<br>') : `<strong style="color:#ff4444">Hata:</strong><br>` + d.analysis;
-    }} catch (err) {{
-        comment.innerHTML = `<strong style="color:#ff4444">Bağlantı hatası:</strong><br>` + err.message;
-    }} finally {{
-        btn.disabled = false;
-        btn.innerHTML = "🤖 GRAFİĞİ ANALİZ ET";
-    }}
-}}
-setTimeout(connectSignal, 500);
-</script>
-</body>
-</html>"""
-    return HTMLResponse(content=html_content)
-
-# ==================== ANALİZ ENDPOINT ====================
+# ==================== API: ANALYZE CHART ====================
 @app.post("/api/analyze-chart")
 async def analyze_chart(request: Request):
     try:
@@ -828,74 +275,222 @@ async def analyze_chart(request: Request):
         symbol = (body.get("symbol") or "BTC").upper()
         if not symbol.endswith("USDT"):
             symbol += "USDT"
-        timeframe = body.get("timeframe", "5m")
+        tf = body.get("timeframe", "5m")
 
-        klines = await fetch_coingecko_ohlcv(symbol, timeframe)
+        klines = await fetch_coingecko_ohlcv(symbol, tf)
         if not klines or len(klines) < 50:
             return JSONResponse({
                 "success": False,
-                "analysis": f"❌ {symbol} için CoinGecko'dan yeterli veri alınamadı. Lütfen sembolü kontrol edin."
-            }, status_code=500)
+                "analysis": f"❌ {symbol} için yeterli veri yok. Lütfen geçerli bir coin girin (BTC, ETH, SOL vs.)"
+            })
 
         df = pd.DataFrame(klines, columns=['timestamp', 'open', 'high', 'low', 'close', 'volume'])
-        for col in ['open', 'high', 'low', 'close', 'volume']:
-            df[col] = pd.to_numeric(df[col])
+        df[['open','high','low','close','volume']] = df[['open','high','low','close','volume']].apply(pd.to_numeric)
         df['timestamp'] = pd.to_datetime(df['timestamp'], unit='s')
         df = df.sort_values('timestamp').tail(150)
 
-        # Sinyal üretimi — artık her zaman tanımlı!
-        analyzer = GrokIndicators()
+        # Signal & Patterns
         try:
-            signal = generate_ict_signal(df.copy(), symbol, timeframe)
-        except Exception as e:
-            logger.warning(f"ICT sinyali başarısız, basit sinyal deneniyor: {e}")
-            signal = generate_simple_signal(df.copy(), symbol, timeframe)
-
+            signal = generate_ict_signal(df.copy(), symbol, tf)
+        except:
+            signal = generate_simple_signal(df.copy(), symbol, tf)
+        analyzer = GrokIndicators()
         patterns = analyzer.detect_all_patterns(df)
-        pos = [f"✅ {k.replace('_',' ').title()}" for k,v in patterns.items() if isinstance(v, pd.Series) and len(v) > 0 and v.iloc[-1] and 'bull' in k.lower()]
-        neg = [f"⚠️ {k.replace('_',' ').title()}" for k,v in patterns.items() if isinstance(v, pd.Series) and len(v) > 0 and v.iloc[-1] and 'bear' in k.lower()]
-        triggers = (("\n".join(pos) if pos else "") + ("\n".join(neg) if neg else "")).strip() or "😐 Belirgin patern yok"
 
-        current_price = signal.get("current_price", 0.0)
-        analysis = f"""🔍 **{symbol} - {timeframe.upper()} Analiz**
+        pos = [f"✅ {k.replace('_',' ').title()}" for k,v in patterns.items() 
+               if isinstance(v, pd.Series) and len(v) and v.iloc[-1] and 'bull' in k.lower()]
+        neg = [f"⚠️ {k.replace('_',' ').title()}" for k,v in patterns.items() 
+               if isinstance(v, pd.Series) and len(v) and v.iloc[-1] and 'bear' in k.lower()]
+        triggers = "\n".join(pos + neg) or "😐 Belirgin patern yok"
+
+        price = signal.get("current_price", 0)
+        analysis = f"""🔍 **{symbol} · {tf.upper()} Analiz**
 🎯 **Sinyal:** **{signal.get('signal', 'N/A')}**
 📈 **Skor:** {signal.get('score', '?')}/100 | {signal.get('strength', 'N/A')}
-💰 **Fiyat:** ${current_price:,.6f}
+💰 **Fiyat:** ${price:,.6f}
 🕐 **Killzone:** {signal.get('killzone', 'N/A')}
 🔥 **Tetikleyiciler:**
 {triggers}
-💡 AI analiz hazır. Gerçek zamanlı veri almak için Core modülünü yükleyin.
+💡 AI analiz hazır. Gerçek zamanlı veri için Core modülü gereklidir.
+
 ⚠️ Bu bir yatırım tavsiyesi değildir."""
-
-        return JSONResponse({
-            "success": True,
-            "analysis": analysis,
-            "signal_data": signal,
-            "current_price": current_price
-        })
-
-    except json.JSONDecodeError:
-        return JSONResponse({"success": False, "analysis": "❌ Geçersiz JSON isteği"}, status_code=400)
+        return JSONResponse({"success": True, "analysis": analysis})
     except Exception as e:
-        logger.exception("API analiz hatası")
-        return JSONResponse({"success": False, "analysis": f"❌ Hata: {str(e)[:200]}"}, status_code=500)
+        logger.exception("Analiz hatası")
+        return JSONResponse({"success": False, "analysis": f"❌ Hata: {str(e)[:150]}"}, status_code=500)
 
-# ==================== SAĞLIK KONTROLÜ ====================
+# ==================== ROUTES ====================
+@app.get("/", response_class=HTMLResponse)
+async def home(request: Request):
+    user = request.cookies.get("user_email") or "Misafir"
+    stats = get_visitor_stats_html()
+    return HTMLResponse(f"""<!DOCTYPE html>
+<html><head><meta charset="utf-8"><title>ICT SMART PRO</title>
+<style>:root{{--g:linear-gradient(135deg,#0a0022,#1a0033,#000);--a:linear-gradient(90deg,#00dbde,#fc00ff,#00dbde);}}
+body{{background:var(--g);color:#fff;font-family:Segoe UI;margin:0;min-height:100vh;overflow-x:hidden;}}
+.container{{max-width:1400px;margin:0 auto;padding:20px;}}
+.h1{{font-size:clamp(2rem,5vw,4.5rem);text-align:center;background:var(--a);-webkit-background-clip:text;-webkit-text-fill-color:transparent;margin:20px 0;font-weight:800;}}
+.btn{{display:inline-block;min-width:240px;padding:18px 24px;font-size:clamp(1.1rem,2.5vw,1.6rem);background:var(--a);color:#fff;text-align:center;border-radius:15px;text-decoration:none;box-shadow:0 0 30px rgba(252,0,255,0.4);border:none;cursor:pointer;margin:10px;}}
+.btn:hover{{transform:scale(1.03);box-shadow:0 0 50px rgba(252,0,255,0.7);}}
+.loader{{border:4px solid #00ffff33;border-top:#00ffff solid 4px;border-radius:50%;width:40px;height:40px;animation:spin 1s linear infinite;margin:20px auto;}}
+@keyframes spin{{0%{{transform:rotate(0)}}100%{{transform:rotate(360deg)}}}}
+</style></head><body>
+<div style='position:fixed;top:15px;left:15px;background:rgba(0,0,0,0.8);padding:10px 20px;border-radius:20px;color:#00ff88;font-size:clamp(0.8rem,2vw,1.2rem)'>👤 Hoş geldin, <strong>{user}</strong></div>
+{stats}
+<div class="container">
+<h1 class="h1">ICT SMART PRO</h1>
+<div style="text-align:center;color:#00dbde;margin:30px 0;font-size:1.4rem">Akıllı Kripto Sinyal ve Analiz Platformu</div>
+<div style="text-align:center;color:#00dbde;margin:20px 0;font-size:1.2rem;background:rgba(0,219,222,0.1);padding:15px;border-radius:10px">
+<div class="loader"></div>
+<div id="update">Veri yükleniyor...</div>
+</div>
+<div style="text-align:center;margin:40px 0;">
+<a href="/signal" class="btn">🚀 Tek Coin Canlı Sinyal</a>
+<a href="/signal/all" class="btn">🔥 Tüm Coinleri Tara</a>
+<a href="/admin" class="btn">⚙️ Admin Paneli</a>
+</div>
+</div>
+<script>
+const ws = new WebSocket((window.location.protocol==='https:'?'wss':'ws')+'://'+window.location.host+'/ws/pump_radar');
+ws.onmessage=e=>{{try{{const d=JSON.parse(e.data);document.getElementById('update').innerHTML=`📊 Son Güncelleme: <strong>${{d.last_update||'Şimdi'}}</strong>`}}catch(_){}}};
+ws.onerror=()=>document.getElementById('update').innerHTML='⚠️ Bağlantı hatası';
+</script>
+</body></html>""")
+
+@app.get("/signal/", response_class=HTMLResponse)
+async def signal_page(request: Request):
+    user = request.cookies.get("user_email") or "Misafir"
+    stats = get_visitor_stats_html()
+    tfs = get_available_timeframes()
+    tf_options = ''.join([f'<option value="{tf}"{" selected" if tf=="5m" else ""}>{tf.upper()}</option>' for tf in tfs])
+
+    return HTMLResponse(f"""<!DOCTYPE html>
+<html><head><meta charset="utf-8"><title>Tek Coin Sinyal</title>
+<style>
+body{{background:linear-gradient(135deg,#0a0022,#1a0033,#000);color:#fff;font-family:Arial,sans-serif;margin:0;padding:20px;min-height:100vh;}}
+.container{{max-width:1000px;margin:0 auto;}}
+.title{{text-align:center;font-size:2.4rem;background:linear-gradient(90deg,#00dbde,#fc00ff);-webkit-background-clip:text;-webkit-text-fill-color:transparent;margin:30px 0;}}
+.controls{{background:rgba(255,255,255,0.05);padding:25px;border-radius:15px;text-align:center;margin:25px 0;}}
+input,select{{background:#1a0033;color:#00ff88;border:2px solid #00dbde;border-radius:12px;padding:14px;font-size:1.2rem;margin:0 10px;}}
+select{{min-width:200px;background-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='14' height='10'%3E%3Cpath fill='%2300ff88' d='M1 1l6 6 6-6'/%3E%3C/svg%3E");background-repeat:no-repeat;background-position:right 15px center;background-size:14px;}}
+.btn{{background:linear-gradient(45deg,#fc00ff,#00dbde);color:#fff;border:none;padding:14px 28px;border-radius:10px;font-size:1.1rem;font-weight:bold;margin:10px;cursor:pointer;display:inline-block;min-width:220px;}}
+.card{{background:rgba(0,0,0,0.5);padding:25px;border-radius:15px;margin:30px 0;text-align:center;border-left:5px solid #ffd700;}}
+.card.green{{border-left-color:#00ff88;}}
+.card.red{{border-left-color:#ff4444;}}
+#signal{{font-size:2rem;font-weight:bold;margin:15px 0;color:#ffd700;}}
+.ai{{background:rgba(10,0,30,0.8);padding:20px;border-radius:10px;border:2px solid #00dbde;display:none;margin:25px 0;}}
+.chart{{width:100%;height:80vh;min-height:900px;background:#000;border-radius:16px;margin:30px 0;box-shadow:0 0 30px rgba(0,219,222,0.2);}}
+</style>
+<script src="https://s3.tradingview.com/tv.js"></script>
+</head><body>
+<div style="position:fixed;top:15px;left:15px;background:rgba(0,0,0,0.8);padding:10px 20px;border-radius:20px;color:#00ff88;font-size:1.1rem">👤 Hoş geldin, <strong>{user}</strong></div>
+{stats}
+<div class="container">
+<h1 class="title">📊 Tek Coin Canlı Sinyal</h1>
+<div class="controls">
+<input type="text" id="pair" placeholder="Coin (örn: BTC)" value="BTC">
+<select id="timeframe">{tf_options}</select><br>
+<button class="btn" onclick="connect()">🔴 Canlı Sinyal Kur</button>
+<button class="btn" style="background:linear-gradient(45deg,#00dbde,#ff00ff)" onclick="analyze()">🤖 Grafiği Analiz Et</button>
+<div id="status" style="color:#00ffff;margin-top:10px">Bağlantı bekleniyor...</div>
+</div>
+<div class="card" id="card">
+<div id="signal">Sinyal bekleniyor...</div>
+<div id="details">Lütfen "Canlı Sinyal Kur" butonuna tıklayın.</div>
+</div>
+<div class="ai" id="ai"></div>
+<div class="chart"><div id="tv"></div></div>
+</div>
+<script>
+let ws, widget;
+const tfMap = {{'1m':'1','3m':'3','5m':'5','15m':'15','30m':'30','1h':'60','4h':'240','1d':'D','1w':'W'}};
+
+function symbolToTV(s) {{
+    s = s.trim().toUpperCase();
+    return 'BINANCE:' + (s.endsWith('USDT') ? s : s + 'USDT');
+}}
+
+function connect() {{
+    const pair = document.getElementById('pair').value;
+    const tf = document.getElementById('timeframe').value;
+    const sym = symbolToTV(pair);
+    const int = tfMap[tf] || '5';
+
+    if (ws) ws.close();
+    if (widget) widget.remove();
+
+    widget = new TradingView.widget({{
+        width: '100%', height: '100%',
+        symbol: sym,
+        interval: int,
+        timezone: 'Etc/UTC',
+        theme: 'dark',
+        style: '1',
+        locale: 'tr',
+        container_id: 'tv',
+        library_path: 'https://s3.tradingview.com/tv.js',
+        autosize: true,
+        overrides: {{
+            'paneProperties.background': '#000000',
+            'scalesProperties.textColor': '#FFFFFF'
+        }}
+    }});
+
+    ws = new WebSocket((location.protocol==='https:'?'wss':'ws')+'://'+location.host+'/ws/signal/'+pair+'/'+tf);
+    ws.onopen = () => document.getElementById('status').innerHTML = `✅ ${pair} ${tf.toUpperCase()} bağlantısı kuruldu`;
+    ws.onmessage = e => {{
+        if (e.data.includes('heartbeat')) return;
+        try {{
+            const d = JSON.parse(e.data);
+            const card = document.getElementById('card');
+            const sig = d.signal || '⏸️ Bekleniyor';
+            document.getElementById('signal').innerHTML = sig;
+            document.getElementById('details').innerHTML = `<strong>${{d.pair||pair}}</strong><br>💰 Fiyat: $${{(d.current_price||0).toFixed(6)}}</br>📊 Skor: ${{d.score||'?'}}`;
+            card.className = 'card ' + (sig.includes('AL')?'green':sig.includes('SAT')?'red':'');
+            document.getElementById('signal').style.color = sig.includes('AL')?'#00ff88':sig.includes('SAT')?'#ff4444':'#ffd700';
+        }} catch(_){} 
+    }};
+}}
+
+async function analyze() {{
+    const btn = Array.from(document.querySelectorAll('.btn')).find(b=>b.textContent.includes('Analiz'));
+    btn.disabled = true;
+    btn.innerHTML = '⏳ Analiz ediliyor...';
+    const ai = document.getElementById('ai');
+    ai.style.display = 'block';
+    ai.innerHTML = '📊 Analiz yapılıyor...';
+
+    try {{
+        const res = await fetch('/api/analyze-chart', {{
+            method: 'POST',
+            headers: {{'Content-Type':'application/json'}},
+            body: JSON.stringify({{
+                symbol: document.getElementById('pair').value,
+                timeframe: document.getElementById('timeframe').value
+            }})
+        }});
+        const d = await res.json();
+        ai.innerHTML = d.success ? d.analysis.replace(/\
+/g, '<br>') : `<strong style="color:#ff4444">Hata:</strong><br>${{d.analysis}}`;
+    }} catch(err) {{
+        ai.innerHTML = `<strong style="color:#ff4444">Bağlantı hatası:</strong><br>${{err.message}}`;
+    }} finally {{
+        btn.disabled = false;
+        btn.innerHTML = '🤖 Grafiği Analiz Et';
+    }}
+}}
+
+// Sayfa yüklendiğinde otomatik bağlan
+setTimeout(connect, 500);
+</script>
+</body></html>""")
+
 @app.get("/health")
 async def health():
-    return {"status": "ok", "timestamp": datetime.utcnow().isoformat()}
+    return {"status": "ok", "time": datetime.now(timezone.utc).isoformat()}
 
-# ==================== GİRİŞ NOKTASI ====================
+# ==================== ENTRY POINT ====================
 if __name__ == "__main__":
     port = int(os.getenv("PORT", 8000))
-    workers = int(os.getenv("UVICORN_WORKERS", 1))  # Railway'de 1 yeterli
-    logger.info(f"🚀 ICT SMART PRO {port} portunda ({workers} worker) başlatılıyor...")
-    uvicorn.run(
-        "main:app",
-        host="0.0.0.0",
-        port=port,
-        workers=workers,
-        log_level="info",
-        access_log=True,
-        timeout_keep_alive=30,
-    )
+    logger.info(f"🚀 ICT SMART PRO {port} portunda başlatılıyor...")
+    uvicorn.run("main:app", host="0.0.0.0", port=port, workers=1, log_level="info")
