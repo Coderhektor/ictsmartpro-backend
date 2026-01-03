@@ -351,7 +351,7 @@ async def home(request: Request):
             console.log('FİYAT VERİSİ GELDİ:', Object.keys(d.tickers || {}).length + ' coin');
             
             // Son güncelleme zamanını göster
-            document.getElementById('update').innerHTML = `Son Güncelleme: <strong>${d.last_update || 'Şimdi'}</strong>`;
+            document.getElementById('update').innerHTML = `Son Güncelleme: <strong>${{d.last_update || 'Şimdi'}}</strong>`;
             
             const t = document.getElementById('table-body');
             
@@ -1462,6 +1462,7 @@ async def debug_info():
 if __name__ == "__main__":
     import uvicorn
     uvicorn.run(app, host="0.0.0.0", port=8000) 
+
 
 
 
