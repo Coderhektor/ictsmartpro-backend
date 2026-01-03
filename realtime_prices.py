@@ -192,6 +192,39 @@ class UserPriceTracker:
     def list_tracked(self) -> List[str]:
         return list(self.tracked_symbols)
 
+#   Tüm takip edilen fiyatları snapshot olarak döndür
+def get_all_prices_snapshot(limit: int = 50) -> Dict[str, Any]:
+    """
+    Global olarak takip edilen tüm sembollerin güncel fiyat snapshot'ını döndürür.
+    HTTP endpoint'ler için kullanışlı.
+    """
+    try:
+        # Tüm global sembolleri al
+        all_keys = list(price_manager.price_pool.keys())
+        # En son güncellenenlere göre sırala (timestamp'e göre)
+        sorted_keys = sorted(
+            all_keys,
+            key=lambda k: price_manager.price_pool[k]['timestamp'].max() if k in price_manager.price_pool else datetime.min,
+            reverse=True
+        )[:limit]
+
+        snapshot = {}
+        for key in sorted_keys:
+            snapshot[key] = price_manager.get_price(key.replace('USDT', '/USDT'))  # kullanıcı dostu format
+
+        return {
+            "snapshot": snapshot,
+            "total_tracked": len(price_manager.all_symbols),
+            "returned_count": len(snapshot),
+            "timestamp": datetime.utcnow().isoformat() + 'Z'
+        }
+    except Exception as e:
+        logger.error(f"get_all_prices_snapshot hatası: {e}")
+        return {
+            "error": "Snapshot alınamadı",
+            "details": str(e),
+            "timestamp": datetime.utcnow().isoformat() + 'Z'
+        }
 
 # Test / Örnek kullanım
 async def main():
