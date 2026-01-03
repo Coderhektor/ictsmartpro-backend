@@ -1124,11 +1124,6 @@ async def signal_page(request: Request):
 </html>"""
     return HTMLResponse(content=html_content)
 #=========================================================================================================
-# indicators.py'den sınıfı import et (dosyanın en üstüne zaten var ama emin ol)
-from indicators import GrokIndicators, generate_ict_signal, generate_simple_signal
-
-# ... diğer kodlar ...
-
 @app.post("/api/analyze-chart")
 async def analyze_chart(request: Request):
     try:
@@ -1170,7 +1165,7 @@ async def analyze_chart(request: Request):
 
         # CoinGecko fallback
         if not klines_list:
-            logger.info(f"Borsalar başarısız, CoinGecko fallback: {symbol}")
+            logger.info(f"Borsalar başarısız, CoinGecko fallback kullanılıyor: {symbol}")
             coingecko_klines = await fetch_coingecko_ohlcv(symbol, timeframe)
             if coingecko_klines and len(coingecko_klines) > 50:
                 klines_list.append(("CoinGecko", coingecko_klines))
@@ -1179,10 +1174,9 @@ async def analyze_chart(request: Request):
         if not klines_list:
             return JSONResponse({
                 "success": False,
-                "analysis": f"❌ {symbol} için veri alınamadı. İnternet veya sembolü kontrol edin.\n⚠️ Bu bir yatırım tavsiyesi değildir."
+                "analysis": f"❌ {symbol} için hiçbir kaynaktan veri alınamadı. Lütfen sembolü kontrol edin.\n⚠️ Bu bir yatırım tavsiyesi değildir."
             }, status_code=500)
 
-        # En iyi kaynağı seç
         source_name, klines = max(klines_list, key=lambda x: len(x[1]))
 
         # DataFrame oluştur
@@ -1216,29 +1210,29 @@ async def analyze_chart(request: Request):
         if len(df) < 50:
             return JSONResponse({
                 "success": False,
-                "analysis": f"❌ Yeterli veri yok ({len(df)} mum).\n⚠️ Bu bir yatırım tavsiyesi değildir."
+                "analysis": f"❌ Yeterli veri yok ({len(df)} mum). Daha uzun timeframe deneyin.\n⚠️ Bu bir yatırım tavsiyesi değildir."
             }, status_code=500)
 
-        # === GROK NESNESİNİ BURADA OLUŞTUR (HATA BURADAYDI!) ===
-        grok_analyzer = GrokIndicators()
+        # === KRİTİK DÜZELTME: GrokIndicators nesnesini burada oluştur ===
+        analyzer = GrokIndicators()
 
         # Sinyal üret
         try:
             signal = generate_ict_signal(df.copy(), symbol, timeframe)
         except Exception as e:
-            logger.warning(f"ICT sinyal hatası, basit sinyal kullanılıyor: {e}")
+            logger.warning(f"ICT sinyal üretilemedi, basit sinyal kullanılıyor: {e}")
             signal = generate_simple_signal(df.copy(), symbol, timeframe)
 
-        # Tetiklenen paternleri detaylı çek
-        patterns = grok_analyzer.detect_all_patterns(df)
+        # Tetiklenen paternleri çek
+        patterns = analyzer.detect_all_patterns(df)
         triggered_positive = []
         triggered_negative = []
 
         for key, value in patterns.items():
             if isinstance(value, pd.Series) and len(value) > 0 and value.iloc[-1]:
-                if any(pos in key.lower() for pos in ['bull', 'buy', 'positive', 'up', 'long', 'choch_bull', 'sweep_bull', 'breaker_bull', 'mitigation_bull', 'golden', 'crt_buy', 'fvg_up']):
+                if any(pos in key.lower() for pos in ['bull', 'buy', 'positive', 'up', 'long', 'choch_bull', 'sweep_bull', 'breaker_bull', 'mitigation_bull', 'golden', 'crt_buy', 'fvg_up', 'rsi6_crossover']):
                     triggered_positive.append(f"✅ {key.replace('_', ' ').title()}")
-                elif any(neg in key.lower() for neg in ['bear', 'sell', 'negative', 'down', 'short', 'choch_bear', 'sweep_bear', 'breaker_bear', 'mitigation_bear', 'death', 'crt_sell', 'fvg_down']):
+                elif any(neg in key.lower() for neg in ['bear', 'sell', 'negative', 'down', 'short', 'choch_bear', 'sweep_bear', 'breaker_bear', 'mitigation_bear', 'death', 'crt_sell', 'fvg_down', 'rsi6_crossunder']):
                     triggered_negative.append(f"⚠️ {key.replace('_', ' ').title()}")
 
         triggers_detail = ""
@@ -1247,13 +1241,13 @@ async def analyze_chart(request: Request):
         if triggered_negative:
             triggers_detail += "**Negatif Tetikleyiciler:**\n" + "\n".join(triggered_negative) + "\n\n"
         if not triggered_positive and not triggered_negative:
-            triggers_detail = "😐 Henüz belirgin bir tetikleyici patern oluşmadı.\n"
+            triggers_detail = "😐 Henüz belirgin bir tetikleyici oluşmadı.\n"
 
         current_price = float(df['close'].iloc[-1])
 
         analysis_text = f"""🔍 **{symbol.replace('USDT', '/USDT')} - {timeframe.upper()} Detaylı Teknik Analiz**
 
-📊 **Kaynak:** {source_name} • **Mum Sayısı:** {len(df)}
+📊 **Veri Kaynağı:** {source_name} • **Mum Sayısı:** {len(df)}
 
 🎯 **ANA SİNYAL:** <strong style="font-size:1.3em;">{signal.get('signal', '⏸️ BEKLE')}</strong>
 
@@ -1266,9 +1260,9 @@ async def analyze_chart(request: Request):
 {triggers_detail}
 
 💡 **Kısa Yorum:**
-{symbol.replace('USDT', '')} şu anda {signal.get('signal', 'BEKLE').replace('🚀 AL', 'güçlü yükseliş').replace('🔻 SAT', 'güçlü düşüş').replace('⏸️ BEKLE', 'bekleme')} eğiliminde.
+{symbol.replace('USDT', '')} şu anda {signal.get('signal', 'BEKLE').replace('🚀 AL', 'güçlü yükseliş').replace('🔻 SAT', 'güçlü düşüş').replace('⏸️ BEKLE', 'bekleme')} sinyali veriyor.
 
-⚠️ **ÖNEMLİ UYARI:** Bu bir yatırım tavsiyesi değildir. Kripto paralar yüksek risk içerir. Kendi araştırmanızı yapın ve yalnızca kaybetmeyi göze alabileceğiniz miktar ile işlem yapın.
+⚠️ **ÖNEMLİ UYARI:** Bu bir yatırım tavsiyesi değildir. Kripto para piyasaları yüksek volatiliteye sahiptir. Kendi araştırmanızı yapın ve yalnızca kaybetmeyi göze alabildiğiniz miktar ile işlem yapın.
 """
 
         return JSONResponse({
@@ -1282,14 +1276,14 @@ async def analyze_chart(request: Request):
     except json.JSONDecodeError:
         return JSONResponse({
             "success": False,
-            "analysis": "❌ Geçersiz istek formatı.\n⚠️ Bu bir yatırım tavsiyesi değildir."
+            "analysis": "❌ Geçersiz istek. Lütfen tekrar deneyin.\n⚠️ Bu bir yatırım tavsiyesi değildir."
         }, status_code=400)
 
     except Exception as e:
         logger.error(f"Analiz endpoint hatası: {e}", exc_info=True)
         return JSONResponse({
             "success": False,
-            "analysis": f"❌ Beklenmeyen bir hata oluştu.\nDetay: {str(e)[:200]}\n⚠️ Bu bir yatırım tavsiyesi değildir."
+            "analysis": f"❌ Beklenmeyen hata: {str(e)[:150]}\n⚠️ Bu bir yatırım tavsiyesi değildir."
         }, status_code=500)
 #=========================================================================================================
 # Diğer endpoint'ler (analyze-chart, signal, all, realtime, admin vs.) tamamen aynı kalıyor,
@@ -1319,6 +1313,7 @@ if __name__ == "__main__":
     logger.info(f"👷 Workers: {uvicorn_config['workers']}")
 
     uvicorn.run(**uvicorn_config)
+
 
 
 
