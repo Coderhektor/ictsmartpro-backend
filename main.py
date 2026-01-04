@@ -355,14 +355,14 @@ async def home(request: Request):
     return;
    }}
    const tickers = Object.entries(d.tickers);
-   t.innerHTML = tickers.slice(0, 10).map(([symbol, data], i) => `
-    <tr>
-     <td>#${{i+1}}</td>
-     <td><strong>${{symbol.replace('USDT', '')}}</strong></td>
-     <td>$${{data.price.toFixed(data.price > 1 ? 2 : 6)}}</td>
-     <td class="${{data.change > 0 ? 'green' : 'red'}}">${{data.change > 0 ? '+' : ''}}${{data.change.toFixed(2)}}%</td>
-    </tr>
-   `).join('');
+  t.innerHTML = tickers.slice(0, 10).map(([symbol, data], i) => `
+ <tr>
+  <td>#${i+1}</td>
+  <td><strong>${symbol.replace('USDT', '')}</strong></td>
+  <td>$${data.price.toFixed(data.price > 1 ? 2 : 6)}</td>
+  <td class="${data.change > 0 ? 'green' : 'red'}">${data.change > 0 ? '+' : ''}${data.change.toFixed(2)}}%</td>
+ </tr>
+`).join('');
   }} catch (err) {{
    console.error('WebSocket veri hatası:', err);
   }}
@@ -952,3 +952,4 @@ async def health():
 if __name__ == "__main__":
     import uvicorn
     uvicorn.run("main:app", host="0.0.0.0", port=int(os.getenv("PORT", 8000)), reload=False)
+
