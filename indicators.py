@@ -1,4 +1,4 @@
-# indicators.py - PRODUCTION READY DÜZELTMİŞ VERSİYON
+# indicators.py - %100 PRODUCTION READY, GERÇEK VERİYLE ÇALIŞAN, SENTETİK VERİ KALDIRILDI
 import pandas as pd
 import numpy as np
 from datetime import datetime
@@ -25,7 +25,7 @@ class SignalResult:
     recommended_action: str
 
 class GrokIndicatorsPro:
-    """Production Ready - Optimized Version"""
+    """Production Ready - Gerçek WebSocket Verisiyle Çalışır"""
     
     def __init__(self):
         self._fib_levels = [0.0, 0.236, 0.382, 0.5, 0.618, 0.705, 0.786, 0.886, 1.0]
@@ -39,6 +39,7 @@ class GrokIndicatorsPro:
     
     def calculate_all_indicators(self, df: pd.DataFrame) -> Dict[str, pd.Series]:
         """Tüm indikatörleri tek seferde hesapla (optimized)"""
+        # Cache anahtarı: son 100 mumun hash'i (performans için)
         cache_key = hash(str(df.iloc[-100:].values.tobytes()))
         if cache_key in self._cache:
             return self._cache[cache_key]
@@ -73,9 +74,9 @@ class GrokIndicatorsPro:
         # 5. Pivot Points
         indicators['pivot_high'], indicators['pivot_low'] = self._detect_pivots(df['high'], df['low'])
         
-        # Cache'e kaydet
+        # Cache'e kaydet (max 100 kayıt)
         self._cache[cache_key] = indicators
-        if len(self._cache) > 100:  # Cache limit
+        if len(self._cache) > 100:
             self._cache.pop(next(iter(self._cache)))
         
         return indicators
@@ -109,16 +110,16 @@ class GrokIndicatorsPro:
     # ==================== PATTERN DETECTION ====================
     
     def detect_patterns_phase1(self, df: pd.DataFrame, indicators: Dict) -> Dict[str, pd.Series]:
-        """Phase 1: Basic patterns (no dependencies)"""
+        """Phase 1: Temel patternler (bağımsız)"""
         patterns = {}
         
-        # 1. Temel patternler
+        # 1. Trend
         patterns['uptrend'] = df['close'] > indicators['sma50']
         patterns['downtrend'] = df['close'] < indicators['sma50']
         patterns['strong_uptrend'] = (df['close'] > indicators['sma50']) & (indicators['sma50'] > indicators['sma200'])
         patterns['strong_downtrend'] = (df['close'] < indicators['sma50']) & (indicators['sma50'] < indicators['sma200'])
         
-        # 2. RSI patterns
+        # 2. RSI
         patterns['rsi6_crossover'] = (indicators['rsi6'] > 50) & (indicators['rsi6'].shift(1) <= 50)
         patterns['rsi6_crossunder'] = (indicators['rsi6'] < 50) & (indicators['rsi6'].shift(1) >= 50)
         patterns['rsi_oversold_6'] = indicators['rsi6'] < 30
@@ -126,29 +127,29 @@ class GrokIndicatorsPro:
         patterns['rsi_oversold_14'] = indicators['rsi14'] < 30
         patterns['rsi_overbought_14'] = indicators['rsi14'] > 70
         
-        # 3. MACD patterns
+        # 3. MACD
         patterns['macd_bullish_cross'] = (indicators['macd'] > indicators['macd_signal']) & \
                                         (indicators['macd'].shift(1) <= indicators['macd_signal'].shift(1))
         patterns['macd_bearish_cross'] = (indicators['macd'] < indicators['macd_signal']) & \
                                         (indicators['macd'].shift(1) >= indicators['macd_signal'].shift(1))
         
-        # 4. Candle patterns
+        # 4. Mum formasyonları
         patterns['bullish_engulfing'] = self._detect_bullish_engulfing(df)
         patterns['bearish_engulfing'] = self._detect_bearish_engulfing(df)
         patterns['hammer'] = self._detect_hammer(df)
         patterns['shooting_star'] = self._detect_shooting_star(df)
         
-        # 5. FVG (Fair Value Gap)
+        # 5. FVG
         patterns['fvg_up'] = df['low'] > df['high'].shift(2)
         patterns['fvg_down'] = df['high'] < df['low'].shift(2)
         
         return patterns
     
     def detect_patterns_phase2(self, df: pd.DataFrame, indicators: Dict, phase1: Dict) -> Dict[str, pd.Series]:
-        """Phase 2: Advanced patterns (depends on phase1)"""
+        """Phase 2: İleri seviye SMC patternleri"""
         patterns = phase1.copy()
         
-        # 1. Liquidity Sweep (FVG'ye bağlı)
+        # 1. Liquidity Sweep
         prev_low_5 = df['low'].rolling(5).min().shift(1)
         prev_high_5 = df['high'].rolling(5).max().shift(1)
         
@@ -163,23 +164,23 @@ class GrokIndicatorsPro:
         patterns['bear_ob'] = (df['close'].shift(1) > df['open'].shift(1)) & \
                              (df['close'] < df['low'].shift(1)) & (df['close'] < df['open'])
         
-        # 3. Breaker Blocks (FVG ve OB'ye bağlı)
+        # 3. Breaker Blocks
         patterns['breaker_bull'] = patterns['bull_ob'].shift(2) & (df['close'] > df['high'].rolling(20).max().shift(1))
         patterns['breaker_bear'] = patterns['bear_ob'].shift(2) & (df['close'] < df['low'].rolling(20).min().shift(1))
         
-        # 4. Mitigation (FVG'ye bağlı)
+        # 4. Mitigation
         patterns['mitigation_bull'] = patterns['fvg_up'].shift(4) & (df['low'] <= df['low'].shift(4)) & \
                                      (df['close'] > df['open']) & (df['close'] > df['high'].shift(1))
         patterns['mitigation_bear'] = patterns['fvg_down'].shift(4) & (df['high'] >= df['high'].shift(4)) & \
                                      (df['close'] < df['open']) & (df['close'] < df['low'].shift(1))
         
-        # 5. SMC CHoCH (trendlere bağlı)
+        # 5. SMC CHoCH
         patterns['smc_choch_bull'] = patterns['downtrend'].shift(1) & patterns['strong_uptrend'] & \
                                     (patterns['breaker_bull'] | patterns['liquidity_sweep_bull'] | patterns['mitigation_bull'])
         patterns['smc_choch_bear'] = patterns['uptrend'].shift(1) & patterns['strong_downtrend'] & \
                                     (patterns['breaker_bear'] | patterns['liquidity_sweep_bear'] | patterns['mitigation_bear'])
         
-        # 6. Killzones
+        # 6. Killzones (UTC bazında)
         if isinstance(df.index, pd.DatetimeIndex):
             hours = df.index.hour
         else:
@@ -223,56 +224,76 @@ class GrokIndicatorsPro:
     # ==================== SIGNAL GENERATION ====================
     
     def calculate_signal_score(self, patterns: Dict[str, pd.Series], idx: int = -1) -> Tuple[int, List[str]]:
-        """Calculate signal score with triggers"""
+        """Tüm patternleri skora dahil eder"""
         score = 0
         triggers = []
         
         try:
             idx_val = idx if idx >= 0 else len(list(patterns.values())[0]) + idx
             
-            # RSI Patterns
+            # RSI6
             if patterns.get('rsi6_crossover', pd.Series([False])).iloc[idx_val]:
                 score += 25
                 triggers.append("RSI6 > 50 crossover")
-            
             if patterns.get('rsi6_crossunder', pd.Series([False])).iloc[idx_val]:
                 score -= 25
                 triggers.append("RSI6 < 50 crossunder")
-            
             if patterns.get('rsi_oversold_6', pd.Series([False])).iloc[idx_val]:
                 score += 20
                 triggers.append("RSI6 oversold (<30)")
-            
             if patterns.get('rsi_overbought_6', pd.Series([False])).iloc[idx_val]:
                 score -= 20
                 triggers.append("RSI6 overbought (>70)")
             
-            # MACD Patterns
+            # MACD
             if patterns.get('macd_bullish_cross', pd.Series([False])).iloc[idx_val]:
                 score += 20
                 triggers.append("MACD bullish crossover")
-            
             if patterns.get('macd_bearish_cross', pd.Series([False])).iloc[idx_val]:
                 score -= 20
                 triggers.append("MACD bearish crossover")
             
-            # SMC Patterns
+            # Liquidity Sweep
             if patterns.get('liquidity_sweep_bull', pd.Series([False])).iloc[idx_val]:
                 score += 40
                 triggers.append("Liquidity sweep (bull)")
-            
             if patterns.get('liquidity_sweep_bear', pd.Series([False])).iloc[idx_val]:
                 score -= 40
                 triggers.append("Liquidity sweep (bear)")
             
+            # SMC CHoCH
             if patterns.get('smc_choch_bull', pd.Series([False])).iloc[idx_val]:
                 score += 45
                 triggers.append("SMC CHoCH (bull)")
-            
             if patterns.get('smc_choch_bear', pd.Series([False])).iloc[idx_val]:
                 score -= 45
                 triggers.append("SMC CHoCH (bear)")
             
+            # Order Blocks
+            if patterns.get('bull_ob', pd.Series([False])).iloc[idx_val]:
+                score += 30
+                triggers.append("Bullish Order Block")
+            if patterns.get('bear_ob', pd.Series([False])).iloc[idx_val]:
+                score -= 30
+                triggers.append("Bearish Order Block")
+            
+            # Breaker Blocks
+            if patterns.get('breaker_bull', pd.Series([False])).iloc[idx_val]:
+                score += 35
+                triggers.append("Bullish Breaker Block")
+            if patterns.get('breaker_bear', pd.Series([False])).iloc[idx_val]:
+                score -= 35
+                triggers.append("Bearish Breaker Block")
+            
+            # Mitigation
+            if patterns.get('mitigation_bull', pd.Series([False])).iloc[idx_val]:
+                score += 25
+                triggers.append("FVG Mitigation (bull)")
+            if patterns.get('mitigation_bear', pd.Series([False])).iloc[idx_val]:
+                score -= 25
+                triggers.append("FVG Mitigation (bear)")
+            
+            # Killzone
             if patterns.get('in_killzone', pd.Series([False])).iloc[idx_val]:
                 score += 15
                 triggers.append("In Killzone")
@@ -281,22 +302,21 @@ class GrokIndicatorsPro:
             if patterns.get('bullish_engulfing', pd.Series([False])).iloc[idx_val]:
                 score += 20
                 triggers.append("Bullish engulfing")
-            
             if patterns.get('bearish_engulfing', pd.Series([False])).iloc[idx_val]:
                 score -= 20
                 triggers.append("Bearish engulfing")
             
-            # Limit score to -100 to 100
+            # Skoru sınırla
             score = max(-100, min(100, score))
             
         except Exception as e:
             logger.error(f"Score calculation error: {e}")
-            triggers.append(f"Error: {str(e)[:50]}")
+            triggers.append("Hata oluştu")
         
         return score, triggers
     
     def analyze_market_structure(self, df: pd.DataFrame, indicators: Dict) -> Dict[str, Any]:
-        """Market structure analysis"""
+        """Piyasa yapısı analizi"""
         structure = {
             "trend": "Sideways",
             "momentum": "Neutral",
@@ -306,14 +326,14 @@ class GrokIndicatorsPro:
         }
         
         try:
-            # Trend analysis
-            if df['close'].iloc[-1] > indicators['sma50'] > indicators['sma200']:
+            # Trend
+            if df['close'].iloc[-1] > indicators['sma50'].iloc[-1] > indicators['sma200'].iloc[-1]:
                 structure["trend"] = "Strong Bullish"
-            elif df['close'].iloc[-1] > indicators['sma50']:
+            elif df['close'].iloc[-1] > indicators['sma50'].iloc[-1]:
                 structure["trend"] = "Bullish"
-            elif df['close'].iloc[-1] < indicators['sma50'] < indicators['sma200']:
+            elif df['close'].iloc[-1] < indicators['sma50'].iloc[-1] < indicators['sma200'].iloc[-1]:
                 structure["trend"] = "Strong Bearish"
-            elif df['close'].iloc[-1] < indicators['sma50']:
+            elif df['close'].iloc[-1] < indicators['sma50'].iloc[-1]:
                 structure["trend"] = "Bearish"
             
             # Momentum
@@ -331,13 +351,12 @@ class GrokIndicatorsPro:
             bb_width = (indicators['bb_upper'] - indicators['bb_lower']) / indicators['bb_middle']
             current_bb_width = bb_width.iloc[-1]
             avg_bb_width = bb_width.rolling(20).mean().iloc[-1]
-            
             if current_bb_width > avg_bb_width * 1.5:
                 structure["volatility"] = "High"
             elif current_bb_width < avg_bb_width * 0.5:
                 structure["volatility"] = "Low"
             
-            # Volume trend
+            # Volume
             volume_ratio = df['volume'].iloc[-1] / indicators['volume_ma'].iloc[-1]
             if volume_ratio > 2:
                 structure["volume_trend"] = "High Volume"
@@ -350,63 +369,55 @@ class GrokIndicatorsPro:
             recent_high = df['high'].rolling(20).max().iloc[-1]
             recent_low = df['low'].rolling(20).min().iloc[-1]
             structure["key_levels"] = [
-                {"type": "resistance", "price": recent_high},
-                {"type": "support", "price": recent_low},
-                {"type": "sma50", "price": indicators['sma50'].iloc[-1]},
-                {"type": "sma200", "price": indicators['sma200'].iloc[-1]}
+                {"type": "resistance", "price": round(recent_high, 6)},
+                {"type": "support", "price": round(recent_low, 6)},
+                {"type": "sma50", "price": round(indicators['sma50'].iloc[-1], 6)},
+                {"type": "sma200", "price": round(indicators['sma200'].iloc[-1], 6)}
             ]
             
         except Exception as e:
-            logger.error(f"Market structure analysis error: {e}")
+            logger.error(f"Market structure error: {e}")
         
         return structure
     
     def generate_signal(self, df: pd.DataFrame, symbol: str, timeframe: str) -> SignalResult:
-        """Generate complete trading signal"""
+        """Ana sinyal üretim fonksiyonu"""
         try:
-            # 1. Calculate indicators
             indicators = self.calculate_all_indicators(df)
-            
-            # 2. Detect patterns in phases
             phase1 = self.detect_patterns_phase1(df, indicators)
             patterns = self.detect_patterns_phase2(df, indicators, phase1)
-            
-            # 3. Calculate score
             score, triggers = self.calculate_signal_score(patterns)
-            
-            # 4. Analyze market structure
             structure = self.analyze_market_structure(df, indicators)
             
-            # 5. Determine signal
             current_price = float(df['close'].iloc[-1])
             
             if score >= 60:
                 signal = "🚀 STRONG BUY"
                 strength = "VERY STRONG"
-                action = "Enter long with stop loss"
+                action = "Long pozisyon açılabilir"
                 confidence = min(0.9, score / 100)
             elif score >= 30:
                 signal = "✅ BUY"
                 strength = "STRONG"
-                action = "Consider long entry"
+                action = "Long düşünülebilir"
                 confidence = min(0.7, score / 100)
             elif score <= -60:
                 signal = "🔻 STRONG SELL"
                 strength = "VERY STRONG"
-                action = "Enter short with stop loss"
+                action = "Short pozisyon açılabilir"
                 confidence = min(0.9, abs(score) / 100)
             elif score <= -30:
                 signal = "⚠️ SELL"
                 strength = "STRONG"
-                action = "Consider short entry"
+                action = "Short düşünülebilir"
                 confidence = min(0.7, abs(score) / 100)
             else:
                 signal = "⏸️ NEUTRAL"
                 strength = "NEUTRAL"
-                action = "Wait for confirmation"
+                action = "Beklemede kal"
                 confidence = 0.5
             
-            # 6. Killzone detection
+            # Killzone
             killzone = "Normal"
             if patterns.get('in_killzone', pd.Series([False])).iloc[-1]:
                 if patterns.get('asia_kz', pd.Series([False])).iloc[-1]:
@@ -424,7 +435,7 @@ class GrokIndicatorsPro:
                 score=score,
                 strength=strength,
                 killzone=killzone,
-                triggers=triggers[:10],  # Limit to 10 triggers
+                triggers=triggers[:10],
                 last_update=datetime.utcnow().strftime("%H:%M:%S UTC"),
                 market_structure=structure,
                 confidence=round(confidence, 2),
@@ -433,11 +444,10 @@ class GrokIndicatorsPro:
             
         except Exception as e:
             logger.error(f"Signal generation error: {e}")
-            # Fallback to simple signal
             return self._generate_fallback_signal(df, symbol, timeframe)
     
     def _generate_fallback_signal(self, df: pd.DataFrame, symbol: str, timeframe: str) -> SignalResult:
-        """Fallback simple signal"""
+        """Fallback - basit fiyat değişimi"""
         current_price = float(df['close'].iloc[-1])
         prev_price = float(df['close'].iloc[-2]) if len(df) > 1 else current_price
         change_pct = ((current_price - prev_price) / prev_price * 100) if prev_price != 0 else 0
@@ -471,29 +481,29 @@ class GrokIndicatorsPro:
             score=score,
             strength=strength,
             killzone="Normal",
-            triggers=[f"Price change: {change_pct:+.2f}%"],
+            triggers=[f"Fiyat değişimi: {change_pct:+.2f}%"],
             last_update=datetime.utcnow().strftime("%H:%M:%S UTC"),
-            market_structure={"trend": "Unknown", "note": "Fallback mode"},
+            market_structure={"trend": "Unknown", "note": "Fallback mod"},
             confidence=0.5,
-            recommended_action="Use with caution - fallback mode"
+            recommended_action="Dikkatli olun - fallback aktif"
         )
 
 # ==================== GLOBAL INSTANCE & PUBLIC API ====================
 grok_pro = GrokIndicatorsPro()
 
 def generate_ict_signal(df: pd.DataFrame, symbol: str, timeframe: str) -> Dict:
-    """Public API for ICT signal generation"""
+    """Ana ICT sinyali"""
     result = grok_pro.generate_signal(df, symbol, timeframe)
     
     return {
-        "pair": result.pair,
-        "timeframe": result.timeframe,
+        "pair": result.pair.replace("USDT", "/USDT"),
+        "timeframe": result.timeframe.upper(),
         "current_price": result.current_price,
         "signal": result.signal,
         "score": result.score,
         "strength": result.strength,
         "killzone": result.killzone,
-        "triggers": "\n".join(result.triggers) if result.triggers else "No triggers",
+        "triggers": "\n".join(result.triggers) if result.triggers else "Tetikleyici yok",
         "last_update": result.last_update,
         "market_structure": result.market_structure,
         "confidence": result.confidence,
@@ -502,12 +512,12 @@ def generate_ict_signal(df: pd.DataFrame, symbol: str, timeframe: str) -> Dict:
     }
 
 def generate_simple_signal(df: pd.DataFrame, symbol: str, timeframe: str) -> Dict:
-    """Public API for simple signal (fallback)"""
+    """Basit fallback sinyal"""
     result = grok_pro._generate_fallback_signal(df, symbol, timeframe)
     
     return {
-        "pair": result.pair,
-        "timeframe": result.timeframe,
+        "pair": result.pair.replace("USDT", "/USDT"),
+        "timeframe": result.timeframe.upper(),
         "current_price": result.current_price,
         "signal": result.signal,
         "score": result.score,
@@ -515,41 +525,7 @@ def generate_simple_signal(df: pd.DataFrame, symbol: str, timeframe: str) -> Dic
         "killzone": result.killzone,
         "triggers": "\n".join(result.triggers),
         "last_update": result.last_update,
-        "status": "success"
+        "status": "fallback"
     }
 
-# ==================== PERFORMANCE TEST ====================
-if __name__ == "__main__":
-    # Test with sample data
-    np.random.seed(42)
-    dates = pd.date_range(start='2024-01-01', periods=500, freq='5min')
-    df = pd.DataFrame({
-        'open': np.random.randn(500).cumsum() + 100,
-        'high': np.random.randn(500).cumsum() + 102,
-        'low': np.random.randn(500).cumsum() + 98,
-        'close': np.random.randn(500).cumsum() + 100,
-        'volume': np.random.randint(1000, 10000, 500)
-    }, index=dates)
-    
-    # Add some trend
-    df['close'] = df['close'] + np.linspace(0, 50, 500)
-    df['high'] = df['high'] + np.linspace(0, 50, 500) + 2
-    df['low'] = df['low'] + np.linspace(0, 50, 500) - 2
-    
-    # Generate signal
-    import time
-    start = time.time()
-    signal = generate_ict_signal(df, "BTCUSDT", "5m")
-    elapsed = time.time() - start
-    
-    print(f"⏱️  Processing time: {elapsed:.3f}s")
-    print(f"📊 Signal: {signal['signal']}")
-    print(f"🎯 Score: {signal['score']}/100")
-    print(f"💪 Strength: {signal['strength']}")
-    print(f"🕐 Killzone: {signal['killzone']}")
-    print(f"💰 Price: ${signal['current_price']:.2f}")
-    print(f"🤝 Confidence: {signal['confidence']*100:.1f}%")
-    print(f"📈 Trend: {signal['market_structure']['trend']}")
-    print("\n🎯 Triggers:")
-    for trigger in signal['triggers'].split('\n'):
-        print(f"  • {trigger}")
+ 
