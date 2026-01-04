@@ -970,23 +970,8 @@ async def analyze_chart(request: Request):
             "agreement_majority": agreement_meta["majority"],
             "agreement_ratio": round(agreement_meta["ratio"], 3)
         }
-
-        # Ek zengin veriler (chart + backtest)
-        try:
-            chart_data = indicators_analyze_chart(primary["df"], canonical, timeframe, chart_type="candlestick")
-        except Exception as e:
-            logger.warning(f"Chart data üretilemedi: {e}")
-            chart_data = {"note": "Grafik verisi geçici olarak kullanılamıyor"}
-
-        try:
-            backtest = (
-                backtest_ict_signals(primary["df"], canonical, timeframe)
-                if len(primary["df"]) >= 200 else
-                {"note": "Backtest için en az 200 mum gerekli"}
-            )
-        except Exception as e:
-            logger.warning(f"Backtest hatası: {e}")
-            backtest = {"note": "Backtest şu anda yapılamıyor"}
+ 
+        
 
         # DÜNYANIN EN İYİ ANALİZ METNİ 🌟
         market = signal_dict.get("market_structure", {})
@@ -1114,6 +1099,7 @@ async def health():
 if __name__ == "__main__":
     import uvicorn
     uvicorn.run("main:app", host="0.0.0.0", port=int(os.getenv("PORT", 8000)), reload=False)
+
 
 
 
