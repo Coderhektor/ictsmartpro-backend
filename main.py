@@ -691,118 +691,380 @@ async def signal_all_page(request: Request):
 
 # ====================== ANALİZ ENDPOINT ======================
  
-@app.post("/api/analyze-chart")
+ from fastapi import Request, APIRouter
+from fastapi.responses import JSONResponse
+import asyncio
+import pandas as pd
+from datetime import datetime, timezone
+from typing import List, Dict, Any, Optional, Tuple
+
+router = APIRouter()
+
+# Mevcut yardımcılar (varsayım)
+# get_binance_client(), get_bybit_client(), get_okex_client()
+# generate_ict_signal(df: pd.DataFrame, symbol: str, timeframe: str) -> Dict[str, Any]
+# logger
+
+INTERVAL_MAP = {
+    "1m": "1m", "3m": "3m", "5m": "5m", "15m": "15m", "30m": "30m",
+    "1h": "1h", "4h": "4h", "1d": "1d", "1w": "1w"
+}
+DEFAULT_LIMIT = 300
+MIN_REQUIRED = 50
+FETCH_TIMEOUT_SEC = 10
+
+
+def _normalize_symbol(symbol: str) -> Tuple[str, str]:
+    """
+    Sembol normalizasyonu:
+    - Girilen her şeyi UPPERCASE.
+    - 'BTCUSDT' => 'BTC/USDT'
+    - 'BTC/USDT' => 'BTC/USDT'
+    - 'ETHUSDC' => 'ETH/USDC' vb.
+    """
+    s = (symbol or "BTCUSDT").upper().replace(" ", "")
+    if "/" in s:
+        base, quote = s.split("/", 1)
+        return f"{base}/{quote}", f"{base}{quote}"
+    else:
+        # BTCUSDT -> BTC/USDT (en yaygın çift)
+        # 6+ karakterli ve USDT/USDC/USDP/FDUSD/USDD gibi stable eşleşmelerine bakılır
+        stable_candidates = ("USDT", "USDC", "USDP", "FDUSD", "USDD", "BUSD")
+        for st in stable_candidates:
+            if s.endswith(st) and len(s) > len(st):
+                base = s[:-len(st)]
+                return f"{base}/{st}", s
+        # Fallback
+        return "BTC/USDT", "BTCUSDT"
+
+
+async def _fetch_ohlcv(
+    client: Any,
+    name: str,
+    ccxt_symbol: str,
+    interval: str,
+    limit: int
+) -> Optional[Dict[str, Any]]:
+    """
+    Borsa’dan veri çekme. Timeout ve hata yakalama.
+    Dönen dict:
+      {name, klines, df, last_ts, length}
+    """
+    if client is None:
+        return None
+    try:
+        klines = await asyncio.wait_for(
+            client.fetch_ohlcv(ccxt_symbol, timeframe=interval, limit=limit),
+            timeout=FETCH_TIMEOUT_SEC
+        )
+        if not klines or len(klines) < MIN_REQUIRED:
+            return None
+
+        df = pd.DataFrame(klines, columns=['timestamp', 'open', 'high', 'low', 'close', 'volume'])
+        df['timestamp'] = pd.to_datetime(df['timestamp'], unit='ms', utc=True)
+        df = df.sort_values('timestamp').reset_index(drop=True)
+        last_ts = df['timestamp'].iloc[-1]
+        return {
+            "name": name,
+            "klines": klines,
+            "df": df,
+            "last_ts": last_ts,
+            "length": len(klines)
+        }
+    except Exception as e:
+        # Borsa spesifik hata loglanır ama akış durmaz
+        try:
+            logger.warning(f"{name} veri hatası: {e}")
+        except Exception:
+            pass
+        return None
+
+
+def _compute_freshness_minutes(last_ts: pd.Timestamp) -> float:
+    now = datetime.now(timezone.utc)
+    delta = now - last_ts
+    return max(delta.total_seconds() / 60.0, 0.0)
+
+
+def _volatility_weight(vol: str) -> float:
+    """
+    Volatiliteye göre güven etkisi:
+      High -> daha düşük güven, Normal -> nötr, Low -> biraz daha yüksek.
+    """
+    v = (vol or "").lower()
+    if "high" in v or "yüksek" in v:
+        return 0.9
+    if "low" in v or "düşük" in v:
+        return 1.05
+    return 1.0
+
+
+def _freshness_weight(minutes: float, interval: str) -> float:
+    """
+    Tazelik (freshness) ağırlığı:
+      - İntervale göre kabul edilebilir gecikme penceresi.
+      - 5m için 2-3 bar gecikmeden sonra güven düşer.
+    """
+    baseline = {
+        "1m": 3,
+        "3m": 9,
+        "5m": 15,
+        "15m": 45,
+        "30m": 90,
+        "1h": 180,
+        "4h": 720,
+        "1d": 1440,
+        "1w": 10080
+    }.get(interval, 15)
+    if minutes <= baseline:
+        return 1.0
+    elif minutes <= baseline * 2:
+        return 0.95
+    else:
+        return 0.85
+
+
+def _coverage_weight(length: int, limit: int) -> float:
+    """
+    Verinin kapsama oranına göre ağırlık:
+      length/limit ile lineer ölçeklenir, taban 0.85, tavan 1.0.
+    """
+    ratio = max(min(length / float(limit), 1.0), 0.0)
+    return 0.85 + 0.15 * ratio
+
+
+def _agreement_weight(signals: List[str]) -> Tuple[float, Dict[str, Any]]:
+    """
+    Çoklu borsa sinyal uyumu:
+      - Basit çoğunluk ile uyum yüzdesi.
+      - Ağırlık: (0.90 .. 1.05)
+    """
+    if not signals:
+        return 0.95, {"agreement_ratio": 0.0, "majority": "N/A"}
+
+    from collections import Counter
+    c = Counter([s or "Nötr" for s in signals])
+    majority_signal, majority_count = c.most_common(1)[0]
+    ratio = majority_count / max(len(signals), 1)
+
+    # Nötr çoğunlukta hafif nötr yaklaşım
+    if majority_signal.lower().startswith("nötr"):
+        weight = 0.98 if ratio >= 0.6 else 0.95
+    else:
+        # Yüksek uyum -> daha yüksek güven
+        if ratio >= 0.75:
+            weight = 1.05
+        elif ratio >= 0.6:
+            weight = 1.02
+        else:
+            weight = 0.97
+
+    return weight, {
+        "agreement_ratio": round(ratio, 3),
+        "majority": majority_signal
+    }
+
+
+def _derive_base_confidence(signal_dict: Dict[str, Any]) -> float:
+    """
+    Base confidence:
+      - Varsa 'confidence' (0..1) kullanılır.
+      - Yoksa 'score' (0..100) normalize edilir.
+    """
+    conf = signal_dict.get("confidence")
+    if isinstance(conf, (float, int)):
+        return max(min(float(conf), 1.0), 0.0)
+    score = signal_dict.get("score")
+    if isinstance(score, (float, int)):
+        return max(min(float(score) / 100.0, 1.0), 0.0)
+    return 0.5
+
+
+@router.post("/api/analyze-chart")
 async def analyze_chart(request: Request):
     try:
         body = await request.json()
-        symbol = body.get("symbol", "BTCUSDT").upper()
+        raw_symbol = body.get("symbol", "BTCUSDT")
         timeframe = body.get("timeframe", "5m")
-        logger.info(f"Analiz talebi: {symbol} {timeframe}")
+        # Kullanıcının ek parametreleri şimdiden topla (ileride indicators.py'ye aktarılabilir)
+        extra_params = {k: v for k, v in body.items() if k not in ("symbol", "timeframe")}
+        try:
+            logger.info(f"Analiz talebi: {raw_symbol} {timeframe} | extra={list(extra_params.keys())}")
+        except Exception:
+            pass
 
-        # CCXT sembol formatı
-        ccxt_symbol = symbol.replace("USDT", "/USDT")
+        ccxt_symbol, canonical = _normalize_symbol(raw_symbol)
+        interval = INTERVAL_MAP.get(timeframe, "5m")
 
-        clients = [get_binance_client(), get_bybit_client(), get_okex_client()]
-        names = ["Binance", "Bybit", "OKX"]
-        klines_list = []
-        interval_map = {
-            "1m": "1m", "3m": "3m", "5m": "5m", "15m": "15m", "30m": "30m",
-            "1h": "1h", "4h": "4h", "1d": "1d", "1w": "1w"
-        }
-        interval = interval_map.get(timeframe, "5m")
+        clients = [
+            (get_binance_client(), "Binance"),
+            (get_bybit_client(), "Bybit"),
+            (get_okex_client(), "OKX")
+        ]
+        tasks = [
+            _fetch_ohlcv(client, name, ccxt_symbol, interval, DEFAULT_LIMIT)
+            for client, name in clients
+            if client is not None
+        ]
+        results = await asyncio.gather(*tasks, return_exceptions=False)
+        sources = [r for r in results if r]
 
-        # Borsalardan veri çek
-        for client, name in zip(clients, names):
-            if client:
-                try:
-                    klines = await client.fetch_ohlcv(ccxt_symbol, timeframe=interval, limit=300)  # Daha fazla veri = daha iyi analiz
-                    if klines and len(klines) >= 50:
-                        klines_list.append((name, klines))
-                except Exception as e:
-                    logger.warning(f"{name} veri hatası: {e}")
-
-        if not klines_list:
+        if not sources:
             return JSONResponse({
                 "analysis": "❌ Hiçbir borsadan veri alınamadı. Lütfen daha sonra tekrar deneyin.",
                 "success": False
             })
 
-        # En iyi veri setini seç (en uzun olan)
-        source_used, max_klines = max(klines_list, key=lambda x: len(x[1]))
+        # Primary seçimi: en uzun ve en taze veri öncelikli
+        sources_sorted = sorted(
+            sources,
+            key=lambda x: (x["length"], -_compute_freshness_minutes(x["last_ts"])),
+            reverse=True
+        )
+        primary = sources_sorted[0]
 
-        # DataFrame oluştur
-        df = pd.DataFrame(max_klines, columns=['timestamp', 'open', 'high', 'low', 'close', 'volume'])
-        df['timestamp'] = pd.to_datetime(df['timestamp'], unit='ms')
-        df = df.sort_values('timestamp').reset_index(drop=True)
+        # Tazelik ve kapsama metrikleri
+        freshness_min = _compute_freshness_minutes(primary["last_ts"])
+        coverage_w = _coverage_weight(primary["length"], DEFAULT_LIMIT)
+        freshness_w = _freshness_weight(freshness_min, interval)
 
-        # indicators.py'den sinyal üret (TÜM PARAMETRELER KULLANILIYOR)
-        signal_dict = generate_ict_signal(df.copy(), symbol, timeframe)
+        # Çoklu borsa sinyalleri (ensemble)
+        per_exchange_signals = []
+        for src in sources_sorted:
+            try:
+                # indicators.py tüm parametreleri kullanır: df + sembol + timeframe (+ extra_params)
+                # Eğer generate_ict_signal ekstra kwargs desteklemiyorsa, bu çağrı sadece 3 parametreyi kullanır.
+               	sig = generate_ict_signal(src["df"].copy(), canonical, timeframe, extra_params or {})
+                per_exchange_signals.append({
+                    "name": src["name"],
+                    "signal": sig.get("signal", "Nötr"),
+                    "score": sig.get("score", None),
+                    "confidence": sig.get("confidence", None),
+                    "killzone": sig.get("killzone", None),
+                    "current_price": sig.get("current_price", None),
+                    "status": sig.get("status", "unknown")
+                })
+            except Exception as e:
+                try:
+                    logger.warning(f"{src['name']} sinyal üretim hatası: {e}")
+                except Exception:
+                    pass
 
-        # Eğer indicators.py fallback'e düşmüşse bile success döner, ama biz status'e bakalım
+        # Primary kaynak ile detaylı analiz
+       	signal_dict = generate_ict_signal(primary["df"].copy(), canonical, timeframe, extra_params or {})
+
+        # Ensemble uyum ve ağırlıklar
+        ensemble_signals = [s["signal"] for s in per_exchange_signals if s.get("signal") is not None]
+        agreement_w, agreement_meta = _agreement_weight(ensemble_signals)
+
+        market_struct = signal_dict.get("market_structure", {}) or {}
+        vol = market_struct.get("volatility", "Normal")
+        vol_w = _volatility_weight(vol)
+
+        base_conf = _derive_base_confidence(signal_dict)
+
+        # Nihai güven: çarpan bazlı kombinasyon, üst limit
+        final_conf = base_conf * coverage_w * freshness_w * agreement_w * vol_w
+        final_conf = max(min(final_conf, 1.0), 0.0)
+
+        # Meta detaylar (kullanıcıya net bilgi)
+        confidence_components = {
+            "base_confidence": round(base_conf, 4),
+            "coverage_weight": round(coverage_w, 4),
+            "freshness_weight": round(freshness_w, 4),
+            "agreement_weight": round(agreement_w, 4),
+            "volatility_weight": round(vol_w, 4),
+            "data_freshness_minutes": round(freshness_min, 2),
+            "data_length": primary["length"],
+            "interval": interval,
+            "agreement_majority": agreement_meta["majority"],
+            "agreement_ratio": agreement_meta["agreement_ratio"]
+        }
+
+        # Signal dict’e güven skorunu net şekilde yansıt
+        signal_dict["confidence_final"] = final_conf
+        signal_dict["confidence_components"] = confidence_components
+        signal_dict["source_used"] = primary["name"]
+        signal_dict["available_sources"] = [s["name"] for s in sources_sorted]
+
+        # Analiz metni (tam durum veya fallback)
         if signal_dict.get("status") != "success":
-            # Fallback bile olsa güzel gösterelim
-            analysis = f"""🔍 {symbol} {timeframe.upper()} Grafik Analizi
-⚠️ Tam ICT analizi yapılamadı (veri sınırlı olabilir).
-
-📡 Kaynak: <strong>{source_used}</strong> ({len(max_klines)} mum)
-💰 Güncel Fiyat: <strong>${signal_dict.get('current_price', 0.0)}</strong>
-
-🎯 SİNYAL: <strong>{signal_dict.get('signal', 'Nötr')}</strong>
-📊 Skor: <strong>{signal_dict.get('score', 0)}/100</strong>
-🕐 Killzone: <strong>{signal_dict.get('killzone', 'Normal')}</strong>
-
-🔥 Tetikleyenler:
-{signal_dict.get('triggers', 'Tetikleyici yok')}
-
-⚠️ Bu bir yatırım tavsiyesi değildir."""
+            analysis = (
+                f"🔍 {canonical} {timeframe.upper()} Grafik Analizi\n"
+                f"⚠️ Tam ICT analizi yapılamadı (veri sınırlı olabilir).\n\n"
+                f"📡 Kaynak: <strong>{primary['name']}</strong> ({primary['length']} mum)\n"
+                f"💰 Güncel Fiyat: <strong>${signal_dict.get('current_price', 0.0)}</strong>\n\n"
+                f"🎯 SİNYAL: <strong>{signal_dict.get('signal', 'Nötr')}</strong>\n"
+                f"📊 Skor: <strong>{signal_dict.get('score', 0)}/100</strong>\n"
+                f"🕐 Killzone: <strong>{signal_dict.get('killzone', 'Normal')}</strong>\n"
+                f"🔒 Güven (nihai): <strong>%{int(final_conf * 100)}</strong>\n"
+                f"🧩 Bileşenler: kapsama={confidence_components['coverage_weight']}, "
+                f"tazelik={confidence_components['freshness_weight']}, uyum={confidence_components['agreement_weight']}, "
+                f"volatilite={confidence_components['volatility_weight']}\n\n"
+                f"🔥 Tetikleyenler:\n{signal_dict.get('triggers', 'Tetikleyici yok')}\n\n"
+                f"⚠️ Bu bir yatırım tavsiyesi değildir."
+            )
         else:
-            # Tam başarı durumu - tüm detaylar
-            market_struct = signal_dict.get("market_structure", {})
             trend = market_struct.get("trend", "Bilinmiyor")
             momentum = market_struct.get("momentum", "Nötr")
             volatility = market_struct.get("volatility", "Normal")
             volume_trend = market_struct.get("volume_trend", "Nötr")
 
+            key_levels_list = market_struct.get("key_levels", []) or []
             key_levels = "\n".join([
-                f"• {lvl['type'].capitalize()}: ${lvl['price']}"
-                for lvl in market_struct.get("key_levels", [])[:4]
+                f"• {lvl.get('type', 'Seviye').capitalize()}: ${lvl.get('price', '—')}"
+                for lvl in key_levels_list[:6]
             ]) or "Ana seviyeler hesaplanamadı"
 
-            analysis = f"""🔍 {symbol} {timeframe.upper()} Grafik Analizi (ICT + SMC)
-✅ <strong>Tam analiz başarıyla tamamlandı!</strong>
-📡 Veri Kaynağı: <strong>{source_used}</strong> ({len(max_klines)} mum)
+            analysis = (
+                f"🔍 {canonical} {timeframe.upper()} Grafik Analizi (ICT + SMC)\n"
+                f"✅ <strong>Tam analiz başarıyla tamamlandı!</strong>\n"
+                f"📡 Veri Kaynağı: <strong>{primary['name']}</strong> ({primary['length']} mum)\n"
+                f"💰 Güncel Fiyat: <strong>${signal_dict.get('current_price', 0.0)}</strong>\n\n"
+                f"🎯 SİNYAL: <strong>{signal_dict.get('signal', 'Nötr')}</strong>\n"
+                f"📊 Güç Skoru: <strong>{signal_dict.get('score', 0)}/100</strong> ({signal_dict.get('strength', 'Nötr')})\n"
+                f"🕐 Oturum: <strong>{signal_dict.get('killzone', 'Normal')}</strong>\n"
+                f"🔒 Güven (nihai): <strong>%{int(final_conf * 100)}</strong>\n"
+                f"🧩 Bileşenler: kapsama={confidence_components['coverage_weight']}, "
+                f"tazelik={confidence_components['freshness_weight']}, uyum={confidence_components['agreement_weight']}, "
+                f"volatilite={confidence_components['volatility_weight']}\n\n"
+                f"📈 Piyasa Yapısı:\n"
+                f"• Trend: <strong>{trend}</strong>\n"
+                f"• Momentum: <strong>{momentum}</strong>\n"
+                f"• Volatilite: <strong>{volatility}</strong>\n"
+                f"• Hacim Trendi: <strong>{volume_trend}</strong>\n\n"
+                f"🔑 Ana Seviyeler:\n{key_levels}\n\n"
+                f"🔥 Tetikleyen Faktörler:\n{signal_dict.get('triggers', 'Tetikleyici tespit edilmedi')}\n\n"
+                f"💡 Öneri: {signal_dict.get('recommended_action', 'Kendi analizinizi yapın')}\n\n"
+                f"⚠️ Bu bir yatırım tavsiyesi değildir. Kendi araştırmanızı yapın ve risk yönetiminizi unutmayın."
+            )
 
-💰 Güncel Fiyat: <strong>${signal_dict.get('current_price', 0.0)}</strong>
+        # Kullanıcıya şeffaf kaynak metasını da dönelim
+        sources_meta = []
+        for src in sources_sorted:
+            sources_meta.append({
+                "name": src["name"],
+                "length": src["length"],
+                "freshness_minutes": round(_compute_freshness_minutes(src["last_ts"]), 2)
+            })
 
-🎯 SİNYAL: <strong>{signal_dict.get('signal', 'Nötr')}</strong>
-📊 Güç Skoru: <strong>{signal_dict.get('score', 0)}/100</strong> ({signal_dict.get('strength', 'Nötr')})
-🕐 Oturum: <strong>{signal_dict.get('killzone', 'Normal')}</strong>
-🎯 Güven Oranı: <strong>%{int(signal_dict.get('confidence', 0) * 100)}</strong>
-
-📈 Piyasa Yapısı:
-• Trend: <strong>{trend}</strong>
-• Momentum: <strong>{momentum}</strong>
-• Volatilite: <strong>{volatility}</strong>
-• Hacim Trendi: <strong>{volume_trend}</strong>
-
-🔑 Ana Seviyeler:
-{key_levels}
-
-🔥 Tetikleyen Faktörler:
-{signal_dict.get('triggers', 'Tetikleyici tespit edilmedi')}
-
-💡 Öneri: {signal_dict.get('recommended_action', 'Kendi analizinizi yapın')}
-
-⚠️ Bu bir yatırım tavsiyesi değildir. Kendi araştırmanızı yapın ve risk yönetiminizi unutmayın."""
-
-        return JSONResponse({
+        response_payload = {
             "analysis": analysis,
             "signal_data": signal_dict,
+            "ensemble": {
+                "per_exchange_signals": per_exchange_signals,
+                "agreement": agreement_meta,
+            },
+            "sources": sources_meta,
             "success": True
-        })
+        }
+        return JSONResponse(response_payload)
 
     except Exception as e:
-        logger.error(f"analyze_chart genel hatası: {e}")
+        try:
+            logger.error(f"analyze_chart genel hatası: {e}")
+        except Exception:
+            pass
         return JSONResponse({
             "analysis": "❌ Sistem hatası oluştu. Lütfen tekrar deneyin.",
             "success": False
@@ -854,6 +1116,7 @@ async def health():
 if __name__ == "__main__":
     import uvicorn
     uvicorn.run("main:app", host="0.0.0.0", port=int(os.getenv("PORT", 8000)), reload=False)
+
 
 
 
