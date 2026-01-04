@@ -778,120 +778,110 @@ async def _fetch_ohlcv(
         except Exception:
             pass
         return None
+# ====================== ANALİZ ENDPOINT ======================
 
+from fastapi import Request, APIRouter
+from fastapi.responses import JSONResponse
+import asyncio
+import pandas as pd
+from datetime import datetime, timezone
+from collections import Counter
+from typing import Dict, List, Any, Optional, Tuple
+
+# indicators.py'den import'lar (zaten yukarıda var ama emin olalım)
+from indicators import (
+    generate_ict_signal,
+    analyze_chart as indicators_analyze_chart,
+    backtest_ict_signals
+)
+
+router = APIRouter()
+
+logger = logging.getLogger("main")
+
+# Sabitler
+INTERVAL_MAP = {
+    "1m": "1m", "3m": "3m", "5m": "5m", "15m": "15m",
+    "30m": "30m", "1h": "1h", "4h": "4h", "1d": "1d", "1w": "1w"
+}
+DEFAULT_LIMIT = 500
+MIN_REQUIRED = 100
+FETCH_TIMEOUT_SEC = 12
+
+def _normalize_symbol(symbol: str) -> Tuple[str, str]:
+    s = (symbol or "BTCUSDT").upper().replace(" ", "").replace("/", "")
+    stable = ["USDT", "USDC", "FDUSD", "BUSD", "USDP", "USDD"]
+    for st in stable:
+        if s.endswith(st) and len(s) > len(st):
+            base = s[:-len(st)]
+            return f"{base}/{st}", s
+    return "BTC/USDT", "BTCUSDT"
+
+async def _fetch_ohlcv(client: Any, name: str, ccxt_symbol: str, interval: str, limit: int) -> Optional[Dict]:
+    if client is None:
+        return None
+    try:
+        klines = await asyncio.wait_for(
+            client.fetch_ohlcv(ccxt_symbol, timeframe=interval, limit=limit),
+            timeout=FETCH_TIMEOUT_SEC
+        )
+        if not klines or len(klines) < MIN_REQUIRED:
+            return None
+        df = pd.DataFrame(klines, columns=['timestamp', 'open', 'high', 'low', 'close', 'volume'])
+        df['timestamp'] = pd.to_datetime(df['timestamp'], unit='ms', utc=True)
+        df.set_index('timestamp', inplace=True)
+        df = df.astype({'open': 'float', 'high': 'float', 'low': 'float', 'close': 'float', 'volume': 'float'})
+        return {
+            "name": name,
+            "df": df,
+            "length": len(df),
+            "last_ts": df.index[-1]
+        }
+    except Exception as e:
+        logger.warning(f"{name} OHLCV hatası: {e}")
+        return None
 
 def _compute_freshness_minutes(last_ts: pd.Timestamp) -> float:
-    now = datetime.now(timezone.utc)
-    delta = now - last_ts
-    return max(delta.total_seconds() / 60.0, 0.0)
-
+    return max((datetime.now(timezone.utc) - last_ts).total_seconds() / 60.0, 0.0)
 
 def _volatility_weight(vol: str) -> float:
-    """
-    Volatiliteye göre güven etkisi:
-      High -> daha düşük güven, Normal -> nötr, Low -> biraz daha yüksek.
-    """
     v = (vol or "").lower()
-    if "high" in v or "yüksek" in v:
-        return 0.9
-    if "low" in v or "düşük" in v:
-        return 1.05
+    if "high" in v or "yüksek" in v: return 0.92
+    if "low" in v or "düşük" in v: return 1.03
     return 1.0
 
-
 def _freshness_weight(minutes: float, interval: str) -> float:
-    """
-    Tazelik (freshness) ağırlığı:
-      - İntervale göre kabul edilebilir gecikme penceresi.
-      - 5m için 2-3 bar gecikmeden sonra güven düşer.
-    """
-    baseline = {
-        "1m": 3,
-        "3m": 9,
-        "5m": 15,
-        "15m": 45,
-        "30m": 90,
-        "1h": 180,
-        "4h": 720,
-        "1d": 1440,
-        "1w": 10080
-    }.get(interval, 15)
-    if minutes <= baseline:
-        return 1.0
-    elif minutes <= baseline * 2:
-        return 0.95
-    else:
-        return 0.85
-
+    baseline = {"1m":5,"3m":10,"5m":20,"15m":50,"30m":100,"1h":240,"4h":960,"1d":2880,"1w":20160}.get(interval, 20)
+    if minutes <= baseline: return 1.0
+    if minutes <= baseline * 1.5: return 0.96
+    return 0.88
 
 def _coverage_weight(length: int, limit: int) -> float:
-    """
-    Verinin kapsama oranına göre ağırlık:
-      length/limit ile lineer ölçeklenir, taban 0.85, tavan 1.0.
-    """
-    ratio = max(min(length / float(limit), 1.0), 0.0)
-    return 0.85 + 0.15 * ratio
+    return 0.88 + 0.12 * min(length / limit, 1.0)
 
-
-def _agreement_weight(signals: List[str]) -> Tuple[float, Dict[str, Any]]:
-    """
-    Çoklu borsa sinyal uyumu:
-      - Basit çoğunluk ile uyum yüzdesi.
-      - Ağırlık: (0.90 .. 1.05)
-    """
+def _agreement_weight(signals: List[str]) -> Tuple[float, Dict]:
     if not signals:
-        return 0.95, {"agreement_ratio": 0.0, "majority": "N/A"}
+        return 0.96, {"ratio": 0.0, "majority": "N/A"}
+    c = Counter([s.split()[0] if s else "Nötr" for s in signals])  # Sadece ana kelimeyi al (🚀, 🔻, 🟡 vs.)
+    majority, count = c.most_common(1)[0]
+    ratio = count / len(signals)
+    weight = 1.04 if ratio >= 0.8 else 1.01 if ratio >= 0.6 else 0.96
+    if "nötr" in majority.lower(): weight *= 0.98
+    return weight, {"ratio": round(ratio, 3), "majority": majority}
 
-    from collections import Counter
-    c = Counter([s or "Nötr" for s in signals])
-    majority_signal, majority_count = c.most_common(1)[0]
-    ratio = majority_count / max(len(signals), 1)
-
-    # Nötr çoğunlukta hafif nötr yaklaşım
-    if majority_signal.lower().startswith("nötr"):
-        weight = 0.98 if ratio >= 0.6 else 0.95
-    else:
-        # Yüksek uyum -> daha yüksek güven
-        if ratio >= 0.75:
-            weight = 1.05
-        elif ratio >= 0.6:
-            weight = 1.02
-        else:
-            weight = 0.97
-
-    return weight, {
-        "agreement_ratio": round(ratio, 3),
-        "majority": majority_signal
-    }
-
-
-def _derive_base_confidence(signal_dict: Dict[str, Any]) -> float:
-    """
-    Base confidence:
-      - Varsa 'confidence' (0..1) kullanılır.
-      - Yoksa 'score' (0..100) normalize edilir.
-    """
-    conf = signal_dict.get("confidence")
-    if isinstance(conf, (float, int)):
-        return max(min(float(conf), 1.0), 0.0)
-    score = signal_dict.get("score")
-    if isinstance(score, (float, int)):
-        return max(min(float(score) / 100.0, 1.0), 0.0)
-    return 0.5
-
+def _derive_base_confidence(sig: Dict) -> float:
+    if (c := sig.get("confidence_final") or sig.get("confidence")) is not None:
+        return max(min(float(c), 1.0), 0.0)
+    if (s := sig.get("score")) is not None:
+        return max(min(float(s) / 100.0, 1.0), 0.0)
+    return 0.6
 
 @router.post("/api/analyze-chart")
 async def analyze_chart(request: Request):
     try:
         body = await request.json()
-        raw_symbol = body.get("symbol", "BTCUSDT")
-        timeframe = body.get("timeframe", "5m")
-        # Kullanıcının ek parametreleri şimdiden topla (ileride indicators.py'ye aktarılabilir)
-        extra_params = {k: v for k, v in body.items() if k not in ("symbol", "timeframe")}
-        try:
-            logger.info(f"Analiz talebi: {raw_symbol} {timeframe} | extra={list(extra_params.keys())}")
-        except Exception:
-            pass
+        raw_symbol = body.get("symbol", "BTCUSDT").strip()
+        timeframe = body.get("timeframe", "5m").lower()
 
         ccxt_symbol, canonical = _normalize_symbol(raw_symbol)
         interval = INTERVAL_MAP.get(timeframe, "5m")
@@ -901,174 +891,111 @@ async def analyze_chart(request: Request):
             (get_bybit_client(), "Bybit"),
             (get_okex_client(), "OKX")
         ]
-        tasks = [
-            _fetch_ohlcv(client, name, ccxt_symbol, interval, DEFAULT_LIMIT)
-            for client, name in clients
-            if client is not None
-        ]
-        results = await asyncio.gather(*tasks, return_exceptions=False)
-        sources = [r for r in results if r]
+        tasks = [_fetch_ohlcv(c, n, ccxt_symbol, interval, DEFAULT_LIMIT) for c, n in clients if c]
+        sources = [s for s in await asyncio.gather(*tasks) if s]
 
         if not sources:
-            return JSONResponse({
-                "analysis": "❌ Hiçbir borsadan veri alınamadı. Lütfen daha sonra tekrar deneyin.",
-                "success": False
-            })
+            return JSONResponse({"analysis": "❌ Hiçbir borsadan veri alınamadı.", "success": False})
 
-        # Primary seçimi: en uzun ve en taze veri öncelikli
-        sources_sorted = sorted(
-            sources,
-            key=lambda x: (x["length"], -_compute_freshness_minutes(x["last_ts"])),
-            reverse=True
-        )
+        # En iyi kaynağı seç
+        sources_sorted = sorted(sources, key=lambda x: (x["length"], -_compute_freshness_minutes(x["last_ts"])), reverse=True)
         primary = sources_sorted[0]
 
-        # Tazelik ve kapsama metrikleri
-        freshness_min = _compute_freshness_minutes(primary["last_ts"])
-        coverage_w = _coverage_weight(primary["length"], DEFAULT_LIMIT)
-        freshness_w = _freshness_weight(freshness_min, interval)
-
-        # Çoklu borsa sinyalleri (ensemble)
+        # Ensemble sinyaller
         per_exchange_signals = []
         for src in sources_sorted:
             try:
-                # indicators.py tüm parametreleri kullanır: df + sembol + timeframe (+ extra_params)
-                # Eğer generate_ict_signal ekstra kwargs desteklemiyorsa, bu çağrı sadece 3 parametreyi kullanır.
-               	sig = generate_ict_signal(src["df"].copy(), canonical, timeframe, extra_params or {})
+                sig = generate_ict_signal(src["df"], canonical, timeframe)
                 per_exchange_signals.append({
                     "name": src["name"],
                     "signal": sig.get("signal", "Nötr"),
-                    "score": sig.get("score", None),
-                    "confidence": sig.get("confidence", None),
-                    "killzone": sig.get("killzone", None),
-                    "current_price": sig.get("current_price", None),
-                    "status": sig.get("status", "unknown")
+                    "score": sig.get("score", 0),
+                    "confidence": sig.get("confidence_final", sig.get("confidence", 0.5)),
+                    "killzone": sig.get("killzone", "Normal"),
+                    "current_price": sig.get("current_price", 0.0)
                 })
             except Exception as e:
-                try:
-                    logger.warning(f"{src['name']} sinyal üretim hatası: {e}")
-                except Exception:
-                    pass
+                logger.warning(f"{src['name']} sinyal hatası: {e}")
 
-        # Primary kaynak ile detaylı analiz
-       	signal_dict = generate_ict_signal(primary["df"].copy(), canonical, timeframe, extra_params or {})
+        signal_dict = generate_ict_signal(primary["df"], canonical, timeframe)
 
-        # Ensemble uyum ve ağırlıklar
-        ensemble_signals = [s["signal"] for s in per_exchange_signals if s.get("signal") is not None]
-        agreement_w, agreement_meta = _agreement_weight(ensemble_signals)
-
-        market_struct = signal_dict.get("market_structure", {}) or {}
-        vol = market_struct.get("volatility", "Normal")
-        vol_w = _volatility_weight(vol)
-
+        # Güven hesaplamaları
+        freshness_min = _compute_freshness_minutes(primary["last_ts"])
+        coverage_w = _coverage_weight(primary["length"], DEFAULT_LIMIT)
+        freshness_w = _freshness_weight(freshness_min, interval)
+        agreement_w, agreement_meta = _agreement_weight([s["signal"] for s in per_exchange_signals])
+        vol_w = _volatility_weight(signal_dict.get("market_structure", {}).get("volatility", "Normal"))
         base_conf = _derive_base_confidence(signal_dict)
+        final_conf = min(max(base_conf * coverage_w * freshness_w * agreement_w * vol_w, 0.0), 1.0)
 
-        # Nihai güven: çarpan bazlı kombinasyon, üst limit
-        final_conf = base_conf * coverage_w * freshness_w * agreement_w * vol_w
-        final_conf = max(min(final_conf, 1.0), 0.0)
-
-        # Meta detaylar (kullanıcıya net bilgi)
         confidence_components = {
-            "base_confidence": round(base_conf, 4),
-            "coverage_weight": round(coverage_w, 4),
-            "freshness_weight": round(freshness_w, 4),
-            "agreement_weight": round(agreement_w, 4),
-            "volatility_weight": round(vol_w, 4),
-            "data_freshness_minutes": round(freshness_min, 2),
+            "base": round(base_conf, 4),
+            "coverage": round(coverage_w, 4),
+            "freshness": round(freshness_w, 4),
+            "agreement": round(agreement_w, 4),
+            "volatility": round(vol_w, 4),
+            "freshness_min": round(freshness_min, 2),
             "data_length": primary["length"],
-            "interval": interval,
             "agreement_majority": agreement_meta["majority"],
-            "agreement_ratio": agreement_meta["agreement_ratio"]
+            "agreement_ratio": agreement_meta["ratio"]
         }
 
-        # Signal dict’e güven skorunu net şekilde yansıt
-        signal_dict["confidence_final"] = final_conf
-        signal_dict["confidence_components"] = confidence_components
-        signal_dict["source_used"] = primary["name"]
-        signal_dict["available_sources"] = [s["name"] for s in sources_sorted]
+        # Ek veriler
+        chart_data = indicators_analyze_chart(primary["df"], canonical, timeframe)
+        backtest = backtest_ict_signals(primary["df"], canonical, timeframe) if len(primary["df"]) > 200 else {"note": "Yetersiz veri"}
 
-        # Analiz metni (tam durum veya fallback)
-        if signal_dict.get("status") != "success":
+        # Detaylı analiz metni
+        market_struct = signal_dict.get("market_structure", {})
+        if signal_dict.get("status") == "success":
             analysis = (
-                f"🔍 {canonical} {timeframe.upper()} Grafik Analizi\n"
-                f"⚠️ Tam ICT analizi yapılamadı (veri sınırlı olabilir).\n\n"
-                f"📡 Kaynak: <strong>{primary['name']}</strong> ({primary['length']} mum)\n"
-                f"💰 Güncel Fiyat: <strong>${signal_dict.get('current_price', 0.0)}</strong>\n\n"
-                f"🎯 SİNYAL: <strong>{signal_dict.get('signal', 'Nötr')}</strong>\n"
-                f"📊 Skor: <strong>{signal_dict.get('score', 0)}/100</strong>\n"
-                f"🕐 Killzone: <strong>{signal_dict.get('killzone', 'Normal')}</strong>\n"
-                f"🔒 Güven (nihai): <strong>%{int(final_conf * 100)}</strong>\n"
-                f"🧩 Bileşenler: kapsama={confidence_components['coverage_weight']}, "
-                f"tazelik={confidence_components['freshness_weight']}, uyum={confidence_components['agreement_weight']}, "
-                f"volatilite={confidence_components['volatility_weight']}\n\n"
-                f"🔥 Tetikleyenler:\n{signal_dict.get('triggers', 'Tetikleyici yok')}\n\n"
-                f"⚠️ Bu bir yatırım tavsiyesi değildir."
+                f"🌟 {canonical} {timeframe.upper()} - ICT/SMC UZMAN ANALİZİ\n"
+                f"✅ Grok Pro tarafından analiz edildi\n"
+                f"📡 Kaynak: {primary['name']} ({primary['length']} mum | {freshness_min:.1f} dk taze)\n"
+                f"💰 Fiyat: ${signal_dict.get('current_price', '—')}\n\n"
+                f"🎯 SİNYAL: {signal_dict.get('signal', 'Nötr')}\n"
+                f"📊 Skor: {signal_dict.get('score', 0)}/100 ({signal_dict.get('strength', '—')})\n"
+                f"🕐 Oturum: {signal_dict.get('killzone', 'Normal')}\n"
+                f"🔒 Güven: %{int(final_conf * 100)} (Uyum: {agreement_meta['majority']})\n\n"
+                f"📈 Piyasa:\n"
+                f"• Trend: {market_struct.get('trend', '—')}\n"
+                f"• Momentum: {market_struct.get('momentum', '—')}\n"
+                f"• Volatilite: {market_struct.get('volatility', '—')}\n"
+                f"• MTF Uyum: {market_struct.get('mtf_alignment', '—')}\n\n"
+                f"🔥 Tetikleyiciler:\n{signal_dict.get('triggers', 'Yok')}\n\n"
+                f"📊 Risk Yönetimi:\n"
+                f"• Giriş: {', '.join(map(str, signal_dict.get('entry_levels', ['—'])))}\n"
+                f"• Stop: ${signal_dict.get('stop_loss', '—')}\n"
+                f"• TP: {', '.join(map(str, signal_dict.get('take_profit', ['—'])))}\n\n"
+                f"📉 Backtest: WR %{backtest.get('win_rate', '—')} | Getiri %{backtest.get('total_return', '—')}\n\n"
+                f"💡 {signal_dict.get('recommended_action', 'Kendi analizinizi yapın')}\n"
+                f"⚠️ Yatırım tavsiyesi değildir. DYOR."
             )
         else:
-            trend = market_struct.get("trend", "Bilinmiyor")
-            momentum = market_struct.get("momentum", "Nötr")
-            volatility = market_struct.get("volatility", "Normal")
-            volume_trend = market_struct.get("volume_trend", "Nötr")
+            analysis = f"⚠️ {canonical} {timeframe.upper()} - Kısmi Analiz\n{signal_dict.get('signal', 'Veri yetersiz')}\nGüven: %{int(final_conf*100)}"
 
-            key_levels_list = market_struct.get("key_levels", []) or []
-            key_levels = "\n".join([
-                f"• {lvl.get('type', 'Seviye').capitalize()}: ${lvl.get('price', '—')}"
-                for lvl in key_levels_list[:6]
-            ]) or "Ana seviyeler hesaplanamadı"
+        sources_meta = [
+            {"name": s["name"], "length": s["length"], "freshness_min": round(_compute_freshness_minutes(s["last_ts"]), 2)}
+            for s in sources_sorted
+        ]
 
-            analysis = (
-                f"🔍 {canonical} {timeframe.upper()} Grafik Analizi (ICT + SMC)\n"
-                f"✅ <strong>Tam analiz başarıyla tamamlandı!</strong>\n"
-                f"📡 Veri Kaynağı: <strong>{primary['name']}</strong> ({primary['length']} mum)\n"
-                f"💰 Güncel Fiyat: <strong>${signal_dict.get('current_price', 0.0)}</strong>\n\n"
-                f"🎯 SİNYAL: <strong>{signal_dict.get('signal', 'Nötr')}</strong>\n"
-                f"📊 Güç Skoru: <strong>{signal_dict.get('score', 0)}/100</strong> ({signal_dict.get('strength', 'Nötr')})\n"
-                f"🕐 Oturum: <strong>{signal_dict.get('killzone', 'Normal')}</strong>\n"
-                f"🔒 Güven (nihai): <strong>%{int(final_conf * 100)}</strong>\n"
-                f"🧩 Bileşenler: kapsama={confidence_components['coverage_weight']}, "
-                f"tazelik={confidence_components['freshness_weight']}, uyum={confidence_components['agreement_weight']}, "
-                f"volatilite={confidence_components['volatility_weight']}\n\n"
-                f"📈 Piyasa Yapısı:\n"
-                f"• Trend: <strong>{trend}</strong>\n"
-                f"• Momentum: <strong>{momentum}</strong>\n"
-                f"• Volatilite: <strong>{volatility}</strong>\n"
-                f"• Hacim Trendi: <strong>{volume_trend}</strong>\n\n"
-                f"🔑 Ana Seviyeler:\n{key_levels}\n\n"
-                f"🔥 Tetikleyen Faktörler:\n{signal_dict.get('triggers', 'Tetikleyici tespit edilmedi')}\n\n"
-                f"💡 Öneri: {signal_dict.get('recommended_action', 'Kendi analizinizi yapın')}\n\n"
-                f"⚠️ Bu bir yatırım tavsiyesi değildir. Kendi araştırmanızı yapın ve risk yönetiminizi unutmayın."
-            )
-
-        # Kullanıcıya şeffaf kaynak metasını da dönelim
-        sources_meta = []
-        for src in sources_sorted:
-            sources_meta.append({
-                "name": src["name"],
-                "length": src["length"],
-                "freshness_minutes": round(_compute_freshness_minutes(src["last_ts"]), 2)
-            })
-
-        response_payload = {
+        return JSONResponse({
             "analysis": analysis,
             "signal_data": signal_dict,
-            "ensemble": {
-                "per_exchange_signals": per_exchange_signals,
-                "agreement": agreement_meta,
-            },
+            "chart_data": chart_data,
+            "backtest": backtest,
+            "ensemble": {"signals": per_exchange_signals, "agreement": agreement_meta},
             "sources": sources_meta,
+            "confidence_components": confidence_components,
             "success": True
-        }
-        return JSONResponse(response_payload)
+        })
 
     except Exception as e:
-        try:
-            logger.error(f"analyze_chart genel hatası: {e}")
-        except Exception:
-            pass
-        return JSONResponse({
-            "analysis": "❌ Sistem hatası oluştu. Lütfen tekrar deneyin.",
-            "success": False
-        }, status_code=500)
+        logger.error(f"analyze-chart hatası: {e}")
+        return JSONResponse({"analysis": "❌ Sistem hatası oluştu.", "success": False}, status_code=500)
+
+# KRİTİK: Router'ı app'e dahil et!
+app.include_router(router)
+
 # ====================== GİRİŞ & HEALTH ======================
 @app.get("/login", response_class=HTMLResponse)
 async def login_page():
@@ -1111,11 +1038,12 @@ async def login(request: Request):
 @app.get("/health")
 async def health():
     return {"status": "ok", "timestamp": datetime.utcnow().isoformat()}
-
+app.include_router(router)
 # ====================== RUN ======================
 if __name__ == "__main__":
     import uvicorn
     uvicorn.run("main:app", host="0.0.0.0", port=int(os.getenv("PORT", 8000)), reload=False)
+
 
 
 
