@@ -344,14 +344,14 @@ async def home(request: Request):
     <script>
         const ws = new WebSocket((location.protocol === 'https:' ? 'wss' : 'ws') + '://' + location.host + '/ws/realtime_price');
         ws.onmessage = function(e) {
-            try {
+      
                 const d = JSON.parse(e.data);
                 document.getElementById('update').innerHTML = `Son Güncelleme: <strong>${d.last_update || 'Şimdi'}</strong>`;
                 const t = document.getElementById('table-body');
                 if (!d.tickers || Object.keys(d.tickers).length === 0) {
                     t.innerHTML = '<tr><td colspan="4" style="padding:80px;color:#ffd700">⏳ Fiyatlar yükleniyor...</td></tr>';
                     return;
-                }
+           
                 const tickers = Object.entries(d.tickers);
                 t.innerHTML = tickers.slice(0, 10).map(([symbol, data], i) => `
                     <tr>
