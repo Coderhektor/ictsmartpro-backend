@@ -456,6 +456,8 @@ async def signal_page(request: Request):
         let ws = null;
         let tvWidget = null;
         let currentPrice = null;
+        let currentSymbol = "";
+        let currentTf = "";
         const tfMap = {{"1m":"1","3m":"3","5m":"5","15m":"15","30m":"30","1h":"60","4h":"240","1d":"D","1w":"W"}};
 
         function getSymbol() {{
@@ -464,9 +466,7 @@ async def signal_page(request: Request):
             return "BINANCE:" + pair;
         }}
 
-        function createWidget() {{
-            const symbol = getSymbol();
-            const interval = tfMap[document.getElementById('tf').value] || "5";
+        function createWidget(symbol, interval) {{
             if (tvWidget) tvWidget.remove();
             tvWidget = new TradingView.widget({{
                 autosize: true,
@@ -483,7 +483,8 @@ async def signal_page(request: Request):
             }});
 
             tvWidget.onChartReady(() => {{
-                document.getElementById('status').innerHTML = "✅ Grafik yüklendi • Canlı sinyal bağlantısı kurun";
+                document.getElementById('status').innerHTML = "✅ Grafik yüklendi • Canlı sinyal bağlanıyor...";
+
                 setInterval(() => {{
                     try {{
                         const price = tvWidget.activeChart().getSeries().lastPrice();
@@ -496,9 +497,12 @@ async def signal_page(request: Request):
             }});
         }}
 
-        document.addEventListener("DOMContentLoaded", createWidget);
-        document.getElementById('pair').addEventListener('change', createWidget);
-        document.getElementById('tf').addEventListener('change', createWidget);
+        document.addEventListener("DOMContentLoaded", () => {{
+            createWidget(getSymbol(), tfMap[document.getElementById('tf').value] || "5");
+        }});
+
+        document.getElementById('pair').addEventListener('change', () => createWidget(getSymbol(), tfMap[document.getElementById('tf').value] || "5"));
+        document.getElementById('tf').addEventListener('change', () => createWidget(getSymbol(), tfMap[document.getElementById('tf').value] || "5"));
 
         async function analyzeChartWithAI() {{
             const btn = document.getElementById('analyze-btn');
@@ -533,52 +537,23 @@ async def signal_page(request: Request):
         function connect() {{
             const symbolInput = document.getElementById('pair').value.trim().toUpperCase();
             const tfSelect = document.getElementById('tf').value;
-            let symbol = symbolInput;
-            if (!symbol.endsWith("USDT")) symbol += "USDT";
-            const tvSymbol = "BINANCE:" + symbol;
-            const interval = tfMap[tfSelect] || "5";
+            currentSymbol = symbolInput;
+            if (!currentSymbol.endsWith("USDT")) currentSymbol += "USDT";
+            currentTf = tfSelect;
+
+            const tvSymbol = "BINANCE:" + currentSymbol;
+            const interval = tfMap[currentTf] || "5";
 
             document.getElementById('status').innerHTML = "🔄 Bağlantı kuruluyor... Lütfen bekleyin";
 
-            if (tvWidget) {{
-                tvWidget.remove();
-                tvWidget = null;
-            }}
-
-            tvWidget = new TradingView.widget({{
-                autosize: true,
-                width: "100%",
-                height: 500,
-                symbol: tvSymbol,
-                interval: interval,
-                timezone: "Etc/UTC",
-                theme: "dark",
-                style: "1",
-                locale: "tr",
-                container_id: "tradingview_widget",
-                studies: ["RSI@tv-basicstudies", "MACD@tv-basicstudies"]
-            }});
-
-            tvWidget.onChartReady(() => {{
-                document.getElementById('status').innerHTML = "✅ Grafik yüklendi • Canlı sinyal bağlanıyor...";
-
-                setInterval(() => {{
-                    try {{
-                        const price = tvWidget.activeChart().getSeries().lastPrice();
-                        if (price && price !== currentPrice) {{
-                            currentPrice = price;
-                            document.getElementById('price-text').innerHTML = '$' + parseFloat(price).toFixed(price > 1 ? 2 : 6);
-                        }}
-                    }} catch(e) {{}}
-                }}, 1500);
-            }});
+            createWidget(tvSymbol, interval);
 
             if (ws) ws.close();
 
-            ws = new WebSocket((location.protocol === 'https:' ? 'wss' : 'ws') + '://' + location.host + '/ws/signal/' + symbol + '/' + tfSelect);
+            ws = new WebSocket((location.protocol === 'https:' ? 'wss' : 'ws') + '://' + location.host + '/ws/signal/' + currentSymbol + '/' + currentTf);
 
             ws.onopen = () => {{
-                document.getElementById('status').innerHTML = `<strong>✅ ${symbol} ${tfSelect.toUpperCase()} İÇİN CANLI SİNYAL BAĞLANTISI BAŞARIYLA KURULDU! 🚀</strong>`;
+                document.getElementById('status').innerHTML = `<strong>✅ ${currentSymbol} ${currentTf.toUpperCase()} İÇİN CANLI SİNYAL BAĞLANTISI BAŞARIYLA KURULDU! 🚀</strong>`;
                 document.getElementById('signal-text').innerHTML = "Sinyal bekleniyor...";
                 document.getElementById('signal-details').innerHTML = "Güçlü ICT/SMC sinyalleri anında burada görünecek.";
             }};
@@ -591,7 +566,7 @@ async def signal_page(request: Request):
 
                 text.innerHTML = d.signal?.signal || "Sinyal bekleniyor...";
                 details.innerHTML = `
-                    <strong>${{d.signal?.pair || symbol.replace('USDT','/USDT')}}</strong><br>
+                    <strong>${{d.signal?.pair || currentSymbol.replace('USDT','/USDT')}}</strong><br>
                     Skor: <strong>${{d.signal?.score || '?'}}/100</strong> | ${{d.signal?.killzone || ''}}<br>
                     ${{d.signal?.last_update ? 'Son: ' + d.signal.last_update : ''}}<br>
                     <small>${{d.signal?.triggers || ''}}</small>
@@ -1116,6 +1091,7 @@ async def health():
 if __name__ == "__main__":
     import uvicorn
     uvicorn.run("main:app", host="0.0.0.0", port=int(os.getenv("PORT", 8000)), reload=False)
+
 
 
 
