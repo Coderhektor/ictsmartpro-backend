@@ -19,9 +19,16 @@ import ccxt.async_support as ccxt
 # ====================== PROJE MODÜLLERİ ======================
 from core import (
     initialize, cleanup,
-    top_gainers, top_losers, last_update,
+    top_gainers, last_update,
     rt_ticker, price_pool
 )
+
+# top_losers opsiyonel → core.py'de yoksa boş liste fallback
+try:
+    from core import top_losers
+except ImportError:
+    top_losers = []
+    logging.getLogger("main").warning("core.py'de top_losers tanımlı değil → boş liste kullanılıyor.")
 
 # indicators.py opsiyonel
 try:
@@ -210,7 +217,6 @@ async def ws_signal(websocket: WebSocket, pair: str, timeframe: str):
         single_subscribers[channel] = set()
     single_subscribers[channel].add(websocket)
 
-    # Mevcut sinyal varsa hemen gönder
     try:
         sig = shared_signals.get(timeframe, {}).get(symbol)
         if sig:
@@ -259,7 +265,7 @@ async def ws_pump(websocket: WebSocket):
     pump_radar_subscribers.add(websocket)
     await safe_send_json(websocket, {
         "top_gainers": top_gainers,
-        "top_losers": top_losers or [],
+        "top_losers": top_losers or [],  # Güvenli fallback
         "last_update": last_update
     })
     hb = asyncio.create_task(heartbeat_task(websocket, 20))
