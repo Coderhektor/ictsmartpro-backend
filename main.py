@@ -711,94 +711,105 @@ async def analyze_chart(request: Request):
         timeframe = body.get("timeframe", "5m")
         logger.info(f"Analiz talebi: {symbol} {timeframe}")
 
+        # CCXT sembol formatı
+        ccxt_symbol = symbol.replace("USDT", "/USDT")
+
         clients = [get_binance_client(), get_bybit_client(), get_okex_client()]
         names = ["Binance", "Bybit", "OKX"]
         klines_list = []
-        interval = {
+        interval_map = {
             "1m": "1m", "3m": "3m", "5m": "5m", "15m": "15m", "30m": "30m",
             "1h": "1h", "4h": "4h", "1d": "1d", "1w": "1w"
-        }.get(timeframe, "5m")
-        ccxt_symbol = symbol.replace("USDT", "/USDT")
+        }
+        interval = interval_map.get(timeframe, "5m")
 
+        # Borsalardan veri çek
         for client, name in zip(clients, names):
             if client:
                 try:
-                    klines = await client.fetch_ohlcv(ccxt_symbol, timeframe=interval, limit=200)
+                    klines = await client.fetch_ohlcv(ccxt_symbol, timeframe=interval, limit=300)  # Daha fazla veri = daha iyi analiz
                     if klines and len(klines) >= 50:
                         klines_list.append((name, klines))
                 except Exception as e:
                     logger.warning(f"{name} veri hatası: {e}")
 
         if not klines_list:
-            return JSONResponse({"analysis": "❌ Hiçbir borsadan veri alınamadı.", "success": False})
+            return JSONResponse({
+                "analysis": "❌ Hiçbir borsadan veri alınamadı. Lütfen daha sonra tekrar deneyin.",
+                "success": False
+            })
 
-        # En uzun veri setini seç (en güvenilir kaynak)
+        # En iyi veri setini seç (en uzun olan)
         source_used, max_klines = max(klines_list, key=lambda x: len(x[1]))
 
         # DataFrame oluştur
         df = pd.DataFrame(max_klines, columns=['timestamp', 'open', 'high', 'low', 'close', 'volume'])
-
-        # NaN değerleri temizle ve sayısal tipe dönüştür
-        df[['open', 'high', 'low', 'close', 'volume']] = df[['open', 'high', 'low', 'close', 'volume']].apply(pd.to_numeric, errors='coerce')
-        df = df.fillna(0)  # Alternatif: df = df.dropna().reset_index(drop=True) - Veri kaybı olabilir
-
         df['timestamp'] = pd.to_datetime(df['timestamp'], unit='ms')
-        df = df.sort_values('timestamp').tail(150).reset_index(drop=True)
+        df = df.sort_values('timestamp').reset_index(drop=True)
 
-        # Sinyal üretimi
-        signal = None
-        try:
-            if generate_ict_signal:
-                signal = generate_ict_signal(df.copy(), symbol, timeframe)
-            if not signal or signal.get("status") != "success":
-                if generate_simple_signal:
-                    signal = generate_simple_signal(df.copy(), symbol, timeframe)
-            # Signal üretildikten sonra NaN kontrolü ve log
-            if signal:
-                logger.info(f"Üretilen signal: {signal}")
-        except Exception as e:
-            logger.error(f"Sinyal üretim hatası: {e}")
+        # indicators.py'den sinyal üret (TÜM PARAMETRELER KULLANILIYOR)
+        signal_dict = generate_ict_signal(df.copy(), symbol, timeframe)
 
-        # Fallback sinyal (hata durumunda)
-        if not signal or signal.get("status") != "success":
-            last_price = float(df['close'].iloc[-1]) if len(df) > 0 else 0.0
-            signal = {
-                "signal": "SİNYAL ÜRETİLEMEDİ",
-                "score": 0,
-                "current_price": round(last_price, 6),
-                "strength": "Bilinmiyor",
-                "killzone": "Normal",
-                "triggers": "Veri yetersiz veya hata",
-                "last_update": datetime.utcnow().strftime("%H:%M:%S UTC"),
-                "status": "error"
-            }
+        # Eğer indicators.py fallback'e düşmüşse bile success döner, ama biz status'e bakalım
+        if signal_dict.get("status") != "success":
+            # Fallback bile olsa güzel gösterelim
             analysis = f"""🔍 {symbol} {timeframe.upper()} Grafik Analizi
-✅ Veri alındı: <strong>{source_used}</strong> ({len(max_klines)} mum)
-❌ Sinyal üretilemedi (veri eksikliği veya teknik hata).
-💡 Farklı bir zaman dilimi veya coin deneyin.
-⚠️ Yatırım tavsiyesi değildir."""
-        else:
-            analysis = f"""🔍 {symbol} {timeframe.upper()} Grafik Analizi
-✅ <strong>Veri alındı ve işlendi!</strong>
+⚠️ Tam ICT analizi yapılamadı (veri sınırlı olabilir).
+
 📡 Kaynak: <strong>{source_used}</strong> ({len(max_klines)} mum)
+💰 Güncel Fiyat: <strong>${signal_dict.get('current_price', 0.0)}</strong>
 
-🎯 SİNYAL: <strong>{signal.get('signal', 'Bilinmiyor')}</strong>
-📊 Skor: <strong>{signal.get('score', 0)}/100</strong> → {signal.get('strength', 'Bilinmiyor')}
-💰 Güncel Fiyat: <strong>${signal.get('current_price', 0.0)}</strong>
-🕐 Killzone: <strong>{signal.get('killzone', 'Normal')}</strong>
-🕒 Son Güncelleme: {signal.get('last_update', 'Şimdi')}
+🎯 SİNYAL: <strong>{signal_dict.get('signal', 'Nötr')}</strong>
+📊 Skor: <strong>{signal_dict.get('score', 0)}/100</strong>
+🕐 Killzone: <strong>{signal_dict.get('killzone', 'Normal')}</strong>
 
 🔥 Tetikleyenler:
-{signal.get('triggers', 'Belirtilmemiş')}
+{signal_dict.get('triggers', 'Tetikleyici yok')}
 
-📈 Tüm ICT kavramları ve indikatörler tarandı.
-⚠️ Bu bir yatırım tavsiyesi değildir. Kendi araştırmanızı yapın."""
+⚠️ Bu bir yatırım tavsiyesi değildir."""
+        else:
+            # Tam başarı durumu - tüm detaylar
+            market_struct = signal_dict.get("market_structure", {})
+            trend = market_struct.get("trend", "Bilinmiyor")
+            momentum = market_struct.get("momentum", "Nötr")
+            volatility = market_struct.get("volatility", "Normal")
+            volume_trend = market_struct.get("volume_trend", "Nötr")
 
-        # NaN'leri temizle ve yanıt döndür
-        cleaned_signal = clean_nan(signal or {})
+            key_levels = "\n".join([
+                f"• {lvl['type'].capitalize()}: ${lvl['price']}"
+                for lvl in market_struct.get("key_levels", [])[:4]
+            ]) or "Ana seviyeler hesaplanamadı"
+
+            analysis = f"""🔍 {symbol} {timeframe.upper()} Grafik Analizi (ICT + SMC)
+✅ <strong>Tam analiz başarıyla tamamlandı!</strong>
+📡 Veri Kaynağı: <strong>{source_used}</strong> ({len(max_klines)} mum)
+
+💰 Güncel Fiyat: <strong>${signal_dict.get('current_price', 0.0)}</strong>
+
+🎯 SİNYAL: <strong>{signal_dict.get('signal', 'Nötr')}</strong>
+📊 Güç Skoru: <strong>{signal_dict.get('score', 0)}/100</strong> ({signal_dict.get('strength', 'Nötr')})
+🕐 Oturum: <strong>{signal_dict.get('killzone', 'Normal')}</strong>
+🎯 Güven Oranı: <strong>%{int(signal_dict.get('confidence', 0) * 100)}</strong>
+
+📈 Piyasa Yapısı:
+• Trend: <strong>{trend}</strong>
+• Momentum: <strong>{momentum}</strong>
+• Volatilite: <strong>{volatility}</strong>
+• Hacim Trendi: <strong>{volume_trend}</strong>
+
+🔑 Ana Seviyeler:
+{key_levels}
+
+🔥 Tetikleyen Faktörler:
+{signal_dict.get('triggers', 'Tetikleyici tespit edilmedi')}
+
+💡 Öneri: {signal_dict.get('recommended_action', 'Kendi analizinizi yapın')}
+
+⚠️ Bu bir yatırım tavsiyesi değildir. Kendi araştırmanızı yapın ve risk yönetiminizi unutmayın."""
+
         return JSONResponse({
             "analysis": analysis,
-            "signal_data": cleaned_signal,
+            "signal_data": signal_dict,
             "success": True
         })
 
@@ -855,5 +866,6 @@ async def health():
 if __name__ == "__main__":
     import uvicorn
     uvicorn.run("main:app", host="0.0.0.0", port=int(os.getenv("PORT", 8000)), reload=False)
+
 
 
