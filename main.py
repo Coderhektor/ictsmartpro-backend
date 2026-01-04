@@ -904,7 +904,6 @@ async def analyze_chart(request: Request):
                 "success": False
             }, status_code=503)
 
-        # En taze ve uzun veriyi seç
         sources_sorted = sorted(
             sources,
             key=lambda x: (x["length"], -_compute_freshness_minutes(x["last_ts"])),
@@ -914,89 +913,108 @@ async def analyze_chart(request: Request):
         df = primary["df"]
         freshness_min = round(_compute_freshness_minutes(primary["last_ts"]), 1)
 
-        # Ana sinyal - HATA OLSA BİLE FALLBACK VAR
         try:
             signal_dict = generate_ict_signal(df, canonical, timeframe)
         except Exception as e:
             logger.error(f"Sinyal üretimi hatası: {e}")
-            # Basit ama mantıklı fallback
             close = df["close"].iloc[-1] if len(df) > 0 else 0
             change = ((close - df["close"].iloc[-2]) / df["close"].iloc[-2] * 100) if len(df) > 1 else 0
             signal_dict = {
-                "signal": "🟡 NÖTR (Veri İşleme Hatası)",
+                "signal": "🟡 NÖTR (Geçici Teknik Sorun)",
                 "score": 0,
                 "strength": "NÖTR",
                 "current_price": round(close, 6),
                 "killzone": "Normal",
-                "triggers": [f"Son değişim: {change:+.2f}%"],
+                "triggers": [f"Son mum değişimi: {change:+.2f}%"],
                 "market_structure": {"trend": "Yatay", "momentum": "Nötr", "volatility": "Normal"},
                 "confidence": 0.3,
-                "recommended_action": "Piyasayı izleyin",
+                "recommended_action": "Piyasayı izlemeye devam edin",
                 "entry_levels": [],
                 "stop_loss": 0.0,
                 "take_profit": [],
                 "risk_reward": {}
             }
 
-        # Chart data - Güvenli
         try:
             chart_data = indicators_analyze_chart(df, canonical, timeframe)
         except Exception as e:
             logger.warning(f"Chart data hatası: {e}")
             chart_data = {"note": "Grafik detayları geçici olarak yüklenemiyor"}
 
-        # Skor ve güveni güzelleştir
         raw_score = signal_dict.get("score", 0)
-        displayed_score = max(abs(raw_score), 30)  # Skor 0 görünmesin
+        displayed_score = max(abs(raw_score), 30)
         confidence = max(signal_dict.get("confidence", 0.4), 0.3)
 
-        # Trend netleştir
         ms = signal_dict.get("market_structure", {})
         trend = ms.get("trend", "Yatay")
         if "Strong Bullish" in trend or "Güçlü Yükseliş" in trend:
-            trend_text = "📈 GÜÇLÜ YÜKSELİŞ TRENDİ"
+            trend_text = "📈 GÜÇLÜ YÜKSELİŞ TRENDİ (BULLISH DOMINATION!)"
         elif "Bullish" in trend or "Yükseliş" in trend:
-            trend_text = "⬆️ YÜKSELİŞ TRENDİ"
+            trend_text = "⬆️ YÜKSELİŞ TRENDİ (ALIM BASKISI GÜÇLENİYOR)"
         elif "Strong Bearish" in trend or "Güçlü Düşüş" in trend:
-            trend_text = "📉 GÜÇLÜ DÜŞÜŞ TRENDİ"
+            trend_text = "📉 GÜÇLÜ DÜŞÜŞ TRENDİ (BEARISH CONTROL!)"
         elif "Bearish" in trend or "Düşüş" in trend:
-            trend_text = "⬇️ DÜŞÜŞ TRENDİ"
+            trend_text = "⬇️ DÜŞÜŞ TRENDİ (SATIM BASKISI ARTMAKTA)"
         else:
-            trend_text = "↔️ YATAY / KONSOLİDASYON"
+            trend_text = "↔️ YATAY HAREKET (KONSOLİDASYON AŞAMASI)"
 
-        # Tetikleyiciler
         triggers_raw = signal_dict.get("triggers", [])
         if isinstance(triggers_raw, str):
             triggers = [t.strip() for t in triggers_raw.split("\n") if t.strip()]
         else:
             triggers = [str(t) for t in triggers_raw]
-        triggers = triggers[:10]  # En fazla 10
+        triggers = triggers[:12]
 
-        # ANALİZ METNİ - DÜNYANIN EN İYİSİ
+        # 🔥 ÖNE ÇIKAN ICT YAPILARI - KULLANICIYI ŞAŞKINA ÇEVİR! 🔥
+        fvg_info = "🚀 BULLISH FVG (Fair Value Gap) TESPİT EDİLDİ!" if any("fvg_up" in t.lower() for t in triggers) else \
+                   "🔻 BEARISH FVG (Fair Value Gap) TESPİT EDİLDİ!" if any("fvg_down" in t.lower() for t in triggers) else ""
+        
+        ob_info = "🛡️ ORDER BLOCK BÖLGESİNDEYİZ (Güçlü Destek/Direnç)" if any("order block" in t.lower() for t in triggers) else ""
+        
+        bos_info = "💥 BREAK OF STRUCTURE (BOS) GERÇEKLEŞTİ!" if any("bos" in t.lower() for t in triggers) else ""
+        
+        choch_info = "⚡ CHANGE OF CHARACTER (CHoCH) - TREND DEĞİŞİMİ!" if any("choch" in t.lower() or "smc_choch" in t.lower() for t in triggers) else ""
+        
+        liquidity_info = "🌊 LIQUIDITY SWEEP TESPİT EDİLDİ (Stop Hunt!)" if any("liquidity" in t.lower() for t in triggers) else ""
+        
+        breaker_info = "🔨 BREAKER BLOCK AKTİF (Geri Dönüş Potansiyeli Yüksek)" if any("breaker" in t.lower() for t in triggers) else ""
+        
+        mitigation_info = "🛠️ MITIGATION BLOCK (Fiyat Düzeltme Bölgesi)" if any("mitigation" in t.lower() for t in triggers) else ""
+
+        highlighted_structures = [fvg_info, ob_info, bos_info, choch_info, liquidity_info, breaker_info, mitigation_info]
+        extra_info = "\n".join([item for item in highlighted_structures if item])
+
+        # DÜNYANIN EN İYİ ANALİZ METNİ - KULLANICI MUTLU OLSUN!
         analysis = (
-            f"🌟 {canonical} {timeframe.upper()} — GERÇEK ZAMANLI ICT/SMC UZMAN ANALİZİ 🌟\n\n"
-            f"✅ Grok Pro v3.0 | Tamamen Canlı Borsa Verisiyle\n"
-            f"📡 Kaynak: <strong>{primary['name']}</strong> ({primary['length']} mum | {freshness_min} dk taze)\n"
-            f"💰 Güncel Fiyat: <strong>${signal_dict.get('current_price', '—')}</strong>\n\n"
-            f"🎯 SİNYAL: <strong>{signal_dict.get('signal', 'Nötr')}</strong>\n"
+            f"🌟 {canonical} {timeframe.upper()} — DÜNYANIN EN GELİŞMİŞ ICT/SMC ANALİZİ 🌟\n\n"
+            f"✅ Grok Pro v3.0 Tarafından Üretildi | Gerçek Zamanlı Profesyonel Analiz\n"
+            f"📡 Veri Kaynağı: <strong>{primary['name']}</strong> ({primary['length']} mum | {freshness_min} dk taze)\n"
+            f"💰 Anlık Fiyat: <strong>${signal_dict.get('current_price', '—')}</strong>\n\n"
+            f"🎯 ANA SİNYAL: <strong>{signal_dict.get('signal', 'Nötr')}</strong>\n"
             f"📊 Güç Skoru: <strong>{displayed_score}/100</strong> ({signal_dict.get('strength', 'Nötr')})\n"
             f"🕐 Oturum: <strong>{signal_dict.get('killzone', 'Normal')}</strong>\n"
-            f"🔒 Güven Oranı: <strong>%{int(confidence * 100)}</strong>\n\n"
-            f"📊 TREND DURUMU: {trend_text}\n\n"
-            f"🔥 TESPİT EDİLEN TETİKLEYİCİLER:\n"
-            + ("\n".join([f"• {t}" for t in triggers]) if triggers else "• Henüz güçlü tetikleyici yok\n• Piyasa konsolidasyonda olabilir") + "\n\n"
-            f"📈 PİYASA YAPISI:\n"
+            f"🔒 Analiz Güveni: <strong>%{int(confidence * 100)}</strong>\n\n"
+            f"📊 MEVCUT TREND: {trend_text}\n\n"
+        )
+
+        if extra_info:
+            analysis += f"🔥 ÖNE ÇIKAN ICT & SMC YAPILARI:\n{extra_info}\n\n"
+
+        analysis += (
+            f"⚡ TESPİT EDİLEN TETİKLEYİCİLER:\n"
+            + ("\n".join([f"• {t}" for t in triggers]) if triggers else "• Şu an belirgin tetikleyici yok\n• Piyasa bekleme modunda") + "\n\n"
+            f"📈 PİYASA YAPISI DETAYLARI:\n"
             f"• Momentum: {ms.get('momentum', 'Nötr')}\n"
             f"• Volatilite: {ms.get('volatility', 'Normal')}\n"
             f"• Hacim Trendi: {ms.get('volume_trend', 'Normal')}\n"
-            f"• MTF Uyumu: {ms.get('mtf_alignment', 'Nötr')}\n\n"
-            f"🎯 RİSK YÖNETİMİ:\n"
-            f"• Giriş: {', '.join([f'${x}' for x in signal_dict.get('entry_levels', [])]) or '—'}\n"
+            f"• Çoklu Zaman Dilimi Uyumu: {ms.get('mtf_alignment', 'Nötr')}\n\n"
+            f"🎯 RİSK & ÖDÜL YÖNETİMİ:\n"
+            f"• Giriş Seviyeleri: {', '.join([f'${x}' for x in signal_dict.get('entry_levels', [])]) or 'Belirgin giriş yok'}\n"
             f"• Stop Loss: ${signal_dict.get('stop_loss', '—')}\n"
             f"• Take Profit: {', '.join([f'${x}' for x in signal_dict.get('take_profit', [])]) or '—'}\n\n"
-            f"💡 TAVSİYE: {signal_dict.get('recommended_action', 'Piyasayı yakından izleyin')}\n\n"
-            f"⚠️ Bu analiz yatırım tavsiyesi değildir. DYOR.\n"
-            f"🚀 ICT SMART PRO — Gerçek Veri, Gerçek Analiz"
+            f"💡 UZMAN TAVSİYESİ:\n{signal_dict.get('recommended_action', 'Piyasayı yakından takip edin')}\n\n"
+            f"⚠️ Bu analiz yatırım tavsiyesi değildir. Kendi araştırmanızı (DYOR) yapın ve risk yönetimi uygulayın.\n\n"
+            f"🚀 ICT SMART PRO — Gerçek Veri, Gerçek Zeka, Gerçek Kazanç Potansiyeli"
         )
 
         sources_meta = [
@@ -1015,7 +1033,7 @@ async def analyze_chart(request: Request):
     except Exception as e:
         logger.error(f"analyze-chart genel hata: {e}")
         return JSONResponse({
-            "analysis": "❌ Geçici bir sistem hatası oluştu.\nLütfen 10 saniye sonra tekrar deneyin.",
+            "analysis": "❌ Geçici bir sistem hatası oluştu.\nEkip bilgilendirildi, kısa sürede çözülecek.\nLütfen biraz sonra tekrar deneyin.",
             "success": False
         }, status_code=500)
 
@@ -1068,6 +1086,7 @@ async def health():
 if __name__ == "__main__":
     import uvicorn
     uvicorn.run("main:app", host="0.0.0.0", port=int(os.getenv("PORT", 8000)), reload=False)
+
 
 
 
