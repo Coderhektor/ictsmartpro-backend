@@ -58,15 +58,16 @@ class GrokIndicatorsPro:
         except:
             return float(default)
 
-    def _clean_dataframe(self, df: pd.DataFrame) -> pd.DataFrame:
+       def _clean_dataframe(self, df: pd.DataFrame) -> pd.DataFrame:
         """Veri çerçevesini tamamen temizler: NaN, inf, duplicate index, sıfır volume filtre"""
         df = df.copy()
-        df.index = pd.to_datetime(df.index, errors='coerce')  # Zaman indeksi standartla
-        df = df[~df.index.duplicated(keep='last')]  # Tekrar eden index kaldır
+        df.index = pd.to_datetime(df.index, errors='coerce')
+        df = df[~df.index.duplicated(keep='last')]
         numeric_cols = ['open', 'high', 'low', 'close', 'volume']
         df[numeric_cols] = df[numeric_cols].replace([np.inf, -np.inf], np.nan)
-        df[numeric_cols] = df[numeric_cols].interpolate(method='linear').fillna(method='ffill').fillna(method='bfill').fillna(0)
-        df = df[df['volume'] > 0]  # Sıfır volume'lu satırları filtrele
+        # DEPRECATED METHOD YERİNE YENİ YÖNTEM
+        df[numeric_cols] = df[numeric_cols].interpolate(method='linear').ffill().bfill().fillna(0)
+        df = df[df['volume'] > 0]
         return df
 
     # ==================== OPTIMIZED INDICATORS ====================
