@@ -494,7 +494,8 @@ def generate_simple_signal(df: pd.DataFrame, symbol: str, timeframe: str) -> Dic
         "last_update": result.last_update,
         "status": "fallback"
     }
- def clean_nan(obj):
+ 
+def clean_nan(obj):
     """Recursive NaN temizleyici: NaN'leri None'a çevirir (JSON uyumlu)."""
     if isinstance(obj, dict):
         return {k: clean_nan(v) for k, v in obj.items()}
