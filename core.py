@@ -1,60 +1,40 @@
-# core.py - ÜRETİM HAZIR, GERÇEK ZAMANLI WEBSOCKET + SAĞLAM HAVUZ
+# 📁 core.py
+"""
+Real-time price aggregation & WebSocket broadcaster.
+Depends on `utils.py` for symbol map and exchange instances.
+"""
 
 import asyncio
 import logging
 from datetime import datetime, timezone
-from typing import Dict, List, Optional, Any, Set
+from typing import Dict, List, Set, Any, Optional
 
-import ccxt.pro as ccxt_pro          # Gerçek WebSocket akışları için
-import ccxt.async_support as ccxt_async
+import ccxt.pro as ccxt_pro
 import pandas as pd
 
-# ==================== LOGGER ====================
+# Logger
 logger = logging.getLogger("core")
 logger.setLevel(logging.INFO)
 if not logger.handlers:
     handler = logging.StreamHandler()
-    handler.setFormatter(logging.Formatter("%(asctime)s | %(levelname)s | core | %(message)s"))
+    handler.setFormatter(logging.Formatter("%(asctime)s | %(levelname)-7s | core | %(message)s"))
     logger.addHandler(handler)
 
-# ==================== NORMALIZATION ====================
-def normalize_pool_key(symbol: str) -> str:
-    """
-    Havuz anahtarı: COINUSDT (ör: BTCUSDT)
-    Her giriş formatını normalize eder.
-    """
-    s = symbol.upper().replace('-', '').replace('/', '')
-    if not s.endswith('USDT'):
-        s += 'USDT'
-    return s
+logger.info("🔄 core.py yükleniyor...")
 
-def to_exchange_symbol(symbol_key: str, exchange: str) -> str:
-    """
-    Havuz anahtarından (BTCUSDT) exchange abonelik formatına çeviri:
-    - binance:      BTC/USDT
-    - bybit:        BTCUSDT
-    - okx:          BTC-USDT
-    """
-    base = symbol_key[:-4]
-    if exchange == 'binance':
-        return f"{base}/USDT"
-    if exchange == 'bybit':
-        return symbol_key
-    if exchange == 'okx':
-        return f"{base}-USDT"
-    return symbol_key
+# ========== DEPENDENCIES FROM utils.py ==========
+# utils.initialize() çağrıldığında doldurulacak
+all_usdt_symbols: List[str] = []      # e.g., ["BTCUSDT", "ETHUSDT", ...]
+symbol_map: Dict[str, Dict[str, str]] = {}  # exchange → {base_sym: actual_sym}
+exchanges: Dict[str, ccxt_pro.Exchange] = {}  # ccxt.pro instance’ları
 
-# ==================== PRICE POOL (ASYNC SAFE) ====================
+# ========== PRICE POOL ==========
 class PricePool:
-    """
-    Tek, global fiyat havuzu. Exchange’lerden gelen anlık verileri birleştirir.
-    """
     def __init__(self):
         self._pool: Dict[str, Dict[str, Any]] = {}
         self._lock = asyncio.Lock()
 
-    async def update(self, source: str, symbol_key: str, price: float,
-                     change_24h: Optional[float] = None):
+    async def update(self, source: str, symbol_key: str, price: float, change_24h: Optional[float] = None):
         async with self._lock:
             if symbol_key not in self._pool:
                 self._pool[symbol_key] = {"sources": {}, "best_price": 0.0, "updated": ""}
@@ -64,33 +44,35 @@ class PricePool:
                 "timestamp": datetime.now(timezone.utc),
             }
             valid_prices = [
-                v["price"]
-                for v in self._pool[symbol_key]["sources"].values()
-                if v["price"] and v["price"] > 0
+                v["price"] for v in self._pool[symbol_key]["sources"].values()
+                if v["price"] > 0
             ]
             if valid_prices:
                 self._pool[symbol_key]["best_price"] = round(sum(valid_prices) / len(valid_prices), 8)
                 self._pool[symbol_key]["updated"] = datetime.now(timezone.utc).strftime("%H:%M:%S UTC")
 
     async def get_best_price(self, symbol: str) -> float:
-        key = normalize_pool_key(symbol)
+        key = symbol.upper().replace("/", "").replace("-", "")
+        if not key.endswith("USDT"):
+            key += "USDT"
         async with self._lock:
             return self._pool.get(key, {}).get("best_price", 0.0)
 
     async def snapshot(self, limit: int = 50) -> Dict[str, Any]:
         async with self._lock:
-            if not self._pool:
-                return {"tickers": {}, "last_update": "N/A"}
-            valid = {s: d for s, d in self._pool.items() if d.get("best_price", 0) > 0}
-            sorted_symbols = sorted(
+            valid = {
+                s: d for s, d in self._pool.items()
+                if d.get("best_price", 0) > 0
+            }
+            sorted_items = sorted(
                 valid.items(),
                 key=lambda x: x[1]["best_price"],
                 reverse=True
             )[:limit]
             tickers = {}
-            for symbol, data in sorted_symbols:
+            for symbol, data in sorted_items:
                 changes = [
-                    src.get("change_24h")
+                    src["change_24h"]
                     for src in data["sources"].values()
                     if src.get("change_24h") is not None
                 ]
@@ -105,13 +87,13 @@ class PricePool:
                 "last_update": datetime.now(timezone.utc).strftime("%H:%M:%S UTC"),
             }
 
-    async def all_items(self):
+    async def all_items(self) -> Dict[str, Dict]:
         async with self._lock:
             return dict(self._pool)
 
 price_pool = PricePool()
 
-# ==================== REALTIME BROADCAST ====================
+# ========== REALTIME BROADCAST ==========
 class RealtimeTicker:
     def __init__(self):
         self.subscribers: Set[Any] = set()
@@ -133,129 +115,69 @@ class RealtimeTicker:
                     await ws.send_json(data)
                 except Exception:
                     disconnected.add(ws)
-            for ws in disconnected:
-                self.subscribers.discard(ws)
+            self.subscribers -= disconnected
 
 rt_ticker = RealtimeTicker()
 
-# ==================== GLOBAL STATE ====================
+# ========== GLOBAL STATE ==========
 top_gainers: List[Dict] = []
+top_losers: List[Dict] = []   # ✅ eksik olan eklendi
 last_update: str = "Yükleniyor..."
-all_usdt_symbols: List[str] = []  # Havuz anahtarı formatında: BTCUSDT
 background_tasks: List[asyncio.Task] = []
 shutdown_evt = asyncio.Event()
 
-# ==================== SYMBOL YÜKLEME (REST) ====================
-async def load_symbols():
+# ========== WEBSOCKET STREAMS ==========
+async def _watch_tickers(exchange_id: str):
     """
-    Binance REST ile aktif USDT paritelerini yükler, havuz anahtarı formatına çevirir.
+    Generic ticker stream for Binance/Bybit/OKX using ccxt.pro
     """
-    global all_usdt_symbols  # Bu satırı EN ÜSTE TAŞI (önce kullanım yok diye)
-    try:
-        binance_rest = ccxt_async.binance({'enableRateLimit': True})
-        await binance_rest.load_markets()
-        pairs = [
-            s for s in binance_rest.symbols
-            if s.endswith('/USDT') and binance_rest.markets[s].get('active', True)
-        ]
-        # Havuz formatına çeviri: BTC/USDT -> BTCUSDT
-        normalized = [normalize_pool_key(s) for s in pairs]
-        max_symbols = 150
-        all_usdt_symbols = normalized[:max_symbols]  # Artık güvenli
-        await binance_rest.close()
-        logger.info(f"✅ {len(all_usdt_symbols)} USDT çifti yüklendi")
-    except Exception as e:
-        logger.warning(f"Symbol yükleme hatası: {e}")
-        # Fallback
-        all_usdt_symbols = ["BTCUSDT", "ETHUSDT", "SOLUSDT", "XRPUSDT", "BNBUSDT"]
+    exchange = exchanges.get(exchange_id)
+    if not exchange:
+        logger.error(f"{exchange_id} exchange not initialized")
+        return
 
-# ==================== WEBSOCKET STREAMS (GERÇEK ZAMANLI) ====================
+    # utils.symbol_map’dan sembolleri al
+    symbols = [
+        symbol_map[exchange_id][s]
+        for s in all_usdt_symbols
+        if s in symbol_map[exchange_id]
+    ]
+    if not symbols:
+        logger.warning(f"{exchange_id}: No valid symbols to subscribe")
+        return
+
+    chunk_size = 50
+    chunks = [symbols[i:i + chunk_size] for i in range(0, len(symbols), chunk_size)]
+    logger.info(f"📡 {exchange_id.upper()} WS subscribing {len(symbols)} symbols in {len(chunks)} chunks")
+
+    while not shutdown_evt.is_set():
+        for chunk in chunks:
+            try:
+                tickers = await exchange.watch_tickers(chunk)
+                for raw_sym, t in tickers.items():
+                    # Normalize to pool key: BTC/USDT → BTCUSDT
+                    key = raw_sym.upper().replace("/", "").replace("-", "")
+                    if not key.endswith("USDT"):
+                        key += "USDT"
+                    price = t.get("last") or t.get("close") or 0
+                    change = t.get("percentage") or 0
+                    await price_pool.update(exchange_id, key, price, change)
+            except Exception as e:
+                logger.error(f"{exchange_id} WS error: {e}")
+                await asyncio.sleep(3)
+                break  # Chunk başarısızsa yeniden dene
+        await asyncio.sleep(0.3)
+
 async def binance_stream():
-    """
-    Binance WS: watch_tickers. Semboller chunk'lanarak abone olunur.
-    """
-    exchange = ccxt_pro.binance()
-    try:
-        # Exchange formatına çeviri
-        symbols = [to_exchange_symbol(s, 'binance') for s in all_usdt_symbols]
-        chunk_size = 50  # Binance tek seferde çok fazla sembol subscription’da sorun yaratabilir
-        chunks = [symbols[i:i + chunk_size] for i in range(0, len(symbols), chunk_size)]
-        logger.info(f"📡 Binance WS subscribing in {len(chunks)} chunks")
-
-        while not shutdown_evt.is_set():
-            for chunk in chunks:
-                try:
-                    tickers = await exchange.watch_tickers(chunk)
-                    for sym, t in tickers.items():
-                        key = normalize_pool_key(sym)  # "BTC/USDT" -> "BTCUSDT"
-                        await price_pool.update('binance', key, t.get('last') or 0, t.get('percentage'))
-                except Exception as e:
-                    logger.error(f"Binance WS hata: {e}")
-                    await asyncio.sleep(3)
-            await asyncio.sleep(0.3)
-    finally:
-        try:
-            await exchange.close()
-        except Exception:
-            pass
+    await _watch_tickers("binance")
 
 async def bybit_stream():
-    """
-    Bybit WS: watch_tickers. Bybit formatı BTCUSDT şeklindedir.
-    """
-    exchange = ccxt_pro.bybit()
-    try:
-        symbols = [to_exchange_symbol(s, 'bybit') for s in all_usdt_symbols]
-        chunk_size = 50
-        chunks = [symbols[i:i + chunk_size] for i in range(0, len(symbols), chunk_size)]
-        logger.info(f"📡 Bybit WS subscribing in {len(chunks)} chunks")
-
-        while not shutdown_evt.is_set():
-            for chunk in chunks:
-                try:
-                    tickers = await exchange.watch_tickers(chunk)
-                    for sym, t in tickers.items():
-                        key = normalize_pool_key(sym)  # "BTCUSDT" -> "BTCUSDT"
-                        await price_pool.update('bybit', key, t.get('last') or 0, t.get('percentage'))
-                except Exception as e:
-                    logger.error(f"Bybit WS hata: {e}")
-                    await asyncio.sleep(3)
-            await asyncio.sleep(0.3)
-    finally:
-        try:
-            await exchange.close()
-        except Exception:
-            pass
+    await _watch_tickers("bybit")
 
 async def okx_stream():
-    """
-    OKX WS: watch_tickers. OKX formatı BTC-USDT şeklindedir.
-    """
-    exchange = ccxt_pro.okx()
-    try:
-        symbols = [to_exchange_symbol(s, 'okx') for s in all_usdt_symbols]
-        chunk_size = 50
-        chunks = [symbols[i:i + chunk_size] for i in range(0, len(symbols), chunk_size)]
-        logger.info(f"📡 OKX WS subscribing in {len(chunks)} chunks")
+    await _watch_tickers("okx")
 
-        while not shutdown_evt.is_set():
-            for chunk in chunks:
-                try:
-                    tickers = await exchange.watch_tickers(chunk)
-                    for sym, t in tickers.items():
-                        key = normalize_pool_key(sym)  # "BTC-USDT" -> "BTCUSDT"
-                        await price_pool.update('okx', key, t.get('last') or 0, t.get('percentage'))
-                except Exception as e:
-                    logger.error(f"OKX WS hata: {e}")
-                    await asyncio.sleep(3)
-            await asyncio.sleep(0.3)
-    finally:
-        try:
-            await exchange.close()
-        except Exception:
-            pass
-
-# ==================== REALTIME PRICE BROADCAST ====================
+# ========== REALTIME BROADCAST TASK ==========
 async def realtime_broadcast_task():
     logger.info("📊 Realtime broadcast başladı")
     await asyncio.sleep(2)
@@ -264,43 +186,64 @@ async def realtime_broadcast_task():
         await rt_ticker.broadcast(data)
         await asyncio.sleep(3)
 
-# ==================== PUMP RADAR ====================
+# ========== PUMP RADAR ==========
 async def pump_radar_task():
     logger.info("🔥 Pump radar başladı")
-    global top_gainers, last_update
+    global top_gainers, top_losers, last_update
     while not shutdown_evt.is_set():
         try:
             pool_items = await price_pool.all_items()
-            candidates = []
+            gainers, losers = [], []
             for symbol_key, data in pool_items.items():
                 if data.get("best_price", 0) <= 0:
                     continue
                 changes = [
-                    s.get("change_24h")
+                    s["change_24h"]
                     for s in data["sources"].values()
                     if s.get("change_24h") is not None
                 ]
                 if not changes:
                     continue
                 avg_change = sum(changes) / len(changes)
-                if abs(avg_change) >= 2.0:
-                    candidates.append({
-                        "symbol": symbol_key.replace("USDT", ""),
-                        "price": data["best_price"],
-                        "change": round(avg_change, 2),
-                    })
-            candidates.sort(key=lambda x: x["change"], reverse=True)
-            top_gainers = candidates[:10]
-            last_update = datetime.now(timezone.utc).strftime("%H:%M:%S UTC")
-            await asyncio.sleep(20)
-        except Exception as e:
-            logger.error(f"Pump radar hata: {e}")
-            await asyncio.sleep(20)
+                entry = {
+                    "symbol": symbol_key.replace("USDT", ""),
+                    "price": data["best_price"],
+                    "change": round(avg_change, 2),
+                }
+                if avg_change >= 2.0:
+                    gainers.append(entry)
+                elif avg_change <= -2.0:
+                    losers.append(entry)
 
-# ==================== LIFECYCLE ====================
+            gainers.sort(key=lambda x: x["change"], reverse=True)
+            losers.sort(key=lambda x: x["change"])  # en düşen ilk
+            top_gainers = gainers[:10]
+            top_losers = losers[:10]
+            last_update = datetime.now(timezone.utc).strftime("%H:%M:%S UTC")
+        except Exception as e:
+            logger.error(f"Pump radar error: {e}")
+        await asyncio.sleep(20)
+
+# ========== LIFECYCLE ==========
 async def initialize():
-    logger.info("🚀 Core başlatılıyor...")
-    await load_symbols()
+    """
+    core.py’yi başlat. utils.py önceden initialize edilmelidir.
+    """
+    global all_usdt_symbols, symbol_map, exchanges
+
+    # utils.py’dan import edilen global’lere ulaş
+    from utils import all_usdt_symbols as _sym, symbol_map as _map, exchanges as _ex
+
+    all_usdt_symbols = _sym
+    symbol_map = _map
+    exchanges = {
+        "binance": ccxt_pro.binance({"enableRateLimit": True}),
+        "bybit": ccxt_pro.bybit({"enableRateLimit": True}),
+        "okx": ccxt_pro.okx({"enableRateLimit": True}),
+    }
+
+    logger.info(f"🚀 Core başlatılıyor... ({len(all_usdt_symbols)} symbols)")
+
     tasks = [
         realtime_broadcast_task(),
         pump_radar_task(),
@@ -309,7 +252,7 @@ async def initialize():
         okx_stream(),
     ]
     background_tasks.extend([asyncio.create_task(t) for t in tasks])
-    logger.info("✅ Tüm gerçek zamanlı görevler başlatıldı")
+    logger.info("✅ Core hazır")
 
 async def cleanup():
     logger.info("🛑 Core kapanıyor...")
@@ -319,65 +262,26 @@ async def cleanup():
             task.cancel()
     await asyncio.gather(*background_tasks, return_exceptions=True)
     background_tasks.clear()
+
+    # ccxt.pro exchange’leri kapat
+    for ex in exchanges.values():
+        try:
+            await ex.close()
+        except Exception:
+            pass
+
     logger.info("✅ Core temizlendi")
-    #========================================================
-# ==================== CLIENT FACTORY FONKSİYONLARI ====================
-async def get_binance_client():
-    """Analiz için async Binance client döner (OHLCV için)"""
-    try:
-        client = ccxt_async.binance({
-            'enableRateLimit': True,
-            'options': {'defaultType': 'future'}  # spot veya future seçebilirsin
-        })
-        await client.load_markets()
-        return client
-    except Exception as e:
-        logger.error(f"Binance client oluşturulamadı: {e}")
-        return None
-
-async def get_bybit_client():
-    """Analiz için async Bybit client döner"""
-    try:
-        client = ccxt_async.bybit({
-            'enableRateLimit': True,
-        })
-        await client.load_markets()
-        return client
-    except Exception as e:
-        logger.error(f"Bybit client oluşturulamadı: {e}")
-        return None
-
-async def get_okex_client():
-    """Analiz için async OKX client döner"""
-    try:
-        client = ccxt_async.okx({
-            'enableRateLimit': True,
-        })
-        await client.load_markets()
-        return client
-    except Exception as e:
-        logger.error(f"OKX client oluşturulamadı: {e}")
-        return None
-
-# get_coingecko_client artık gerekmiyor çünkü main.py'de pycoingecko kullanıyoruz
-# Ama main.py'de hata vermesin diye boş bir şey döndürelim
-def get_coingecko_client():
-    return None  # main.py'de zaten cg_client = CoinGeckoAPI()  
 
 
-# ==================== EXPORT ====================
+# ========== EXPORT ==========
 __all__ = [
-    'rt_ticker',
-    'top_gainers',
-    'top_losers',  # bu da eksik olabilir, ekleyelim
-    'last_update',
-    'initialize',
-    'cleanup',
-    'price_pool',
-    'normalize_pool_key',
-    'to_exchange_symbol',
-    'get_binance_client',
-    'get_bybit_client',
-    'get_okex_client',
-    'get_coingecko_client',
+    "rt_ticker",
+    "price_pool",
+    "top_gainers",
+    "top_losers",        # ✅ artık var
+    "last_update",
+    "initialize",
+    "cleanup",
 ]
+
+logger.info("✅ core.py hazır!")
