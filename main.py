@@ -691,19 +691,7 @@ async def signal_all_page(request: Request):
 
 # ====================== ANALİZ ENDPOINT ======================
  
-
-def clean_nan(obj):
-    """Recursive NaN temizleyici: NaN'leri None'a çevirir (JSON uyumlu)."""
-    if isinstance(obj, dict):
-        return {k: clean_nan(v) for k, v in obj.items()}
-    elif isinstance(obj, list):
-        return [clean_nan(v) for v in obj]
-    elif isinstance(obj, float) and np.isnan(obj):
-        return None  # Veya 0 tercih edebilirsin
-    else:
-        return obj
-
-@app.post("/api/analyze-chart")
+ @app.post("/api/analyze-chart")
 async def analyze_chart(request: Request):
     try:
         body = await request.json()
@@ -866,6 +854,7 @@ async def health():
 if __name__ == "__main__":
     import uvicorn
     uvicorn.run("main:app", host="0.0.0.0", port=int(os.getenv("PORT", 8000)), reload=False)
+
 
 
 
