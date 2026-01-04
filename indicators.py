@@ -1,13 +1,11 @@
 # indicators.py - %100 PRODUCTION READY, NaN HATASI TAMAMEN ÇÖZÜLDÜ, SİNYAL DAHA BELİRGİN
-# ÖZEL: Websocket gerçek verisi için optimize edilmiştir
 
 import pandas as pd
 import numpy as np
-from datetime import datetime, timedelta
+from datetime import datetime
 from typing import Optional, Dict, Any, Tuple, List, Union
 import logging
-from dataclasses import dataclass, asdict
-import json
+from dataclasses import dataclass
 
 logger = logging.getLogger("grok_indicators")
 logger.setLevel(logging.INFO)
@@ -26,56 +24,19 @@ class SignalResult:
     market_structure: Dict[str, Any]
     confidence: float
     recommended_action: str
-    
-    def to_dict(self) -> Dict[str, Any]:
-        """JSON uyumlu dict'e çevir"""
-        return clean_nan(asdict(self))
-
-class CacheManager:
-    """WebSocket verisi için optimize cache yönetimi"""
-    
-    def __init__(self, ttl_seconds: int = 30, max_size: int = 50):
-        self.cache = {}
-        self.timestamps = {}
-        self.ttl = timedelta(seconds=ttl_seconds)
-        self.max_size = max_size
-    
-    def get(self, key: str) -> Optional[Any]:
-        """TTL kontrolüyle cache'den getir"""
-        if key in self.cache:
-            if datetime.now() - self.timestamps[key] < self.ttl:
-                return self.cache[key]
-            else:
-                del self.cache[key]
-                del self.timestamps[key]
-        return None
-    
-    def set(self, key: str, value: Any) -> None:
-        """Cache'e kaydet, boyut kontrolü yap"""
-        if len(self.cache) >= self.max_size:
-            oldest_key = min(self.timestamps.items(), key=lambda x: x[1])[0]
-            del self.cache[oldest_key]
-            del self.timestamps[oldest_key]
-        
-        self.cache[key] = value
-        self.timestamps[key] = datetime.now()
-    
-    def clear(self) -> None:
-        """Cache'i temizle"""
-        self.cache.clear()
-        self.timestamps.clear()
 
 class GrokIndicatorsPro:
-    """Production Ready - WebSocket verisi için optimize, NaN güvenli"""
+    """Production Ready - Gerçek WebSocket Verisiyle Çalışır - NaN Güvenliği Eklenmiştir"""
     
     def __init__(self):
+        self._fib_levels = [0.0, 0.236, 0.382, 0.5, 0.618, 0.705, 0.786, 0.886, 1.0]
         self._periods = {
             'rsi6': 6, 'rsi14': 14, 'sma50': 50, 'sma200': 200,
             'ema9': 9, 'ema21': 21, 'bb': 20, 'atr': 14
         }
-        self.cache_manager = CacheManager(ttl_seconds=30, max_size=50)
+        self._cache = {}
     
-    # ==================== GÜVENLİK FONKSİYONLARI ====================
+    # ==================== GÜVENLİK FONKSİYONU ====================
     def _safe_float(self, val, default=0.0) -> float:
         """NaN, inf, None gibi değerleri temizler ve Python float döner"""
         try:
@@ -86,132 +47,30 @@ class GrokIndicatorsPro:
             return float(default)
         except:
             return float(default)
-    
-    def _safe_series(self, series: pd.Series) -> pd.Series:
-        """Serideki NaN'leri temizle - WebSocket verisi için optimize"""
-        if series.empty:
-            return series
-        
-        # Önce inf değerleri NaN'a çevir
-        series = series.replace([np.inf, -np.inf], np.nan)
-        
-        # NaN'leri önce forward fill, sonra backward fill ile doldur
-        series = series.fillna(method='ffill').fillna(method='bfill')
-        
-        # Hala NaN varsa 0 ile doldur
-        return series.fillna(0)
-    
-    # ==================== VERİ KALİTE KONTROLLERİ ====================
-    def _check_websocket_data_quality(self, df: pd.DataFrame) -> Dict[str, Any]:
-        """WebSocket verisi için özel kalite kontrolleri"""
-        quality_metrics = {
-            "score": 1.0,
-            "issues": [],
-            "warnings": [],
-            "metadata": {}
-        }
-        
-        try:
-            if df.empty or len(df) < 20:
-                quality_metrics["score"] = 0.3
-                quality_metrics["issues"].append(f"Yetersiz veri: {len(df)} mum")
-                return quality_metrics
-            
-            # 1. Gaps kontrolü (WebSocket'te nadir olmalı)
-            if isinstance(df.index, pd.DatetimeIndex) and len(df) > 10:
-                time_diffs = df.index.to_series().diff().dt.total_seconds()
-                expected_interval = {
-                    '1m': 60, '3m': 180, '5m': 300, '15m': 900,
-                    '30m': 1800, '1h': 3600, '4h': 14400, '1d': 86400
-                }.get('5m', 300)
-                
-                # Büyük boşluklar
-                large_gaps = (time_diffs > expected_interval * 2).sum()
-                if large_gaps > 0:
-                    quality_metrics["score"] *= 0.8
-                    quality_metrics["warnings"].append(f"Veri boşlukları: {large_gaps}")
-            
-            # 2. Anormal fiyat hareketleri
-            if len(df) > 5:
-                recent = df.iloc[-5:]
-                price_changes = recent['close'].pct_change().abs()
-                
-                # Aşırı volatilite
-                high_volatility = (price_changes > 0.05).any()  # %5'ten fazla değişim
-                if high_volatility:
-                    quality_metrics["score"] *= 0.9
-                    quality_metrics["warnings"].append("Yüksek volatilite")
-                
-                # Anomalik fiyat
-                mean_price = recent['close'].mean()
-                std_price = recent['close'].std()
-                if std_price > 0:
-                    current_price = recent['close'].iloc[-1]
-                    z_score = abs((current_price - mean_price) / std_price)
-                    if z_score > 3:
-                        quality_metrics["score"] *= 0.7
-                        quality_metrics["issues"].append(f"Anormal fiyat (z-score: {z_score:.1f})")
-            
-            # 3. Hacim anomalileri
-            if 'volume' in df.columns:
-                recent_volume = df['volume'].iloc[-10:]
-                if len(recent_volume) > 5 and recent_volume.mean() > 0:
-                    volume_std = recent_volume.std()
-                    current_volume = recent_volume.iloc[-1]
-                    
-                    if volume_std > 0:
-                        volume_z = abs((current_volume - recent_volume.mean()) / volume_std)
-                        if volume_z > 4:
-                            quality_metrics["score"] *= 0.6
-                            quality_metrics["issues"].append(f"Aşırı hacim (z-score: {volume_z:.1f})")
-            
-            # 4. Doğruluk kontrolü (OHLC mantığı)
-            if len(df) > 0:
-                invalid_rows = ((df['high'] < df['low']) | 
-                               (df['close'] > df['high']) | 
-                               (df['close'] < df['low'])).sum()
-                if invalid_rows > 0:
-                    quality_metrics["score"] *= 0.5
-                    quality_metrics["issues"].append(f"{invalid_rows} geçersiz OHLC satırı")
-            
-            quality_metrics["score"] = max(0.1, min(1.0, quality_metrics["score"]))
-            
-        except Exception as e:
-            logger.warning(f"WebSocket data quality check error: {e}")
-        
-        return quality_metrics
-    
+
     # ==================== OPTIMIZED INDICATORS ====================
     def calculate_all_indicators(self, df: pd.DataFrame) -> Dict[str, pd.Series]:
-        """WebSocket verisi için optimize indikatörler"""
+        """Tüm indikatörleri tek seferde hesapla - NaN güvenli"""
         df = df.copy()
         
-        # Cache anahtarı (WebSocket verisi için hash)
-        last_rows = df.iloc[-50:] if len(df) >= 50 else df
-        cache_key = f"{hash(str(last_rows['close'].values.tobytes()))}_{len(df)}"
+        # Temel temizlik: inf ve NaN'leri önceki değerle doldur, yoksa 0
+        numeric_cols = ['open', 'high', 'low', 'close', 'volume']
+        df[numeric_cols] = df[numeric_cols].replace([np.inf, -np.inf], np.nan)
+        df[numeric_cols] = df[numeric_cols].fillna(method='ffill').fillna(0)
         
-        cached = self.cache_manager.get(cache_key)
-        if cached:
-            return cached
-        
-        # Temel temizlik
-        numeric_cols = ['open', 'high', 'low', 'close']
-        if 'volume' in df.columns:
-            numeric_cols.append('volume')
-        
-        for col in numeric_cols:
-            if col in df.columns:
-                df[col] = self._safe_series(df[col])
+        # Cache anahtarı
+        cache_key = hash(str(df.iloc[-100:].round(8).values.tobytes()))
+        if cache_key in self._cache:
+            return self._cache[cache_key]
         
         indicators = {}
         close = df['close']
         
-        # RSI (WebSocket için optimize)
+        # RSI
         indicators['rsi6'] = self._calculate_rsi(close, 6).fillna(50)
         indicators['rsi14'] = self._calculate_rsi(close, 14).fillna(50)
         
-        # Moving Averages (WebSocket hızı için optimize)
-        indicators['sma20'] = close.rolling(20, min_periods=1).mean()
+        # Moving Averages - min_periods=1 ile NaN önlenir
         indicators['sma50'] = close.rolling(50, min_periods=1).mean()
         indicators['sma200'] = close.rolling(200, min_periods=1).mean()
         indicators['ema9'] = close.ewm(span=9, adjust=False).mean()
@@ -222,30 +81,27 @@ class GrokIndicatorsPro:
         ema26 = close.ewm(span=26, adjust=False).mean()
         indicators['macd'] = ema12 - ema26
         indicators['macd_signal'] = indicators['macd'].ewm(span=9, adjust=False).mean()
-        indicators['macd_histogram'] = indicators['macd'] - indicators['macd_signal']
         
         # Bollinger Bands
-        sma20 = indicators['sma20']
-        std20 = close.rolling(20).std().fillna(0)
+        sma20 = close.rolling(20, min_periods=1).mean()
+        std20 = close.rolling(20).std().fillna(0)  # std NaN olursa 0
         indicators['bb_upper'] = sma20 + (std20 * 2)
         indicators['bb_middle'] = sma20
         indicators['bb_lower'] = sma20 - (std20 * 2)
-        indicators['bb_width'] = (indicators['bb_upper'] - indicators['bb_lower']) / indicators['bb_middle'].replace(0, 1)
         
-        # Volume indikatörleri
-        if 'volume' in df.columns:
-            indicators['volume'] = df['volume']
-            indicators['volume_ma'] = df['volume'].rolling(20, min_periods=1).mean()
-            indicators['volume_ratio'] = df['volume'] / indicators['volume_ma'].replace(0, 1)
+        # Volume
+        indicators['volume'] = df['volume']
+        indicators['volume_ma'] = df['volume'].rolling(20, min_periods=1).mean()
         
-        # ATR (Average True Range)
-        if len(df) >= 15:
-            indicators['atr'] = self._calculate_atr(df['high'], df['low'], df['close'], 14)
-        else:
-            indicators['atr'] = pd.Series(0, index=df.index)
+        # Pivot Points
+        indicators['pivot_high'], indicators['pivot_low'] = self._detect_pivots(df['high'], df['low'])
+        indicators['pivot_high'] = indicators['pivot_high'].fillna(method='ffill').fillna(0)
+        indicators['pivot_low'] = indicators['pivot_low'].fillna(method='ffill').fillna(0)
         
-        # Cache'e kaydet
-        self.cache_manager.set(cache_key, indicators)
+        # Cache kaydet
+        self._cache[cache_key] = indicators
+        if len(self._cache) > 100:
+            self._cache.clear()
         
         return indicators
     
@@ -260,14 +116,21 @@ class GrokIndicatorsPro:
         rsi = 100 - (100 / (1 + rs))
         return rsi.clip(0, 100)
     
-    def _calculate_atr(self, high: pd.Series, low: pd.Series, close: pd.Series, period: int) -> pd.Series:
-        """Average True Range hesapla"""
-        tr1 = high - low
-        tr2 = abs(high - close.shift())
-        tr3 = abs(low - close.shift())
-        tr = pd.concat([tr1, tr2, tr3], axis=1).max(axis=1)
-        atr = tr.rolling(period).mean().fillna(method='ffill')
-        return atr.fillna(0)
+    def _detect_pivots(self, high: pd.Series, low: pd.Series, length: int = 5) -> Tuple[pd.Series, pd.Series]:
+        """Vectorized pivot detection - NaN döner"""
+        ph = pd.Series(np.nan, index=high.index)
+        pl = pd.Series(np.nan, index=low.index)
+        
+        for i in range(length, len(high) - length):
+            window_high = high.iloc[i-length:i+length+1]
+            window_low = low.iloc[i-length:i+length+1]
+            
+            if high.iloc[i] == window_high.max():
+                ph.iloc[i] = high.iloc[i]
+            if low.iloc[i] == window_low.min():
+                pl.iloc[i] = low.iloc[i]
+        
+        return ph, pl
     
     # ==================== PATTERN DETECTION ====================
     def detect_patterns_phase1(self, df: pd.DataFrame, indicators: Dict) -> Dict[str, pd.Series]:
@@ -338,10 +201,6 @@ class GrokIndicatorsPro:
                                     (patterns['breaker_bull'] | patterns['liquidity_sweep_bull'] | patterns['mitigation_bull'])
         patterns['smc_choch_bear'] = patterns['uptrend'].shift(1) & patterns['strong_downtrend'] & \
                                     (patterns['breaker_bear'] | patterns['liquidity_sweep_bear'] | patterns['mitigation_bear'])
-        
-        # Volume patterns
-        if 'volume_ratio' in indicators:
-            patterns['volume_spike'] = indicators['volume_ratio'] > 2.0
         
         # Killzones (UTC)
         if isinstance(df.index, pd.DatetimeIndex):
@@ -442,7 +301,7 @@ class GrokIndicatorsPro:
         try:
             close_last = self._safe_float(df['close'].iloc[-1])
             sma50_last = self._safe_float(indicators['sma50'].iloc[-1])
-            sma200_last = self._safe_float(indicators['sma200'].iloc[-1], close_last)
+            sma200_last = self._safe_float(indicators['sma200'].iloc[-1])
             rsi14_last = self._safe_float(indicators['rsi14'].iloc[-1])
             
             # Trend
@@ -465,105 +324,66 @@ class GrokIndicatorsPro:
             elif rsi14_last < 45:
                 structure["momentum"] = "Bearish"
             
-            # Volatility
-            if 'bb_width' in indicators:
-                current_bb = self._safe_float(indicators['bb_width'].iloc[-1])
-                avg_bb = self._safe_float(indicators['bb_width'].rolling(20).mean().iloc[-1], current_bb)
-                
-                if avg_bb > 0:
-                    bb_ratio = current_bb / avg_bb
-                    if bb_ratio > 1.5:
-                        structure["volatility"] = "High"
-                    elif bb_ratio < 0.7:
-                        structure["volatility"] = "Low"
+            # Volatility & Volume & Key Levels (güvenli)
+            bb_width = (indicators['bb_upper'] - indicators['bb_lower']) / indicators['bb_middle'].replace(0, 1)
+            current_bb = self._safe_float(bb_width.iloc[-1])
+            avg_bb = self._safe_float(bb_width.rolling(20).mean().iloc[-1])
+            if current_bb > avg_bb * 1.5:
+                structure["volatility"] = "High"
+            elif current_bb < avg_bb * 0.5:
+                structure["volatility"] = "Low"
             
-            # Volume
-            if 'volume_ratio' in indicators:
-                vol_ratio = self._safe_float(indicators['volume_ratio'].iloc[-1])
-                if vol_ratio > 2:
-                    structure["volume_trend"] = "High Volume"
-                elif vol_ratio > 1.2:
-                    structure["volume_trend"] = "Increasing"
+            volume_ratio = self._safe_float(df['volume'].iloc[-1]) / self._safe_float(indicators['volume_ma'].iloc[-1], 1)
+            if volume_ratio > 2:
+                structure["volume_trend"] = "High Volume"
+            elif volume_ratio > 1.2:
+                structure["volume_trend"] = "Increasing"
             
-            # Key Levels (FLOAT olarak)
             recent_high = self._safe_float(df['high'].rolling(20).max().iloc[-1])
             recent_low = self._safe_float(df['low'].rolling(20).min().iloc[-1])
-            
             structure["key_levels"] = [
-                {"type": "resistance", "price": float(recent_high)},
-                {"type": "support", "price": float(recent_low)},
-                {"type": "sma50", "price": float(sma50_last)},
-                {"type": "sma200", "price": float(sma200_last)}
+                {"type": "resistance", "price": round(recent_high, 6)},
+                {"type": "support", "price": round(recent_low, 6)},
+                {"type": "sma50", "price": round(sma50_last, 6)},
+                {"type": "sma200", "price": round(sma200_last, 6)}
             ]
-            
-            # EMA seviyeleri
-            if 'ema9' in indicators:
-                ema9_last = self._safe_float(indicators['ema9'].iloc[-1])
-                structure["key_levels"].append({"type": "ema9", "price": float(ema9_last)})
-            
-            if 'ema21' in indicators:
-                ema21_last = self._safe_float(indicators['ema21'].iloc[-1])
-                structure["key_levels"].append({"type": "ema21", "price": float(ema21_last)})
             
         except Exception as e:
             logger.error(f"Market structure error: {e}")
         
         return structure
     
-    def generate_signal(self, df: pd.DataFrame, symbol: str, timeframe: str, 
-                       data_quality_weight: float = 1.0) -> SignalResult:
-        """
-        WebSocket verisi için optimize sinyal üretme
-        
-        Args:
-            df: WebSocket'tan gelen OHLCV verisi
-            symbol: Sembol
-            timeframe: Zaman aralığı
-            data_quality_weight: Veri kalite ağırlığı
-        """
+    def generate_signal(self, df: pd.DataFrame, symbol: str, timeframe: str) -> SignalResult:
         try:
-            if len(df) < 30:  # WebSocket için daha düşük limit
-                logger.warning(f"WebSocket: Yetersiz veri: {len(df)} mum")
-                return self._generate_websocket_fallback(df, symbol, timeframe)
+            if len(df) < 50:
+                raise ValueError("Yetersiz veri (min 50 mum gerekli)")
             
-            # WebSocket veri kalitesi kontrolü
-            data_quality = self._check_websocket_data_quality(df)
-            effective_quality = min(data_quality["score"], data_quality_weight)
-            
-            # İndikatör hesapla
             indicators = self.calculate_all_indicators(df)
             phase1 = self.detect_patterns_phase1(df, indicators)
             patterns = self.detect_patterns_phase2(df, indicators, phase1)
             score, triggers = self.calculate_signal_score(patterns)
             structure = self.analyze_market_structure(df, indicators)
             
-            # Veri kalitesine göre skoru ağırlıklandır
-            adjusted_score = int(score * effective_quality)
             current_price = self._safe_float(df['close'].iloc[-1])
             
-            # Sinyal belirleme
-            if adjusted_score >= 70:
+            # Daha belirgin sinyal metinleri
+            if score >= 70:
                 signal = "🚀 GÜÇLÜ ALIM SİNYALİ"
                 strength = "ÇOK GÜÇLÜ"
-                action = "ALIM DÜŞÜNÜLEBİLİR"
-            elif adjusted_score >= 40:
+            elif score >= 40:
                 signal = "✅ ALIM FIRSATI"
                 strength = "GÜÇLÜ"
-                action = "ALIM FIRSATI"
-            elif adjusted_score <= -70:
+            elif score <= -70:
                 signal = "🔻 GÜÇLÜ SATIM SİNYALİ"
                 strength = "ÇOK GÜÇLÜ"
-                action = "SATIM DÜŞÜNÜLEBİLİR"
-            elif adjusted_score <= -40:
+            elif score <= -40:
                 signal = "⚠️ SATIM UYARISI"
                 strength = "GÜÇLÜ"
-                action = "SATIM FIRSATI"
             else:
                 signal = "🟡 NÖTR - BEKLE"
                 strength = "NÖTR"
-                action = "PİYASAYI İZLEYİN"
             
-            # Killzone
+            # Killzone belirleme
             killzone = "Normal"
             if patterns.get('in_killzone', pd.Series([False])).iloc[-1]:
                 if patterns.get('london_kz', pd.Series([False])).iloc[-1]:
@@ -573,210 +393,96 @@ class GrokIndicatorsPro:
                 elif patterns.get('asia_kz', pd.Series([False])).iloc[-1]:
                     killzone = "🌙 Asia Killzone"
             
-            # Confidence
-            base_confidence = abs(adjusted_score) / 100
-            final_confidence = base_confidence * effective_quality
-            
-            # Veri kalitesi uyarısı
-            if effective_quality < 0.7 and len(triggers) > 0:
-                triggers.insert(0, f"⚠️ Veri kalitesi: %{int(effective_quality*100)}")
+            confidence = round(abs(score) / 100, 2)
             
             return SignalResult(
                 pair=symbol,
                 timeframe=timeframe,
                 current_price=round(current_price, 6),
                 signal=signal,
-                score=adjusted_score,
-                strength=strength,
-                killzone=killzone,
-                triggers=triggers[:8],
-                last_update=datetime.utcnow().strftime("%H:%M UTC"),
-                market_structure=structure,
-                confidence=round(final_confidence, 3),
-                recommended_action=action
-            )
-            
-        except Exception as e:
-            logger.error(f"WebSocket signal generation error: {e}")
-            return self._generate_websocket_fallback(df, symbol, timeframe)
-    
-    def _generate_websocket_fallback(self, df: pd.DataFrame, symbol: str, timeframe: str) -> SignalResult:
-        """WebSocket için optimize fallback sinyal"""
-        try:
-            if len(df) < 2:
-                return SignalResult(
-                    pair=symbol,
-                    timeframe=timeframe,
-                    current_price=0.0,
-                    signal="❌ VERİ YOK",
-                    score=50,
-                    strength="BİLİNMİYOR",
-                    killzone="Normal",
-                    triggers=["Yetersiz WebSocket verisi"],
-                    last_update=datetime.utcnow().strftime("%H:%M UTC"),
-                    market_structure={"trend": "Veri yok", "note": "WebSocket bağlantısı"},
-                    confidence=0.1,
-                    recommended_action="WebSocket bağlantısını kontrol edin"
-                )
-            
-            current_price = self._safe_float(df['close'].iloc[-1])
-            prev_price = self._safe_float(df['close'].iloc[-2] if len(df) > 1 else current_price)
-            change_pct = ((current_price - prev_price) / prev_price * 100) if prev_price != 0 else 0
-            
-            # WebSocket'a özel basit trend
-            if len(df) > 10:
-                sma10 = df['close'].rolling(10).mean().iloc[-1]
-                trend = "Yükseliş" if current_price > sma10 else "Düşüş" if current_price < sma10 else "Yatay"
-            else:
-                trend = "Hızlı analiz"
-            
-            if change_pct >= 2.0:
-                signal = "🟢 HIZLI AL"
-                score = 65
-                strength = "ORTA"
-            elif change_pct >= 0.5:
-                signal = "🟢 Hafif Yükseliş"
-                score = 55
-                strength = "ZAYIF"
-            elif change_pct <= -2.0:
-                signal = "🔴 HIZLI SAT"
-                score = 35
-                strength = "ORTA"
-            elif change_pct <= -0.5:
-                signal = "🔴 Hafif Düşüş"
-                score = 45
-                strength = "ZAYIF"
-            else:
-                signal = "🟡 NÖTR"
-                score = 50
-                strength = "NÖTR"
-            
-            return SignalResult(
-                pair=symbol,
-                timeframe=timeframe,
-                current_price=round(current_price, 6),
-                signal=f"{signal} ({trend})",
                 score=score,
                 strength=strength,
-                killzone="Normal",
-                triggers=[f"Son değişim: %{change_pct:+.2f}", "WebSocket hızlı analiz"],
+                killzone=killzone,
+                triggers=triggers[:8],  # En güçlü 8 tetikleyici
                 last_update=datetime.utcnow().strftime("%H:%M UTC"),
-                market_structure={
-                    "trend": trend,
-                    "momentum": "Hızlı analiz",
-                    "volatility": "WebSocket",
-                    "volume_trend": "Hızlı",
-                    "key_levels": [],
-                    "note": "WebSocket fallback sinyal"
-                },
-                confidence=0.6,
-                recommended_action="Tam analiz için daha fazla veri bekleyin"
+                market_structure=structure,
+                confidence=confidence,
+                recommended_action="Kendi analizinizi yapın" if abs(score) >= 40 else "Piyasayı izleyin"
             )
             
         except Exception as e:
-            logger.error(f"WebSocket fallback error: {e}")
-            return SignalResult(
-                pair=symbol,
-                timeframe=timeframe,
-                current_price=0.0,
-                signal="❌ WEBSOCKET HATASI",
-                score=50,
-                strength="HATA",
-                killzone="Normal",
-                triggers=["WebSocket bağlantı hatası"],
-                last_update=datetime.utcnow().strftime("%H:%M UTC"),
-                market_structure={"error": "WebSocket hatası"},
-                confidence=0.0,
-                recommended_action="Bağlantıyı kontrol edip tekrar deneyin"
-            )
+            logger.error(f"Signal generation error: {e}")
+            return self._generate_fallback_signal(df, symbol, timeframe)
+    
+    def _generate_fallback_signal(self, df: pd.DataFrame, symbol: str, timeframe: str) -> SignalResult:
+        current_price = self._safe_float(df['close'].iloc[-1] if len(df) > 0 else 0)
+        prev_price = self._safe_float(df['close'].iloc[-2] if len(df) > 1 else current_price)
+        change_pct = ((current_price - prev_price) / prev_price * 100) if prev_price != 0 else 0
+        
+        if change_pct >= 1.5:
+            signal = "✅ BASİT ALIM"
+            score = 65
+            strength = "ORTA"
+        elif change_pct >= 0.5:
+            signal = "🟢 Hafif Yükseliş"
+            score = 55
+            strength = "ZAYIF"
+        elif change_pct <= -1.5:
+            signal = "⚠️ BASİT SATIM"
+            score = 35
+            strength = "ORTA"
+        elif change_pct <= -0.5:
+            signal = "🔴 Hafif Düşüş"
+            score = 45
+            strength = "ZAYIF"
+        else:
+            signal = "🟡 NÖTR"
+            score = 50
+            strength = "NÖTR"
+        
+        return SignalResult(
+            pair=symbol,
+            timeframe=timeframe,
+            current_price=round(current_price, 6),
+            signal=signal,
+            score=score,
+            strength=strength,
+            killzone="Normal",
+            triggers=[f"Son mum değişimi: {change_pct:+.2f}%"],
+            last_update=datetime.utcnow().strftime("%H:%M UTC"),
+            market_structure={"trend": "Bilinmiyor", "note": "Fallback aktif"},
+            confidence=0.5,
+            recommended_action="Tam analiz için daha fazla veri bekleyin"
+        )
 
-# ==================== GLOBAL FONKSİYONLAR ====================
-def clean_nan(obj: Any) -> Any:
-    """Global NaN temizleyici - JSON serialization için"""
-    if isinstance(obj, dict):
-        return {k: clean_nan(v) for k, v in obj.items()}
-    elif isinstance(obj, list):
-        return [clean_nan(v) for v in obj]
-    elif isinstance(obj, (np.floating, np.float64, np.float32)):
-        if np.isnan(obj) or np.isinf(obj):
-            return None
-        return float(obj)
-    elif isinstance(obj, (np.integer, np.int64, np.int32)):
-        return int(obj)
-    elif isinstance(obj, pd.Timestamp):
-        return obj.isoformat()
-    elif pd.isna(obj):
-        return None
-    else:
-        return obj
-
-# Global instance
+# ==================== GLOBAL INSTANCE & PUBLIC API ====================
 grok_pro = GrokIndicatorsPro()
 
-def generate_ict_signal(df: pd.DataFrame, symbol: str, timeframe: str, 
-                       extra_params: Optional[Dict] = None) -> Dict:
-    """
-    Ana ICT sinyali - WebSocket verisi için optimize
+def generate_ict_signal(df: pd.DataFrame, symbol: str, timeframe: str) -> Dict:
+    """Ana ICT sinyali - JSON uyumlu"""
+    result = grok_pro.generate_signal(df, symbol, timeframe)
     
-    Args:
-        df: WebSocket OHLCV verisi
-        symbol: Sembol
-        timeframe: Zaman aralığı
-        extra_params: Ek parametreler
-    """
-    try:
-        # Ek parametreler
-        data_quality_weight = 1.0
-        if extra_params:
-            if 'data_quality' in extra_params:
-                data_quality_weight = float(extra_params.get('data_quality', 1.0))
-        
-        result = grok_pro.generate_signal(df, symbol, timeframe, data_quality_weight)
-        
-        # JSON uyumlu dict
-        response = {
-            "pair": result.pair.replace("USDT", "/USDT"),
-            "timeframe": result.timeframe.upper(),
-            "current_price": result.current_price,
-            "signal": result.signal,
-            "score": result.score,
-            "strength": result.strength,
-            "killzone": result.killzone,
-            "triggers": "\n".join(result.triggers) if result.triggers else "Tetikleyici tespit edilmedi",
-            "last_update": result.last_update,
-            "market_structure": result.market_structure,
-            "confidence": result.confidence,
-            "recommended_action": result.recommended_action,
-            "status": "success",
-            "source": "websocket"
-        }
-        
-        return clean_nan(response)
-        
-    except Exception as e:
-        logger.error(f"generate_ict_signal error: {e}")
-        return {
-            "pair": symbol.replace("USDT", "/USDT"),
-            "timeframe": timeframe.upper(),
-            "current_price": 0.0,
-            "signal": "❌ SİNYAL HATASI",
-            "score": 50,
-            "strength": "HATA",
-            "killzone": "Normal",
-            "triggers": f"Hata: {str(e)[:100]}",
-            "last_update": datetime.utcnow().strftime("%H:%M UTC"),
-            "market_structure": {"error": str(e)},
-            "confidence": 0.0,
-            "recommended_action": "Tekrar deneyin",
-            "status": "error",
-            "source": "websocket_error"
-        }
+    return {
+        "pair": result.pair.replace("USDT", "/USDT"),
+        "timeframe": result.timeframe.upper(),
+        "current_price": result.current_price,
+        "signal": result.signal,
+        "score": result.score,
+        "strength": result.strength,
+        "killzone": result.killzone,
+        "triggers": "\n".join(result.triggers) if result.triggers else "Tetikleyici tespit edilmedi",
+        "last_update": result.last_update,
+        "market_structure": result.market_structure,
+        "confidence": result.confidence,
+        "recommended_action": result.recommended_action,
+        "status": "success"
+    }
 
 def generate_simple_signal(df: pd.DataFrame, symbol: str, timeframe: str) -> Dict:
-    """Basit fallback sinyal - WebSocket için"""
-    result = grok_pro._generate_websocket_fallback(df, symbol, timeframe)
+    """Basit fallback sinyal"""
+    result = grok_pro._generate_fallback_signal(df, symbol, timeframe)
     
-    response = {
+    return {
         "pair": result.pair.replace("USDT", "/USDT"),
         "timeframe": result.timeframe.upper(),
         "current_price": result.current_price,
@@ -786,70 +492,16 @@ def generate_simple_signal(df: pd.DataFrame, symbol: str, timeframe: str) -> Dic
         "killzone": result.killzone,
         "triggers": "\n".join(result.triggers),
         "last_update": result.last_update,
-        "market_structure": result.market_structure,
-        "confidence": result.confidence,
-        "status": "fallback",
-        "source": "websocket_fallback"
+        "status": "fallback"
     }
-    
-    return clean_nan(response)
+ bu fonksiyon ile def clean_nan(obj):
+    """Recursive NaN temizleyici: NaN'leri None'a çevirir (JSON uyumlu)."""
+    if isinstance(obj, dict):
+        return {k: clean_nan(v) for k, v in obj.items()}
+    elif isinstance(obj, list):
+        return [clean_nan(v) for v in obj]
+    elif isinstance(obj, float) and np.isnan(obj):
+        return None  # Veya 0 tercih edebilirsin
+    else:
+        return obj
 
-# ==================== WEBHOOK/WEBSOCKET TEST FONKSİYONU ====================
-def test_websocket_indicators(ohlcv_data: List[List], symbol: str = "BTCUSDT", timeframe: str = "5m"):
-    """
-    WebSocket verisi ile test fonksiyonu
-    
-    Args:
-        ohlcv_data: WebSocket formatında OHLCV verisi [[timestamp, open, high, low, close, volume], ...]
-        symbol: Test sembolü
-        timeframe: Zaman aralığı
-    """
-    try:
-        # WebSocket verisini DataFrame'e çevir
-        df = pd.DataFrame(ohlcv_data, columns=['timestamp', 'open', 'high', 'low', 'close', 'volume'])
-        df['timestamp'] = pd.to_datetime(df['timestamp'], unit='ms')
-        df = df.sort_values('timestamp').reset_index(drop=True)
-        
-        # Sinyal üret
-        signal = generate_ict_signal(df, symbol, timeframe)
-        
-        print(f"=== WebSocket Test Sonucu ===")
-        print(f"Sembol: {symbol}")
-        print(f"Veri: {len(df)} mum")
-        print(f"Sinyal: {signal.get('signal')}")
-        print(f"Skor: {signal.get('score')}/100")
-        print(f"Güven: %{signal.get('confidence', 0)*100:.0f}")
-        
-        # JSON test
-        try:
-            json_str = json.dumps(signal, indent=2)
-            print("\n✅ JSON serialization başarılı!")
-        except Exception as e:
-            print(f"\n❌ JSON hatası: {e}")
-        
-        return signal
-        
-    except Exception as e:
-        print(f"WebSocket test hatası: {e}")
-        return None
-
-# Production için basit sağlık kontrolü
-def health_check():
-    """Basit sağlık kontrolü - production için"""
-    return {
-        "status": "healthy",
-        "version": "2.0.0",
-        "features": [
-            "websocket_optimized",
-            "nan_safe",
-            "multi_exchange_support",
-            "real_time_analysis"
-        ],
-        "timestamp": datetime.utcnow().isoformat()
-    }
-
-if __name__ == "__main__":
-    # Production'da test fonksiyonu yok
-    print("✅ Indicators.py WebSocket için hazır!")
-    print("📊 Production modunda çalışıyor")
-    print(f"🕐 {datetime.utcnow().strftime('%Y-%m-%d %H:%M UTC')}")
