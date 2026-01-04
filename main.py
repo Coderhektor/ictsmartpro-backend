@@ -701,7 +701,10 @@ async def analyze_chart(request: Request):
         clients = [get_binance_client(), get_bybit_client(), get_okex_client()]
         names = ["Binance", "Bybit", "OKX"]
         klines_list = []
-        interval = {"1m":"1m","3m":"3m","5m":"5m","15m":"15m","30m":"30m","1h":"1h","4h":"4h","1d":"1d","1w":"1w"}.get(timeframe, "5m")
+        interval = {
+            "1m": "1m", "3m": "3m", "5m": "5m", "15m": "15m", "30m": "30m",
+            "1h": "1h", "4h": "4h", "1d": "1d", "1w": "1w"
+        }.get(timeframe, "5m")
         ccxt_symbol = symbol.replace("USDT", "/USDT")
 
         for client, name in zip(clients, names):
@@ -716,12 +719,21 @@ async def analyze_chart(request: Request):
         if not klines_list:
             return JSONResponse({"analysis": "❌ Hiçbir borsadan veri alınamadı.", "success": False})
 
+        # En uzun veri setini seç (en güvenilir kaynak)
         source_used, max_klines = max(klines_list, key=lambda x: len(x[1]))
-        df = pd.DataFrame(max_klines, columns=['timestamp', 'open', 'high', 'low', 'close', 'volume'])
-        df[['open','high','low','close','volume']] = df[['open','high','low','close','volume']].apply(pd.to_numeric)
-        df['timestamp'] = pd.to_datetime(df['timestamp'], unit='ms')
-        df = df.dropna().sort_values('timestamp').tail(150).reset_index(drop=True)
 
+        # DataFrame oluştur
+        df = pd.DataFrame(max_klines, columns=['timestamp', 'open', 'high', 'low', 'close', 'volume'])
+
+        # NaN değerleri temizle ve sayısal tipe dönüştür
+        df[['open', 'high', 'low', 'close', 'volume']] = df[['open', 'high', 'low', 'close', 'volume']].apply(pd.to_numeric, errors='coerce')
+        df = df.fillna(0)  # Alternatif: df = df.dropna() da kullanılabilir
+        # Eğer dropna tercih edersen: df = df.dropna().reset_index(drop=True)
+
+        df['timestamp'] = pd.to_datetime(df['timestamp'], unit='ms')
+        df = df.sort_values('timestamp').tail(150).reset_index(drop=True)
+
+        # Sinyal üretimi
         signal = None
         try:
             if generate_ict_signal:
@@ -730,42 +742,56 @@ async def analyze_chart(request: Request):
                 if generate_simple_signal:
                     signal = generate_simple_signal(df.copy(), symbol, timeframe)
         except Exception as e:
-            logger.error(f"Sinyal hatası: {e}")
+            logger.error(f"Sinyal üretim hatası: {e}")
+
+        # Fallback sinyal (hata durumunda)
+        if not signal or signal.get("status") != "success":
             last_price = float(df['close'].iloc[-1]) if len(df) > 0 else 0.0
             signal = {
-                "signal": "SİSTEM HATASI", "score": 0, "current_price": round(last_price, 6),
-                "strength": "HATA", "killzone": "Bilinmiyor", "triggers": "Teknik sorun",
-                "last_update": datetime.utcnow().strftime("%H:%M:%S UTC")
+                "signal": "SİSTEM HATASI",
+                "score": 0,
+                "current_price": round(last_price, 6),
+                "strength": "HATA",
+                "killzone": "Bilinmiyor",
+                "triggers": "Teknik sorun",
+                "last_update": datetime.utcnow().strftime("%H:%M:%S UTC"),
+                "status": "error"
             }
-
-        base_analysis = f"""🔍 {symbol} {timeframe.upper()} Grafik Analizi
-✅ <strong>Veri alındı ve işlendi!</strong>
-📡 Kaynak: <strong>{source_used}</strong> ({len(max_klines)} mum)
-"""
-
-        if not signal or signal.get("status") != "success":
-            analysis = base_analysis + """❌ Sinyal üretilemedi.
-🤔 Muhtemel sebepler:
-• Piyasa yatay
-• Volatilite düşük
-• Teknik sorun
-💡 Farklı zaman dilimi veya coin deneyin.
+            analysis = f"""🔍 {symbol} {timeframe.upper()} Grafik Analizi
+✅ Veri alındı: <strong>{source_used}</strong> ({len(max_klines)} mum)
+❌ Sinyal üretilemedi (teknik hata).
+💡 Lütfen tekrar deneyin veya farklı bir zaman dilimi seçin.
 ⚠️ Yatırım tavsiyesi değildir."""
         else:
-            analysis = base_analysis + f"""🎯 SİNYAL: <strong>{signal.get('signal', 'Bilinmiyor')}</strong>
-📊 Skor: <strong>{signal.get('score', 0)}/100</strong> → {signal.get('strength', 'Bilinmiyor')}
-💰 Fiyat: <strong>${signal.get('current_price', 0.0)}</strong>
-🕐 Killzone: <strong>{signal.get('killzone', 'Normal')}</strong>
-🕒 Son: {signal.get('last_update', 'Şimdi')}
-🎯 Tetikleyenler:
-{signal.get('triggers', 'Yok')}
-📈 Teknik özet ve tüm indikatörler kullanıldı.
-⚠️ Bu bir yatırım tavsiyesi değildir."""
+            analysis = f"""🔍 {symbol} {timeframe.upper()} Grafik Analizi
+✅ <strong>Veri alındı ve işlendi!</strong>
+📡 Kaynak: <strong>{source_used}</strong> ({len(max_klines)} mum)
 
-        return JSONResponse({"analysis": analysis, "signal_data": signal or {}, "success": True})
+🎯 SİNYAL: <strong>{signal.get('signal', 'Bilinmiyor')}</strong>
+📊 Skor: <strong>{signal.get('score', 0)}/100</strong> → {signal.get('strength', 'Bilinmiyor')}
+💰 Güncel Fiyat: <strong>${signal.get('current_price', 0.0)}</strong>
+🕐 Killzone: <strong>{signal.get('killzone', 'Normal')}</strong>
+🕒 Son Güncelleme: {signal.get('last_update', 'Şimdi')}
+
+🔥 Tetikleyenler:
+{signal.get('triggers', 'Belirtilmemiş')}
+
+📈 Tüm ICT kavramları ve indikatörler tarandı.
+⚠️ Bu bir yatırım tavsiyesi değildir. Kendi araştırmanızı yapın."""
+
+        # Başarılı yanıt
+        return JSONResponse({
+            "analysis": analysis,
+            "signal_data": signal or {},
+            "success": True
+        })
+
     except Exception as e:
-        logger.error(f"analyze_chart hatası: {e}")
-        return JSONResponse({"analysis": "❌ Sistem hatası oluştu.", "success": False}, status_code=500)
+        logger.error(f"analyze_chart genel hatası: {e}")
+        return JSONResponse({
+            "analysis": "❌ Sistem hatası oluştu. Lütfen tekrar deneyin.",
+            "success": False
+        }, status_code=500)
 
 # ====================== GİRİŞ & HEALTH ======================
 @app.get("/login", response_class=HTMLResponse)
@@ -814,3 +840,4 @@ async def health():
 if __name__ == "__main__":
     import uvicorn
     uvicorn.run("main:app", host="0.0.0.0", port=int(os.getenv("PORT", 8000)), reload=False)
+
