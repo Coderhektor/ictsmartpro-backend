@@ -453,22 +453,22 @@ async def signal_page(request: Request):
     </div>
     <script src="https://s3.tradingview.com/tv.js"></script>
     <script>
-        let ws = null;
-        let tvWidget = null;
-        let currentPrice = null;
-        let currentSymbol = "";  // Global: symbol burada tutulacak
-        let currentTf = "";      // Global: timeframe burada tutulacak
-        const tfMap = {{"1m":"1","3m":"3","5m":"5","15m":"15","30m":"30","1h":"60","4h":"240","1d":"D","1w":"W"}};
+        var ws = null;
+        var tvWidget = null;
+        var currentPrice = null;
+        var currentSymbol = "";
+        var currentTf = "";
+        var tfMap = {{"1m":"1","3m":"3","5m":"5","15m":"15","30m":"30","1h":"60","4h":"240","1d":"D","1w":"W"}};
 
         function getSymbol() {
-            let pair = document.getElementById('pair').value.trim().toUpperCase();
+            var pair = document.getElementById('pair').value.trim().toUpperCase();
             if (!pair.endsWith("USDT")) pair += "USDT";
             return "BINANCE:" + pair;
         }
 
         function createWidget() {
-            const symbol = getSymbol();
-            const interval = tfMap[document.getElementById('tf').value] || "5";
+            var symbol = getSymbol();
+            var interval = tfMap[document.getElementById('tf').value] || "5";
             if (tvWidget) tvWidget.remove();
             tvWidget = new TradingView.widget({
                 autosize: true,
@@ -488,7 +488,7 @@ async def signal_page(request: Request):
                 document.getElementById('status').innerHTML = "✅ Grafik yüklendi • Canlı sinyal bağlantısı kurun";
                 setInterval(() => {
                     try {
-                        const price = tvWidget.activeChart().getSeries().lastPrice();
+                        var price = tvWidget.activeChart().getSeries().lastPrice();
                         if (price && price !== currentPrice) {
                             currentPrice = price;
                             document.getElementById('price-text').innerHTML = '$' + parseFloat(price).toFixed(price > 1 ? 2 : 6);
@@ -503,22 +503,22 @@ async def signal_page(request: Request):
         document.getElementById('tf').addEventListener('change', createWidget);
 
         async function analyzeChartWithAI() {
-            const btn = document.getElementById('analyze-btn');
-            const box = document.getElementById('ai-box');
-            const comment = document.getElementById('ai-comment');
+            var btn = document.getElementById('analyze-btn');
+            var box = document.getElementById('ai-box');
+            var comment = document.getElementById('ai-comment');
             btn.disabled = true;
             btn.innerHTML = "Analiz ediliyor...";
             box.style.display = 'block';
             comment.innerHTML = "📸 Grafik yakalanıyor...<br>🧠 Analiz yapılıyor...";
             try {
-                const symbol = getSymbol().replace("BINANCE:", "");
-                const timeframe = document.getElementById('tf').value;
-                const response = await fetch('/api/analyze-chart', {
+                var symbol = getSymbol().replace("BINANCE:", "");
+                var timeframe = document.getElementById('tf').value;
+                var response = await fetch('/api/analyze-chart', {
                     method: 'POST',
                     headers: {'Content-Type': 'application/json'},
                     body: JSON.stringify({symbol: symbol, timeframe: timeframe})
                 });
-                const data = await response.json();
+                var data = await response.json();
                 if (data.analysis) {
                     comment.innerHTML = data.analysis.replace(/\\n/g, '<br>');
                 } else {
@@ -533,14 +533,14 @@ async def signal_page(request: Request):
         }
 
         function connect() {
-            const symbolInput = document.getElementById('pair').value.trim().toUpperCase();
-            const tfSelect = document.getElementById('tf').value;
+            var symbolInput = document.getElementById('pair').value.trim().toUpperCase();
+            var tfSelect = document.getElementById('tf').value;
             currentSymbol = symbolInput;
             if (!currentSymbol.endsWith("USDT")) currentSymbol += "USDT";
             currentTf = tfSelect;
 
-            const tvSymbol = "BINANCE:" + currentSymbol;
-            const interval = tfMap[currentTf] || "5";
+            var tvSymbol = "BINANCE:" + currentSymbol;
+            var interval = tfMap[currentTf] || "5";
 
             document.getElementById('status').innerHTML = "🔄 Bağlantı kuruluyor...";
 
@@ -553,14 +553,14 @@ async def signal_page(request: Request):
             ws.onopen = () => {
                 document.getElementById('status').innerHTML = `<strong>✅ ${currentSymbol} ${currentTf.toUpperCase()} İÇİN CANLI SİNYAL BAĞLANTISI BAŞARIYLA KURULDU! 🚀</strong>`;
                 document.getElementById('signal-text').innerHTML = "Sinyal bekleniyor...";
-                document.getElementById('signal-details').innerHTML = "Güçlü sinyaller anında burada görünecek.";
+                document.getElementById('signal-details').innerHTML = "Güçlü ICT/SMC sinyalleri anında burada görünecek.";
             };
 
             ws.onmessage = (e) => {
-                const d = JSON.parse(e.data);
-                const card = document.getElementById('signal-card');
-                const text = document.getElementById('signal-text');
-                const details = document.getElementById('signal-details');
+                var d = JSON.parse(e.data);
+                var card = document.getElementById('signal-card');
+                var text = document.getElementById('signal-text');
+                var details = document.getElementById('signal-details');
 
                 text.innerHTML = d.signal?.signal || "Sinyal bekleniyor...";
                 details.innerHTML = `
@@ -1089,6 +1089,7 @@ async def health():
 if __name__ == "__main__":
     import uvicorn
     uvicorn.run("main:app", host="0.0.0.0", port=int(os.getenv("PORT", 8000)), reload=False)
+
 
 
 
