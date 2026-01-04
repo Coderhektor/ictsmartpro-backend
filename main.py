@@ -880,101 +880,167 @@ def _derive_base_confidence(sig: Dict) -> float:
 async def analyze_chart(request: Request):
     try:
         body = await request.json()
-        raw_symbol = body.get("symbol", "BTCUSDT").strip()
+        raw_symbol = body.get("symbol", "BTCUSDT").strip().upper()
         timeframe = body.get("timeframe", "5m").lower()
 
+        # Sembol normalizasyonu - daha akıllı
         ccxt_symbol, canonical = _normalize_symbol(raw_symbol)
         interval = INTERVAL_MAP.get(timeframe, "5m")
 
+        # Paralel veri çekimi
         clients = [
             (get_binance_client(), "Binance"),
             (get_bybit_client(), "Bybit"),
             (get_okex_client(), "OKX")
         ]
-        tasks = [_fetch_ohlcv(c, n, ccxt_symbol, interval, DEFAULT_LIMIT) for c, n in clients if c]
-        sources = [s for s in await asyncio.gather(*tasks) if s]
+        tasks = [
+            _fetch_ohlcv(client, name, ccxt_symbol, interval, DEFAULT_LIMIT)
+            for client, name in clients if client
+        ]
+        raw_sources = await asyncio.gather(*tasks, return_exceptions=True)
+        sources = [s for s in raw_sources if isinstance(s, dict) and s.get("df") is not None]
 
         if not sources:
-            return JSONResponse({"analysis": "❌ Hiçbir borsadan veri alınamadı.", "success": False})
+            return JSONResponse({
+                "analysis": "❌ Şu anda hiçbir borsadan veri alınamadı.\nLütfen birkaç dakika sonra tekrar deneyin.",
+                "success": False
+            }, status_code=503)
 
-        # En iyi kaynağı seç
-        sources_sorted = sorted(sources, key=lambda x: (x["length"], -_compute_freshness_minutes(x["last_ts"])), reverse=True)
+        # En iyi kaynağı seç (uzunluk + tazelik)
+        sources_sorted = sorted(
+            sources,
+            key=lambda x: (x["length"], -_compute_freshness_minutes(x["last_ts"])),
+            reverse=True
+        )
         primary = sources_sorted[0]
 
-        # Ensemble sinyaller
+        # Ensemble: Her borsadan ayrı sinyal üret
         per_exchange_signals = []
         for src in sources_sorted:
             try:
                 sig = generate_ict_signal(src["df"], canonical, timeframe)
                 per_exchange_signals.append({
-                    "name": src["name"],
+                    "exchange": src["name"],
                     "signal": sig.get("signal", "Nötr"),
                     "score": sig.get("score", 0),
-                    "confidence": sig.get("confidence_final", sig.get("confidence", 0.5)),
-                    "killzone": sig.get("killzone", "Normal"),
-                    "current_price": sig.get("current_price", 0.0)
+                    "strength": sig.get("strength", "Nötr"),
+                    "confidence": round(sig.get("confidence_final", sig.get("confidence", 0.5)), 3),
+                    "price": sig.get("current_price"),
+                    "killzone": sig.get("killzone", "Normal")
                 })
             except Exception as e:
-                logger.warning(f"{src['name']} sinyal hatası: {e}")
+                logger.warning(f"{src['name']} sinyal üretimi başarısız: {e}")
 
-        signal_dict = generate_ict_signal(primary["df"], canonical, timeframe)
+        # Ana sinyal (en iyi kaynaktan)
+        try:
+            signal_dict = generate_ict_signal(primary["df"], canonical, timeframe)
+        except Exception as e:
+            logger.error(f"Ana sinyal üretimi hatası: {e}")
+            signal_dict = {
+                "signal": "⚠️ Analiz Hatası",
+                "score": 0,
+                "strength": "Bilinmiyor",
+                "current_price": primary["df"]["close"].iloc[-1] if len(primary["df"]) > 0 else 0,
+                "killzone": "Normal",
+                "triggers": "Sinyal üretilemedi",
+                "market_structure": {"trend": "Bilinmiyor"},
+                "status": "error"
+            }
 
-        # Güven hesaplamaları
+        # Güven skoru bileşenleri (dünyanın en şeffaf sistemi)
         freshness_min = _compute_freshness_minutes(primary["last_ts"])
         coverage_w = _coverage_weight(primary["length"], DEFAULT_LIMIT)
         freshness_w = _freshness_weight(freshness_min, interval)
         agreement_w, agreement_meta = _agreement_weight([s["signal"] for s in per_exchange_signals])
         vol_w = _volatility_weight(signal_dict.get("market_structure", {}).get("volatility", "Normal"))
+
         base_conf = _derive_base_confidence(signal_dict)
         final_conf = min(max(base_conf * coverage_w * freshness_w * agreement_w * vol_w, 0.0), 1.0)
 
         confidence_components = {
-            "base": round(base_conf, 4),
-            "coverage": round(coverage_w, 4),
-            "freshness": round(freshness_w, 4),
-            "agreement": round(agreement_w, 4),
-            "volatility": round(vol_w, 4),
-            "freshness_min": round(freshness_min, 2),
-            "data_length": primary["length"],
+            "base_confidence": round(base_conf, 4),
+            "data_coverage": round(coverage_w, 4),
+            "data_freshness": round(freshness_w, 4),
+            "exchange_agreement": round(agreement_w, 4),
+            "volatility_adjustment": round(vol_w, 4),
+            "final_confidence": round(final_conf, 4),
+            "freshness_minutes": round(freshness_min, 1),
+            "candle_count": primary["length"],
+            "primary_source": primary["name"],
             "agreement_majority": agreement_meta["majority"],
-            "agreement_ratio": agreement_meta["ratio"]
+            "agreement_ratio": round(agreement_meta["ratio"], 3)
         }
 
-        # Ek veriler
-        chart_data = indicators_analyze_chart(primary["df"], canonical, timeframe)
-        backtest = backtest_ict_signals(primary["df"], canonical, timeframe) if len(primary["df"]) > 200 else {"note": "Yetersiz veri"}
+        # Ek zengin veriler (chart + backtest)
+        try:
+            chart_data = indicators_analyze_chart(primary["df"], canonical, timeframe, chart_type="candlestick")
+        except Exception as e:
+            logger.warning(f"Chart data üretilemedi: {e}")
+            chart_data = {"note": "Grafik verisi geçici olarak kullanılamıyor"}
 
-        # Detaylı analiz metni
-        market_struct = signal_dict.get("market_structure", {})
-        if signal_dict.get("status") == "success":
-            analysis = (
-                f"🌟 {canonical} {timeframe.upper()} - ICT/SMC UZMAN ANALİZİ\n"
-                f"✅ Grok Pro tarafından analiz edildi\n"
-                f"📡 Kaynak: {primary['name']} ({primary['length']} mum | {freshness_min:.1f} dk taze)\n"
-                f"💰 Fiyat: ${signal_dict.get('current_price', '—')}\n\n"
-                f"🎯 SİNYAL: {signal_dict.get('signal', 'Nötr')}\n"
-                f"📊 Skor: {signal_dict.get('score', 0)}/100 ({signal_dict.get('strength', '—')})\n"
-                f"🕐 Oturum: {signal_dict.get('killzone', 'Normal')}\n"
-                f"🔒 Güven: %{int(final_conf * 100)} (Uyum: {agreement_meta['majority']})\n\n"
-                f"📈 Piyasa:\n"
-                f"• Trend: {market_struct.get('trend', '—')}\n"
-                f"• Momentum: {market_struct.get('momentum', '—')}\n"
-                f"• Volatilite: {market_struct.get('volatility', '—')}\n"
-                f"• MTF Uyum: {market_struct.get('mtf_alignment', '—')}\n\n"
-                f"🔥 Tetikleyiciler:\n{signal_dict.get('triggers', 'Yok')}\n\n"
-                f"📊 Risk Yönetimi:\n"
-                f"• Giriş: {', '.join(map(str, signal_dict.get('entry_levels', ['—'])))}\n"
-                f"• Stop: ${signal_dict.get('stop_loss', '—')}\n"
-                f"• TP: {', '.join(map(str, signal_dict.get('take_profit', ['—'])))}\n\n"
-                f"📉 Backtest: WR %{backtest.get('win_rate', '—')} | Getiri %{backtest.get('total_return', '—')}\n\n"
-                f"💡 {signal_dict.get('recommended_action', 'Kendi analizinizi yapın')}\n"
-                f"⚠️ Yatırım tavsiyesi değildir. DYOR."
+        try:
+            backtest = (
+                backtest_ict_signals(primary["df"], canonical, timeframe)
+                if len(primary["df"]) >= 200 else
+                {"note": "Backtest için en az 200 mum gerekli"}
             )
-        else:
-            analysis = f"⚠️ {canonical} {timeframe.upper()} - Kısmi Analiz\n{signal_dict.get('signal', 'Veri yetersiz')}\nGüven: %{int(final_conf*100)}"
+        except Exception as e:
+            logger.warning(f"Backtest hatası: {e}")
+            backtest = {"note": "Backtest şu anda yapılamıyor"}
 
+        # DÜNYANIN EN İYİ ANALİZ METNİ 🌟
+        market = signal_dict.get("market_structure", {})
+        trend = market.get("trend", "Bilinmiyor")
+        momentum = market.get("momentum", "Nötr")
+        volatility = market.get("volatility", "Normal")
+        volume_trend = market.get("volume_trend", "Nötr")
+        mtf = market.get("mtf_alignment", "Nötr")
+
+        key_levels = market.get("key_levels", [])[:6]
+        levels_text = "\n".join([f"• {lvl['type'].replace('_', ' ').title()}: ${lvl['price']}" for lvl in key_levels]) or "Seviyeler hesaplanamadı"
+
+        rr = signal_dict.get("risk_reward", {})
+        entry_text = ", ".join([f"${round(x, 6)}" for x in signal_dict.get("entry_levels", [])]) or "—"
+        sl_text = f"${signal_dict.get('stop_loss', '—')}"
+        tp_text = ", ".join([f"${round(x, 6)}" for x in signal_dict.get("take_profit", [])]) or "—"
+
+        backtest_text = f"WR: %{backtest.get('win_rate', '—')} | Toplam Getiri: %{backtest.get('total_return', '—')}"
+
+        analysis = (
+            f"🌟 {canonical} {timeframe.upper()} — DÜNYANIN EN GELİŞMİŞ ICT/SMC ANALİZİ 🌟\n\n"
+            f"✅ Grok Pro v3.0 tarafından üretildi\n"
+            f"📡 Veri Kaynağı: <strong>{primary['name']}</strong> ({primary['length']} mum | {freshness_min:.1f} dk taze)\n"
+            f"💰 Güncel Fiyat: <strong>${signal_dict.get('current_price', '—')}</strong>\n\n"
+            f"🎯 ANA SİNYAL: <strong>{signal_dict.get('signal', 'Nötr')}</strong>\n"
+            f"📊 Güç Skoru: <strong>{signal_dict.get('score', 0)}/100</strong> ({signal_dict.get('strength', 'Nötr')})\n"
+            f"🕐 Oturum: <strong>{signal_dict.get('killzone', 'Normal')}</strong>\n"
+            f"🔒 Nihai Güven: <strong>%{int(final_conf * 100)}</strong> (En yüksek uyum: {agreement_meta['majority']})\n\n"
+            f"📈 PİYASA YAPISI:\n"
+            f"• Trend: <strong>{trend}</strong>\n"
+            f"• Momentum: <strong>{momentum}</strong>\n"
+            f"• Volatilite: <strong>{volatility}</strong>\n"
+            f"• Hacim Trendi: <strong>{volume_trend}</strong>\n"
+            f"• MTF Uyumu: <strong>{mtf}</strong>\n\n"
+            f"🔑 KRİTİK SEVİYELER:\n{levels_text}\n\n"
+            f"🔥 TETİKLEYİCİLER:\n{signal_dict.get('triggers', 'Tetikleyici tespit edilmedi')}\n\n"
+            f"📊 RİSK & ÖDÜL YÖNETİMİ:\n"
+            f"• Giriş Seviyeleri: {entry_text}\n"
+            f"• Stop Loss: {sl_text}\n"
+            f"• Take Profit: {tp_text}\n"
+            f"• Risk %: {rr.get('risk_percent', '—')} | RR: {rr.get('rr_ratio_1', '—')} & {rr.get('rr_ratio_2', '—')}\n\n"
+            f"📉 BACKTEST ÖZETİ:\n{backtest_text}\n\n"
+            f"💡 TAVSİYE: {signal_dict.get('recommended_action', 'Kendi analizinizi yapın')}\n\n"
+            f"⚠️ Bu analiz yatırım tavsiyesi değildir. Kendi araştırmanızı (DYOR) yapın ve risk yönetimi uygulayın.\n"
+            f"🚀 Powered by Grok Pro — En Akıllı Trading Asistanı"
+        )
+
+        # Kaynak bilgisi
         sources_meta = [
-            {"name": s["name"], "length": s["length"], "freshness_min": round(_compute_freshness_minutes(s["last_ts"]), 2)}
+            {
+                "exchange": s["name"],
+                "candles": s["length"],
+                "freshness_min": round(_compute_freshness_minutes(s["last_ts"]), 1)
+            }
             for s in sources_sorted
         ]
 
@@ -983,16 +1049,21 @@ async def analyze_chart(request: Request):
             "signal_data": signal_dict,
             "chart_data": chart_data,
             "backtest": backtest,
-            "ensemble": {"signals": per_exchange_signals, "agreement": agreement_meta},
+            "ensemble": {
+                "exchanges": per_exchange_signals,
+                "agreement": agreement_meta
+            },
             "sources": sources_meta,
-            "confidence_components": confidence_components,
+            "confidence_breakdown": confidence_components,
             "success": True
         })
 
     except Exception as e:
-        logger.error(f"analyze-chart hatası: {e}")
-        return JSONResponse({"analysis": "❌ Sistem hatası oluştu.", "success": False}, status_code=500)
-
+        logger.error(f"analyze-chart kritik hata: {e}")
+        return JSONResponse({
+            "analysis": "❌ Beklenmeyen bir sistem hatası oluştu.\nEkip bilgilendirildi, kısa sürede düzeltilecek.\nLütfen biraz sonra tekrar deneyin.",
+            "success": False
+        }, status_code=500)
 # KRİTİK: Router'ı app'e dahil et!
 app.include_router(router)
 
@@ -1043,6 +1114,7 @@ async def health():
 if __name__ == "__main__":
     import uvicorn
     uvicorn.run("main:app", host="0.0.0.0", port=int(os.getenv("PORT", 8000)), reload=False)
+
 
 
 
