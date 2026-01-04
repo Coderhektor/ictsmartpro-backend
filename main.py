@@ -825,7 +825,7 @@ async def analyze_chart(request: Request):
             triggers = [str(t) for t in triggers_raw]
         triggers = triggers[:12]
 
-        # ÖNE ÇIKAN ICT YAPILARI
+        # 🔥 ÖNE ÇIKAN ICT YAPILARI - KULLANICIYI ŞAŞKINA ÇEVİR! 🔥
         fvg_info = "🚀 BULLISH FVG (Fair Value Gap) TESPİT EDİLDİ!" if any("fvg_up" in t.lower() for t in triggers) else \
                    "🔻 BEARISH FVG (Fair Value Gap) TESPİT EDİLDİ!" if any("fvg_down" in t.lower() for t in triggers) else ""
         
@@ -844,6 +844,7 @@ async def analyze_chart(request: Request):
         highlighted_structures = [fvg_info, ob_info, bos_info, choch_info, liquidity_info, breaker_info, mitigation_info]
         extra_info = "\n".join([item for item in highlighted_structures if item])
 
+        # DÜNYANIN EN İYİ ANALİZ METNİ - KULLANICI MUTLU OLSUN!
         analysis = (
             f"🌟 {canonical} {timeframe.upper()} — DÜNYANIN EN GELİŞMİŞ ICT/SMC ANALİZİ 🌟\n\n"
             f"✅ Grok Pro v3.0 Tarafından Üretildi | Gerçek Zamanlı Profesyonel Analiz\n"
@@ -943,3 +944,4 @@ async def health():
 if __name__ == "__main__":
     import uvicorn
     uvicorn.run("main:app", host="0.0.0.0", port=int(os.getenv("PORT", 8000)), reload=False)
+
