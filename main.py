@@ -375,7 +375,6 @@ async def home(request: Request):
 </body>
 </html>"""
     return HTMLResponse(content=html_content)
-
 @app.get("/signal", response_class=HTMLResponse)
 async def signal_page(request: Request):
     user = request.cookies.get("user_email")
@@ -397,11 +396,11 @@ async def signal_page(request: Request):
         input, select, button {{width: 100%;max-width: 500px;padding: 15px;margin: 10px auto;font-size: 1.4rem;border: none;border-radius: 16px;background: #333;color: #fff;}}
         button {{background: linear-gradient(45deg, #fc00ff, #00dbde);font-weight: bold;cursor: pointer;}}
         #analyze-btn {{background: linear-gradient(45deg, #00dbde, #ff00ff, #00ffff);}}
-        #status {{color: #00ffff;text-align: center;margin: 15px;}}
+        #status {{color: #00ffff;text-align: center;margin: 15px;font-size: 1.1rem;font-weight: bold;}}
         #price-text {{font-size: clamp(3rem, 8vw, 5rem);font-weight: bold;background: linear-gradient(90deg, #00ffff, #ff00ff);-webkit-background-clip: text;-webkit-text-fill-color: transparent;}}
-        #signal-card {{background: #000000aa;border-radius: 20px;padding: 25px;text-align: center;min-height: 160px;}}
-        #signal-card.green {{border-left: 8px solid #00ff88;}}
-        #signal-card.red {{border-left: 8px solid #ff4444;}}
+        #signal-card {{background: #000000aa;border-radius: 20px;padding: 25px;text-align: center;min-height: 160px;transition: all 0.4s;}}
+        #signal-card.green {{border-left: 8px solid #00ff88;box-shadow: 0 0 30px #00ff8844;}}
+        #signal-card.red {{border-left: 8px solid #ff4444;box-shadow: 0 0 30px #ff444444;}}
         #signal-text {{font-size: clamp(2rem, 5vw, 3rem);}}
         #ai-box {{background: #0d0033ee;border-radius: 20px;padding: 25px;border: 3px solid #00dbde;display: none;}}
         .chart-container {{width: 95%;max-width: 1000px;margin: 30px auto;border-radius: 20px;overflow: hidden;box-shadow: 0 15px 50px #00ffff44;background: #0a0022;}}
@@ -428,7 +427,7 @@ async def signal_page(request: Request):
                 <option value="1d">1 Gün</option>
                 <option value="1w">1 Hafta</option>
             </select>
-            <button onclick="connect()">🔴 CANLI SİNYAL BAĞLANTISI KUR</button>
+            <button onclick="connect()">🔥 CANLI SİNYAL BAĞLANTISI KUR</button>
             <button id="analyze-btn" onclick="analyzeChartWithAI()">🤖 GRAFİĞİ GPT-4o İLE ANALİZ ET</button>
             <div id="status">Grafik yükleniyor...</div>
         </div>
@@ -453,32 +452,44 @@ async def signal_page(request: Request):
     </div>
     <script src="https://s3.tradingview.com/tv.js"></script>
     <script>
-        let ws = null;
-        let tvWidget = null;
-        let currentPrice = null;
-        const tfMap = {{"1m":"1","3m":"3","5m":"5","15m":"15","30m":"30","1h":"60","4h":"240","1d":"D","1w":"W"}};
+        var ws = null;
+        var tvWidget = null;
+        var currentPrice = null;
+        var tfMap = {{"1m":"1","3m":"3","5m":"5","15m":"15","30m":"30","1h":"60","4h":"240","1d":"D","1w":"W"}};
 
         function getSymbol() {{
-            let pair = document.getElementById('pair').value.trim().toUpperCase();
+            var pair = document.getElementById('pair').value.trim().toUpperCase();
             if (!pair.endsWith("USDT")) pair += "USDT";
             return "BINANCE:" + pair;
         }}
 
         function createWidget() {{
-            const symbol = getSymbol();
-            const interval = tfMap[document.getElementById('tf').value] || "5";
-            if (tvWidget) tvWidget.remove();
+            var symbol = getSymbol();
+            var interval = tfMap[document.getElementById('tf').value] || "5";
+
+            // Container temizle
+            document.getElementById("tradingview_widget").innerHTML = "";
+
             tvWidget = new TradingView.widget({{
-                autosize: true, width: "100%", height: 500, symbol: symbol, interval: interval,
-                timezone: "Etc/UTC", theme: "dark", style: "1", locale: "tr",
+                autosize: true,
+                width: "100%",
+                height: 500,
+                symbol: symbol,
+                interval: interval,
+                timezone: "Etc/UTC",
+                theme: "dark",
+                style: "1",
+                locale: "tr",
                 container_id: "tradingview_widget",
                 studies: ["RSI@tv-basicstudies", "MACD@tv-basicstudies"]
             }});
-            tvWidget.onChartReady(() => {{
+
+            tvWidget.onChartReady(function() {{
                 document.getElementById('status').innerHTML = "✅ Grafik yüklendi • Sinyal bağlantısı kurun";
-                setInterval(() => {{
+
+                setInterval(function() {{
                     try {{
-                        const price = tvWidget.activeChart().getSeries().lastPrice();
+                        var price = tvWidget.activeChart().getSeries().lastPrice();
                         if (price && price !== currentPrice) {{
                             currentPrice = price;
                             document.getElementById('price-text').innerHTML = '$' + parseFloat(price).toFixed(price > 1 ? 2 : 6);
@@ -492,90 +503,60 @@ async def signal_page(request: Request):
         document.getElementById('pair').addEventListener('change', createWidget);
         document.getElementById('tf').addEventListener('change', createWidget);
 
-        async function analyzeChartWithAI() {{
-            const btn = document.getElementById('analyze-btn');
-            const box = document.getElementById('ai-box');
-            const comment = document.getElementById('ai-comment');
-            btn.disabled = true;
-            btn.innerHTML = "Analiz ediliyor...";
-            box.style.display = 'block';
-            comment.innerHTML = "📸 Grafik yakalanıyor...<br>🧠 Analiz yapılıyor...";
-            try {{
-                const symbol = getSymbol().replace("BINANCE:", "");
-                const timeframe = document.getElementById('tf').value;
-                const response = await fetch('/api/analyze-chart', {{
-                    method: 'POST',
-                    headers: {{'Content-Type': 'application/json'}},
-                    body: JSON.stringify({{symbol: symbol, timeframe: timeframe}})
-                }});
-                const data = await response.json();
-                if (data.analysis) {{
-                    comment.innerHTML = data.analysis.replace(/\\n/g, '<br>');
-                }} else {{
-                    comment.innerHTML = "❌ Analiz alınamadı: " + (data.detail || 'Bilinmeyen hata');
-                }}
-            }} catch (err) {{
-                comment.innerHTML = "❌ Bağlantı hatası. Tekrar deneyin.<br>" + err.message;
-            }} finally {{
-                btn.disabled = false;
-                btn.innerHTML = "🤖 GRAFİĞİ GPT-4o İLE ANALİZ ET";
-            }}
-        }}
-
         function connect() {{
-            const symbolInput = document.getElementById('pair').value.trim().toUpperCase();
-            const tfSelect = document.getElementById('tf').value;
-            let symbol = symbolInput;
+            var symbolInput = document.getElementById('pair').value.trim().toUpperCase();
+            var tfSelect = document.getElementById('tf').value;
+            var symbol = symbolInput;
             if (!symbol.endsWith("USDT")) symbol += "USDT";
-            const tvSymbol = "BINANCE:" + symbol;
-            const interval = tfMap[tfSelect] || "5";
+            var tvSymbol = "BINANCE:" + symbol;
+            var interval = tfMap[tfSelect] || "5";
 
-            if (tvWidget) {{ tvWidget.remove(); tvWidget = null; }}
+            document.getElementById('status').innerHTML = "🔄 Bağlantı kuruluyor...";
+
+            // Widget yeniden yükle
+            document.getElementById("tradingview_widget").innerHTML = "";
             tvWidget = new TradingView.widget({{
-                autosize: true, width: "100%", height: 500, symbol: tvSymbol, interval: interval,
-                timezone: "Etc/UTC", theme: "dark", style: "1", locale: "tr",
+                autosize: true,
+                width: "100%",
+                height: 500,
+                symbol: tvSymbol,
+                interval: interval,
+                timezone: "Etc/UTC",
+                theme: "dark",
+                style: "1",
+                locale: "tr",
                 container_id: "tradingview_widget",
                 studies: ["RSI@tv-basicstudies", "MACD@tv-basicstudies"]
             }});
 
-            tvWidget.onChartReady(() => {{
-                document.getElementById('status').innerHTML = `✅ Grafik yüklendi: ${{symbol}} ${{tfSelect.toUpperCase()}} • Canlı sinyal akışı başladı!`;
-                setInterval(() => {{
-                    try {{
-                        const price = tvWidget.activeChart().getSeries().lastPrice();
-                        if (price && price !== currentPrice) {{
-                            currentPrice = price;
-                            document.getElementById('price-text').innerHTML = '$' + parseFloat(price).toFixed(price > 1 ? 2 : 6);
-                        }}
-                    }} catch(e) {{}}
-                }}, 1500);
+            tvWidget.onChartReady(function() {{
+                document.getElementById('status').innerHTML = "✅ Grafik yüklendi • Canlı sinyal akışı başladı!";
             }});
 
             if (ws) ws.close();
-            ws = new WebSocket((location.protocol==='https:'?'wss':'ws')+'://'+location.host+'/ws/signal/'+symbol+'/'+tfSelect);
+            ws = new WebSocket((location.protocol === 'https:' ? 'wss' : 'ws') + '://' + location.host + '/ws/signal/' + symbol + '/' + tfSelect);
 
-            ws.onopen = () => {{
-                document.getElementById('status').innerHTML = `✅ ${{symbol}} ${{tfSelect.toUpperCase()}} için canlı sinyal akışı başladı!`;
+            ws.onopen = function() {{
+                document.getElementById('status').innerHTML = "✅ " + symbol + " " + tfSelect.toUpperCase() + " için CANLI SİNYAL BAĞLANTISI BAŞARIYLA KURULDU! 🚀";
             }};
 
-            ws.onmessage = e => {{
-                const d = JSON.parse(e.data);
-                const card = document.getElementById('signal-card');
-                const text = document.getElementById('signal-text');
-                const details = document.getElementById('signal-details');
+            ws.onmessage = function(e) {{
+                var d = JSON.parse(e.data);
+                var card = document.getElementById('signal-card');
+                var text = document.getElementById('signal-text');
+                var details = document.getElementById('signal-details');
 
                 text.innerHTML = d.signal?.signal || "Sinyal bekleniyor...";
-                details.innerHTML = `
-                    <strong>${{d.signal?.pair || symbol.replace('USDT','/USDT')}}</strong><br>
-                    Skor: <strong>${{d.signal?.score || '?'}}/100</strong> | ${{d.signal?.killzone || ''}}<br>
-                    ${{d.signal?.last_update ? 'Son: ' + d.signal.last_update : ''}}<br>
-                    <small>${{d.signal?.triggers || ''}}</small>
-                `;
+                details.innerHTML = 
+                    "<strong>" + (d.signal?.pair || symbol.replace('USDT','/USDT')) + "</strong><br>" +
+                    "Skor: <strong>" + (d.signal?.score || '?') + "/100</strong> | " + (d.signal?.killzone || '') + "<br>" +
+                    (d.signal?.last_update ? 'Son: ' + d.signal.last_update : '') + "<br>" +
+                    "<small>" + (d.signal?.triggers || '') + "</small>";
 
-                if (d.signal?.signal?.includes('ALIM') || d.signal?.signal?.includes('🚀')) {{
+                if (d.signal?.signal && (d.signal.signal.includes('ALIM') || d.signal.signal.includes('🚀'))) {{
                     card.className = 'signal-card green';
                     text.style.color = '#00ff88';
-                }} else if (d.signal?.signal?.includes('SATIM') || d.signal?.signal?.includes('🔻')) {{
+                }} else if (d.signal?.signal && (d.signal.signal.includes('SATIM') || d.signal.signal.includes('🔻'))) {{
                     card.className = 'signal-card red';
                     text.style.color = '#ff4444';
                 }} else {{
@@ -584,8 +565,13 @@ async def signal_page(request: Request):
                 }}
             }};
 
-            ws.onerror = () => document.getElementById('status').innerHTML = "❌ WebSocket bağlantı hatası";
-            ws.onclose = () => document.getElementById('status').innerHTML = "🔌 Sinyal bağlantısı kapandı. Yeniden bağlanmak için butona tıklayın.";
+            ws.onerror = function() {{
+                document.getElementById('status').innerHTML = "❌ WebSocket bağlantı hatası";
+            }};
+
+            ws.onclose = function() {{
+                document.getElementById('status').innerHTML = "🔌 Sinyal bağlantısı kapandı. Yeniden bağlanmak için butona tıklayın.";
+            }};
         }}
     </script>
 </body>
@@ -1089,6 +1075,7 @@ async def health():
 if __name__ == "__main__":
     import uvicorn
     uvicorn.run("main:app", host="0.0.0.0", port=int(os.getenv("PORT", 8000)), reload=False)  
+
 
 
 
