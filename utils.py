@@ -1,284 +1,287 @@
-# 📁 utils.py
+# 📁 core.py
 """
-Multi-exchange OHLCV loader with symbol normalization, caching, and volume filtering.
-Supports: Binance, Bybit, OKX
+Real-time price aggregation & WebSocket broadcaster.
+Depends on `utils.py` for symbol map and exchange instances.
 """
 
-import ccxt.async_support as ccxt
-import httpx
-import pandas as pd
-from datetime import datetime, timedelta
-import logging
 import asyncio
+import logging
+from datetime import datetime, timezone
+from typing import Dict, List, Set, Any, Optional
+
+import ccxt.pro as ccxt_pro
+import pandas as pd
 
 # Logger
-logger = logging.getLogger("utils")
+logger = logging.getLogger("core")
 logger.setLevel(logging.INFO)
 if not logger.handlers:
     handler = logging.StreamHandler()
-    formatter = logging.Formatter(
-        "%(asctime)s | %(levelname)-7s | %(name)s | %(message)s"
-    )
-    handler.setFormatter(formatter)
+    handler.setFormatter(logging.Formatter("%(asctime)s | %(levelname)-7s | core | %(message)s"))
     logger.addHandler(handler)
 
-logger.info("🔄 utils.py yükleniyor...")
+logger.info("🔄 core.py yükleniyor...")
 
-# ========== EXCHANGES ==========
-exchanges = {}
-ohlcv_cache = {}
-CACHE_TTL = 25  # seconds
+# ========== DEPENDENCIES FROM utils.py ==========
+# utils.initialize() çağrıldığında doldurulacak
+all_usdt_symbols: List[str] = []      # e.g., ["BTCUSDT", "ETHUSDT", ...]
+symbol_map: Dict[str, Dict[str, str]] = {}  # exchange → {base_sym: actual_sym}
+exchanges: Dict[str, ccxt_pro.Exchange] = {}  # ccxt.pro instance’ları
 
-# ========== SYMBOL NORMALIZATION ==========
-def normalize_symbol(symbol: str, exchange_id: str) -> str:
-    """Normalize symbol for specific exchange"""
-    symbol = symbol.strip().upper()
+# ========== PRICE POOL ==========
+class PricePool:
+    def __init__(self):
+        self._pool: Dict[str, Dict[str, Any]] = {}
+        self._lock = asyncio.Lock()
 
-    # Split base/quote
-    if "/" in symbol:
-        base, quote = symbol.split("/", 1)
-    elif "-" in symbol:
-        base, quote = symbol.split("-", 1)
-    elif symbol.endswith("USDT"):
-        base, quote = symbol[:-4], "USDT"
-    elif symbol.endswith("USD"):
-        base, quote = symbol[:-3], "USD"
-    else:
-        # Fallback: last 3 chars = quote (e.g., ETHBTC)
-        base, quote = symbol[:-3], symbol[-3:]
+    async def update(self, source: str, symbol_key: str, price: float, change_24h: Optional[float] = None):
+        async with self._lock:
+            if symbol_key not in self._pool:
+                self._pool[symbol_key] = {"sources": {}, "best_price": 0.0, "updated": ""}
+            self._pool[symbol_key]["sources"][source] = {
+                "price": float(price) if price is not None else 0.0,
+                "change_24h": float(change_24h) if change_24h is not None else None,
+                "timestamp": datetime.now(timezone.utc),
+            }
+            valid_prices = [
+                v["price"] for v in self._pool[symbol_key]["sources"].values()
+                if v["price"] > 0
+            ]
+            if valid_prices:
+                self._pool[symbol_key]["best_price"] = round(sum(valid_prices) / len(valid_prices), 8)
+                self._pool[symbol_key]["updated"] = datetime.now(timezone.utc).strftime("%H:%M:%S UTC")
 
-    # Bybit: remove 1000/100 prefixes for known memecoins
-    if exchange_id == "bybit":
-        memecoins = ["SHIB", "FLOKI", "CHEEMS", "BONK", "PEPE", "WIF", "MOG"]
-        for prefix in ["1000", "100"]:
-            if base.startswith(prefix):
-                candidate = base[len(prefix):]
-                if candidate in memecoins:
-                    base = candidate
-        return f"{base}{quote}"  # e.g., SHIBUSDT
+    async def get_best_price(self, symbol: str) -> float:
+        key = symbol.upper().replace("/", "").replace("-", "")
+        if not key.endswith("USDT"):
+            key += "USDT"
+        async with self._lock:
+            return self._pool.get(key, {}).get("best_price", 0.0)
 
-    # OKX: requires BASE-QUOTE
-    if exchange_id == "okx":
-        return f"{base}-{quote}"  # e.g., BTC-USDT
+    async def snapshot(self, limit: int = 50) -> Dict[str, Any]:
+        async with self._lock:
+            valid = {
+                s: d for s, d in self._pool.items()
+                if d.get("best_price", 0) > 0
+            }
+            sorted_items = sorted(
+                valid.items(),
+                key=lambda x: x[1]["best_price"],
+                reverse=True
+            )[:limit]
+            tickers = {}
+            for symbol, data in sorted_items:
+                changes = [
+                    src["change_24h"]
+                    for src in data["sources"].values()
+                    if src.get("change_24h") is not None
+                ]
+                avg_change = round(sum(changes) / len(changes), 2) if changes else 0.0
+                tickers[symbol] = {
+                    "price": data["best_price"],
+                    "change": avg_change,
+                    "sources": list(data["sources"].keys()),
+                }
+            return {
+                "tickers": tickers,
+                "last_update": datetime.now(timezone.utc).strftime("%H:%M:%S UTC"),
+            }
 
-    # Binance: prefers BASE/QUOTE or BASEUSDT (both work in fetch_ohlcv)
-    if exchange_id == "binance":
-        # We standardize to BASE/USDT internally for clarity
-        return f"{base}/{quote}"
+    async def all_items(self) -> Dict[str, Dict]:
+        async with self._lock:
+            return dict(self._pool)
 
-    return symbol  # fallback
+price_pool = PricePool()
 
+# ========== REALTIME BROADCAST ==========
+class RealtimeTicker:
+    def __init__(self):
+        self.subscribers: Set[Any] = set()
+        self.lock = asyncio.Lock()
 
-async def init_exchanges():
-    """Initialize exchanges with rate limiting and options"""
-    global exchanges
-    config = {
-        "binance": {
-            "enableRateLimit": True,
-            "options": {"defaultType": "spot", "adjustForTimeDifference": True},
-        },
-        "bybit": {
-            "enableRateLimit": True,
-            "options": {"defaultType": "spot"},
-        },
-        "okx": {
-            "enableRateLimit": True,
-            "options": {"defaultType": "spot"},
-        },
+    async def subscribe(self, ws):
+        async with self.lock:
+            self.subscribers.add(ws)
+
+    async def unsubscribe(self, ws):
+        async with self.lock:
+            self.subscribers.discard(ws)
+
+    async def broadcast(self, data: dict):
+        async with self.lock:
+            disconnected = set()
+            for ws in list(self.subscribers):
+                try:
+                    await ws.send_json(data)
+                except Exception:
+                    disconnected.add(ws)
+            self.subscribers -= disconnected
+
+rt_ticker = RealtimeTicker()
+
+# ========== GLOBAL STATE ==========
+top_gainers: List[Dict] = []
+top_losers: List[Dict] = []   # ✅ eksik olan eklendi
+last_update: str = "Yükleniyor..."
+background_tasks: List[asyncio.Task] = []
+shutdown_evt = asyncio.Event()
+
+# ========== WEBSOCKET STREAMS ==========
+async def _watch_tickers(exchange_id: str):
+    """
+    Generic ticker stream for Binance/Bybit/OKX using ccxt.pro
+    """
+    exchange = exchanges.get(exchange_id)
+    if not exchange:
+        logger.error(f"{exchange_id} exchange not initialized")
+        return
+
+    # utils.symbol_map’dan sembolleri al
+    symbols = [
+        symbol_map[exchange_id][s]
+        for s in all_usdt_symbols
+        if s in symbol_map[exchange_id]
+    ]
+    if not symbols:
+        logger.warning(f"{exchange_id}: No valid symbols to subscribe")
+        return
+
+    chunk_size = 50
+    chunks = [symbols[i:i + chunk_size] for i in range(0, len(symbols), chunk_size)]
+    logger.info(f"📡 {exchange_id.upper()} WS subscribing {len(symbols)} symbols in {len(chunks)} chunks")
+
+    while not shutdown_evt.is_set():
+        for chunk in chunks:
+            try:
+                tickers = await exchange.watch_tickers(chunk)
+                for raw_sym, t in tickers.items():
+                    # Normalize to pool key: BTC/USDT → BTCUSDT
+                    key = raw_sym.upper().replace("/", "").replace("-", "")
+                    if not key.endswith("USDT"):
+                        key += "USDT"
+                    price = t.get("last") or t.get("close") or 0
+                    change = t.get("percentage") or 0
+                    await price_pool.update(exchange_id, key, price, change)
+            except Exception as e:
+                logger.error(f"{exchange_id} WS error: {e}")
+                await asyncio.sleep(3)
+                break  # Chunk başarısızsa yeniden dene
+        await asyncio.sleep(0.3)
+
+async def binance_stream():
+    await _watch_tickers("binance")
+
+async def bybit_stream():
+    await _watch_tickers("bybit")
+
+async def okx_stream():
+    await _watch_tickers("okx")
+
+# ========== REALTIME BROADCAST TASK ==========
+async def realtime_broadcast_task():
+    logger.info("📊 Realtime broadcast başladı")
+    await asyncio.sleep(2)
+    while not shutdown_evt.is_set():
+        data = await price_pool.snapshot(50)
+        await rt_ticker.broadcast(data)
+        await asyncio.sleep(3)
+
+# ========== PUMP RADAR ==========
+async def pump_radar_task():
+    logger.info("🔥 Pump radar başladı")
+    global top_gainers, top_losers, last_update
+    while not shutdown_evt.is_set():
+        try:
+            pool_items = await price_pool.all_items()
+            gainers, losers = [], []
+            for symbol_key, data in pool_items.items():
+                if data.get("best_price", 0) <= 0:
+                    continue
+                changes = [
+                    s["change_24h"]
+                    for s in data["sources"].values()
+                    if s.get("change_24h") is not None
+                ]
+                if not changes:
+                    continue
+                avg_change = sum(changes) / len(changes)
+                entry = {
+                    "symbol": symbol_key.replace("USDT", ""),
+                    "price": data["best_price"],
+                    "change": round(avg_change, 2),
+                }
+                if avg_change >= 2.0:
+                    gainers.append(entry)
+                elif avg_change <= -2.0:
+                    losers.append(entry)
+
+            gainers.sort(key=lambda x: x["change"], reverse=True)
+            losers.sort(key=lambda x: x["change"])  # en düşen ilk
+            top_gainers = gainers[:10]
+            top_losers = losers[:10]
+            last_update = datetime.now(timezone.utc).strftime("%H:%M:%S UTC")
+        except Exception as e:
+            logger.error(f"Pump radar error: {e}")
+        await asyncio.sleep(20)
+
+# ========== LIFECYCLE ==========
+async def initialize():
+    """
+    core.py’yi başlat. utils.py önceden initialize edilmelidir.
+    """
+    global all_usdt_symbols, symbol_map, exchanges
+
+    # utils.py’dan import edilen global’lere ulaş
+    from utils import all_usdt_symbols as _sym, symbol_map as _map, exchanges as _ex
+
+    all_usdt_symbols = _sym
+    symbol_map = _map
+    exchanges = {
+        "binance": ccxt_pro.binance({"enableRateLimit": True}),
+        "bybit": ccxt_pro.bybit({"enableRateLimit": True}),
+        "okx": ccxt_pro.okx({"enableRateLimit": True}),
     }
 
-    exchanges["binance"] = ccxt.binance(config["binance"])
-    exchanges["bybit"] = ccxt.bybit(config["bybit"])
-    exchanges["okx"] = ccxt.okx(config["okx"])
+    logger.info(f"🚀 Core başlatılıyor... ({len(all_usdt_symbols)} symbols)")
 
-    logger.info("✅ Exchanges initialized (Binance, Bybit, OKX)")
-
-
-# ========== SYMBOL DISCOVERY ==========
-async def _fetch_binance_symbols() -> list:
-    async with httpx.AsyncClient(timeout=15) as client:
-        response = await client.get("https://api.binance.com/api/v3/exchangeInfo")
-        info = response.json()
-
-    symbols = [
-        s["symbol"]
-        for s in info.get("symbols", [])
-        if s.get("quoteAsset") == "USDT"
-        and s.get("status") == "TRADING"
-        and "SPOT" in s.get("permissions", [])
+    tasks = [
+        realtime_broadcast_task(),
+        pump_radar_task(),
+        binance_stream(),
+        bybit_stream(),
+        okx_stream(),
     ]
-    return symbols
+    background_tasks.extend([asyncio.create_task(t) for t in tasks])
+    logger.info("✅ Core hazır")
+
+async def cleanup():
+    logger.info("🛑 Core kapanıyor...")
+    shutdown_evt.set()
+    for task in background_tasks:
+        if not task.done():
+            task.cancel()
+    await asyncio.gather(*background_tasks, return_exceptions=True)
+    background_tasks.clear()
+
+    # ccxt.pro exchange’leri kapat
+    for ex in exchanges.values():
+        try:
+            await ex.close()
+        except Exception:
+            pass
+
+    logger.info("✅ Core temizlendi")
 
 
-async def _fetch_exchange_symbols(exchange_id: str) -> set:
-    """Fetch active USDT spot symbols for given exchange"""
-    try:
-        ex = exchanges[exchange_id]
-        await ex.load_markets()
-        symbols = {
-            m["symbol"]
-            for m in ex.markets.values()
-            if m.get("quote") == "USDT"
-            and m.get("spot") is True
-            and m.get("active") is True
-        }
-        logger.debug(f"{exchange_id}: {len(symbols)} active USDT symbols")
-        return symbols
-    except Exception as e:
-        logger.warning(f"⚠️ {exchange_id} symbol list fetch failed: {e}")
-        return set()
+# ========== EXPORT ==========
+__all__ = [
+    "rt_ticker",
+    "price_pool",
+    "top_gainers",
+    "top_losers",        # ✅ artık var
+    "last_update",
+    "initialize",
+    "cleanup",
+]
 
-
-async def load_all_symbols():
-    """
-    Load top 150 high-volume USDT symbols (binance-based),
-    then validate & normalize for each exchange.
-    """
-    global all_usdt_symbols, symbol_map
-
-    logger.info("📡 High-volume symbols loading (Binance-based)...")
-
-    try:
-        # 1. Binance'den raw USDT sembolleri
-        binance_raw = await _fetch_binance_symbols()
-        if not binance_raw:
-            raise Exception("Binance symbol list empty")
-
-        # 2. Hacim bilgisi için ticker'ları çek (rate limit korumalı)
-        binance = exchanges["binance"]
-        # Batch: her seferinde 200 sembol, 100k altını eliyoruz
-        vol_list = []
-        for i in range(0, len(binance_raw), 200):
-            batch = binance_raw[i : i + 200]
-            try:
-                tickers = await binance.fetch_tickers(batch)
-                for sym in batch:
-                    ticker = tickers.get(sym)
-                    if ticker:
-                        vol = float(ticker.get("quoteVolume", 0))
-                        if vol >= 100_000:  # ≥ $100k daily volume
-                            vol_list.append((sym, vol))
-                await asyncio.sleep(0.1)  # Rate limit koruma
-            except Exception as e:
-                logger.warning(f"Ticker batch {i} skipped: {e}")
-
-        # 3. Hacme göre sırala → top 150
-        vol_list.sort(key=lambda x: x[1], reverse=True)
-        top_symbols = [sym for sym, _ in vol_list[:150]]
-
-        if not top_symbols:
-            raise Exception("No high-volume symbols found")
-
-        all_usdt_symbols = top_symbols
-        logger.info(f"✅ {len(all_usdt_symbols)} high-volume USDT symbols selected")
-
-        # 4. Her exchange için valid & normalize edilmiş map oluştur
-        symbol_map = {}
-        for ex_id in ["binance", "bybit", "okx"]:
-            valid_symbols = await _fetch_exchange_symbols(ex_id)
-            mapped = {}
-            skipped = 0
-            for s in all_usdt_symbols:
-                norm = normalize_symbol(s, ex_id)
-                if norm in valid_symbols:
-                    mapped[s] = norm
-                else:
-                    skipped += 1
-            symbol_map[ex_id] = mapped
-            logger.info(f"→ {ex_id}: {len(mapped)} symbols mapped, {skipped} skipped")
-
-    except Exception as e:
-        logger.error(f"🚨 Symbol loading failed: {e}. Using fallback.")
-        fallback = [
-            "BTC/USDT", "ETH/USDT", "BNB/USDT", "SOL/USDT", "XRP/USDT",
-            "ADA/USDT", "DOGE/USDT", "TRX/USDT", "LINK/USDT", "DOT/USDT",
-            "MATIC/USDT", "LTC/USDT", "AVAX/USDT", "SHIB/USDT", "PEPE/USDT",
-            "TON/USDT", "BCH/USDT", "NEAR/USDT", "UNI/USDT", "SUI/USDT",
-            "APT/USDT", "ICP/USDT", "FIL/USDT", "RNDR/USDT", "ATOM/USDT"
-        ]
-        all_usdt_symbols = [s.replace("/", "") for s in fallback]  # BTCUSDT format
-        symbol_map = {
-            "binance": {s: s.replace("/", "") for s in fallback},
-            "bybit": {s: s.replace("/", "").replace("1000", "") for s in fallback},
-            "okx": {s: s.replace("/", "-") for s in fallback},
-        }
-        logger.info(f"✅ Fallback: {len(all_usdt_symbols)} symbols loaded")
-
-
-# ========== OHLCV FETCHER ==========
-async def fetch_ohlcv(
-    symbol: str,
-    timeframe: str = "5m",
-    limit: int = 200,
-    exchange_id: str = "binance"
-) -> pd.DataFrame:
-    """
-    Fetch OHLCV as DataFrame with caching & normalization.
-    Parameters:
-        symbol: "BTCUSDT" or "BTC/USDT" (base format)
-        exchange_id: "binance" | "bybit" | "okx"
-    Returns:
-        pd.DataFrame with columns: open, high, low, close, volume, timestamp (index)
-    """
-    # Normalize symbol to base → exchange-specific
-    if exchange_id not in symbol_map or symbol not in symbol_map[exchange_id]:
-        logger.warning(f"Symbol '{symbol}' not mapped for {exchange_id}. Skipping.")
-        return pd.DataFrame()
-
-    actual_symbol = symbol_map[exchange_id][symbol]
-    key = f"{exchange_id}_{actual_symbol}_{timeframe}_{limit}"
-    now = datetime.now().timestamp()
-
-    # Cache check
-    cached = ohlcv_cache.get(key)
-    if cached and (now - cached["ts"] < CACHE_TTL):
-        return cached["data"]
-
-    try:
-        ex = exchanges[exchange_id]
-        ohlcv = await ex.fetch_ohlcv(actual_symbol, timeframe, limit=limit)
-
-        if not ohlcv or len(ohlcv) < 2:
-            logger.warning(f"No OHLCV data for {exchange_id}:{actual_symbol}")
-            return pd.DataFrame()
-
-        # Convert to DataFrame
-        df = pd.DataFrame(
-            ohlcv,
-            columns=["timestamp", "open", "high", "low", "close", "volume"]
-        )
-        df["timestamp"] = pd.to_datetime(df["timestamp"], unit="ms")
-        df.set_index("timestamp", inplace=True)
-
-        # Cache
-        ohlcv_cache[key] = {"data": df, "ts": now}
-        if len(ohlcv_cache) > 500:
-            # FIFO temizleme
-            oldest_key = next(iter(ohlcv_cache))
-            ohlcv_cache.pop(oldest_key, None)
-
-        return df
-
-    except Exception as e:
-        logger.error(f"❌ OHLCV error ({exchange_id}:{actual_symbol}): {e}")
-        return pd.DataFrame()
-
-
-# ========== INIT ==========
-async def initialize():
-    """Initialize everything in correct order"""
-    await init_exchanges()
-    await load_all_symbols()
-
-
-# Export globals
-all_usdt_symbols = []
-symbol_map = {}
-
-logger.info("✅ utils.py hazır!")
-
-# For direct run/test
-if __name__ == "__main__":
-    import asyncio
-    asyncio.run(initialize())
-    print(f"Top symbols: {all_usdt_symbols[:5]}")
+logger.info("✅ core.py hazır!")
