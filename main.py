@@ -481,9 +481,9 @@ async def signal_page(request: Request):
                 studies: ["RSI@tv-basicstudies", "MACD@tv-basicstudies"]
             }});
 
-            tvWidget.onChartReady(() => {{
+            tvWidget.onChartReady(function() {{
                 document.getElementById('status').innerHTML = "✅ Grafik yüklendi • Canlı sinyal bağlantısı kurun";
-                setInterval(() => {{
+                setInterval(function() {{
                     try {{
                         var price = tvWidget.activeChart().getSeries().lastPrice();
                         if (price && price !== currentPrice) {{
@@ -547,14 +547,14 @@ async def signal_page(request: Request):
 
             ws = new WebSocket((location.protocol === 'https:' ? 'wss' : 'ws') + '://' + location.host + '/ws/signal/' + currentSymbol + '/' + currentTf);
 
-            ws.onopen = () => {{
+            ws.onopen = function() {{
                 document.getElementById('status').innerHTML = `<strong>✅ ${currentSymbol} ${currentTf.toUpperCase()} İÇİN CANLI SİNYAL BAĞLANTISI BAŞARIYLA KURULDU! 🚀</strong>`;
                 document.getElementById('signal-text').innerHTML = "Sinyal bekleniyor...";
                 document.getElementById('signal-details').innerHTML = "Güçlü ICT/SMC sinyalleri anında burada görünecek.";
             }};
 
-            ws.onmessage = (e) => {{
-                var d = JSON.parse(e.data);  // <--- BURASI DÜZELTİLDİ: const → var
+            ws.onmessage = function(e) {{
+                var d = JSON.parse(e.data);
                 var card = document.getElementById('signal-card');
                 var text = document.getElementById('signal-text');
                 var details = document.getElementById('signal-details');
@@ -579,11 +579,11 @@ async def signal_page(request: Request):
                 }}
             }};
 
-            ws.onerror = () => {{
+            ws.onerror = function() {{
                 document.getElementById('status').innerHTML = "❌ WebSocket bağlantı hatası!";
             }};
 
-            ws.onclose = () => {{
+            ws.onclose = function() {{
                 document.getElementById('status').innerHTML = "🔌 Bağlantı kesildi. Yeniden bağlanmak için butona tıklayın.";
             }};
         }}
@@ -943,6 +943,7 @@ async def health():
 if __name__ == "__main__":
     import uvicorn
     uvicorn.run("main:app", host="0.0.0.0", port=int(os.getenv("PORT", 8000)), reload=False)
+
 
 
 
