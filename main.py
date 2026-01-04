@@ -601,7 +601,7 @@ async def signal_page(request: Request):
     ws.onclose = () => {
         document.getElementById('status').innerHTML = "🔌 Sinyal bağlantısı kesildi. Yeniden bağlanmak için butona tıklayın.";
     };
-
+        }
     </script>
 </body>
 </html>"""
@@ -1101,6 +1101,7 @@ async def health():
 if __name__ == "__main__":
     import uvicorn
     uvicorn.run("main:app", host="0.0.0.0", port=int(os.getenv("PORT", 8000)), reload=False)
+
 
 
 
