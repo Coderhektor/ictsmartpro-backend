@@ -1,8 +1,4 @@
-# indicators.py - %100 PRODUCTION READY, NaN HATASI TAMAMEN ÇÖZÜLDÜ, SİNYAL DAHA BELİRGİN VE GÜVENİLİR
-# Dünyanın En İyi ICT & SMC Sinyal Sistemi - Tam Entegre, Eksiksiz ve Güvenilir
-# Ek Özellikler: Gelişmiş FVG Tespiti, BOS/CHoCH Optimizasyonu, Multi-Timeframe Analizi,
-# Risk Yönetimi, Backtest Uyumlu, Chart Analizi Entegrasyonu
-
+#indicators.my
 import pandas as pd
 import numpy as np
 from datetime import datetime, timedelta
@@ -344,35 +340,35 @@ class GrokIndicatorsPro:
         return (upper_wick > 2 * body) & (lower_wick < 0.3 * body) & (df['close'] < df['open'])
     
     # ==================== MULTI-TIMEFRAME ANALİZ ====================
+  
     def multi_timeframe_analysis(self, df: pd.DataFrame, symbol: str, timeframes: List[str] = ['1h', '4h', '1d']) -> Dict[str, Dict]:
-    """Multi-Timeframe (MTF) analizi - HATA ÖNLEYİCİ, 'H' → 'h' DÜZELTME, NaN GÜVENLİ"""
-     mtf_results = {}
-     for tf in timeframes:
-        try:
-            # 'H' deprecated → 'h' kullan
-            freq = tf.upper().replace('H', 'h')  # '1H' → '1h', '4H' → '4h'
-            resampled_df = df.resample(freq).agg({
-                'open': 'first',
-                'high': 'max',
-                'low': 'min',
-                'close': 'last',
-                'volume': 'sum'
-            }).dropna()
+        """Multi-Timeframe (MTF) analizi - HATA ÖNLEYİCİ, 'H' → 'h' DÜZELTME, NaN GÜVENLİ"""
+        mtf_results = {}
+        for tf in timeframes:
+            try:
+                freq = tf.upper().replace('H', 'h')  # '1H' → '1h'
+                resampled_df = df.resample(freq).agg({
+                    'open': 'first',
+                    'high': 'max',
+                    'low': 'min',
+                    'close': 'last',
+                    'volume': 'sum'
+                }).dropna()
 
-            if len(resampled_df) < 30:  # Yeterli veri yoksa atla
+                if len(resampled_df) < 30:
+                    continue
+
+                sub_signal = self.generate_signal(resampled_df, symbol, tf)
+                mtf_results[tf] = {
+                    'trend': sub_signal.market_structure.get('trend', 'Nötr'),
+                    'score': sub_signal.score,
+                    'confidence': sub_signal.confidence
+                }
+            except Exception as e:
+                logger.debug(f"MTF {tf} analizi atlandı: {e}")
                 continue
+        return mtf_results
 
-            # Güvenli sinyal üretimi
-            sub_signal = self.generate_signal(resampled_df, symbol, tf)
-            mtf_results[tf] = {
-                'trend': sub_signal.market_structure.get('trend', 'Nötr'),
-                'score': sub_signal.score,
-                'confidence': sub_signal.confidence
-            }
-        except Exception as e:
-            logger.debug(f"MTF {tf} analizi atlandı: {e}")  # WARNING yerine DEBUG (log spam önlemek için)
-            continue
-      return mtf_results
     
     # ==================== SIGNAL GENERATION ====================
     def calculate_signal_score(self, patterns: Dict[str, pd.Series], mtf: Dict, idx: int = -1) -> Tuple[int, List[str]]:
