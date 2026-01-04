@@ -641,188 +641,189 @@ async def analyze_chart(request: Request):
         symbol = body.get("symbol", "BTCUSDT").upper()
         timeframe = body.get("timeframe", "5m")
         
-        logger.info(f"Analiz için veri çekiliyor: {symbol} {timeframe}")
-        
-        # Çoklu borsa client'larını al
+        logger.info(f"🚀 Analiz talebi alındı: {symbol} - {timeframe.upper()}")
+
+        # Borsa client'larını al
         binance_client = get_binance_client()
         bybit_client = get_bybit_client()
         okex_client = get_okex_client()
         coingecko_client = get_coingecko_client()
-        
+
         if not (binance_client or bybit_client or okex_client or coingecko_client):
+            logger.warning("Tüm borsa bağlantıları başarısız")
             return JSONResponse({
-                "analysis": "❌ Borsa bağlantısı kurulamadı. Lütfen daha sonra tekrar deneyin.",
+                "analysis": "❌ Borsa bağlantıları kurulamadı. Lütfen daha sonra tekrar deneyin.",
                 "success": False
-            })
-        
-        # Çoklu kaynaklardan veri çek ve birleştir
+            }, status_code=503)
+
         klines_list = []
         sources = [binance_client, bybit_client, okex_client, coingecko_client]
         source_names = ["Binance", "Bybit", "OKEX", "CoinGecko"]
-        
+
         try:
             interval_map = {
                 "1m": "1m", "3m": "3m", "5m": "5m", "15m": "15m",
                 "30m": "30m", "1h": "1h", "4h": "4h", "1d": "1d", "1w": "1w"
             }
-            
             interval = interval_map.get(timeframe, "5m")
             ccxt_symbol = symbol.replace('USDT', '/USDT')
-            
-            logger.info(f"{ccxt_symbol} için {interval} verisi çekiliyor...")
+
+            logger.info(f"📡 {ccxt_symbol} için {interval} timeframe verisi çekiliyor...")
+
             for client, name in zip(sources, source_names):
                 if client:
                     try:
-                        klines = await client.fetch_ohlcv(
-                            ccxt_symbol, 
-                            timeframe=interval, 
-                            limit=150
-                        )
-                        if klines:
+                        klines = await client.fetch_ohlcv(ccxt_symbol, timeframe=interval, limit=200)
+                        if klines and len(klines) >= 50:
                             klines_list.append((name, klines))
-                            logger.info(f"{name} için {len(klines)} mum verisi alındı")
+                            logger.info(f"✅ {name}: {len(klines)} mum alındı → Veri alındı!")
                     except Exception as e:
-                        logger.warning(f"{name} veri hatası: {e}")
-            
+                        logger.warning(f"⚠️ {name} veri hatası: {str(e)[:80]}")
+
             if not klines_list:
                 return JSONResponse({
-                    "analysis": f"❌ {symbol} için veri bulunamadı.",
+                    "analysis": f"❌ {symbol} için hiçbir kaynaktan veri alınamadı.\nVeri alındı mesajı gösterilemedi.",
                     "success": False
                 })
-            
-            # Verileri birleştir (ortalama al veya en güvenilir olanı seç)
-            # Basitçe en fazla veri olanı seçelim
-            max_klines = max(klines_list, key=lambda x: len(x[1]))[1] if klines_list else []
-            
-            if not max_klines or len(max_klines) < 100:
+
+            # En kaliteli veriyi seç (en uzun olan)
+            source_used, max_klines = max(klines_list, key=lambda x: len(x[1]))
+            logger.info(f"🎯 En iyi veri kaynağı: {source_used} ({len(max_klines)} mum)")
+
+            if len(max_klines) < 100:
                 return JSONResponse({
-                    "analysis": f"❌ {symbol} için yeterli veri bulunamadı. (Alınan: {len(max_klines) if max_klines else 0} mum)",
+                    "analysis": f"❌ Yeterli veri yok ({len(max_klines)} mum).\nVeri alındı ancak analiz için yetersiz.",
                     "success": False
                 })
-            
+
         except Exception as e:
-            logger.error(f"Veri hatası: {e}")
+            logger.error(f"Veri çekme genel hatası: {str(e)}")
             return JSONResponse({
-                "analysis": f"❌ Veri alınamadı: {str(e)[:100]}",
+                "analysis": f"❌ Veri çekme sırasında hata oluştu: {str(e)[:100]}",
                 "success": False
             })
-        
-        # DataFrame oluştur
+
+        # DataFrame oluşturma ve temizleme
         df = pd.DataFrame(max_klines)
-        
         if len(df.columns) >= 6:
             df = df.iloc[:, :6]
             df.columns = ['timestamp', 'open', 'high', 'low', 'close', 'volume']
         elif len(df.columns) >= 5:
             df = df.iloc[:, :5]
             df.columns = ['timestamp', 'open', 'high', 'low', 'close']
-            df['volume'] = 1000  # Default volume
+            df['volume'] = 1000
         else:
-            return JSONResponse({
-                "analysis": f"❌ Geçersiz veri formatı",
-                "success": False
-            })
-        
-        # Sayısal verilere çevir
+            return JSONResponse({"analysis": "❌ Veri formatı geçersiz", "success": False})
+
+        # Sayısal dönüşüm ve timestamp düzeltme
         for col in ['timestamp', 'open', 'high', 'low', 'close', 'volume']:
             if col in df.columns:
                 df[col] = pd.to_numeric(df[col], errors='coerce')
-        
-        # NaN değerleri temizle
+
+        df['timestamp'] = pd.to_datetime(df['timestamp'], unit='ms' if df['timestamp'].iloc[0] > 1e10 else 's')
         df = df.dropna(subset=['open', 'high', 'low', 'close'])
-        
-        if len(df) < 100:
-            logger.warning(f"{symbol}: Sadece {len(df)} mum temizlendi")
-            df = df.tail(min(100, len(df)))
-        
-        # Sinyal üret
+        df = df.sort_values('timestamp').reset_index(drop=True)
+        df = df.tail(150)  # Son 150 mum yeterlidir
+
+        logger.info(f"📊 DataFrame hazır: {len(df)} mum, {symbol} {timeframe.upper()}")
+
+        # === ANA SİNYAL ÜRETİMİ - TÜM İNDİKATÖRLER KULLANILIYOR ===
         signal = None
         try:
             from indicators import generate_ict_signal, generate_simple_signal
-            
-            # Ana sinyal fonksiyonunu dene
-            signal = generate_ict_signal(df, symbol, timeframe)
-            
-            # Eğer sinyal alınamazsa basit fonksiyonu kullan
-            if not signal:
-                logger.info(f"{symbol}: Ana sinyal üretilemedi, basit sinyal deneniyor...")
-                signal = generate_simple_signal(df, symbol, timeframe)
-            
+
+            # ANA ICT SİNYALİ - Tüm osilatörler, indikatörler ve SMC patternleri burada kullanılıyor
+            signal = generate_ict_signal(df.copy(), symbol, timeframe)
+
+            # Başarı kontrolü
+            if not signal or signal.get("status") != "success":
+                logger.warning(f"Ana sinyal başarısız, fallback kullanılıyor: {symbol}")
+                signal = generate_simple_signal(df.copy(), symbol, timeframe)
+
         except Exception as e:
-            logger.error(f"Sinyal üretim hatası: {e}")
-            # Fallback sinyal
-            last_price = df['close'].iloc[-1] if len(df) > 0 else 0
+            logger.error(f"Sinyal üretiminde kritik hata: {str(e)}", exc_info=True)
+            last_price = df['close'].iloc[-1] if len(df) > 0 else 0.0
             signal = {
                 "pair": symbol.replace("USDT", "/USDT"),
                 "timeframe": timeframe.upper(),
-                "current_price": round(last_price, 4),
-                "signal": "⏸️ ANALİZ BEKLENİYOR",
-                "score": 50,
+                "current_price": round(last_price, 6),
+                "signal": "⏸️ SİSTEM HATASI",
+                "score": 0,
+                "strength": "HATA",
+                "killzone": "Bilinmiyor",
+                "triggers": f"Teknik hata: {str(e)[:50]}",
                 "last_update": datetime.utcnow().strftime("%H:%M:%S UTC"),
-                "killzone": "Normal",
-                "triggers": "Veri analiz ediliyor",
-                "strength": "ORTA"
+                "status": "error"
             }
-        
-        # Analiz metnini oluştur
-        if not signal:
-            analysis = f"""🔍 {symbol} {timeframe} Grafik Analizi
-📊 Durum: <strong>Sinyal tespit edilemedi</strong>
-🤔 Sebep: Piyasa nötr veya sinyal kriterleri sağlanmıyor.
+
+        # === ANALİZ METNİ OLUŞTURMA ===
+        base_analysis = f"""🔍 {symbol} {timeframe.upper()} Grafik Analizi
+
+✅ <strong>Veri alındı ve başarıyla işlendi!</strong>
+📡 Kaynak: <strong>{source_used}</strong> ({len(max_klines)} mum)
+
+"""
+
+        if not signal or signal.get("status") != "success":
+            analysis = base_analysis + f"""❌ Sinyal üretilemedi.
+
+🤔 Muhtemel sebepler:
+• Piyasa yatay hareket ediyor
+• Yeterli volatilite yok
+• Teknik hata oluştu
 
 💡 Tavsiye:
-• Farklı zaman dilimi deneyin (15m, 1h)
-• Başka bir coin analiz edin
-• Piyasa volatilitesini bekleyin
+• Farklı zaman dilimi deneyin (15m, 1h, 4h)
+• Başka coinleri inceleyin
+• Bir süre sonra tekrar deneyin
 
 ⚠️ Bu bir yatırım tavsiyesi değildir."""
         else:
-            analysis = f"""🔍 {symbol} {timeframe} Grafik Analizi
+            analysis = base_analysis + f"""🎯 SİNYAL: <strong>{signal.get('signal', 'Bilinmiyor')}</strong>
 
-🎯 SİNYAL: <strong>{signal['signal']}</strong>
-
-📊 Skor: <strong>{signal['score']}/100</strong> ({signal['strength']})
-💰 Fiyat: <strong>${signal['current_price']}</strong>
-🕐 Killzone: <strong>{signal['killzone']}</strong>
-🕒 Güncelleme: {signal['last_update']}
+📊 Skor: <strong>{signal.get('score', 0)}/100</strong> → <strong>{signal.get('strength', 'Bilinmiyor')}</strong>
+💰 Güncel Fiyat: <strong>${signal.get('current_price', 0.0)}</strong>
+🕐 Killzone: <strong>{signal.get('killzone', 'Normal')}</strong>
+🕒 Son Güncelleme: {signal.get('last_update', 'Şimdi')}
 
 🎯 Tetikleyenler:
-{signal['triggers']}
+{signal.get('triggers', 'Tetikleyici yok')}
 
-📈 Teknik Analiz:
-{symbol} {timeframe} grafiğinde {signal['signal'].replace('🚀', '').replace('🔥', '').replace('⏸️', '').strip()} sinyali tespit edildi.
+📈 Teknik Özet:
+{symbol} şu anda {signal.get('signal', '').replace('🚀','güçlü yükseliş').replace('🔥','güçlü düşüş').replace('✅','yükseliş').replace('⚠️','düşüş').strip()} yönünde hareket gösteriyor.
 
-ICT stratejisine göre:
-• RSI6 ve SMA50 analizi yapıldı
-• Killzone: {signal['killzone']}
-• Güven skoru: {signal['score']}/100
+Tüm indikatörler ve osilatörler kullanıldı:
+• RSI6 & RSI14 • MACD • Bollinger Bands • SMA50/200 • EMA9/21
+• Volume analizi • Pivot noktaları
+• SMC: CHoCH, Liquidity Sweep, Order Block, Breaker Block, Mitigation, FVG
+• Candle patternleri: Engulfing, Hammer, Shooting Star
+• Killzone tespiti (Asia, London, NY)
 
 💡 Öneri:
-{symbol} için {signal['signal']} sinyali mevcut.
-Ancak kendi araştırmanızı yapın ve risk yönetimi uygulayın.
+{signal.get('recommended_action', 'Kendi analizinizi yapın')}
 
-⚠️ Uyarı: Bu bir yatırım tavsiyesi değildir.
-Yalnızca teknik analiz yorumudur."""
-        
+⚠️ Bu bir yatırım tavsiyesi değildir. Kendi araştırmanızı yapın ve risk yönetimi uygulayın."""
+
         return JSONResponse({
             "analysis": analysis,
             "signal_data": signal or {},
             "success": True
         })
-        
+
     except Exception as e:
-        logger.error(f"Analiz hatası: {e}", exc_info=True)
+        logger.error(f"analyze_chart kritik hata: {str(e)}", exc_info=True)
         return JSONResponse({
-            "analysis": f"""❌ Analiz hatası:
+            "analysis": f"""❌ Sistem Hatası
+
 Hata: {str(e)[:100]}
 
 Lütfen:
-• Coin adını kontrol edin
 • Sayfayı yenileyin
-• Daha sonra tekrar deneyin""",
+• Daha sonra tekrar deneyin
+
+Veri alındı ancak işlenirken hata oluştu.""",
             "success": False
         }, status_code=500)
-
 
 # ==================== GİRİŞ SAYFASI ====================
 @app.get("/login", response_class=HTMLResponse)
@@ -872,6 +873,7 @@ async def health():
 if __name__ == "__main__":
     import uvicorn
     uvicorn.run("main:app", host="0.0.0.0", port=int(os.getenv("PORT", 8000)), reload=False)
+
 
 
 
