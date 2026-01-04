@@ -302,77 +302,77 @@ async def ws_realtime_price(websocket: WebSocket):
 async def home(request: Request):
     user = request.cookies.get("user_email") or "Misafir"
     visitor_stats_html = get_visitor_stats_html()
-    html_content = f"""<!DOCTYPE html>
+    html_content = """<!DOCTYPE html>
 <html lang="tr">
 <head>
- <meta charset="UTF-8">
- <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
- <title>ICT SMART PRO</title>
- <style>
- body {{background: linear-gradient(135deg, #0a0022, #1a0033, #000);color: #fff;font-family: sans-serif;min-height: 100vh;margin: 0;display: flex;flex-direction: column;}}
- .container {{max-width: 1200px;margin: auto;padding: 20px;flex: 1;}}
- h1 {{font-size: clamp(2rem, 5vw, 5rem);text-align: center;background: linear-gradient(90deg, #00dbde, #fc00ff, #00dbde);-webkit-background-clip: text;-webkit-text-fill-color: transparent;animation: g 8s infinite;}}
- @keyframes g {{0% {{background-position: 0%;}}100% {{background-position: 200%;}}}}
- .update {{text-align: center;color: #00ffff;margin: 30px;font-size: clamp(1rem, 3vw, 1.8rem);}}
- table {{width: 100%;border-collapse: separate;border-spacing: 0 12px;margin: 30px 0;}}
- th {{background: #ffffff11;padding: clamp(10px, 2vw, 20px);font-size: clamp(1rem, 2.5vw, 1.6rem);}}
- tr {{background: #ffffff08;transition: .4s;}}
- tr:hover {{transform: scale(1.02);box-shadow: 0 15px 40px #00ffff44;}}
- .green {{color: #00ff88;text-shadow: 0 0 20px #00ff88;}}
- .red {{color: #ff4444;text-shadow: 0 0 20px #ff4444;}}
- .btn {{display: block;width: 90%;max-width: 500px;margin: 20px auto;padding: clamp(15px, 3vw, 25px);font-size: clamp(1.2rem, 4vw, 2.2rem);background: linear-gradient(45deg, #fc00ff, #00dbde);color: #fff;text-align: center;border-radius: 50px;text-decoration: none;box-shadow: 0 0 60px #ff00ff88;transition: .3s;}}
- .btn:hover {{transform: scale(1.08);box-shadow: 0 0 100px #ff00ff;}}
- </style>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>ICT SMART PRO</title>
+    <style>
+        body {{background: linear-gradient(135deg, #0a0022, #1a0033, #000);color: #fff;font-family: sans-serif;min-height: 100vh;margin: 0;display: flex;flex-direction: column;}}
+        .container {{max-width: 1200px;margin: auto;padding: 20px;flex: 1;}}
+        h1 {{font-size: clamp(2rem, 5vw, 5rem);text-align: center;background: linear-gradient(90deg, #00dbde, #fc00ff, #00dbde);-webkit-background-clip: text;-webkit-text-fill-color: transparent;animation: g 8s infinite;}}
+        @keyframes g {{0% {{background-position: 0%;}}100% {{background-position: 200%;}}}}
+        .update {{text-align: center;color: #00ffff;margin: 30px;font-size: clamp(1rem, 3vw, 1.8rem);}}
+        table {{width: 100%;border-collapse: separate;border-spacing: 0 12px;margin: 30px 0;}}
+        th {{background: #ffffff11;padding: clamp(10px, 2vw, 20px);font-size: clamp(1rem, 2.5vw, 1.6rem);}}
+        tr {{background: #ffffff08;transition: .4s;}}
+        tr:hover {{transform: scale(1.02);box-shadow: 0 15px 40px #00ffff44;}}
+        .green {{color: #00ff88;text-shadow: 0 0 20px #00ff88;}}
+        .red {{color: #ff4444;text-shadow: 0 0 20px #ff4444;}}
+        .btn {{display: block;width: 90%;max-width: 500px;margin: 20px auto;padding: clamp(15px, 3vw, 25px);font-size: clamp(1.2rem, 4vw, 2.2rem);background: linear-gradient(45deg, #fc00ff, #00dbde);color: #fff;text-align: center;border-radius: 50px;text-decoration: none;box-shadow: 0 0 60px #ff00ff88;transition: .3s;}}
+        .btn:hover {{transform: scale(1.08);box-shadow: 0 0 100px #ff00ff;}}
+    </style>
 </head>
 <body>
- <div style='position:fixed;top:15px;left:15px;background:#000000cc;padding:10px 20px;border-radius:20px;color:#00ff88;font-size:clamp(0.8rem, 2vw, 1.2rem);z-index:1000;'>
-  Hoş geldin, {user}
- </div>
- {visitor_stats_html}
- <div class="container">
-  <h1>ICT SMART PRO</h1>
-  <div class="update" id="update">Veri yükleniyor...</div>
-  <table>
-   <thead>
-    <tr><th>SIRA</th><th>COİN</th><th>FİYAT</th><th>24S DEĞİŞİM</th></tr>
-   </thead>
-   <tbody id="table-body">
-    <tr><td colspan="4" style="padding:80px;color:#888">Pump radar yükleniyor...</td></tr>
-   </tbody>
-  </table>
-  <a href="/signal" class="btn">🚀 Tek Coin Canlı Sinyal + Grafik</a>
-  <a href="/signal/all" class="btn">🔥 Tüm Coinleri Tara</a>
- </div>
- <script>
- const ws = new WebSocket((location.protocol === 'https:' ? 'wss' : 'ws') + '://' + location.host + '/ws/realtime_price');
- ws.onmessage = function(e) {{
-  try {{
-   const d = JSON.parse(e.data);
-   document.getElementById('update').innerHTML = `Son Güncelleme: <strong>${{d.last_update || 'Şimdi'}}</strong>`;
-   const t = document.getElementById('table-body');
-   if (!d.tickers || Object.keys(d.tickers).length === 0) {{
-    t.innerHTML = '<tr><td colspan="4" style="padding:80px;color:#ffd700">⏳ Fiyatlar yükleniyor...</td></tr>';
-    return;
-   }}
-   const tickers = Object.entries(d.tickers);
-   t.innerHTML = tickers.slice(0, 10).map(([symbol, data], i) => `
-    <tr>
-     <td>#${{i+1}}</td>
-     <td><strong>${{symbol.replace('USDT', '')}}</strong></td>
-     <td>$${{data.price.toFixed(data.price > 1 ? 2 : 6)}}</td>
-     <td class="${{data.change > 0 ? 'green' : 'red'}}">${{data.change > 0 ? '+' : ''}}${{data.change.toFixed(2)}}%</td>
-    </tr>
-   `).join('');
-  }} catch (err) {{
-   console.error('WebSocket veri hatası:', err);
-  }}
- }};
- ws.onopen = () => document.getElementById('update').innerHTML = 'Canlı fiyatlar bağlandı...';
- ws.onerror = () => document.getElementById('update').innerHTML = '❌ Bağlantı hatası';
- ws.onclose = () => document.getElementById('update').innerHTML = '🔌 Bağlantı kesildi';
- </script>
+    <div style='position:fixed;top:15px;left:15px;background:#000000cc;padding:10px 20px;border-radius:20px;color:#00ff88;font-size:clamp(0.8rem, 2vw, 1.2rem);z-index:1000;'>
+        Hoş geldin, {user}
+    </div>
+    {visitor_stats_html}
+    <div class="container">
+        <h1>ICT SMART PRO</h1>
+        <div class="update" id="update">Veri yükleniyor...</div>
+        <table>
+            <thead>
+                <tr><th>SIRA</th><th>COİN</th><th>FİYAT</th><th>24S DEĞİŞİM</th></tr>
+            </thead>
+            <tbody id="table-body">
+                <tr><td colspan="4" style="padding:80px;color:#888">Pump radar yükleniyor...</td></tr>
+            </tbody>
+        </table>
+        <a href="/signal" class="btn">🚀 Tek Coin Canlı Sinyal + Grafik</a>
+        <a href="/signal/all" class="btn">🔥 Tüm Coinleri Tara</a>
+    </div>
+    <script>
+        const ws = new WebSocket((location.protocol === 'https:' ? 'wss' : 'ws') + '://' + location.host + '/ws/realtime_price');
+        ws.onmessage = function(e) {
+            try {
+                const d = JSON.parse(e.data);
+                document.getElementById('update').innerHTML = `Son Güncelleme: <strong>${{d.last_update || 'Şimdi'}}</strong>`;
+                const t = document.getElementById('table-body');
+                if (!d.tickers || Object.keys(d.tickers).length === 0) {
+                    t.innerHTML = '<tr><td colspan="4" style="padding:80px;color:#ffd700">⏳ Fiyatlar yükleniyor...</td></tr>';
+                    return;
+                }
+                const tickers = Object.entries(d.tickers);
+                t.innerHTML = tickers.slice(0, 10).map(([symbol, data], i) => `
+                    <tr>
+                        <td>#${{i+1}}</td>
+                        <td><strong>${{symbol.replace('USDT', '')}}</strong></td>
+                        <td>${{data.price.toFixed(data.price > 1 ? 2 : 6)}}</td>
+                        <td class="$$ {{data.change > 0 ? 'green' : 'red'}}"> $${{data.change > 0 ? '+' : ''}}${{data.change.toFixed(2)}}%</td>
+                    </tr>
+                `).join('');
+            } catch (err) {
+                console.error('WebSocket veri hatası:', err);
+            }
+        };
+        ws.onopen = () => document.getElementById('update').innerHTML = 'Canlı fiyatlar bağlandı...';
+        ws.onerror = () => document.getElementById('update').innerHTML = '❌ Bağlantı hatası';
+        ws.onclose = () => document.getElementById('update').innerHTML = '🔌 Bağlantı kesildi';
+    </script>
 </body>
-</html>"""
+</html>""".format(user=user, visitor_stats_html=visitor_stats_html)
     return HTMLResponse(content=html_content)
 
 @app.get("/signal", response_class=HTMLResponse)
@@ -952,5 +952,6 @@ async def health():
 if __name__ == "__main__":
     import uvicorn
     uvicorn.run("main:app", host="0.0.0.0", port=int(os.getenv("PORT", 8000)), reload=False)  
+
 
 
