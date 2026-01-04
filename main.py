@@ -691,7 +691,7 @@ async def signal_all_page(request: Request):
 
 # ====================== ANALİZ ENDPOINT ======================
  
- @app.post("/api/analyze-chart")
+@app.post("/api/analyze-chart")
 async def analyze_chart(request: Request):
     try:
         body = await request.json()
@@ -854,6 +854,7 @@ async def health():
 if __name__ == "__main__":
     import uvicorn
     uvicorn.run("main:app", host="0.0.0.0", port=int(os.getenv("PORT", 8000)), reload=False)
+
 
 
 
