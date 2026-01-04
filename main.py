@@ -554,7 +554,7 @@ async def signal_page(request: Request):
             }};
 
             ws.onmessage = (e) => {{
-                var d = JSON.parse(e.data);
+                var d = JSON.parse(e.data);  // <--- BURASI DÜZELTİLDİ: const → var
                 var card = document.getElementById('signal-card');
                 var text = document.getElementById('signal-text');
                 var details = document.getElementById('signal-details');
@@ -943,6 +943,7 @@ async def health():
 if __name__ == "__main__":
     import uvicorn
     uvicorn.run("main:app", host="0.0.0.0", port=int(os.getenv("PORT", 8000)), reload=False)
+
 
 
 
