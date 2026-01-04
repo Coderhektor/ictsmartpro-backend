@@ -861,7 +861,7 @@ async def analyze_chart(request: Request):
             f"🎯 ANA SİNYAL: <strong>{signal_dict.get('signal', 'Nötr')}</strong>\n"
             f"📊 Güç Skoru: <strong>{displayed_score}/100</strong> ({signal_dict.get('strength', 'Nötr')})\n"
             f"🕐 Oturum: <strong>{signal_dict.get('killzone', 'Normal')}</strong>\n"
-            f"🔒 Analiz Güveni: <strong>%{int(confidence * 100)}</strong>\n\n"
+            f"🔒 Analiz Güveni: <strong>{int(confidence * 100)}%</strong>\n\n"
             f"📊 MEVCUT TREND: {trend_text}\n\n"
         )
 
@@ -952,4 +952,5 @@ async def health():
 if __name__ == "__main__":
     import uvicorn
     uvicorn.run("main:app", host="0.0.0.0", port=int(os.getenv("PORT", 8000)), reload=False)  
+
 
