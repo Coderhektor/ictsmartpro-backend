@@ -344,7 +344,7 @@ class GrokIndicatorsPro:
         return (upper_wick > 2 * body) & (lower_wick < 0.3 * body) & (df['close'] < df['open'])
     
     # ==================== MULTI-TIMEFRAME ANALİZ ====================
-   def multi_timeframe_analysis(self, df: pd.DataFrame, symbol: str, timeframes: List[str] = ['1h', '4h', '1d']) -> Dict[str, Dict]:
+    def multi_timeframe_analysis(self, df: pd.DataFrame, symbol: str, timeframes: List[str] = ['1h', '4h', '1d']) -> Dict[str, Dict]:
     """Multi-Timeframe (MTF) analizi - HATA ÖNLEYİCİ, 'H' → 'h' DÜZELTME, NaN GÜVENLİ"""
     mtf_results = {}
     for tf in timeframes:
