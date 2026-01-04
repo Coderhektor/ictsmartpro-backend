@@ -58,7 +58,7 @@ class GrokIndicatorsPro:
         except:
             return float(default)
 
-       def _clean_dataframe(self, df: pd.DataFrame) -> pd.DataFrame:
+    def _clean_dataframe(self, df: pd.DataFrame) -> pd.DataFrame:
         """Veri çerçevesini tamamen temizler: NaN, inf, duplicate index, sıfır volume filtre"""
         df = df.copy()
         df.index = pd.to_datetime(df.index, errors='coerce')
