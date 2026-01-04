@@ -10,7 +10,7 @@ import hashlib
 import os
 from decimal import Decimal
 import contextlib
-
+import numpy as np 
 from fastapi import FastAPI, WebSocket, WebSocketDisconnect, Request, Response
 from fastapi.responses import HTMLResponse, RedirectResponse, JSONResponse
 from openai import OpenAI
@@ -690,6 +690,19 @@ async def signal_all_page(request: Request):
     return HTMLResponse(content=html_content)
 
 # ====================== ANALİZ ENDPOINT ======================
+ 
+
+def clean_nan(obj):
+    """Recursive NaN temizleyici: NaN'leri None'a çevirir (JSON uyumlu)."""
+    if isinstance(obj, dict):
+        return {k: clean_nan(v) for k, v in obj.items()}
+    elif isinstance(obj, list):
+        return [clean_nan(v) for v in obj]
+    elif isinstance(obj, float) and np.isnan(obj):
+        return None  # Veya 0 tercih edebilirsin
+    else:
+        return obj
+
 @app.post("/api/analyze-chart")
 async def analyze_chart(request: Request):
     try:
@@ -727,8 +740,7 @@ async def analyze_chart(request: Request):
 
         # NaN değerleri temizle ve sayısal tipe dönüştür
         df[['open', 'high', 'low', 'close', 'volume']] = df[['open', 'high', 'low', 'close', 'volume']].apply(pd.to_numeric, errors='coerce')
-        df = df.fillna(0)  # Alternatif: df = df.dropna() da kullanılabilir
-        # Eğer dropna tercih edersen: df = df.dropna().reset_index(drop=True)
+        df = df.fillna(0)  # Alternatif: df = df.dropna().reset_index(drop=True) - Veri kaybı olabilir
 
         df['timestamp'] = pd.to_datetime(df['timestamp'], unit='ms')
         df = df.sort_values('timestamp').tail(150).reset_index(drop=True)
@@ -741,6 +753,9 @@ async def analyze_chart(request: Request):
             if not signal or signal.get("status") != "success":
                 if generate_simple_signal:
                     signal = generate_simple_signal(df.copy(), symbol, timeframe)
+            # Signal üretildikten sonra NaN kontrolü ve log
+            if signal:
+                logger.info(f"Üretilen signal: {signal}")
         except Exception as e:
             logger.error(f"Sinyal üretim hatası: {e}")
 
@@ -748,19 +763,19 @@ async def analyze_chart(request: Request):
         if not signal or signal.get("status") != "success":
             last_price = float(df['close'].iloc[-1]) if len(df) > 0 else 0.0
             signal = {
-                "signal": "SİSTEM HATASI",
+                "signal": "SİNYAL ÜRETİLEMEDİ",
                 "score": 0,
                 "current_price": round(last_price, 6),
-                "strength": "HATA",
-                "killzone": "Bilinmiyor",
-                "triggers": "Teknik sorun",
+                "strength": "Bilinmiyor",
+                "killzone": "Normal",
+                "triggers": "Veri yetersiz veya hata",
                 "last_update": datetime.utcnow().strftime("%H:%M:%S UTC"),
                 "status": "error"
             }
             analysis = f"""🔍 {symbol} {timeframe.upper()} Grafik Analizi
 ✅ Veri alındı: <strong>{source_used}</strong> ({len(max_klines)} mum)
-❌ Sinyal üretilemedi (teknik hata).
-💡 Lütfen tekrar deneyin veya farklı bir zaman dilimi seçin.
+❌ Sinyal üretilemedi (veri eksikliği veya teknik hata).
+💡 Farklı bir zaman dilimi veya coin deneyin.
 ⚠️ Yatırım tavsiyesi değildir."""
         else:
             analysis = f"""🔍 {symbol} {timeframe.upper()} Grafik Analizi
@@ -779,10 +794,11 @@ async def analyze_chart(request: Request):
 📈 Tüm ICT kavramları ve indikatörler tarandı.
 ⚠️ Bu bir yatırım tavsiyesi değildir. Kendi araştırmanızı yapın."""
 
-        # Başarılı yanıt
+        # NaN'leri temizle ve yanıt döndür
+        cleaned_signal = clean_nan(signal or {})
         return JSONResponse({
             "analysis": analysis,
-            "signal_data": signal or {},
+            "signal_data": cleaned_signal,
             "success": True
         })
 
@@ -792,7 +808,6 @@ async def analyze_chart(request: Request):
             "analysis": "❌ Sistem hatası oluştu. Lütfen tekrar deneyin.",
             "success": False
         }, status_code=500)
-
 # ====================== GİRİŞ & HEALTH ======================
 @app.get("/login", response_class=HTMLResponse)
 async def login_page():
@@ -840,4 +855,5 @@ async def health():
 if __name__ == "__main__":
     import uvicorn
     uvicorn.run("main:app", host="0.0.0.0", port=int(os.getenv("PORT", 8000)), reload=False)
+
 
