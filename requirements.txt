@@ -1,56 +1,66 @@
 # ==============================================
 # FastAPI & Sunucu (Core)
 # ==============================================
-fastapi>=0.115.0                    # 2025 sonu / 2026 başı en güncel stabil sürüm
-uvicorn[standard]>=0.30.0           # ASGI sunucu + websockets desteği
-hypercorn>=0.17.0                   # Alternatif ASGI sunucu (uvicorn'a ek/yerine)
+fastapi>=0.115.0                    # Modern web framework - REST API geliştirme
+uvicorn[standard]>=0.30.0           # ASGI sunucu - async çalıştırma + websockets
+hypercorn>=0.17.0                   # Alternatif ASGI sunucu - production deployments
 
 # ==============================================
 # Veri & Analiz
 # ==============================================
-pandas>=2.2.3                       # 2.2.3 en son stabil (2025 sonu)
-numpy>=2.0.0                        # numpy 2.x serisi artık çok yaygın
-ccxt>=4.4.0                         # En güncel exchange kütüphanesi
-pycoingecko>=3.2.0                  # CoinGecko API wrapper (fallback için)
+pandas>=2.2.3                       # Veri manipülasyonu ve analiz
+numpy>=2.0.0                        # Sayısal hesaplamalar ve array işlemleri
+ccxt>=4.4.0                         # Cryptocurrency exchange API entegrasyonu (Binance, Bybit, OKEx)
+pycoingecko>=3.2.0                  # CoinGecko API - coin fiyatları ve market data
 
 # ==============================================
 # API & HTTP İstemcileri
 # ==============================================
-httpx>=0.27.2                       # async HTTP client (aiohttp alternatifi)
-aiohttp>=3.10.0                     # async requests için
-websockets>=13.0                    # realtime websocket desteği
+httpx>=0.27.2                       # Async HTTP client - modern API çağrıları
+aiohttp>=3.10.0                     # Async HTTP istekleri için kütüphane
+websockets>=13.0                    # Real-time websocket bağlantıları
 
 # ==============================================
-# Dosya & Form
+# Dosya & Form İşleme
 # ==============================================
-python-multipart>=0.0.12            # FastAPI'de UploadFile için zorunlu
-jinja2>=3.1.4                       # template rendering (isteğe bağlı)
+python-multipart>=0.0.12            # File upload işlemleri için (UploadFile)
+jinja2>=3.1.4                       # Template rendering - HTML sayfaları
 
 # ==============================================
 # Yardımcı & Güvenlik
 # ==============================================
-python-dotenv>=1.0.1                # .env dosyası desteği
-pydantic>=2.9.0                     # FastAPI zaten kullanıyor ama versiyon kilitlemek iyi
-pydantic-settings>=2.5.0            # settings yönetimi için (isteğe bağlı ama çok faydalı)
+python-dotenv>=1.0.1                # .env dosyası okuma - environment variables
+pydantic>=2.9.0                     # Data validation ve settings yönetimi
+pydantic-settings>=2.5.0            # Gelişmiş settings yapılandırması
 
 # ==============================================
 # Loglama & Debug
 # ==============================================
-loguru>=0.7.2                       # Çok daha güzel ve renkli loglar
-rich>=13.7.0                        # terminalde güzel çıktı (loguru ile çok iyi gider)
+loguru>=0.7.2                       # Gelişmiş loglama - renkli ve formatlı loglar
+rich>=13.7.0                        # Terminal çıktısı için - tablolar ve progress bars
 
 # ==============================================
-# Test & Dev (isteğe bağlı - development için)
+# Test & Development
 # ==============================================
-pytest>=8.3.0                       # test framework
-pytest-asyncio>=0.24.0              # async test desteği
-pytest-cov>=5.0.0                   # coverage raporu
-ruff>=0.6.0                         # linter & formatter (black alternatifi)
+pytest>=8.3.0                       # Unit test framework
+pytest-asyncio>=0.24.0              # Async fonksiyonlar için test desteği
+pytest-cov>=5.0.0                   # Test coverage raporları
+ruff>=0.6.0                         # Code linting ve formatting
 
-flask>=3.0.0
-flask-cors>=5.0.0
-flask-limiter>=3.8.0
-torch>=2.4.0 
-transformers
+# ==============================================
+# Web Framework & CORS
+# ==============================================
+flask>=3.0.0                        # Lightweight web framework (alternatif)
+flask-cors>=5.0.0                   # Cross-Origin Resource Sharing desteği
+flask-limiter>=3.8.0                # Rate limiting - API koruma
 
+# ==============================================
+# Machine Learning & AI
+# ==============================================
+torch>=2.4.0                        # PyTorch - deep learning framework
+transformers                        # Hugging Face transformers - NLP modelleri
 
+# ==============================================
+# Image Processing
+# ==============================================
+Pillow>=10.0.0                      # PIL modülü - image processing ve manipulation
