@@ -58,7 +58,7 @@ flask-limiter>=3.8.0                # Rate limiting - API koruma
 # Machine Learning & AI
 # ==============================================
 torch>=2.4.0                        # PyTorch - deep learning framework
-transformers                        # Hugging Face transformers - NLP modelleri
+transformers>=5.0.0                 # Hugging Face transformers - NLP modelleri
 
 # ==============================================
 # Image Processing
