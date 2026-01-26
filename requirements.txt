@@ -46,3 +46,8 @@ pytest>=8.3.0                       # test framework
 pytest-asyncio>=0.24.0              # async test desteği
 pytest-cov>=5.0.0                   # coverage raporu
 ruff>=0.6.0                         # linter & formatter (black alternatifi)
+
+flask>=3.0.0
+flask-cors>=5.0.0
+flask-limiter>=3.8.0
+
