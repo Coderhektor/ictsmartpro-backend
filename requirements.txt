@@ -27,4 +27,5 @@ flask-limiter>=3.8.0
 torch>=2.4.0
 transformers>=5.0.0
 Pillow>=10.0.0
-EOF
+ 
+
