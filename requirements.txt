@@ -8,54 +8,60 @@
 # ==============================================
 flask==2.3.3
 flask-cors==4.0.0
-flask-limiter==3.3.3
+flask-limiter==3.5.0
+werkzeug==2.3.7
 
 # ==============================================
 # 🤖 AI & MACHINE LEARNING (Core)
 # ==============================================
-torch==2.1.0                     # ⚠️ 2.4.1 DEĞİL! (daha küçük)
-transformers==4.35.0             # ⚠️ 4.45.2 DEĞİL! (stable version)
-sentencepiece==0.1.99            # Tokenizer için gerekli
-accelerate==0.29.3              # Model optimizasyonu
-bitsandbytes==0.43.1            # Quantization (opsiyonel)
+torch==2.1.0
+transformers==4.35.0
+sentencepiece==0.1.99
+accelerate==0.24.1
+safetensors==0.4.1              # Model loading için gerekli
 
 # ==============================================
 # 🖼️ IMAGE PROCESSING
 # ==============================================
 Pillow==10.1.0
-python-magic==0.4.27            # File type validation için
 
 # ==============================================
 # 🔍 WEB SEARCH & UTILITIES
 # ==============================================
-duckduckgo-search==3.9.4         # ⚠️ 6.3.2 DEĞİL! (daha stable)
+duckduckgo-search==3.9.4
 requests==2.31.0
-beautifulsoup4==4.12.3          # Web scraping için
-
-# ==============================================
-# 📦 DATABASE & STORAGE
-# ==============================================
-sqlite3                       # Built-in (listeye eklemeyin)
+urllib3==2.1.0
 
 # ==============================================
 # 📊 LOGGING & MONITORING
 # ==============================================
-loguru==0.7.2
+# loguru yerine built-in logging kullanılıyor (daha hafif)
 
 # ==============================================
 # ⚙️ SYSTEM & UTILITIES
 # ==============================================
 python-dotenv==1.0.1
-psutil==5.9.8                  # System monitoring
 
 # ==============================================
 # 🐳 DEPLOYMENT & PRODUCTION
 # ==============================================
-gunicorn==21.2.0               # Production WSGI server
-waitress==2.1.2                # Windows için alternatif
-whitenoise==6.6.0              # Static files
+gunicorn==21.2.0
 
 # ==============================================
-# 🧪 TESTING (Development only - opsiyonel)
+# NOTLAR:
 # ==============================================
-pytest==8.3.3                  # ⚠️ Sadece development için
+# ❌ KALDIRILDI: bitsandbytes (Railway CPU ortamında gereksiz)
+# ❌ KALDIRILDI: beautifulsoup4 (kullanılmıyor)
+# ❌ KALDIRILDI: python-magic (platform bağımlı, imghdr yeterli)
+# ❌ KALDIRILDI: psutil (monitoring için gereksiz)
+# ❌ KALDIRILDI: waitress (gunicorn yeterli)
+# ❌ KALDIRILDI: whitenoise (static files yok)
+# ❌ KALDIRILDI: loguru (built-in logging yeterli)
+# ❌ KALDIRILDI: pytest (production'da gereksiz)
+#
+# ✅ EKLENDI: safetensors (transformers için kritik)
+# ✅ EKLENDI: werkzeug (Flask dependency)
+# ✅ EKLENDI: urllib3 (requests dependency)
+#
+# 📦 BOYUT: ~2.5GB (torch dahil)
+# ⚡ INSTALL SÜRESI: ~8-12 dakika (Railway)
