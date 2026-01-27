@@ -1,9 +1,5 @@
 """
-Production-Ready AI Chatbot for ictsmartpro.ai
-- %100 Ücretsiz & Açık Kaynak
-- API Key Gerektirmez
-- Tamamen Lokal Çalışır
-- Güvenli & Hızlı
+ 
 """
 
 import os
@@ -62,10 +58,9 @@ def sanitize_input(text):
     return text.strip()[:2000]
 
 # ==================== CONFIG ====================
-
 MODEL_NAME = "Qwen/Qwen2-1.5B-Instruct"
 VISION_MODEL = "Salesforce/blip-image-captioning-base"
-DB_PATH = "chat_history.db"
+DB_PATH = "/app/data/chat_history.db"   # ← BURAYI DEĞİŞTİR
 MAX_NEW_TOKENS = 400
 MAX_CONTEXT_TOKENS = 2400
 MAX_IMAGE_SIZE_MB = 5
@@ -766,3 +761,4 @@ if __name__ == '__main__':
     
     port = int(os.environ.get("PORT", 5000))
     app.run(host='0.0.0.0', port=port, debug=False, threaded=True)
+
