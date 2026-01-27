@@ -14,11 +14,11 @@ werkzeug==2.3.7
 # ==============================================
 # 🤖 AI & MACHINE LEARNING (Core)
 # ==============================================
-torch==2.1.0
-transformers==4.35.0
-sentencepiece==0.1.99
-accelerate==0.24.1
-safetensors==0.4.1              # Model loading için gerekli
+torch==2.5.1
+transformers==4.46.0
+sentencepiece==0.2.0
+accelerate==0.34.2
+safetensors==0.4.5              # Model loading için gerekli
 
 # ==============================================
 # 🖼️ IMAGE PROCESSING
