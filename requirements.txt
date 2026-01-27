@@ -1,69 +1,61 @@
-# Production-Ready AI Chatbot - requirements.txt (hash'siz, Railway uyumlu)
+# ==============================================
+# 🚀 PRODUCTION-READY AI CHATBOT
+# ICTSMARTPRO.AI için optimize edilmiş
+# ==============================================
 
 # ==============================================
-# FastAPI & Sunucu (Core)
+# 🌐 WEB FRAMEWORK (Flask)
 # ==============================================
-fastapi==0.115.2
-uvicorn[standard]==0.30.6
-hypercorn==0.17.3
+flask==2.3.3
+flask-cors==4.0.0
+flask-limiter==3.3.3
 
 # ==============================================
-# Veri & Analiz
+# 🤖 AI & MACHINE LEARNING (Core)
 # ==============================================
-pandas==2.2.3
-numpy==2.1.1
-ccxt==4.4.0
-pycoingecko==3.2.0
+torch==2.1.0                     # ⚠️ 2.4.1 DEĞİL! (daha küçük)
+transformers==4.35.0             # ⚠️ 4.45.2 DEĞİL! (stable version)
+sentencepiece==0.1.99            # Tokenizer için gerekli
+accelerate==0.29.3              # Model optimizasyonu
+bitsandbytes==0.43.1            # Quantization (opsiyonel)
 
 # ==============================================
-# API & HTTP İstemcileri
+# 🖼️ IMAGE PROCESSING
 # ==============================================
-httpx==0.27.2
-aiohttp==3.10.10
-websockets==13.1
-duckduckgo-search==6.3.2
+Pillow==10.1.0
+python-magic==0.4.27            # File type validation için
 
 # ==============================================
-# Dosya & Form İşleme
+# 🔍 WEB SEARCH & UTILITIES
 # ==============================================
-python-multipart==0.0.12
-jinja2==3.1.4
+duckduckgo-search==3.9.4         # ⚠️ 6.3.2 DEĞİL! (daha stable)
+requests==2.31.0
+beautifulsoup4==4.12.3          # Web scraping için
 
 # ==============================================
-# Yardımcı & Güvenlik
+# 📦 DATABASE & STORAGE
 # ==============================================
-python-dotenv==1.0.1
-pydantic==2.9.2
-pydantic-settings==2.5.2
+sqlite3                       # Built-in (listeye eklemeyin)
 
 # ==============================================
-# Loglama & Debug
+# 📊 LOGGING & MONITORING
 # ==============================================
 loguru==0.7.2
-rich==13.8.1
 
 # ==============================================
-# Test & Development
+# ⚙️ SYSTEM & UTILITIES
 # ==============================================
-pytest==8.3.3
-pytest-asyncio==0.24.0
-pytest-cov==5.0.0
-ruff==0.7.1
+python-dotenv==1.0.1
+psutil==5.9.8                  # System monitoring
 
 # ==============================================
-# Web Framework & CORS
+# 🐳 DEPLOYMENT & PRODUCTION
 # ==============================================
-flask==3.0.3
-flask-cors==5.0.0
-flask-limiter==3.8.0
+gunicorn==21.2.0               # Production WSGI server
+waitress==2.1.2                # Windows için alternatif
+whitenoise==6.6.0              # Static files
 
 # ==============================================
-# Machine Learning & AI
+# 🧪 TESTING (Development only - opsiyonel)
 # ==============================================
-torch==2.4.1
-transformers==4.45.2
-
-# ==============================================
-# Image Processing
-# ==============================================
-Pillow==10.4.0
+pytest==8.3.3                  # ⚠️ Sadece development için
