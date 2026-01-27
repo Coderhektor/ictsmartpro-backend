@@ -21,6 +21,8 @@ import sqlite3
 import secrets
 import os
 import re
+import imghdr
+from PIL import UnidentifiedImageError
 
 app = Flask(__name__)
 app.secret_key = os.environ.get('SECRET_KEY', secrets.token_hex(32))
@@ -182,31 +184,62 @@ class LocalAI:
             print(f"❌ Generate hatası: {e}")
             return "Üzgünüm, yanıt üretemiyorum. Lütfen tekrar deneyin."
     
-    def describe_image(self, base64_str):
-        self.load_vision()
+ def describe_image(self, base64_str):
+    self.load_vision()
+    try:
+        img_bytes = base64.b64decode(base64_str)
+        
+        # 1. Boyut kontrolü (zaten vardı)
+        if len(img_bytes) > MAX_IMAGE_SIZE_MB * 1024 * 1024:
+            return f"⚠️ Görsel çok büyük (max {MAX_IMAGE_SIZE_MB}MB)"
+        
+        # 2. Hızlı dosya türü kontrolü (imghdr - çok hafif)
+        import imghdr
+        file_type = imghdr.what(None, img_bytes)
+        allowed_types = {'jpeg', 'png', 'webp', 'gif', 'bmp'}  # kabul edeceğin formatlar
+        if file_type not in allowed_types:
+            return f"⚠️ Sadece JPEG, PNG, WebP, GIF, BMP dosyaları kabul edilir (algılanan: {file_type or 'bilinmeyen'})"
+        
+        # 3. PIL ile gerçek doğrulama (bozuk/manipüle dosyaları yakalar)
+        from PIL import Image, UnidentifiedImageError
+        from io import BytesIO
+        
         try:
-            img_bytes = base64.b64decode(base64_str)
+            # verify() ile dosya bütünlüğünü kontrol et
+            img_test = Image.open(BytesIO(img_bytes))
+            img_test.verify()  # ← bu satır bozuk dosyayı yakalar
             
-            if len(img_bytes) > MAX_IMAGE_SIZE_MB * 1024 * 1024:
-                return f"⚠️ Görsel çok büyük (max {MAX_IMAGE_SIZE_MB}MB)"
+            # verify() sonrası yeniden açmak gerekir (dosya pointer'ı kapanır)
+            image = Image.open(BytesIO(img_bytes)).convert("RGB")
             
-            image = Image.open(io.BytesIO(img_bytes)).convert("RGB")
-            
-            if max(image.size) > 896:
-                image.thumbnail((896, 896), Image.Resampling.LANCZOS)
-            
-            inputs = self.vision_processor(images=image, return_tensors="pt").to(self.device)
-            
-            with torch.no_grad():
-                output = self.vision_model.generate(**inputs, max_length=80, num_beams=3)
-            
-            caption = self.vision_processor.decode(output[0], skip_special_tokens=True).strip()
-            return f"🖼️ Görselde: {caption}"
-        except Exception as e:
-            print(f"❌ Görsel hatası: {e}")
-            return "⚠️ Görsel analiz edilemedi"
-
-ai = LocalAI()
+        except UnidentifiedImageError:
+            return "⚠️ Geçerli bir resim dosyası değil (tanınmayan format)"
+        except Exception as pil_err:
+            print(f"PIL doğrulama hatası: {pil_err}")
+            return "⚠️ Resim dosyası işlenemedi (bozuk veya desteklenmeyen format)"
+        
+        # 4. Opsiyonel: Çok büyük çözünürlük kontrolü (RAM koruması)
+        if max(image.size) > 4000:  # örneğin 4000px'den büyükse
+            return "⚠️ Görsel çözünürlüğü çok yüksek (max 4000px kenar)"
+        
+        # 5. Resize (zaten vardı)
+        if max(image.size) > 896:
+            image.thumbnail((896, 896), Image.Resampling.LANCZOS)
+        
+        # 6. Model girişi
+        inputs = self.vision_processor(images=image, return_tensors="pt").to(self.device)
+        
+        with torch.no_grad():
+            output = self.vision_model.generate(**inputs, max_length=80, num_beams=3)
+        
+        caption = self.vision_processor.decode(output[0], skip_special_tokens=True).strip()
+        return f"🖼️ Görselde: {caption}"
+    
+    except base64.binascii.Error:
+        return "⚠️ Geçersiz base64 formatı"
+    except Exception as e:
+        print(f"❌ Görsel işleme hatası: {e}")
+        return "⚠️ Görsel analiz edilemedi (beklenmeyen hata)"
 
 # ==================== HELPERS ====================
 
@@ -789,4 +822,5 @@ if __name__ == '__main__':
     # Flask'ı Railway uyumlu şekilde çalıştır
     port = int(os.environ.get("PORT", 5000))
     app.run(host='0.0.0.0', port=port, debug=False, threaded=True)
+
 
