@@ -22,12 +22,10 @@ import secrets
 import os
 import re
 
-# ==================== FLASK APP ====================
-
 app = Flask(__name__)
 app.secret_key = os.environ.get('SECRET_KEY', secrets.token_hex(32))
 
-# CORS - Sadece ictsmartpro.ai
+# CORS - Sadece izin verilen originler
 ALLOWED_ORIGINS = [
     "https://ictsmartpro.ai",
     "https://www.ictsmartpro.ai",
@@ -39,14 +37,13 @@ CORS(app, resources={r"/*": {"origins": ALLOWED_ORIGINS}}, supports_credentials=
 
 # Rate Limiting
 limiter = Limiter(
+    get_remote_address,
     app=app,
-    key_func=get_remote_address,
     default_limits=["100 per day", "30 per hour"],
     storage_uri="memory://"
 )
 
-# ==================== GÜVENLİK ====================
-
+# Güvenlik header'ları
 @app.after_request
 def security_headers(response):
     response.headers['X-Content-Type-Options'] = 'nosniff'
@@ -58,8 +55,10 @@ def security_headers(response):
 def sanitize_input(text):
     if not text:
         return ""
+    # HTML tag'lerini temizle
     text = re.sub(r'<[^>]+>', '', text)
-    text = re.sub(r'<script.*?</script>', '', text, flags=re.DOTALL)
+    # script tag'lerini temizle
+    text = re.sub(r'<script.*?</script>', '', text, flags=re.DOTALL | re.IGNORECASE)
     return text.strip()[:2000]
 
 # ==================== CONFIG ====================
@@ -318,288 +317,308 @@ def process_message(message, session_id, image_b64=None):
             "timestamp": datetime.now().strftime("%H:%M")
         }
 
-# ==================== HTML ====================
+# ==================== HTML TEMPLATE ====================
 
 HTML_TEMPLATE = '''<!DOCTYPE html>
 <html lang="tr">
 <head>
-<meta charset="UTF-8">
-<meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>AI Chatbot | ictsmartpro.ai</title>
-<style>
-* { margin: 0; padding: 0; box-sizing: border-box; }
-body {
-    font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
-    background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
-    min-height: 100vh;
-    display: flex;
-    justify-content: center;
-    align-items: center;
-    padding: 20px;
-}
-.chat-container {
-    width: 100%;
-    max-width: 900px;
-    height: 90vh;
-    background: white;
-    border-radius: 24px;
-    box-shadow: 0 20px 60px rgba(0,0,0,0.3);
-    display: flex;
-    flex-direction: column;
-    overflow: hidden;
-}
-.header {
-    background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
-    color: white;
-    padding: 24px;
-    text-align: center;
-}
-.header h1 { font-size: 1.8rem; margin-bottom: 8px; }
-.header .domain { font-size: 1rem; opacity: 0.9; }
-.badge {
-    display: inline-flex;
-    gap: 8px;
-    background: rgba(255,255,255,0.2);
-    padding: 6px 16px;
-    border-radius: 20px;
-    font-size: 0.85rem;
-    margin-top: 12px;
-}
-.messages {
-    flex: 1;
-    padding: 20px;
-    overflow-y: auto;
-    background: #f7fafc;
-}
-.msg {
-    margin: 16px 0;
-    display: flex;
-    animation: fadeIn 0.3s;
-}
-@keyframes fadeIn {
-    from { opacity: 0; transform: translateY(10px); }
-    to { opacity: 1; transform: translateY(0); }
-}
-.msg.user { justify-content: flex-end; }
-.bubble {
-    max-width: 75%;
-    padding: 14px 18px;
-    border-radius: 18px;
-    line-height: 1.5;
-    word-wrap: break-word;
-}
-.user .bubble {
-    background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
-    color: white;
-    border-bottom-right-radius: 4px;
-}
-.bot .bubble {
-    background: white;
-    border: 1px solid #e2e8f0;
-    border-bottom-left-radius: 4px;
-}
-.time { font-size: 0.7rem; opacity: 0.6; margin-top: 6px; }
-.sources {
-    margin-top: 10px;
-    padding-top: 10px;
-    border-top: 1px solid #e2e8f0;
-    font-size: 0.8rem;
-}
-.sources a {
-    color: #667eea;
-    text-decoration: none;
-    display: block;
-    margin: 4px 0;
-}
-.input-area {
-    padding: 20px;
-    background: white;
-    border-top: 2px solid #e2e8f0;
-}
-.tools {
-    display: flex;
-    gap: 8px;
-    margin-bottom: 12px;
-}
-textarea {
-    width: 100%;
-    padding: 14px;
-    border: 2px solid #e2e8f0;
-    border-radius: 16px;
-    resize: none;
-    font-size: 1rem;
-    font-family: inherit;
-    margin-bottom: 12px;
-}
-textarea:focus { outline: none; border-color: #667eea; }
-button {
-    padding: 12px 20px;
-    border: none;
-    border-radius: 12px;
-    font-weight: 600;
-    cursor: pointer;
-    transition: all 0.2s;
-}
-.send-btn {
-    background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
-    color: white;
-    width: 100%;
-}
-.send-btn:hover { transform: scale(1.02); }
-.send-btn:disabled { opacity: 0.5; cursor: not-allowed; }
-.tool-btn { background: #f7fafc; color: #4a5568; }
-.tool-btn:hover { background: #e2e8f0; }
-#preview {
-    max-width: 200px;
-    max-height: 200px;
-    margin: 12px 0;
-    border-radius: 12px;
-    border: 3px solid #667eea;
-    display: none;
-}
-</style>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>AI Chatbot | ictsmartpro.ai</title>
+    <style>
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            min-height: 100vh;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            padding: 20px;
+        }
+        .chat-container {
+            width: 100%;
+            max-width: 900px;
+            height: 90vh;
+            background: white;
+            border-radius: 24px;
+            box-shadow: 0 20px 60px rgba(0,0,0,0.3);
+            display: flex;
+            flex-direction: column;
+            overflow: hidden;
+        }
+        .header {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+            padding: 24px;
+            text-align: center;
+        }
+        .header h1 { font-size: 1.8rem; margin-bottom: 8px; }
+        .header .domain { font-size: 1rem; opacity: 0.9; }
+        .badge {
+            display: inline-flex;
+            gap: 8px;
+            background: rgba(255,255,255,0.2);
+            padding: 6px 16px;
+            border-radius: 20px;
+            font-size: 0.85rem;
+            margin-top: 12px;
+        }
+        .messages {
+            flex: 1;
+            padding: 20px;
+            overflow-y: auto;
+            background: #f7fafc;
+        }
+        .msg {
+            margin: 16px 0;
+            display: flex;
+            animation: fadeIn 0.3s;
+        }
+        @keyframes fadeIn {
+            from { opacity: 0; transform: translateY(10px); }
+            to { opacity: 1; transform: translateY(0); }
+        }
+        .msg.user { justify-content: flex-end; }
+        .bubble {
+            max-width: 75%;
+            padding: 14px 18px;
+            border-radius: 18px;
+            line-height: 1.5;
+            word-wrap: break-word;
+        }
+        .user .bubble {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+            border-bottom-right-radius: 4px;
+        }
+        .bot .bubble {
+            background: white;
+            border: 1px solid #e2e8f0;
+            border-bottom-left-radius: 4px;
+        }
+        .time { font-size: 0.7rem; opacity: 0.6; margin-top: 6px; }
+        .sources {
+            margin-top: 10px;
+            padding-top: 10px;
+            border-top: 1px solid #e2e8f0;
+            font-size: 0.8rem;
+        }
+        .sources a {
+            color: #667eea;
+            text-decoration: none;
+            display: block;
+            margin: 4px 0;
+        }
+        .input-area {
+            padding: 20px;
+            background: white;
+            border-top: 2px solid #e2e8f0;
+        }
+        .tools {
+            display: flex;
+            gap: 8px;
+            margin-bottom: 12px;
+        }
+        textarea {
+            width: 100%;
+            padding: 14px;
+            border: 2px solid #e2e8f0;
+            border-radius: 16px;
+            resize: none;
+            font-size: 1rem;
+            font-family: inherit;
+            margin-bottom: 12px;
+        }
+        textarea:focus { outline: none; border-color: #667eea; }
+        button {
+            padding: 12px 20px;
+            border: none;
+            border-radius: 12px;
+            font-weight: 600;
+            cursor: pointer;
+            transition: all 0.2s;
+        }
+        .send-btn {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+            width: 100%;
+        }
+        .send-btn:hover { transform: scale(1.02); }
+        .send-btn:disabled { opacity: 0.5; cursor: not-allowed; }
+        .tool-btn { background: #f7fafc; color: #4a5568; }
+        .tool-btn:hover { background: #e2e8f0; }
+        #preview {
+            max-width: 200px;
+            max-height: 200px;
+            margin: 12px 0;
+            border-radius: 12px;
+            border: 3px solid #667eea;
+            display: none;
+        }
+    </style>
 </head>
 <body>
 <div class="chat-container">
-<div class="header">
-<h1>🤖 AI Asistan</h1>
-<div class="domain">ictsmartpro.ai</div>
-<div class="badge">
-<span>✅ Ücretsiz</span>
-<span>•</span>
-<span>🔒 Güvenli</span>
-<span>•</span>
-<span>⚡ Hızlı</span>
-</div>
-</div>
+    <div class="header">
+        <h1>🤖 AI Asistan</h1>
+        <div class="domain">ictsmartpro.ai</div>
+        <div class="badge">
+            <span>✅ Ücretsiz</span><span>•</span>
+            <span>🔒 Güvenli</span><span>•</span>
+            <span>⚡ Hızlı</span>
+        </div>
+    </div>
 
-<div class="messages" id="messages">
-<div class="msg bot">
-<div class="bubble">
-👋 <strong>Merhaba!</strong> Ben ictsmartpro.ai'nin AI asistanıyım.<br><br>
-<strong>Yapabileceklerim:</strong><br>
-• 💬 Doğal sohbet<br>
-• 🖼️ Görsel analizi<br>
-• 🔍 Web'de arama<br>
-• 🧠 Geçmişi hatırlama<br><br>
-Size nasıl yardımcı olabilirim? 😊
-</div>
-</div>
-</div>
+    <div class="messages" id="messages">
+        <div class="msg bot">
+            <div class="bubble">
+                👋 <strong>Merhaba!</strong> Ben ictsmartpro.ai'nin AI asistanıyım.<br><br>
+                <strong>Yapabileceklerim:</strong><br>
+                • 💬 Doğal sohbet<br>
+                • 🖼️ Görsel analizi<br>
+                • 🔍 Web'de arama<br>
+                • 🧠 Geçmişi hatırlama<br><br>
+                Size nasıl yardımcı olabilirim? 😊
+            </div>
+        </div>
+    </div>
 
-<div class="input-area">
-<div class="tools">
-<button class="tool-btn" onclick="document.getElementById('file').click()">📎 Görsel</button>
-<button class="tool-btn" onclick="clearChat()">🗑️ Temizle</button>
-<button class="tool-btn" onclick="exportChat()">💾 Dışa Aktar</button>
-</div>
-<input type="file" id="file" accept="image/*" style="display:none;">
-<img id="preview" alt="Önizleme">
-<textarea id="input" rows="3" placeholder="Mesaj yazın... (Enter ile gönderin)"></textarea>
-<button class="send-btn" id="sendBtn" onclick="send()">Gönder 🚀</button>
-</div>
+    <div class="input-area">
+        <div class="tools">
+            <button class="tool-btn" onclick="document.getElementById('file').click()">📎 Görsel</button>
+            <button class="tool-btn" onclick="clearChat()">🗑️ Temizle</button>
+            <button class="tool-btn" onclick="exportChat()">💾 Dışa Aktar</button>
+        </div>
+        <input type="file" id="file" accept="image/*" style="display:none;">
+        <img id="preview" alt="Önizleme">
+        <textarea id="input" rows="3" placeholder="Mesaj yazın... (Enter ile gönderin)"></textarea>
+        <button class="send-btn" id="sendBtn">Gönder 🚀</button>
+    </div>
 </div>
 
 <script>
-let session = localStorage.getItem('chatId') || 'ch_' + Date.now();
-localStorage.setItem('chatId', session);
-let currentImage = null;
-let isProcessing = false;
+    let session = localStorage.getItem('chatId') || 'ch_' + Date.now();
+    localStorage.setItem('chatId', session);
+    let currentImage = null;
+    let isProcessing = false;
 
-const messagesDiv = document.getElementById('messages');
-const input = document.getElementById('input');
-const sendBtn = document.getElementById('sendBtn');
-const fileInput = document.getElementById('file');
-const preview = document.getElementById('preview');
+    const messagesDiv = document.getElementById('messages');
+    const input = document.getElementById('input');
+    const sendBtn = document.getElementById('sendBtn');
+    const fileInput = document.getElementById('file');
+    const preview = document.getElementById('preview');
 
-fileInput.onchange = e => {
-    const file = e.target.files[0];
-    if (!file) return;
-    if (file.size > 5 * 1024 * 1024) {
-        alert('⚠️ Dosya max 5MB olmalı!');
-        return;
-    }
-    const reader = new FileReader();
-    reader.onload = ev => {
-        currentImage = ev.target.result.split(',')[1];
-        preview.src = ev.target.result;
-        preview.style.display = 'block';
+    // Dosya seçildiğinde önizleme
+    fileInput.onchange = e => {
+        const file = e.target.files[0];
+        if (!file) return;
+        if (file.size > 5 * 1024 * 1024) {
+            alert('⚠️ Dosya max 5MB olmalı!');
+            return;
+        }
+        const reader = new FileReader();
+        reader.onload = ev => {
+            currentImage = ev.target.result.split(',')[1];
+            preview.src = ev.target.result;
+            preview.style.display = 'block';
+        };
+        reader.readAsDataURL(file);
     };
-    reader.readAsDataURL(file);
-};
 
-input.onkeydown = e => {
-    if (e.key === 'Enter' && !e.shiftKey) {
-        e.preventDefault();
-        send();
-    }
-};
+    // Enter tuşu ile gönderme
+    input.onkeydown = e => {
+        if (e.key === 'Enter' && !e.shiftKey) {
+            e.preventDefault();
+            sendMessage();
+        }
+    };
 
-function addMsg(role, text, time, sources = []) {
-    const div = document.createElement('div');
-    div.className = 'msg ' + role;
-    let html = '<div class="bubble">' + text.replace(/\n/g, '<br>') + '<div class="time">' + time + '</div>';
-    if (sources.length) {
-        html += '<div class="sources">🔗 Kaynaklar:<br>';
-        sources.forEach((s, i) => html += '<a href="' + s + '" target="_blank">' + (i+1) + '. ' + s.slice(0, 50) + '...</a>');
+    // Mesaj ekleme fonksiyonu
+    function addMsg(role, text, time, sources = []) {
+        const div = document.createElement('div');
+        div.className = 'msg ' + role;
+        let html = '<div class="bubble">' + (text || '').replace(/\n/g, '<br>') + 
+                   '<div class="time">' + time + '</div>';
+        
+        if (sources.length) {
+            html += '<div class="sources">🔗 Kaynaklar:<br>';
+            sources.forEach((s, i) => {
+                html += '<a href="' + s + '" target="_blank">' + (i+1) + '. ' + s.slice(0, 50) + '...</a><br>';
+            });
+            html += '</div>';
+        }
         html += '</div>';
+        div.innerHTML = html;
+        messagesDiv.appendChild(div);
+        messagesDiv.scrollTop = messagesDiv.scrollHeight;
     }
-    html += '</div>';
-    div.innerHTML = html;
-    messagesDiv.appendChild(div);
-    messagesDiv.scrollTop = messagesDiv.scrollHeight;
-}
 
-async function send() {
-    const text = input.value.trim();
-    if ((!text && !currentImage) || isProcessing) return;
-    
-    isProcessing = true;
-    sendBtn.disabled = true;
-    sendBtn.textContent = '⏳ İşleniyor...';
-    
-    const now = new Date().toLocaleTimeString('tr-TR', {hour: '2-digit', minute: '2-digit'});
-    addMsg('user', text || '🖼️ [Görsel]', now);
-    input.value = '';
-    
-    try {
-        const response = await fetch('/chat', {
+    // Gönderme fonksiyonu (önceki onclick yerine event listener kullanıyoruz)
+    async function sendMessage() {
+        const text = input.value.trim();
+        if ((!text && !currentImage) || isProcessing) return;
+
+        isProcessing = true;
+        sendBtn.disabled = true;
+        sendBtn.textContent = '⏳ İşleniyor...';
+
+        const now = new Date().toLocaleTimeString('tr-TR', {hour: '2-digit', minute: '2-digit'});
+        addMsg('user', text || '🖼️ [Görsel]', now);
+        input.value = '';
+
+        try {
+            const response = await fetch('/chat', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ message: text, image: currentImage, session: session })
+            });
+
+            if (!response.ok) {
+                throw new Error(`Sunucu hatası: ${response.status}`);
+            }
+
+            const data = await response.json();
+            addMsg('bot', data.text, data.timestamp, data.sources || []);
+            currentImage = null;
+            preview.style.display = 'none';
+        } catch (e) {
+            console.error('Chat hatası:', e);
+            addMsg('bot', '❌ Hata: ' + e.message, now);
+        } finally {
+            isProcessing = false;
+            sendBtn.disabled = false;
+            sendBtn.textContent = 'Gönder 🚀';
+        }
+    }
+
+    // Butona tıklama eventi
+    sendBtn.addEventListener('click', sendMessage);
+
+    async function clearChat() {
+        if (!confirm('Sohbet silinsin mi?')) return;
+        await fetch('/clear', {
             method: 'POST',
-            headers: {'Content-Type': 'application/json'},
-            body: JSON.stringify({message: text, image: currentImage, session: session})
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ session })
         });
-        const data = await response.json();
-        addMsg('bot', data.text, data.timestamp, data.sources || []);
-        currentImage = null;
-        preview.style.display = 'none';
-    } catch (e) {
-        addMsg('bot', '❌ Hata: ' + e.message, now);
-    } finally {
-        isProcessing = false;
-        sendBtn.disabled = false;
-        sendBtn.textContent = 'Gönder 🚀';
+        messagesDiv.innerHTML = '';
+        addMsg('bot', '✅ Sohbet temizlendi!', 
+               new Date().toLocaleTimeString('tr-TR', {hour: '2-digit', minute: '2-digit'}));
     }
-}
 
-async function clearChat() {
-    if (!confirm('Sohbet silinsin mi?')) return;
-    await fetch('/clear', {method: 'POST', headers: {'Content-Type': 'application/json'}, body: JSON.stringify({session})});
-    messagesDiv.innerHTML = '';
-    addMsg('bot', '✅ Temizlendi!', new Date().toLocaleTimeString('tr-TR', {hour: '2-digit', minute: '2-digit'}));
-}
-
-function exportChat() {
-    const msgs = Array.from(document.querySelectorAll('.msg'));
-    const text = msgs.map(m => {
-        const role = m.classList.contains('user') ? 'SİZ' : 'AI';
-        return role + ': ' + m.querySelector('.bubble').textContent.trim();
-    }).join('\n\n');
-    const blob = new Blob([text], {type: 'text/plain'});
-    const a = document.createElement('a');
-    a.href = URL.createObjectURL(blob);
-    a.download = 'sohbet-' + Date.now() + '.txt';
-    a.click();
-}
+    function exportChat() {
+        const msgs = Array.from(document.querySelectorAll('.msg'));
+        const text = msgs.map(m => {
+            const role = m.className.includes('user') ? 'SİZ' : 'AI';
+            return role + ': ' + m.querySelector('.bubble').textContent.trim();
+        }).join('\n\n');
+        const blob = new Blob([text], { type: 'text/plain' });
+        const a = document.createElement('a');
+        a.href = URL.createObjectURL(blob);
+        a.download = 'sohbet-' + Date.now() + '.txt';
+        a.click();
+    }
 </script>
 </body>
 </html>'''
@@ -614,7 +633,10 @@ def home():
 @limiter.limit("30 per minute")
 def chat():
     try:
-        data = request.json
+        data = request.get_json()
+        if not data:
+            return jsonify({"error": "JSON body gerekli"}), 400
+
         msg = data.get('message', '').strip()
         img = data.get('image')
         sid = data.get('session', 'default')
@@ -625,14 +647,18 @@ def chat():
         result = process_message(msg, sid, img)
         return jsonify(result)
     except Exception as e:
-        print(f"❌ Chat hatası: {e}")
-        return jsonify({"text": "Hata oluştu", "sources": [], "timestamp": datetime.now().strftime("%H:%M")}), 500
+        print(f"❌ Chat endpoint hatası: {e}")
+        return jsonify({
+            "text": "Bir hata oluştu, lütfen tekrar deneyin.",
+            "sources": [],
+            "timestamp": datetime.now().strftime("%H:%M")
+        }), 500
 
 @app.route('/clear', methods=['POST'])
 @limiter.limit("10 per hour")
 def clear():
     try:
-        data = request.json
+        data = request.get_json()
         sid = data.get('session')
         if sid:
             conn = sqlite3.connect(DB_PATH)
@@ -641,24 +667,31 @@ def clear():
             conn.commit()
             conn.close()
         return '', 204
-    except:
+    except Exception as e:
+        print(f"Clear hatası: {e}")
         return '', 500
 
 @app.route('/health')
 def health():
-    return jsonify({"status": "ok", "model": MODEL_NAME, "device": ai.device})
+    return jsonify({
+        "status": "ok",
+        "model": MODEL_NAME,
+        "device": ai.device
+    })
 
 # ==================== START ====================
 
 if __name__ == '__main__':
     print("\n" + "="*70)
-    print("🚀 ICTSMARTPRO.AI - AI CHATBOT")
+    print("🚀 ICTSMARTPRO.AI - AI CHATBOT BAŞLATILIYOR")
     print("="*70)
-    print(f"📍 Sunucu: http://127.0.0.1:5000")
+    print(f"📍 Sunucu: http://0.0.0.0:5000")
     print(f"🤖 Model: {MODEL_NAME}")
-    print(f"🖥️  Device: {ai.device.upper()}")
+    print(f"🖥️  Cihaz: {ai.device.upper()}")
     print("="*70 + "\n")
     
     clean_old_messages()
     
-    app.run(host='0.0.0.0', port=5000, debug=False, threaded=True)
+    # Flask'ı Railway uyumlu şekilde çalıştır
+    port = int(os.environ.get("PORT", 5000))
+    app.run(host='0.0.0.0', port=port, debug=False, threaded=True)
