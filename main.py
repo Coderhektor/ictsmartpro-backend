@@ -1,9 +1,6 @@
 """
-Production-Ready AI Chatbot for ictsmartpro.ai
-- %100 Ücretsiz & Açık Kaynak
-- API Key Gerektirmez
-- Tamamen Lokal Çalışır
-- Güvenli & Hızlı
+🤖 ICTSmartPro.ai - Modern AI Chatbot
+Production-Ready | %100 Ücretsiz | Açık Kaynak
 """
 
 import os
@@ -12,6 +9,7 @@ import secrets
 import sqlite3
 import base64
 import imghdr
+import logging
 from datetime import datetime
 from io import BytesIO
 
@@ -24,10 +22,17 @@ from PIL import Image, UnidentifiedImageError
 from transformers import AutoModelForCausalLM, AutoTokenizer, BlipProcessor, BlipForConditionalGeneration
 from duckduckgo_search import DDGS
 
+# Logging ayarları
+logging.basicConfig(
+    level=logging.INFO,
+    format='%(asctime)s - %(levelname)s - %(message)s'
+)
+logger = logging.getLogger(__name__)
+
 app = Flask(__name__)
 app.secret_key = os.environ.get('SECRET_KEY', secrets.token_hex(32))
 
-# CORS - Sadece izin verilen originler
+# CORS - İzin verilen originler
 ALLOWED_ORIGINS = [
     "https://ictsmartpro.ai",
     "https://www.ictsmartpro.ai",
@@ -41,7 +46,7 @@ CORS(app, resources={r"/*": {"origins": ALLOWED_ORIGINS}}, supports_credentials=
 limiter = Limiter(
     get_remote_address,
     app=app,
-    default_limits=["100 per day", "30 per hour"],
+    default_limits=["200 per day", "50 per hour"],
     storage_uri="memory://"
 )
 
@@ -52,45 +57,39 @@ def security_headers(response):
     response.headers['X-Frame-Options'] = 'DENY'
     response.headers['X-XSS-Protection'] = '1; mode=block'
     response.headers['Strict-Transport-Security'] = 'max-age=31536000'
+    response.headers['Content-Security-Policy'] = "default-src 'self' 'unsafe-inline' 'unsafe-eval'; img-src 'self' data: https:;"
     return response
 
 def sanitize_input(text):
+    """Güvenli metin temizleme"""
     if not text:
         return ""
+    # XSS koruması
     text = re.sub(r'<[^>]+>', '', text)
     text = re.sub(r'<script.*?</script>', '', text, flags=re.DOTALL | re.IGNORECASE)
-    return text.strip()[:2000]
+    return text.strip()[:3000]
 
 # ==================== CONFIG ====================
 
 MODEL_NAME = "Qwen/Qwen2-1.5B-Instruct"
 VISION_MODEL = "Salesforce/blip-image-captioning-base"
-MAX_NEW_TOKENS = 400
-MAX_CONTEXT_TOKENS = 2400
+MAX_NEW_TOKENS = 512
+MAX_CONTEXT_TOKENS = 2048
 MAX_IMAGE_SIZE_MB = 5
 
-# Veritabanı yolu (Railway volume mount path ile uyumlu)
-DB_DIR = "/app/data"
+# Veritabanı
+DB_DIR = os.environ.get("DB_DIR", "/app/data")
 DB_PATH = os.path.join(DB_DIR, "chat_history.db")
 
-# Veritabanı klasörünü oluştur + yazılabilirlik testi
+# Klasör oluştur
 os.makedirs(DB_DIR, exist_ok=True)
-try:
-    test_path = os.path.join(DB_DIR, ".write_test")
-    with open(test_path, 'w') as f:
-        f.write("test")
-    os.remove(test_path)
-    print(f"✓ Veritabanı dizini yazılabilir ve hazır: {DB_DIR}")
-except Exception as e:
-    print(f"CRITICAL: {DB_DIR} yazılabilir değil! Hata: {e}")
-    print("→ Railway → Servis → Volumes sekmesinde Mount Path '/app/data' olduğundan emin olun")
-    print("→ Volume attached ve Active mi? Kontrol edin.")
 
 # ==================== DATABASE ====================
 
 def init_db():
+    """Veritabanı başlatma"""
     try:
-        conn = sqlite3.connect(DB_PATH)
+        conn = sqlite3.connect(DB_PATH, timeout=10)
         c = conn.cursor()
         c.execute('''
             CREATE TABLE IF NOT EXISTS messages (
@@ -98,56 +97,58 @@ def init_db():
                 session_id TEXT NOT NULL,
                 role TEXT NOT NULL,
                 content TEXT NOT NULL,
-                timestamp DATETIME DEFAULT CURRENT_TIMESTAMP
+                timestamp DATETIME DEFAULT CURRENT_TIMESTAMP,
+                INDEX idx_session (session_id)
             )
         ''')
         conn.commit()
         conn.close()
-        print(f"✓ Veritabanı hazır ve bağlandı: {DB_PATH}")
-    except sqlite3.OperationalError as e:
-        print(f"CRITICAL: Veritabanı açılamadı! Hata: {e}")
-        print(f"  DB_PATH: {DB_PATH}")
-        print("  Çözüm önerileri:")
-        print("  1. Railway → Servis → Volumes → Mount Path '/app/data' mı?")
-        print("  2. Volume gerçekten attached ve Active mi?")
-        raise
+        logger.info(f"✓ Veritabanı hazır: {DB_PATH}")
     except Exception as e:
-        print(f"Veritabanı başlatma hatası: {e}")
+        logger.error(f"Veritabanı hatası: {e}")
         raise
 
 def clean_old_messages():
+    """Eski mesajları temizle"""
     try:
-        conn = sqlite3.connect(DB_PATH)
+        conn = sqlite3.connect(DB_PATH, timeout=10)
         c = conn.cursor()
         c.execute("DELETE FROM messages WHERE timestamp < datetime('now', '-30 days')")
         deleted = c.rowcount
         conn.commit()
         conn.close()
         if deleted > 0:
-            print(f"🧹 {deleted} eski mesaj temizlendi")
+            logger.info(f"🧹 {deleted} eski mesaj temizlendi")
     except Exception as e:
-        print(f"Temizlik hatası: {e}")
+        logger.error(f"Temizlik hatası: {e}")
 
-# Veritabanını başlat
+# Veritabanı başlat
 init_db()
 clean_old_messages()
 
 # ==================== AI MODEL ====================
 
 class LocalAI:
+    """Lokal AI motoru - Text ve Vision"""
+    
     def __init__(self):
-        print("\n" + "="*70)
-        print("🤖 AI MODELLERİ YÜKLENİYOR...")
-        print("="*70)
+        logger.info("="*70)
+        logger.info("🤖 AI MODELLERİ YÜKLENİYOR...")
+        logger.info("="*70)
         
         self.device = "cuda" if torch.cuda.is_available() else "cpu"
-        print(f"🖥️  Cihaz: {self.device.upper()}")
+        logger.info(f"🖥️  Cihaz: {self.device.upper()}")
         
         if self.device == "cuda":
-            print(f"🎮 GPU: {torch.cuda.get_device_name(0)}")
+            logger.info(f"🎮 GPU: {torch.cuda.get_device_name(0)}")
         
-        print("\n📥 Qwen2-1.5B yükleniyor...")
-        self.tokenizer = AutoTokenizer.from_pretrained(MODEL_NAME, trust_remote_code=True)
+        # Text model
+        logger.info("📥 Qwen2-1.5B yükleniyor...")
+        self.tokenizer = AutoTokenizer.from_pretrained(
+            MODEL_NAME, 
+            trust_remote_code=True,
+            use_fast=True
+        )
         if self.tokenizer.pad_token is None:
             self.tokenizer.pad_token = self.tokenizer.eos_token
             self.tokenizer.padding_side = "left"
@@ -159,17 +160,20 @@ class LocalAI:
             low_cpu_mem_usage=True,
             trust_remote_code=True
         )
-        print("✅ Qwen2 hazır")
+        self.model.eval()
+        logger.info("✅ Qwen2 hazır")
         
+        # Vision model (lazy load)
         self.vision_processor = None
         self.vision_model = None
         self.vision_loaded = False
-        print("ℹ️  BLIP (görsel) ilk kullanımda yüklenecek\n")
-        print("="*70 + "\n")
+        logger.info("ℹ️  BLIP (görsel) ilk kullanımda yüklenecek")
+        logger.info("="*70)
     
     def load_vision(self):
+        """Vision modeli lazy load"""
         if not self.vision_loaded:
-            print("📥 BLIP yükleniyor...")
+            logger.info("📥 BLIP yükleniyor...")
             self.vision_processor = BlipProcessor.from_pretrained(VISION_MODEL)
             self.vision_model = BlipForConditionalGeneration.from_pretrained(
                 VISION_MODEL,
@@ -177,10 +181,12 @@ class LocalAI:
                 device_map="auto" if self.device == "cuda" else None,
                 low_cpu_mem_usage=True
             )
+            self.vision_model.eval()
             self.vision_loaded = True
-            print("✅ BLIP hazır")
+            logger.info("✅ BLIP hazır")
     
     def generate(self, prompt):
+        """Text generation"""
         try:
             inputs = self.tokenizer(
                 prompt,
@@ -193,9 +199,10 @@ class LocalAI:
                 outputs = self.model.generate(
                     **inputs,
                     max_new_tokens=MAX_NEW_TOKENS,
-                    temperature=0.75,
-                    top_p=0.92,
-                    repetition_penalty=1.08,
+                    temperature=0.7,
+                    top_p=0.9,
+                    top_k=50,
+                    repetition_penalty=1.1,
                     do_sample=True,
                     pad_token_id=self.tokenizer.pad_token_id,
                     eos_token_id=self.tokenizer.eos_token_id
@@ -207,60 +214,76 @@ class LocalAI:
             ).strip()
             
             return sanitize_input(response)
+            
         except Exception as e:
-            print(f"❌ Generate hatası: {e}")
-            return "Üzgünüm, yanıt üretemiyorum. Lütfen tekrar deneyin."
+            logger.error(f"Generate hatası: {e}")
+            return "Üzgünüm, şu anda yanıt üretemiyorum. Lütfen tekrar deneyin."
     
     def describe_image(self, base64_str):
+        """Görsel analizi"""
         self.load_vision()
         try:
+            # Base64 decode
             img_bytes = base64.b64decode(base64_str)
             
+            # Boyut kontrolü
             if len(img_bytes) > MAX_IMAGE_SIZE_MB * 1024 * 1024:
                 return f"⚠️ Görsel çok büyük (max {MAX_IMAGE_SIZE_MB}MB)"
             
+            # Format kontrolü
             file_type = imghdr.what(None, img_bytes)
-            allowed_types = {'jpeg', 'png', 'webp', 'gif', 'bmp'}
-            if file_type not in allowed_types:
-                return f"⚠️ Sadece JPEG, PNG, WebP, GIF, BMP dosyaları kabul edilir (algılanan: {file_type or 'bilinmeyen'})"
+            allowed = {'jpeg', 'png', 'webp', 'gif', 'bmp'}
+            if file_type not in allowed:
+                return f"⚠️ Desteklenmeyen format: {file_type}"
             
+            # Resmi aç ve doğrula
             try:
-                img_test = Image.open(BytesIO(img_bytes))
-                img_test.verify()
+                image = Image.open(BytesIO(img_bytes))
+                image.verify()
                 image = Image.open(BytesIO(img_bytes)).convert("RGB")
-            except UnidentifiedImageError:
-                return "⚠️ Geçerli bir resim dosyası değil (tanınmayan format)"
-            except Exception as pil_err:
-                print(f"PIL doğrulama hatası: {pil_err}")
-                return "⚠️ Resim dosyası işlenemedi (bozuk veya desteklenmeyen format)"
+            except (UnidentifiedImageError, Exception) as e:
+                logger.error(f"Resim doğrulama hatası: {e}")
+                return "⚠️ Geçersiz resim dosyası"
             
+            # Çözünürlük kontrolü
             if max(image.size) > 4000:
-                return "⚠️ Görsel çözünürlüğü çok yüksek (max 4000px kenar)"
+                return "⚠️ Çözünürlük çok yüksek (max 4000px)"
             
+            # Yeniden boyutlandır
             if max(image.size) > 896:
                 image.thumbnail((896, 896), Image.Resampling.LANCZOS)
             
+            # Vision model inference
             inputs = self.vision_processor(images=image, return_tensors="pt").to(self.device)
             
             with torch.no_grad():
-                output = self.vision_model.generate(**inputs, max_length=80, num_beams=3)
+                output = self.vision_model.generate(
+                    **inputs, 
+                    max_length=100, 
+                    num_beams=4,
+                    temperature=0.8
+                )
             
             caption = self.vision_processor.decode(output[0], skip_special_tokens=True).strip()
-            return f"🖼️ Görselde: {caption}"
+            
+            # Türkçe yanıt
+            return f"🖼️ **Görselde gördüklerim:**\n{caption}\n\n*Bu görselle ilgili sorularınızı sorabilirsiniz.*"
         
         except base64.binascii.Error:
             return "⚠️ Geçersiz base64 formatı"
         except Exception as e:
-            print(f"❌ Görsel işleme hatası: {e}")
-            return "⚠️ Görsel analiz edilemedi (beklenmeyen hata)"
+            logger.error(f"Görsel işleme hatası: {e}")
+            return "⚠️ Görsel analiz edilemedi"
 
+# AI motorunu başlat
 ai = LocalAI()
 
 # ==================== HELPERS ====================
 
-def get_history(session_id, limit=6):
+def get_history(session_id, limit=8):
+    """Sohbet geçmişi"""
     try:
-        conn = sqlite3.connect(DB_PATH)
+        conn = sqlite3.connect(DB_PATH, timeout=5)
         c = conn.cursor()
         c.execute(
             "SELECT role, content FROM messages WHERE session_id = ? ORDER BY timestamp DESC LIMIT ?",
@@ -270,59 +293,68 @@ def get_history(session_id, limit=6):
         conn.close()
         return list(reversed(rows))
     except Exception as e:
-        print(f"❌ History hatası: {e}")
+        logger.error(f"History hatası: {e}")
         return []
 
 def save_message(session_id, role, content):
+    """Mesaj kaydet"""
     try:
-        conn = sqlite3.connect(DB_PATH)
+        conn = sqlite3.connect(DB_PATH, timeout=5)
         c = conn.cursor()
         c.execute(
             "INSERT INTO messages (session_id, role, content) VALUES (?, ?, ?)",
-            (session_id, role, content[:4000])
+            (session_id, role, content[:5000])
         )
         conn.commit()
         conn.close()
     except Exception as e:
-        print(f"❌ Save hatası: {e}")
+        logger.error(f"Save hatası: {e}")
 
 def needs_web_search(text):
+    """Web araması gerekli mi?"""
     text = text.lower()
-    triggers = ["haber", "güncel", "fiyat", "bugün", "ne oldu", "ara", "bul", "kim", "nedir", "nerede"]
+    triggers = [
+        "haber", "güncel", "bugün", "fiyat", "ara", "bul", 
+        "kim", "nedir", "nerede", "ne zaman", "kaç", "hangi",
+        "son", "yeni", "şimdi", "anlat", "söyle"
+    ]
     return any(t in text for t in triggers)
 
 def do_web_search(query):
+    """Web araması yap"""
     try:
-        ddgs = DDGS(timeout=10)
-        results = list(ddgs.text(query, max_results=3, region="tr-tr", safesearch="moderate"))
+        ddgs = DDGS(timeout=8)
+        results = list(ddgs.text(query, max_results=4, region="tr-tr", safesearch="moderate"))
         
         if not results:
             return "", []
         
-        output = "🔍 Web'den güncel bilgiler:\n\n"
+        output = "🔍 **Web'den güncel bilgiler:**\n\n"
         sources = []
         
         for i, r in enumerate(results, 1):
-            title = r.get('title', '')[:80]
-            body = r.get('body', '')[:120]
+            title = r.get('title', '')[:100]
+            body = r.get('body', '')[:150]
             href = r.get('href', '')
             
-            output += f"{i}. {title}\n   {body}...\n\n"
+            output += f"**{i}.** {title}\n{body}...\n\n"
             if href:
                 sources.append(href)
         
         return output, sources
     except Exception as e:
-        print(f"❌ Web arama hatası: {e}")
+        logger.error(f"Web arama hatası: {e}")
         return "", []
 
 def process_message(message, session_id, image_b64=None):
+    """Ana mesaj işleme"""
     try:
         message = sanitize_input(message)
         history = get_history(session_id)
         context_parts = []
         sources = []
         
+        # Görsel varsa analiz et
         if image_b64:
             description = ai.describe_image(image_b64)
             if description.startswith("⚠️"):
@@ -333,29 +365,51 @@ def process_message(message, session_id, image_b64=None):
                 }
             context_parts.append(description)
         
+        # Web araması gerekli mi?
         if needs_web_search(message) and not image_b64:
             search_text, srcs = do_web_search(message)
             if search_text:
                 context_parts.append(search_text)
                 sources.extend(srcs)
         
+        # Prompt oluştur
         messages = [{
             "role": "system",
-            "content": "Sen ictsmartpro.ai'nin samimi, yardımsever ve akıllı Türk AI asistanısın. Doğal ve profesyonel konuş. Kısa ve net cevap ver."
+            "content": """Sen ictsmartpro.ai'nin akıllı, samimi ve yardımsever AI asistanısın. 
+
+Özellikler:
+- Doğal ve sıcak bir dille konuşursun
+- Kısa, öz ve anlaşılır yanıtlar verirsin
+- Türkçe yazım kurallarına dikkat edersin
+- Emojileri uygun yerlerde kullanırsın
+- Kullanıcıya değer katan bilgiler sunarsun
+- Gerektiğinde detaylı açıklama yaparsın
+
+Unutma: Sen bir insan değilsin, dürüst bir AI asistanısın."""
         }]
         
+        # Geçmiş ekle (son 5 mesaj)
         for role, content in history[-5:]:
             messages.append({"role": role, "content": content})
         
+        # Kullanıcı mesajı + ek bilgiler
         user_content = message
         if context_parts:
-            user_content += "\n\nEk bilgiler:\n" + "\n".join(context_parts)
+            user_content += "\n\n**Ek Bilgiler:**\n" + "\n".join(context_parts)
         
         messages.append({"role": "user", "content": user_content})
         
-        prompt = ai.tokenizer.apply_chat_template(messages, tokenize=False, add_generation_prompt=True)
+        # Prompt şablonu
+        prompt = ai.tokenizer.apply_chat_template(
+            messages, 
+            tokenize=False, 
+            add_generation_prompt=True
+        )
+        
+        # Yanıt üret
         response = ai.generate(prompt)
         
+        # Kaydet
         save_message(session_id, "user", message)
         save_message(session_id, "assistant", response)
         
@@ -364,448 +418,1068 @@ def process_message(message, session_id, image_b64=None):
             "sources": sources,
             "timestamp": datetime.now().strftime("%H:%M")
         }
+        
     except Exception as e:
-        print(f"❌ Process hatası: {e}")
+        logger.error(f"Process hatası: {e}")
         return {
-            "text": "Bir hata oluştu, lütfen tekrar deneyin.",
+            "text": "Üzgünüm, bir hata oluştu. Lütfen tekrar deneyin.",
             "sources": [],
             "timestamp": datetime.now().strftime("%H:%M")
         }
 
-# ==================== HTML TEMPLATE (Frontend) ====================
+# ==================== HTML TEMPLATE ====================
 
 HTML_TEMPLATE = '''<!DOCTYPE html>
 <html lang="tr">
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>AI Chatbot | ictsmartpro.ai</title>
+    <title>AI Chatbot • ictsmartpro.ai</title>
+    <link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;700&family=Space+Mono:wght@400;700&display=swap" rel="stylesheet">
     <style>
-        * { margin: 0; padding: 0; box-sizing: border-box; }
-        body {
-            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
-            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
-            min-height: 100vh;
-            display: flex;
-            justify-content: center;
-            align-items: center;
-            padding: 20px;
+        :root {
+            --bg-primary: #0a0e27;
+            --bg-secondary: #141937;
+            --bg-tertiary: #1e2447;
+            --accent-primary: #00f5ff;
+            --accent-secondary: #ff006e;
+            --accent-gradient: linear-gradient(135deg, #00f5ff 0%, #ff006e 100%);
+            --text-primary: #ffffff;
+            --text-secondary: #a0a8c5;
+            --text-muted: #6b7394;
+            --success: #00ff9f;
+            --warning: #ffb800;
+            --error: #ff4757;
+            --shadow-lg: 0 20px 60px rgba(0, 245, 255, 0.15);
+            --shadow-md: 0 10px 30px rgba(0, 0, 0, 0.3);
         }
-        .chat-container {
+
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: 'DM Sans', -apple-system, sans-serif;
+            background: var(--bg-primary);
+            color: var(--text-primary);
+            overflow: hidden;
+            height: 100vh;
+        }
+
+        /* Animated background */
+        .bg-animation {
+            position: fixed;
+            top: 0;
+            left: 0;
             width: 100%;
-            max-width: 900px;
-            height: 90vh;
-            background: white;
+            height: 100%;
+            z-index: 0;
+            background: 
+                radial-gradient(circle at 20% 50%, rgba(0, 245, 255, 0.1) 0%, transparent 50%),
+                radial-gradient(circle at 80% 80%, rgba(255, 0, 110, 0.1) 0%, transparent 50%);
+            animation: bgPulse 8s ease-in-out infinite;
+        }
+
+        @keyframes bgPulse {
+            0%, 100% { opacity: 0.5; transform: scale(1); }
+            50% { opacity: 0.8; transform: scale(1.1); }
+        }
+
+        .container {
+            position: relative;
+            z-index: 1;
+            max-width: 1400px;
+            height: 100vh;
+            margin: 0 auto;
+            display: grid;
+            grid-template-columns: 320px 1fr;
+            gap: 24px;
+            padding: 24px;
+        }
+
+        /* Sidebar */
+        .sidebar {
+            background: var(--bg-secondary);
             border-radius: 24px;
-            box-shadow: 0 20px 60px rgba(0,0,0,0.3);
+            padding: 32px 24px;
             display: flex;
             flex-direction: column;
-            overflow: hidden;
+            gap: 24px;
+            box-shadow: var(--shadow-md);
+            border: 1px solid rgba(255, 255, 255, 0.05);
         }
-        .header {
-            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
-            color: white;
-            padding: 24px;
+
+        .logo {
+            display: flex;
+            align-items: center;
+            gap: 12px;
+            padding-bottom: 24px;
+            border-bottom: 1px solid rgba(255, 255, 255, 0.1);
+        }
+
+        .logo-icon {
+            width: 48px;
+            height: 48px;
+            background: var(--accent-gradient);
+            border-radius: 12px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 24px;
+            animation: logoPulse 2s ease-in-out infinite;
+        }
+
+        @keyframes logoPulse {
+            0%, 100% { transform: scale(1); box-shadow: 0 0 20px rgba(0, 245, 255, 0.3); }
+            50% { transform: scale(1.05); box-shadow: 0 0 30px rgba(255, 0, 110, 0.5); }
+        }
+
+        .logo-text {
+            flex: 1;
+        }
+
+        .logo-text h1 {
+            font-size: 20px;
+            font-weight: 700;
+            background: var(--accent-gradient);
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+            background-clip: text;
+        }
+
+        .logo-text p {
+            font-size: 12px;
+            color: var(--text-muted);
+            margin-top: 4px;
+        }
+
+        .features {
+            flex: 1;
+        }
+
+        .feature-item {
+            display: flex;
+            align-items: center;
+            gap: 12px;
+            padding: 12px;
+            margin-bottom: 8px;
+            border-radius: 12px;
+            background: var(--bg-tertiary);
+            border: 1px solid rgba(255, 255, 255, 0.05);
+            transition: all 0.3s ease;
+        }
+
+        .feature-item:hover {
+            background: rgba(0, 245, 255, 0.1);
+            border-color: var(--accent-primary);
+            transform: translateX(4px);
+        }
+
+        .feature-icon {
+            width: 40px;
+            height: 40px;
+            background: var(--bg-secondary);
+            border-radius: 10px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 18px;
+        }
+
+        .feature-text h3 {
+            font-size: 14px;
+            font-weight: 600;
+            margin-bottom: 2px;
+        }
+
+        .feature-text p {
+            font-size: 12px;
+            color: var(--text-muted);
+        }
+
+        .stats {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 12px;
+        }
+
+        .stat-card {
+            background: var(--bg-tertiary);
+            padding: 16px;
+            border-radius: 12px;
             text-align: center;
+            border: 1px solid rgba(255, 255, 255, 0.05);
         }
-        .header h1 { font-size: 1.8rem; margin-bottom: 8px; }
-        .header .domain { font-size: 1rem; opacity: 0.9; }
-        .badge {
-            display: inline-flex;
+
+        .stat-value {
+            font-size: 24px;
+            font-weight: 700;
+            background: var(--accent-gradient);
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+            background-clip: text;
+        }
+
+        .stat-label {
+            font-size: 11px;
+            color: var(--text-muted);
+            margin-top: 4px;
+        }
+
+        /* Chat area */
+        .chat-area {
+            display: flex;
+            flex-direction: column;
+            height: 100%;
+            background: var(--bg-secondary);
+            border-radius: 24px;
+            overflow: hidden;
+            box-shadow: var(--shadow-lg);
+            border: 1px solid rgba(255, 255, 255, 0.05);
+        }
+
+        .chat-header {
+            background: var(--bg-tertiary);
+            padding: 20px 32px;
+            border-bottom: 1px solid rgba(255, 255, 255, 0.1);
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+        }
+
+        .status {
+            display: flex;
+            align-items: center;
+            gap: 12px;
+        }
+
+        .status-dot {
+            width: 12px;
+            height: 12px;
+            background: var(--success);
+            border-radius: 50%;
+            animation: statusPulse 2s ease-in-out infinite;
+            box-shadow: 0 0 10px var(--success);
+        }
+
+        @keyframes statusPulse {
+            0%, 100% { opacity: 1; }
+            50% { opacity: 0.5; }
+        }
+
+        .status-text {
+            font-size: 14px;
+            font-weight: 600;
+        }
+
+        .header-actions {
+            display: flex;
             gap: 8px;
-            background: rgba(255,255,255,0.2);
-            padding: 6px 16px;
-            border-radius: 20px;
-            font-size: 0.85rem;
-            margin-top: 12px;
         }
+
+        .action-btn {
+            width: 40px;
+            height: 40px;
+            background: var(--bg-secondary);
+            border: 1px solid rgba(255, 255, 255, 0.1);
+            border-radius: 10px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            cursor: pointer;
+            transition: all 0.3s ease;
+            font-size: 18px;
+        }
+
+        .action-btn:hover {
+            background: var(--accent-primary);
+            color: var(--bg-primary);
+            transform: scale(1.1);
+            border-color: var(--accent-primary);
+        }
+
         .messages {
             flex: 1;
-            padding: 20px;
+            padding: 32px;
             overflow-y: auto;
-            background: #f7fafc;
-        }
-        .msg {
-            margin: 16px 0;
             display: flex;
-            animation: fadeIn 0.3s;
+            flex-direction: column;
+            gap: 24px;
         }
-        @keyframes fadeIn {
-            from { opacity: 0; transform: translateY(10px); }
-            to { opacity: 1; transform: translateY(0); }
+
+        .messages::-webkit-scrollbar {
+            width: 8px;
         }
-        .msg.user { justify-content: flex-end; }
-        .bubble {
-            max-width: 75%;
-            padding: 14px 18px;
-            border-radius: 18px;
-            line-height: 1.5;
-            word-wrap: break-word;
+
+        .messages::-webkit-scrollbar-track {
+            background: transparent;
         }
-        .user .bubble {
-            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
-            color: white;
-            border-bottom-right-radius: 4px;
+
+        .messages::-webkit-scrollbar-thumb {
+            background: rgba(255, 255, 255, 0.1);
+            border-radius: 4px;
         }
-        .bot .bubble {
-            background: white;
-            border: 1px solid #e2e8f0;
-            border-bottom-left-radius: 4px;
+
+        .messages::-webkit-scrollbar-thumb:hover {
+            background: rgba(255, 255, 255, 0.2);
         }
-        .time { font-size: 0.7rem; opacity: 0.6; margin-top: 6px; }
-        .sources {
-            margin-top: 10px;
-            padding-top: 10px;
-            border-top: 1px solid #e2e8f0;
-            font-size: 0.8rem;
-        }
-        .sources a {
-            color: #667eea;
-            text-decoration: none;
-            display: block;
-            margin: 4px 0;
-        }
-        .input-area {
-            padding: 20px;
-            background: white;
-            border-top: 2px solid #e2e8f0;
-        }
-        .tools {
+
+        .message {
             display: flex;
+            gap: 16px;
+            animation: messageSlide 0.4s ease;
+        }
+
+        @keyframes messageSlide {
+            from {
+                opacity: 0;
+                transform: translateY(20px);
+            }
+            to {
+                opacity: 1;
+                transform: translateY(0);
+            }
+        }
+
+        .message.user {
+            flex-direction: row-reverse;
+        }
+
+        .message-avatar {
+            width: 48px;
+            height: 48px;
+            border-radius: 14px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 24px;
+            flex-shrink: 0;
+        }
+
+        .message.bot .message-avatar {
+            background: var(--accent-gradient);
+            box-shadow: 0 4px 20px rgba(0, 245, 255, 0.3);
+        }
+
+        .message.user .message-avatar {
+            background: var(--bg-tertiary);
+            border: 2px solid rgba(255, 255, 255, 0.1);
+        }
+
+        .message-content {
+            flex: 1;
+            max-width: 80%;
+        }
+
+        .message-bubble {
+            background: var(--bg-tertiary);
+            padding: 20px 24px;
+            border-radius: 20px;
+            line-height: 1.6;
+            font-size: 15px;
+            border: 1px solid rgba(255, 255, 255, 0.05);
+        }
+
+        .message.bot .message-bubble {
+            border-left: 3px solid var(--accent-primary);
+            background: linear-gradient(135deg, var(--bg-tertiary) 0%, rgba(0, 245, 255, 0.05) 100%);
+        }
+
+        .message.user .message-bubble {
+            background: rgba(255, 0, 110, 0.1);
+            border: 1px solid rgba(255, 0, 110, 0.2);
+            text-align: right;
+        }
+
+        .message-meta {
+            display: flex;
+            align-items: center;
             gap: 8px;
-            margin-bottom: 12px;
+            margin-top: 8px;
+            font-size: 12px;
+            color: var(--text-muted);
         }
-        textarea {
-            width: 100%;
-            padding: 14px;
-            border: 2px solid #e2e8f0;
-            border-radius: 16px;
-            resize: none;
-            font-size: 1rem;
-            font-family: inherit;
-            margin-bottom: 12px;
+
+        .message.user .message-meta {
+            justify-content: flex-end;
         }
-        textarea:focus { outline: none; border-color: #667eea; }
-        button {
-            padding: 12px 20px;
-            border: none;
-            border-radius: 12px;
+
+        .sources {
+            margin-top: 16px;
+            padding-top: 16px;
+            border-top: 1px solid rgba(255, 255, 255, 0.1);
+        }
+
+        .sources-title {
+            font-size: 12px;
             font-weight: 600;
-            cursor: pointer;
-            transition: all 0.2s;
+            color: var(--text-muted);
+            margin-bottom: 8px;
+            display: flex;
+            align-items: center;
+            gap: 6px;
         }
-        .send-btn {
-            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
-            color: white;
-            width: 100%;
+
+        .source-link {
+            display: block;
+            color: var(--accent-primary);
+            text-decoration: none;
+            font-size: 12px;
+            padding: 6px 0;
+            transition: all 0.2s ease;
         }
-        .send-btn:hover { transform: scale(1.02); }
-        .send-btn:disabled { opacity: 0.5; cursor: not-allowed; }
-        .tool-btn { background: #f7fafc; color: #4a5568; }
-        .tool-btn:hover { background: #e2e8f0; }
-        #preview {
-            max-width: 200px;
-            max-height: 200px;
-            margin: 12px 0;
-            border-radius: 12px;
-            border: 3px solid #667eea;
+
+        .source-link:hover {
+            color: var(--accent-secondary);
+            padding-left: 8px;
+        }
+
+        .typing-indicator {
             display: none;
+            align-items: center;
+            gap: 6px;
+            color: var(--text-muted);
+            font-size: 13px;
+        }
+
+        .typing-indicator.active {
+            display: flex;
+        }
+
+        .typing-dot {
+            width: 8px;
+            height: 8px;
+            background: var(--accent-primary);
+            border-radius: 50%;
+            animation: typingBounce 1.4s infinite;
+        }
+
+        .typing-dot:nth-child(2) {
+            animation-delay: 0.2s;
+        }
+
+        .typing-dot:nth-child(3) {
+            animation-delay: 0.4s;
+        }
+
+        @keyframes typingBounce {
+            0%, 60%, 100% { transform: translateY(0); }
+            30% { transform: translateY(-10px); }
+        }
+
+        /* Input area */
+        .input-area {
+            background: var(--bg-tertiary);
+            padding: 24px 32px;
+            border-top: 1px solid rgba(255, 255, 255, 0.1);
+        }
+
+        .input-tools {
+            display: flex;
+            gap: 12px;
+            margin-bottom: 16px;
+        }
+
+        .tool-btn {
+            padding: 10px 16px;
+            background: var(--bg-secondary);
+            border: 1px solid rgba(255, 255, 255, 0.1);
+            border-radius: 10px;
+            color: var(--text-secondary);
+            cursor: pointer;
+            transition: all 0.3s ease;
+            font-size: 14px;
+            font-weight: 500;
+            display: flex;
+            align-items: center;
+            gap: 8px;
+        }
+
+        .tool-btn:hover {
+            background: rgba(0, 245, 255, 0.1);
+            border-color: var(--accent-primary);
+            color: var(--accent-primary);
+            transform: translateY(-2px);
+        }
+
+        .image-preview {
+            display: none;
+            position: relative;
+            max-width: 200px;
+            margin-bottom: 16px;
+        }
+
+        .image-preview.active {
+            display: block;
+        }
+
+        .preview-img {
+            width: 100%;
+            border-radius: 12px;
+            border: 2px solid var(--accent-primary);
+            box-shadow: 0 4px 20px rgba(0, 245, 255, 0.3);
+        }
+
+        .preview-remove {
+            position: absolute;
+            top: -8px;
+            right: -8px;
+            width: 28px;
+            height: 28px;
+            background: var(--error);
+            border-radius: 50%;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            cursor: pointer;
+            font-size: 16px;
+            transition: all 0.3s ease;
+        }
+
+        .preview-remove:hover {
+            transform: scale(1.1);
+            box-shadow: 0 4px 15px rgba(255, 71, 87, 0.5);
+        }
+
+        .input-wrapper {
+            display: flex;
+            gap: 12px;
+            align-items: flex-end;
+        }
+
+        #messageInput {
+            flex: 1;
+            background: var(--bg-secondary);
+            border: 2px solid rgba(255, 255, 255, 0.1);
+            border-radius: 16px;
+            padding: 16px 20px;
+            color: var(--text-primary);
+            font-family: inherit;
+            font-size: 15px;
+            resize: none;
+            max-height: 120px;
+            transition: all 0.3s ease;
+        }
+
+        #messageInput:focus {
+            outline: none;
+            border-color: var(--accent-primary);
+            box-shadow: 0 0 20px rgba(0, 245, 255, 0.2);
+        }
+
+        #messageInput::placeholder {
+            color: var(--text-muted);
+        }
+
+        #sendBtn {
+            width: 56px;
+            height: 56px;
+            background: var(--accent-gradient);
+            border: none;
+            border-radius: 14px;
+            color: var(--text-primary);
+            font-size: 24px;
+            cursor: pointer;
+            transition: all 0.3s ease;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            box-shadow: 0 4px 20px rgba(0, 245, 255, 0.3);
+        }
+
+        #sendBtn:hover:not(:disabled) {
+            transform: scale(1.05) rotate(-5deg);
+            box-shadow: 0 6px 30px rgba(255, 0, 110, 0.5);
+        }
+
+        #sendBtn:active:not(:disabled) {
+            transform: scale(0.95);
+        }
+
+        #sendBtn:disabled {
+            opacity: 0.5;
+            cursor: not-allowed;
+        }
+
+        /* Responsive */
+        @media (max-width: 1024px) {
+            .container {
+                grid-template-columns: 1fr;
+            }
+
+            .sidebar {
+                display: none;
+            }
+        }
+
+        @media (max-width: 768px) {
+            .container {
+                padding: 12px;
+                gap: 12px;
+            }
+
+            .messages {
+                padding: 20px 16px;
+            }
+
+            .message-content {
+                max-width: 90%;
+            }
+
+            .input-area {
+                padding: 16px;
+            }
+        }
+
+        /* Welcome message */
+        .welcome-card {
+            background: linear-gradient(135deg, rgba(0, 245, 255, 0.1) 0%, rgba(255, 0, 110, 0.1) 100%);
+            border: 2px solid rgba(0, 245, 255, 0.3);
+            border-radius: 20px;
+            padding: 32px;
+            text-align: center;
+            animation: welcomeFloat 3s ease-in-out infinite;
+        }
+
+        @keyframes welcomeFloat {
+            0%, 100% { transform: translateY(0); }
+            50% { transform: translateY(-10px); }
+        }
+
+        .welcome-title {
+            font-size: 28px;
+            font-weight: 700;
+            margin-bottom: 16px;
+            background: var(--accent-gradient);
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+            background-clip: text;
+        }
+
+        .welcome-text {
+            font-size: 16px;
+            color: var(--text-secondary);
+            line-height: 1.6;
+            margin-bottom: 24px;
+        }
+
+        .welcome-features {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+            gap: 16px;
+            margin-top: 24px;
+        }
+
+        .welcome-feature {
+            background: var(--bg-tertiary);
+            padding: 16px;
+            border-radius: 12px;
+            border: 1px solid rgba(255, 255, 255, 0.05);
+        }
+
+        .welcome-feature-icon {
+            font-size: 32px;
+            margin-bottom: 8px;
+        }
+
+        .welcome-feature-text {
+            font-size: 13px;
+            color: var(--text-secondary);
         }
     </style>
 </head>
 <body>
-<div class="chat-container">
-    <div class="header">
-        <h1>🤖 AI Asistan</h1>
-        <div class="domain">ictsmartpro.ai</div>
-        <div class="badge">
-            <span>✅ Ücretsiz</span><span>•</span>
-            <span>🔒 Güvenli</span><span>•</span>
-            <span>⚡ Hızlı</span>
-        </div>
-    </div>
+    <div class="bg-animation"></div>
+    
+    <div class="container">
+        <!-- Sidebar -->
+        <div class="sidebar">
+            <div class="logo">
+                <div class="logo-icon">🤖</div>
+                <div class="logo-text">
+                    <h1>AI Chatbot</h1>
+                    <p>ictsmartpro.ai</p>
+                </div>
+            </div>
 
-    <div class="messages" id="messages">
-        <div class="msg bot">
-            <div class="bubble">
-                👋 <strong>Merhaba!</strong> Ben ictsmartpro.ai'nin AI asistanıyım.<br><br>
-                <strong>Yapabileceklerim:</strong><br>
-                • 💬 Doğal sohbet<br>
-                • 🖼️ Görsel analizi<br>
-                • 🔍 Web'de arama<br>
-                • 🧠 Geçmişi hatırlama<br><br>
-                Size nasıl yardımcı olabilirim? 😊
+            <div class="features">
+                <div class="feature-item">
+                    <div class="feature-icon">💬</div>
+                    <div class="feature-text">
+                        <h3>Akıllı Sohbet</h3>
+                        <p>Doğal konuşma</p>
+                    </div>
+                </div>
+                <div class="feature-item">
+                    <div class="feature-icon">🖼️</div>
+                    <div class="feature-text">
+                        <h3>Görsel Analizi</h3>
+                        <p>Resim okuma</p>
+                    </div>
+                </div>
+                <div class="feature-item">
+                    <div class="feature-icon">🔍</div>
+                    <div class="feature-text">
+                        <h3>Web Araması</h3>
+                        <p>Güncel bilgi</p>
+                    </div>
+                </div>
+                <div class="feature-item">
+                    <div class="feature-icon">🧠</div>
+                    <div class="feature-text">
+                        <h3>Hafıza</h3>
+                        <p>Geçmiş hatırlama</p>
+                    </div>
+                </div>
+            </div>
+
+            <div class="stats">
+                <div class="stat-card">
+                    <div class="stat-value">24/7</div>
+                    <div class="stat-label">Aktif</div>
+                </div>
+                <div class="stat-card">
+                    <div class="stat-value">⚡</div>
+                    <div class="stat-label">Hızlı</div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Chat Area -->
+        <div class="chat-area">
+            <div class="chat-header">
+                <div class="status">
+                    <div class="status-dot"></div>
+                    <div class="status-text">AI Asistan • Çevrimiçi</div>
+                </div>
+                <div class="header-actions">
+                    <div class="action-btn" onclick="clearChat()" title="Sohbeti temizle">🗑️</div>
+                    <div class="action-btn" onclick="exportChat()" title="Dışa aktar">💾</div>
+                </div>
+            </div>
+
+            <div class="messages" id="messages">
+                <div class="welcome-card">
+                    <div class="welcome-title">👋 Merhaba!</div>
+                    <div class="welcome-text">
+                        Ben <strong>ictsmartpro.ai</strong>'nin AI asistanıyım.<br>
+                        Size nasıl yardımcı olabilirim?
+                    </div>
+                    <div class="welcome-features">
+                        <div class="welcome-feature">
+                            <div class="welcome-feature-icon">💬</div>
+                            <div class="welcome-feature-text">Sohbet Et</div>
+                        </div>
+                        <div class="welcome-feature">
+                            <div class="welcome-feature-icon">🖼️</div>
+                            <div class="welcome-feature-text">Görsel Gönder</div>
+                        </div>
+                        <div class="welcome-feature">
+                            <div class="welcome-feature-icon">🔍</div>
+                            <div class="welcome-feature-text">Bilgi Ara</div>
+                        </div>
+                        <div class="welcome-feature">
+                            <div class="welcome-feature-icon">❓</div>
+                            <div class="welcome-feature-text">Soru Sor</div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <div class="input-area">
+                <div class="input-tools">
+                    <div class="tool-btn" onclick="document.getElementById('imageInput').click()">
+                        📎 Görsel Ekle
+                    </div>
+                    <input type="file" id="imageInput" accept="image/*" style="display: none;">
+                </div>
+
+                <div class="image-preview" id="imagePreview">
+                    <img id="previewImg" class="preview-img" alt="Önizleme">
+                    <div class="preview-remove" onclick="removeImage()">✕</div>
+                </div>
+
+                <div class="input-wrapper">
+                    <textarea 
+                        id="messageInput" 
+                        rows="1" 
+                        placeholder="Mesajınızı yazın... (Enter: gönder, Shift+Enter: yeni satır)"
+                    ></textarea>
+                    <button id="sendBtn" onclick="sendMessage()">
+                        🚀
+                    </button>
+                </div>
+
+                <div class="typing-indicator" id="typingIndicator">
+                    <div class="typing-dot"></div>
+                    <div class="typing-dot"></div>
+                    <div class="typing-dot"></div>
+                    <span style="margin-left: 8px;">AI düşünüyor...</span>
+                </div>
             </div>
         </div>
     </div>
 
-    <div class="input-area">
-        <div class="tools">
-            <button class="tool-btn" onclick="document.getElementById('file').click()">📎 Görsel</button>
-            <button class="tool-btn" onclick="clearChat()">🗑️ Temizle</button>
-            <button class="tool-btn" onclick="exportChat()">💾 Dışa Aktar</button>
-        </div>
-        <input type="file" id="file" accept="image/*" style="display:none;">
-        <img id="preview" alt="Önizleme">
-        <textarea id="input" rows="3" placeholder="Mesaj yazın... (Enter ile gönderin)"></textarea>
-        <button class="send-btn" id="sendBtn">Gönder 🚀</button>
-    </div>
-</div>
-
-<script>
-    // 1. Global değişkenler (DOM elementleri sonra atanacak)
-    let session, currentImage, isProcessing;
-    let messagesDiv, input, sendBtn, fileInput, preview;
-
-    // 2. DOM hazır olduğunda çalıştır
-    document.addEventListener('DOMContentLoaded', function() {
-        initChat();
-    });
-
-    // 3. Ana başlatma fonksiyonu
-    function initChat() {
-        // Session ID
-        session = localStorage.getItem('chatId') || 'ch_' + Date.now();
-        localStorage.setItem('chatId', session);
+    <script>
+        // Global değişkenler
+        let sessionId = localStorage.getItem('chatSession') || 'session_' + Date.now();
+        localStorage.setItem('chatSession', sessionId);
         
-        // Durum değişkenleri
-        currentImage = null;
-        isProcessing = false;
+        let currentImage = null;
+        let isProcessing = false;
+        let messageCount = parseInt(localStorage.getItem('messageCount') || '0');
 
-        // DOM elementlerini SEÇ - ARTIK DOM HAZIR!
-        messagesDiv = document.getElementById('messages');
-        input = document.getElementById('input');
-        sendBtn = document.getElementById('sendBtn');
-        fileInput = document.getElementById('file');
-        preview = document.getElementById('preview');
+        // DOM elementleri
+        const messagesDiv = document.getElementById('messages');
+        const messageInput = document.getElementById('messageInput');
+        const sendBtn = document.getElementById('sendBtn');
+        const imageInput = document.getElementById('imageInput');
+        const imagePreview = document.getElementById('imagePreview');
+        const previewImg = document.getElementById('previewImg');
+        const typingIndicator = document.getElementById('typingIndicator');
 
-        // Debug: elementler bulundu mu?
-        console.log('sendBtn bulundu:', !!sendBtn);
-        console.log('input bulundu:', !!input);
-        
-        if (!sendBtn) {
-            console.error('CRITICAL: sendBtn elementi bulunamadı!');
-            alert('Sayfa yüklenirken hata oluştu. Lütfen sayfayı yenileyin.');
-            return;
-        }
-
-        // Başlangıç durumu
-        sendBtn.disabled = true;
-        sendBtn.style.opacity = '0.6';
-        sendBtn.textContent = 'Gönder 🚀';
-
-        // Event listener'ları bağla
-        if (input) {
-            input.addEventListener('input', updateSendButton);
-            input.addEventListener('keydown', handleKeyDown);
-        }
-
-        if (fileInput) {
-            fileInput.addEventListener('change', handleFileSelect);
-        }
-
-        if (sendBtn) {
-            sendBtn.addEventListener('click', sendMessage);
-        }
-
-        // İlk güncelleme
-        updateSendButton();
-        
-        // Input'a focus
-        if (input) {
-            setTimeout(() => input.focus(), 500);
-        }
-    }
-
-    // 4. Event handler'lar
-    function handleKeyDown(e) {
-        if (e.key === 'Enter' && !e.shiftKey) {
-            e.preventDefault();
-            if ((input.value.trim() || currentImage) && !isProcessing) {
-                sendMessage();
-            }
-        }
-    }
-
-    function handleFileSelect(e) {
-        const file = e.target.files[0];
-        if (!file) return;
-        
-        if (file.size > 5 * 1024 * 1024) {
-            alert('⚠️ Dosya max 5MB olmalı!');
-            fileInput.value = '';
-            return;
-        }
-        
-        const reader = new FileReader();
-        reader.onload = function(ev) {
-            currentImage = ev.target.result.split(',')[1];
-            if (preview) {
-                preview.src = ev.target.result;
-                preview.style.display = 'block';
-            }
+        // Otomatik yükseklik ayarı
+        messageInput.addEventListener('input', function() {
+            this.style.height = 'auto';
+            this.style.height = Math.min(this.scrollHeight, 120) + 'px';
             updateSendButton();
-        };
-        reader.readAsDataURL(file);
-    }
+        });
 
-    // 5. Buton durum güncelleme
-    function updateSendButton() {
-        if (!sendBtn) return;
-        const hasContent = (input && input.value.trim()) || currentImage;
-        sendBtn.disabled = !hasContent || isProcessing;
-        sendBtn.style.opacity = (hasContent && !isProcessing) ? '1' : '0.6';
-    }
+        // Enter tuşu kontrolü
+        messageInput.addEventListener('keydown', function(e) {
+            if (e.key === 'Enter' && !e.shiftKey) {
+                e.preventDefault();
+                if (canSend()) sendMessage();
+            }
+        });
 
-    // 6. Mesaj gönderme (DEĞİŞMEDİ - sadece güvenlik kontrolü eklendi)
-    async function sendMessage() {
-        if (isProcessing) return;
-        
-        const text = input ? input.value.trim() : '';
-        if (!text && !currentImage) {
-            if (input) input.focus();
-            return;
-        }
+        // Görsel seçimi
+        imageInput.addEventListener('change', function(e) {
+            const file = e.target.files[0];
+            if (!file) return;
 
-        isProcessing = true;
-        if (sendBtn) {
-            sendBtn.disabled = true;
-            sendBtn.style.opacity = '0.6';
-            sendBtn.textContent = '⏳ İşleniyor...';
-        }
-
-        const now = new Date().toLocaleTimeString('tr-TR', {hour: '2-digit', minute: '2-digit'});
-        addMsg('user', text || '🖼️ [Görsel]', now);
-        if (input) input.value = '';
-
-        try {
-            // Backend'e istek
-            const response = await fetch('/chat', {
-                method: 'POST',
-                headers: { 
-                    'Content-Type': 'application/json',
-                    'X-Requested-With': 'XMLHttpRequest'  // Ek güvenlik
-                },
-                body: JSON.stringify({ 
-                    message: text, 
-                    image: currentImage, 
-                    session: session 
-                })
-            });
-
-            if (!response.ok) {
-                const errorText = await response.text();
-                throw new Error(`Sunucu hatası (${response.status}): ${errorText}`);
+            // Boyut kontrolü
+            if (file.size > 5 * 1024 * 1024) {
+                alert('⚠️ Görsel 5MB\'dan küçük olmalıdır!');
+                return;
             }
 
-            const data = await response.json();
-            
-            // Backend'den gelen hata mesajlarını kontrol et
-            if (data.error) {
-                throw new Error(data.error);
+            // Format kontrolü
+            if (!file.type.startsWith('image/')) {
+                alert('⚠️ Lütfen geçerli bir görsel dosyası seçin!');
+                return;
             }
-            
-            addMsg('bot', data.text || 'Yanıt alınamadı', data.timestamp, data.sources || []);
 
-            // Temizle
+            const reader = new FileReader();
+            reader.onload = function(ev) {
+                currentImage = ev.target.result.split(',')[1];
+                previewImg.src = ev.target.result;
+                imagePreview.classList.add('active');
+                updateSendButton();
+            };
+            reader.readAsDataURL(file);
+        });
+
+        // Görseli kaldır
+        function removeImage() {
             currentImage = null;
-            if (fileInput) fileInput.value = '';
-            if (preview) preview.style.display = 'none';
-            
-        } catch (err) {
-            console.error('Gönderme hatası:', err);
-            addMsg('bot', '❌ Hata: ' + (err.message || 'Bağlantı sorunu'), now);
-            
-            // Hata durumunda session'ı yenile (belki cookie sorunu)
-            session = 'ch_' + Date.now();
-            localStorage.setItem('chatId', session);
-            
-        } finally {
-            isProcessing = false;
-            if (sendBtn) {
-                sendBtn.disabled = false;
-                sendBtn.style.opacity = '1';
-                sendBtn.textContent = 'Gönder 🚀';
-            }
+            imageInput.value = '';
+            imagePreview.classList.remove('active');
             updateSendButton();
         }
-    }
 
-    // 7. Mesaj ekleme (DEĞİŞMEDİ)
-    function addMsg(role, text, time, sources = []) {
-        if (!messagesDiv) return;
-        
-        const div = document.createElement('div');
-        div.className = 'msg ' + role;
-        
-        let html = '<div class="bubble">' + 
-                   (text || '').replace(/\n/g, '<br>') + 
-                   '<div class="time">' + time + '</div>';
-        
-        if (sources && sources.length > 0) {
-            html += '<div class="sources">🔗 Kaynaklar:<br>';
-            sources.forEach((s, i) => {
-                html += `<a href="${s}" target="_blank" rel="noopener noreferrer">
-                         ${i+1}. ${s.slice(0,50)}${s.length>50?'...':''}</a><br>`;
-            });
-            html += '</div>';
+        // Gönderme kontrolü
+        function canSend() {
+            const hasText = messageInput.value.trim().length > 0;
+            const hasImage = currentImage !== null;
+            return (hasText || hasImage) && !isProcessing;
         }
-        
-        html += '</div>';
-        div.innerHTML = html;
-        messagesDiv.appendChild(div);
-        
-        // Scroll en alta
-        setTimeout(() => {
-            messagesDiv.scrollTop = messagesDiv.scrollHeight;
-        }, 100);
-    }
 
-    // 8. Diğer fonksiyonlar (DEĞİŞMEDİ)
-    async function clearChat() {
-        if (!confirm('Sohbet geçmişi silinsin mi? Bu işlem geri alınamaz.')) return;
-        
-        try {
-            const response = await fetch('/clear', {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ session: session })
-            });
+        // Buton durumu güncelle
+        function updateSendButton() {
+            sendBtn.disabled = !canSend();
+        }
+
+        // Mesaj gönder
+        async function sendMessage() {
+            if (!canSend()) return;
+
+            const text = messageInput.value.trim();
+            const image = currentImage;
+
+            // UI güncelle
+            isProcessing = true;
+            updateSendButton();
             
-            if (response.ok) {
-                messagesDiv.innerHTML = '';
-                addMsg('bot', '✅ Sohbet temizlendi!', 
-                       new Date().toLocaleTimeString('tr-TR', {hour: '2-digit', minute: '2-digit'}));
-                
-                // Yeni session ID
-                session = 'ch_' + Date.now();
-                localStorage.setItem('chatId', session);
-            }
-        } catch (err) {
-            console.error('Temizleme hatası:', err);
-            alert('Temizleme başarısız: ' + err.message);
-        }
-    }
+            const now = new Date().toLocaleTimeString('tr-TR', { hour: '2-digit', minute: '2-digit' });
+            
+            // Kullanıcı mesajını göster
+            addMessage('user', text || '🖼️ [Görsel gönderildi]', now);
+            
+            // Input'u temizle
+            messageInput.value = '';
+            messageInput.style.height = 'auto';
+            removeImage();
 
-    function exportChat() {
-        const msgs = Array.from(document.querySelectorAll('.msg'));
-        const text = msgs.map(m => {
-            const role = m.className.includes('user') ? 'SİZ' : 'AI';
-            const content = m.querySelector('.bubble')?.textContent.trim() || '';
-            return role + ':\n' + content;
-        }).join('\n\n---\n\n');
-        
-        const blob = new Blob([text], { type: 'text/plain;charset=utf-8' });
-        const url = URL.createObjectURL(blob);
-        const a = document.createElement('a');
-        a.href = url;
-        a.download = `sohbet-${session}-${Date.now()}.txt`;
-        document.body.appendChild(a);
-        a.click();
-        document.body.removeChild(a);
-        URL.revokeObjectURL(url);
-    }
-</script>
+            // Typing indicator
+            typingIndicator.classList.add('active');
+
+            try {
+                const response = await fetch('/chat', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                    },
+                    body: JSON.stringify({
+                        message: text,
+                        image: image,
+                        session: sessionId
+                    })
+                });
+
+                if (!response.ok) {
+                    throw new Error(`HTTP ${response.status}`);
+                }
+
+                const data = await response.json();
+                
+                // AI yanıtını göster
+                addMessage('bot', data.text, data.timestamp, data.sources);
+                
+                // İstatistik güncelle
+                messageCount++;
+                localStorage.setItem('messageCount', messageCount);
+
+            } catch (error) {
+                console.error('Hata:', error);
+                addMessage('bot', '❌ Üzgünüm, bir hata oluştu. Lütfen tekrar deneyin.', now);
+            } finally {
+                typingIndicator.classList.remove('active');
+                isProcessing = false;
+                updateSendButton();
+                messageInput.focus();
+            }
+        }
+
+        // Mesaj ekle
+        function addMessage(role, text, time, sources = []) {
+            const messageDiv = document.createElement('div');
+            messageDiv.className = `message ${role}`;
+            
+            const isBot = role === 'bot';
+            const avatar = isBot ? '🤖' : '👤';
+            
+            let html = `
+                <div class="message-avatar">${avatar}</div>
+                <div class="message-content">
+                    <div class="message-bubble">
+                        ${formatText(text)}
+                    </div>
+                    <div class="message-meta">
+                        <span>${time}</span>
+            `;
+            
+            if (sources && sources.length > 0) {
+                html += `
+                    </div>
+                    <div class="sources">
+                        <div class="sources-title">🔗 Kaynaklar:</div>
+                        ${sources.map((url, i) => `
+                            <a href="${url}" target="_blank" rel="noopener noreferrer" class="source-link">
+                                ${i + 1}. ${truncate(url, 50)}
+                            </a>
+                        `).join('')}
+                    </div>
+                `;
+            } else {
+                html += `</div>`;
+            }
+            
+            html += `</div>`;
+            messageDiv.innerHTML = html;
+            
+            messagesDiv.appendChild(messageDiv);
+            scrollToBottom();
+        }
+
+        // Metin formatlama
+        function formatText(text) {
+            return text
+                .replace(/\n/g, '<br>')
+                .replace(/\*\*(.*?)\*\*/g, '<strong>$1</strong>')
+                .replace(/\*(.*?)\*/g, '<em>$1</em>');
+        }
+
+        // URL kısaltma
+        function truncate(str, maxLen) {
+            if (str.length <= maxLen) return str;
+            return str.substring(0, maxLen) + '...';
+        }
+
+        // Scroll en alta
+        function scrollToBottom() {
+            setTimeout(() => {
+                messagesDiv.scrollTop = messagesDiv.scrollHeight;
+            }, 100);
+        }
+
+        // Sohbeti temizle
+        async function clearChat() {
+            if (!confirm('Sohbet geçmişi silinsin mi?')) return;
+
+            try {
+                const response = await fetch('/clear', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ session: sessionId })
+                });
+
+                if (response.ok) {
+                    messagesDiv.innerHTML = `
+                        <div class="welcome-card">
+                            <div class="welcome-title">✅ Sohbet Temizlendi!</div>
+                            <div class="welcome-text">Yeni bir sohbet başlatabilirsiniz.</div>
+                        </div>
+                    `;
+                    
+                    sessionId = 'session_' + Date.now();
+                    localStorage.setItem('chatSession', sessionId);
+                    messageCount = 0;
+                    localStorage.setItem('messageCount', '0');
+                }
+            } catch (error) {
+                console.error('Temizleme hatası:', error);
+                alert('❌ Sohbet temizlenemedi. Lütfen tekrar deneyin.');
+            }
+        }
+
+        // Sohbeti dışa aktar
+        function exportChat() {
+            const messages = Array.from(document.querySelectorAll('.message'));
+            const text = messages.map(msg => {
+                const role = msg.classList.contains('user') ? 'SİZ' : 'AI';
+                const bubble = msg.querySelector('.message-bubble');
+                const content = bubble ? bubble.innerText : '';
+                const time = msg.querySelector('.message-meta span')?.innerText || '';
+                return `[${time}] ${role}:\n${content}`;
+            }).join('\n\n---\n\n');
+
+            const blob = new Blob([text], { type: 'text/plain;charset=utf-8' });
+            const url = URL.createObjectURL(blob);
+            const a = document.createElement('a');
+            a.href = url;
+            a.download = `sohbet_${sessionId}_${Date.now()}.txt`;
+            document.body.appendChild(a);
+            a.click();
+            document.body.removeChild(a);
+            URL.revokeObjectURL(url);
+        }
+
+        // İlk odaklanma
+        messageInput.focus();
+    </script>
 </body>
 </html>'''
 
@@ -813,29 +1487,33 @@ HTML_TEMPLATE = '''<!DOCTYPE html>
 
 @app.route('/')
 def home():
+    """Ana sayfa"""
     return render_template_string(HTML_TEMPLATE)
 
 @app.route('/chat', methods=['POST'])
-@limiter.limit("30 per minute")
+@limiter.limit("40 per minute")
 def chat():
+    """Chat endpoint"""
     try:
         data = request.get_json(silent=True)
         if not data:
-            return jsonify({"error": "Geçersiz JSON"}), 400
+            return jsonify({"error": "Geçersiz istek"}), 400
 
-        msg = data.get('message', '').strip()
-        img = data.get('image')
-        sid = data.get('session', 'default')
+        message = data.get('message', '').strip()
+        image = data.get('image')
+        session = data.get('session', 'default')
         
-        if not msg and not img:
+        if not message and not image:
             return jsonify({"error": "Mesaj veya görsel gerekli"}), 400
         
-        result = process_message(msg, sid, img)
+        # Mesajı işle
+        result = process_message(message, session, image)
         return jsonify(result)
+        
     except Exception as e:
-        print(f"❌ Chat endpoint hatası: {str(e)}")
+        logger.error(f"Chat endpoint hatası: {e}")
         return jsonify({
-            "text": "Bir hata oluştu, lütfen tekrar deneyin.",
+            "text": "Üzgünüm, bir hata oluştu. Lütfen tekrar deneyin.",
             "sources": [],
             "timestamp": datetime.now().strftime("%H:%M")
         }), 500
@@ -843,39 +1521,49 @@ def chat():
 @app.route('/clear', methods=['POST'])
 @limiter.limit("10 per hour")
 def clear():
+    """Sohbet geçmişini temizle"""
     try:
         data = request.get_json(silent=True)
-        sid = data.get('session') if data else None
-        if sid:
-            conn = sqlite3.connect(DB_PATH)
+        session = data.get('session') if data else None
+        
+        if session:
+            conn = sqlite3.connect(DB_PATH, timeout=5)
             c = conn.cursor()
-            c.execute("DELETE FROM messages WHERE session_id = ?", (sid,))
+            c.execute("DELETE FROM messages WHERE session_id = ?", (session,))
             conn.commit()
             conn.close()
+            logger.info(f"Session temizlendi: {session}")
+        
         return '', 204
     except Exception as e:
-        print(f"Clear hatası: {e}")
+        logger.error(f"Clear hatası: {e}")
         return '', 500
 
 @app.route('/health')
 def health():
+    """Sağlık kontrolü"""
     return jsonify({
-        "status": "ok",
+        "status": "healthy",
         "model": MODEL_NAME,
-        "device": ai.device
+        "device": ai.device,
+        "timestamp": datetime.now().isoformat()
     })
 
 # ==================== START ====================
 
 if __name__ == '__main__':
-    print("\n" + "="*70)
-    print("🚀 ICTSMARTPRO.AI - AI CHATBOT BAŞLATILIYOR")
-    print("="*70)
-    print(f"📍 Sunucu: http://0.0.0.0:{os.environ.get('PORT', 5000)}")
-    print(f"🤖 Model: {MODEL_NAME}")
-    print(f"🖥️  Cihaz: {ai.device.upper()}")
-    print("="*70 + "\n")
+    logger.info("\n" + "="*70)
+    logger.info("🚀 ICTSMARTPRO.AI - AI CHATBOT")
+    logger.info("="*70)
+    logger.info(f"📍 Model: {MODEL_NAME}")
+    logger.info(f"🖥️  Cihaz: {ai.device.upper()}")
+    logger.info(f"🗄️  Database: {DB_PATH}")
+    logger.info("="*70 + "\n")
     
     port = int(os.environ.get("PORT", 5000))
-    app.run(host='0.0.0.0', port=port, debug=False, threaded=True)
-
+    app.run(
+        host='0.0.0.0',
+        port=port,
+        debug=False,
+        threaded=True
+    )
