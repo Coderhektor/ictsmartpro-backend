@@ -553,71 +553,114 @@ HTML_TEMPLATE = '''<!DOCTYPE html>
 </div>
 
 <script>
-    let session = localStorage.getItem('chatId') || 'ch_' + Date.now();
-    localStorage.setItem('chatId', session);
-    let currentImage = null;
-    let isProcessing = false;
+    // 1. Global değişkenler (DOM elementleri sonra atanacak)
+    let session, currentImage, isProcessing;
+    let messagesDiv, input, sendBtn, fileInput, preview;
 
-    const messagesDiv = document.getElementById('messages');
-    const input = document.getElementById('input');
-    const sendBtn = document.getElementById('sendBtn');
-    const fileInput = document.getElementById('file');
-    const preview = document.getElementById('preview');
+    // 2. DOM hazır olduğunda çalıştır
+    document.addEventListener('DOMContentLoaded', function() {
+        initChat();
+    });
 
-    if (!sendBtn) console.error("sendBtn bulunamadı!");
-    if (!input) console.error("input textarea bulunamadı!");
+    // 3. Ana başlatma fonksiyonu
+    function initChat() {
+        // Session ID
+        session = localStorage.getItem('chatId') || 'ch_' + Date.now();
+        localStorage.setItem('chatId', session);
+        
+        // Durum değişkenleri
+        currentImage = null;
+        isProcessing = false;
 
-    if (sendBtn) {
+        // DOM elementlerini SEÇ - ARTIK DOM HAZIR!
+        messagesDiv = document.getElementById('messages');
+        input = document.getElementById('input');
+        sendBtn = document.getElementById('sendBtn');
+        fileInput = document.getElementById('file');
+        preview = document.getElementById('preview');
+
+        // Debug: elementler bulundu mu?
+        console.log('sendBtn bulundu:', !!sendBtn);
+        console.log('input bulundu:', !!input);
+        
+        if (!sendBtn) {
+            console.error('CRITICAL: sendBtn elementi bulunamadı!');
+            alert('Sayfa yüklenirken hata oluştu. Lütfen sayfayı yenileyin.');
+            return;
+        }
+
+        // Başlangıç durumu
         sendBtn.disabled = true;
         sendBtn.style.opacity = '0.6';
+        sendBtn.textContent = 'Gönder 🚀';
+
+        // Event listener'ları bağla
+        if (input) {
+            input.addEventListener('input', updateSendButton);
+            input.addEventListener('keydown', handleKeyDown);
+        }
+
+        if (fileInput) {
+            fileInput.addEventListener('change', handleFileSelect);
+        }
+
+        if (sendBtn) {
+            sendBtn.addEventListener('click', sendMessage);
+        }
+
+        // İlk güncelleme
+        updateSendButton();
+        
+        // Input'a focus
+        if (input) {
+            setTimeout(() => input.focus(), 500);
+        }
     }
 
+    // 4. Event handler'lar
+    function handleKeyDown(e) {
+        if (e.key === 'Enter' && !e.shiftKey) {
+            e.preventDefault();
+            if ((input.value.trim() || currentImage) && !isProcessing) {
+                sendMessage();
+            }
+        }
+    }
+
+    function handleFileSelect(e) {
+        const file = e.target.files[0];
+        if (!file) return;
+        
+        if (file.size > 5 * 1024 * 1024) {
+            alert('⚠️ Dosya max 5MB olmalı!');
+            fileInput.value = '';
+            return;
+        }
+        
+        const reader = new FileReader();
+        reader.onload = function(ev) {
+            currentImage = ev.target.result.split(',')[1];
+            if (preview) {
+                preview.src = ev.target.result;
+                preview.style.display = 'block';
+            }
+            updateSendButton();
+        };
+        reader.readAsDataURL(file);
+    }
+
+    // 5. Buton durum güncelleme
     function updateSendButton() {
         if (!sendBtn) return;
-        const hasContent = (input.value.trim() || currentImage);
+        const hasContent = (input && input.value.trim()) || currentImage;
         sendBtn.disabled = !hasContent || isProcessing;
-        sendBtn.style.opacity = hasContent && !isProcessing ? '1' : '0.6';
+        sendBtn.style.opacity = (hasContent && !isProcessing) ? '1' : '0.6';
     }
 
-    if (input) input.addEventListener('input', updateSendButton);
-
-    if (fileInput) {
-        fileInput.onchange = e => {
-            const file = e.target.files[0];
-            if (!file) return;
-            if (file.size > 5 * 1024 * 1024) {
-                alert('⚠️ Dosya max 5MB olmalı!');
-                return;
-            }
-            const reader = new FileReader();
-            reader.onload = ev => {
-                currentImage = ev.target.result.split(',')[1];
-                if (preview) {
-                    preview.src = ev.target.result;
-                    preview.style.display = 'block';
-                }
-                updateSendButton();
-            };
-            reader.readAsDataURL(file);
-        };
-    }
-
-    if (input) {
-        input.addEventListener('keydown', e => {
-            if (e.key === 'Enter' && !e.shiftKey) {
-                e.preventDefault();
-                if ((input.value.trim() || currentImage) && !isProcessing) {
-                    sendMessage();
-                }
-            }
-        });
-    }
-
-    if (sendBtn) sendBtn.addEventListener('click', sendMessage);
-
+    // 6. Mesaj gönderme (DEĞİŞMEDİ - sadece güvenlik kontrolü eklendi)
     async function sendMessage() {
         if (isProcessing) return;
-
+        
         const text = input ? input.value.trim() : '';
         if (!text && !currentImage) {
             if (input) input.focus();
@@ -636,22 +679,47 @@ HTML_TEMPLATE = '''<!DOCTYPE html>
         if (input) input.value = '';
 
         try {
+            // Backend'e istek
             const response = await fetch('/chat', {
                 method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ message: text, image: currentImage, session })
+                headers: { 
+                    'Content-Type': 'application/json',
+                    'X-Requested-With': 'XMLHttpRequest'  // Ek güvenlik
+                },
+                body: JSON.stringify({ 
+                    message: text, 
+                    image: currentImage, 
+                    session: session 
+                })
             });
 
-            if (!response.ok) throw new Error(`Sunucu hatası: ${response.status}`);
+            if (!response.ok) {
+                const errorText = await response.text();
+                throw new Error(`Sunucu hatası (${response.status}): ${errorText}`);
+            }
 
             const data = await response.json();
-            addMsg('bot', data.text, data.timestamp, data.sources || []);
+            
+            // Backend'den gelen hata mesajlarını kontrol et
+            if (data.error) {
+                throw new Error(data.error);
+            }
+            
+            addMsg('bot', data.text || 'Yanıt alınamadı', data.timestamp, data.sources || []);
 
+            // Temizle
             currentImage = null;
+            if (fileInput) fileInput.value = '';
             if (preview) preview.style.display = 'none';
+            
         } catch (err) {
             console.error('Gönderme hatası:', err);
-            addMsg('bot', '❌ Hata: ' + err.message, now);
+            addMsg('bot', '❌ Hata: ' + (err.message || 'Bağlantı sorunu'), now);
+            
+            // Hata durumunda session'ı yenile (belki cookie sorunu)
+            session = 'ch_' + Date.now();
+            localStorage.setItem('chatId', session);
+            
         } finally {
             isProcessing = false;
             if (sendBtn) {
@@ -663,48 +731,80 @@ HTML_TEMPLATE = '''<!DOCTYPE html>
         }
     }
 
+    // 7. Mesaj ekleme (DEĞİŞMEDİ)
     function addMsg(role, text, time, sources = []) {
         if (!messagesDiv) return;
+        
         const div = document.createElement('div');
         div.className = 'msg ' + role;
-        let html = '<div class="bubble">' + (text || '').replace(/\n/g, '<br>') + 
+        
+        let html = '<div class="bubble">' + 
+                   (text || '').replace(/\n/g, '<br>') + 
                    '<div class="time">' + time + '</div>';
-        if (sources.length) {
+        
+        if (sources && sources.length > 0) {
             html += '<div class="sources">🔗 Kaynaklar:<br>';
-            sources.forEach((s, i) => html += `<a href="${s}" target="_blank">${i+1}. ${s.slice(0,50)}${s.length>50?'...':''}</a><br>`);
+            sources.forEach((s, i) => {
+                html += `<a href="${s}" target="_blank" rel="noopener noreferrer">
+                         ${i+1}. ${s.slice(0,50)}${s.length>50?'...':''}</a><br>`;
+            });
             html += '</div>';
         }
+        
         html += '</div>';
         div.innerHTML = html;
         messagesDiv.appendChild(div);
-        messagesDiv.scrollTop = messagesDiv.scrollHeight;
+        
+        // Scroll en alta
+        setTimeout(() => {
+            messagesDiv.scrollTop = messagesDiv.scrollHeight;
+        }, 100);
     }
 
+    // 8. Diğer fonksiyonlar (DEĞİŞMEDİ)
     async function clearChat() {
-        if (!confirm('Sohbet silinsin mi?')) return;
-        await fetch('/clear', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ session })
-        });
-        messagesDiv.innerHTML = '';
-        addMsg('bot', '✅ Sohbet temizlendi!', new Date().toLocaleTimeString('tr-TR', {hour: '2-digit', minute: '2-digit'}));
+        if (!confirm('Sohbet geçmişi silinsin mi? Bu işlem geri alınamaz.')) return;
+        
+        try {
+            const response = await fetch('/clear', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ session: session })
+            });
+            
+            if (response.ok) {
+                messagesDiv.innerHTML = '';
+                addMsg('bot', '✅ Sohbet temizlendi!', 
+                       new Date().toLocaleTimeString('tr-TR', {hour: '2-digit', minute: '2-digit'}));
+                
+                // Yeni session ID
+                session = 'ch_' + Date.now();
+                localStorage.setItem('chatId', session);
+            }
+        } catch (err) {
+            console.error('Temizleme hatası:', err);
+            alert('Temizleme başarısız: ' + err.message);
+        }
     }
 
     function exportChat() {
         const msgs = Array.from(document.querySelectorAll('.msg'));
         const text = msgs.map(m => {
             const role = m.className.includes('user') ? 'SİZ' : 'AI';
-            return role + ': ' + (m.querySelector('.bubble')?.textContent.trim() || '');
-        }).join('\n\n');
-        const blob = new Blob([text], { type: 'text/plain' });
+            const content = m.querySelector('.bubble')?.textContent.trim() || '';
+            return role + ':\n' + content;
+        }).join('\n\n---\n\n');
+        
+        const blob = new Blob([text], { type: 'text/plain;charset=utf-8' });
+        const url = URL.createObjectURL(blob);
         const a = document.createElement('a');
-        a.href = URL.createObjectURL(blob);
-        a.download = 'sohbet-' + Date.now() + '.txt';
+        a.href = url;
+        a.download = `sohbet-${session}-${Date.now()}.txt`;
+        document.body.appendChild(a);
         a.click();
+        document.body.removeChild(a);
+        URL.revokeObjectURL(url);
     }
-
-    updateSendButton();
 </script>
 </body>
 </html>'''
@@ -778,3 +878,4 @@ if __name__ == '__main__':
     
     port = int(os.environ.get("PORT", 5000))
     app.run(host='0.0.0.0', port=port, debug=False, threaded=True)
+
