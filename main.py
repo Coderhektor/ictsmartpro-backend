@@ -6,23 +6,23 @@ Production-Ready AI Chatbot for ictsmartpro.ai
 - Güvenli & Hızlı
 """
 
+import os
+import re
+import secrets
+import sqlite3
+import base64
+import imghdr
+from datetime import datetime
+from io import BytesIO
+
+import torch
 from flask import Flask, render_template_string, request, jsonify
 from flask_cors import CORS
 from flask_limiter import Limiter
 from flask_limiter.util import get_remote_address
-import torch
+from PIL import Image, UnidentifiedImageError
 from transformers import AutoModelForCausalLM, AutoTokenizer, BlipProcessor, BlipForConditionalGeneration
-from PIL import Image
-import io
-import base64
-from datetime import datetime
 from duckduckgo_search import DDGS
-import sqlite3
-import secrets
-import os
-import re
-import imghdr
-from PIL import UnidentifiedImageError
 
 app = Flask(__name__)
 app.secret_key = os.environ.get('SECRET_KEY', secrets.token_hex(32))
@@ -57,9 +57,7 @@ def security_headers(response):
 def sanitize_input(text):
     if not text:
         return ""
-    # HTML tag'lerini temizle
     text = re.sub(r'<[^>]+>', '', text)
-    # script tag'lerini temizle
     text = re.sub(r'<script.*?</script>', '', text, flags=re.DOTALL | re.IGNORECASE)
     return text.strip()[:2000]
 
@@ -184,62 +182,56 @@ class LocalAI:
             print(f"❌ Generate hatası: {e}")
             return "Üzgünüm, yanıt üretemiyorum. Lütfen tekrar deneyin."
     
- def describe_image(self, base64_str):
-    self.load_vision()
-    try:
-        img_bytes = base64.b64decode(base64_str)
-        
-        # 1. Boyut kontrolü (zaten vardı)
-        if len(img_bytes) > MAX_IMAGE_SIZE_MB * 1024 * 1024:
-            return f"⚠️ Görsel çok büyük (max {MAX_IMAGE_SIZE_MB}MB)"
-        
-        # 2. Hızlı dosya türü kontrolü (imghdr - çok hafif)
-        import imghdr
-        file_type = imghdr.what(None, img_bytes)
-        allowed_types = {'jpeg', 'png', 'webp', 'gif', 'bmp'}  # kabul edeceğin formatlar
-        if file_type not in allowed_types:
-            return f"⚠️ Sadece JPEG, PNG, WebP, GIF, BMP dosyaları kabul edilir (algılanan: {file_type or 'bilinmeyen'})"
-        
-        # 3. PIL ile gerçek doğrulama (bozuk/manipüle dosyaları yakalar)
-        from PIL import Image, UnidentifiedImageError
-        from io import BytesIO
-        
+    def describe_image(self, base64_str):
+        self.load_vision()
         try:
-            # verify() ile dosya bütünlüğünü kontrol et
-            img_test = Image.open(BytesIO(img_bytes))
-            img_test.verify()  # ← bu satır bozuk dosyayı yakalar
+            img_bytes = base64.b64decode(base64_str)
             
-            # verify() sonrası yeniden açmak gerekir (dosya pointer'ı kapanır)
-            image = Image.open(BytesIO(img_bytes)).convert("RGB")
+            # Boyut kontrolü
+            if len(img_bytes) > MAX_IMAGE_SIZE_MB * 1024 * 1024:
+                return f"⚠️ Görsel çok büyük (max {MAX_IMAGE_SIZE_MB}MB)"
             
-        except UnidentifiedImageError:
-            return "⚠️ Geçerli bir resim dosyası değil (tanınmayan format)"
-        except Exception as pil_err:
-            print(f"PIL doğrulama hatası: {pil_err}")
-            return "⚠️ Resim dosyası işlenemedi (bozuk veya desteklenmeyen format)"
+            # Dosya türü kontrolü
+            file_type = imghdr.what(None, img_bytes)
+            allowed_types = {'jpeg', 'png', 'webp', 'gif', 'bmp'}
+            if file_type not in allowed_types:
+                return f"⚠️ Sadece JPEG, PNG, WebP, GIF, BMP dosyaları kabul edilir (algılanan: {file_type or 'bilinmeyen'})"
+            
+            # PIL ile gerçek doğrulama
+            try:
+                img_test = Image.open(BytesIO(img_bytes))
+                img_test.verify()
+                image = Image.open(BytesIO(img_bytes)).convert("RGB")
+            except UnidentifiedImageError:
+                return "⚠️ Geçerli bir resim dosyası değil (tanınmayan format)"
+            except Exception as pil_err:
+                print(f"PIL doğrulama hatası: {pil_err}")
+                return "⚠️ Resim dosyası işlenemedi (bozuk veya desteklenmeyen format)"
+            
+            # Çözünürlük kontrolü
+            if max(image.size) > 4000:
+                return "⚠️ Görsel çözünürlüğü çok yüksek (max 4000px kenar)"
+            
+            # Resize
+            if max(image.size) > 896:
+                image.thumbnail((896, 896), Image.Resampling.LANCZOS)
+            
+            # Model girişi
+            inputs = self.vision_processor(images=image, return_tensors="pt").to(self.device)
+            
+            with torch.no_grad():
+                output = self.vision_model.generate(**inputs, max_length=80, num_beams=3)
+            
+            caption = self.vision_processor.decode(output[0], skip_special_tokens=True).strip()
+            return f"🖼️ Görselde: {caption}"
         
-        # 4. Opsiyonel: Çok büyük çözünürlük kontrolü (RAM koruması)
-        if max(image.size) > 4000:  # örneğin 4000px'den büyükse
-            return "⚠️ Görsel çözünürlüğü çok yüksek (max 4000px kenar)"
-        
-        # 5. Resize (zaten vardı)
-        if max(image.size) > 896:
-            image.thumbnail((896, 896), Image.Resampling.LANCZOS)
-        
-        # 6. Model girişi
-        inputs = self.vision_processor(images=image, return_tensors="pt").to(self.device)
-        
-        with torch.no_grad():
-            output = self.vision_model.generate(**inputs, max_length=80, num_beams=3)
-        
-        caption = self.vision_processor.decode(output[0], skip_special_tokens=True).strip()
-        return f"🖼️ Görselde: {caption}"
-    
-    except base64.binascii.Error:
-        return "⚠️ Geçersiz base64 formatı"
-    except Exception as e:
-        print(f"❌ Görsel işleme hatası: {e}")
-        return "⚠️ Görsel analiz edilemedi (beklenmeyen hata)"
+        except base64.binascii.Error:
+            return "⚠️ Geçersiz base64 formatı"
+        except Exception as e:
+            print(f"❌ Görsel işleme hatası: {e}")
+            return "⚠️ Görsel analiz edilemedi (beklenmeyen hata)"
+
+ai = LocalAI()
 
 # ==================== HELPERS ====================
 
@@ -308,9 +300,18 @@ def process_message(message, session_id, image_b64=None):
         context_parts = []
         sources = []
         
+        # Görsel varsa analiz et (yoksa atla)
         if image_b64:
-            context_parts.append(ai.describe_image(image_b64))
+            description = ai.describe_image(image_b64)
+            if description.startswith("⚠️"):
+                return {
+                    "text": description,
+                    "sources": [],
+                    "timestamp": datetime.now().strftime("%H:%M")
+                }
+            context_parts.append(description)
         
+        # Web arama gerekip gerekmediğini kontrol et
         if needs_web_search(message) and not image_b64:
             search_text, srcs = do_web_search(message)
             if search_text:
@@ -350,7 +351,7 @@ def process_message(message, session_id, image_b64=None):
             "timestamp": datetime.now().strftime("%H:%M")
         }
 
-# ==================== HTML TEMPLATE ====================
+# ==================== HTML TEMPLATE (Frontend) ====================
 
 HTML_TEMPLATE = '''<!DOCTYPE html>
 <html lang="tr">
@@ -529,71 +530,47 @@ HTML_TEMPLATE = '''<!DOCTYPE html>
         <button class="send-btn" id="sendBtn">Gönder 🚀</button>
     </div>
 </div>
+
 <script>
-    // ───────────────────────────────────────────────
-    // 1. Session yönetimi
-    // ───────────────────────────────────────────────
     let session = localStorage.getItem('chatId') || 'ch_' + Date.now();
     localStorage.setItem('chatId', session);
-
-    // ───────────────────────────────────────────────
-    // 2. Global durum değişkenleri
-    // ───────────────────────────────────────────────
     let currentImage = null;
     let isProcessing = false;
 
-    // ───────────────────────────────────────────────
-    // 3. DOM elementlerini güvenli şekilde seç
-    // ───────────────────────────────────────────────
     const messagesDiv = document.getElementById('messages');
-    const input       = document.getElementById('input');
-    const sendBtn     = document.getElementById('sendBtn');
-    const fileInput   = document.getElementById('file');
-    const preview     = document.getElementById('preview');
+    const input = document.getElementById('input');
+    const sendBtn = document.getElementById('sendBtn');
+    const fileInput = document.getElementById('file');
+    const preview = document.getElementById('preview');
 
-    // Hata koruması: elementlerden biri eksikse console'a yaz
-    if (!sendBtn)   console.error("sendBtn butonu DOM'da bulunamadı! ID kontrol edin.");
-    if (!input)     console.error("input textarea DOM'da bulunamadı!");
-    if (!messagesDiv) console.error("messages div DOM'da bulunamadı!");
+    if (!sendBtn) console.error("sendBtn bulunamadı!");
+    if (!input) console.error("input textarea bulunamadı!");
 
-    // ───────────────────────────────────────────────
-    // 4. Başlangıçta buton devre dışı
-    // ───────────────────────────────────────────────
+    // Başlangıçta buton devre dışı
     if (sendBtn) {
         sendBtn.disabled = true;
         sendBtn.style.opacity = '0.6';
-        sendBtn.textContent = 'Gönder 🚀';
     }
 
-    // ───────────────────────────────────────────────
-    // 5. Mesaj yazıldığında / görsel eklendiğinde butonu aktifleştir
-    // ───────────────────────────────────────────────
     function updateSendButton() {
         if (!sendBtn) return;
-        const hasContent = (input.value.trim().length > 0) || !!currentImage;
+        const hasContent = (input.value.trim() || currentImage);
         sendBtn.disabled = !hasContent || isProcessing;
-        sendBtn.style.opacity = (hasContent && !isProcessing) ? '1' : '0.6';
+        sendBtn.style.opacity = hasContent && !isProcessing ? '1' : '0.6';
     }
 
-    // Her input değişikliğinde kontrol et
     if (input) {
         input.addEventListener('input', updateSendButton);
-        // Görsel yüklendiğinde de kontrol et (aşağıda fileInput onchange içinde çağrılacak)
     }
 
-    // ───────────────────────────────────────────────
-    // 6. Dosya (görsel) seçildiğinde
-    // ───────────────────────────────────────────────
     if (fileInput) {
         fileInput.onchange = e => {
             const file = e.target.files[0];
             if (!file) return;
-
             if (file.size > 5 * 1024 * 1024) {
                 alert('⚠️ Dosya max 5MB olmalı!');
                 return;
             }
-
             const reader = new FileReader();
             reader.onload = ev => {
                 currentImage = ev.target.result.split(',')[1];
@@ -601,15 +578,12 @@ HTML_TEMPLATE = '''<!DOCTYPE html>
                     preview.src = ev.target.result;
                     preview.style.display = 'block';
                 }
-                updateSendButton();   // ← Görsel gelince butonu aktif et
+                updateSendButton();
             };
             reader.readAsDataURL(file);
         };
     }
 
-    // ───────────────────────────────────────────────
-    // 7. Enter tuşu ile gönderme (Shift+Enter satır atlama için)
-    // ───────────────────────────────────────────────
     if (input) {
         input.addEventListener('keydown', e => {
             if (e.key === 'Enter' && !e.shiftKey) {
@@ -621,22 +595,14 @@ HTML_TEMPLATE = '''<!DOCTYPE html>
         });
     }
 
-    // ───────────────────────────────────────────────
-    // 8. Gönder butonuna tıklama
-    // ───────────────────────────────────────────────
     if (sendBtn) {
         sendBtn.addEventListener('click', sendMessage);
     }
 
-    // ───────────────────────────────────────────────
-    // 9. Asıl gönderme fonksiyonu
-    // ───────────────────────────────────────────────
     async function sendMessage() {
         if (isProcessing) return;
 
         const text = input ? input.value.trim() : '';
-
-        // Hiçbir içerik yoksa çık
         if (!text && !currentImage) {
             if (input) input.focus();
             return;
@@ -657,26 +623,21 @@ HTML_TEMPLATE = '''<!DOCTYPE html>
             const response = await fetch('/chat', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({
-                    message: text,
-                    image: currentImage,
-                    session: session
-                })
+                body: JSON.stringify({ message: text, image: currentImage, session })
             });
 
             if (!response.ok) {
-                throw new Error(`Sunucu yanıtı başarısız: ${response.status}`);
+                throw new Error(`Sunucu hatası: ${response.status}`);
             }
 
             const data = await response.json();
-            addMsg('bot', data.text || 'Yanıt alınamadı', data.timestamp, data.sources || []);
+            addMsg('bot', data.text, data.timestamp, data.sources || []);
 
-            // Temizle
             currentImage = null;
             if (preview) preview.style.display = 'none';
         } catch (err) {
             console.error('Gönderme hatası:', err);
-            addMsg('bot', '❌ Bağlantı hatası: ' + err.message, now);
+            addMsg('bot', '❌ Hata: ' + err.message, now);
         } finally {
             isProcessing = false;
             if (sendBtn) {
@@ -684,40 +645,27 @@ HTML_TEMPLATE = '''<!DOCTYPE html>
                 sendBtn.style.opacity = '1';
                 sendBtn.textContent = 'Gönder 🚀';
             }
-            updateSendButton();  // son durumu güncelle
+            updateSendButton();
         }
     }
 
-    // ───────────────────────────────────────────────
-    // 10. Mesaj balonu ekleme (öncekiyle aynı)
-    // ───────────────────────────────────────────────
     function addMsg(role, text, time, sources = []) {
         if (!messagesDiv) return;
-
         const div = document.createElement('div');
         div.className = 'msg ' + role;
-
-        let html = '<div class="bubble">' + 
-                   (text || '').replace(/\n/g, '<br>') + 
+        let html = '<div class="bubble">' + (text || '').replace(/\n/g, '<br>') + 
                    '<div class="time">' + time + '</div>';
-
-        if (sources && sources.length > 0) {
+        if (sources.length) {
             html += '<div class="sources">🔗 Kaynaklar:<br>';
-            sources.forEach((s, i) => {
-                html += `<a href="${s}" target="_blank">${i+1}. ${s.slice(0,50)}${s.length>50?'...':''}</a><br>`;
-            });
+            sources.forEach((s, i) => html += `<a href="${s}" target="_blank">${i+1}. ${s.slice(0,50)}${s.length>50?'...':''}</a><br>`);
             html += '</div>';
         }
-
         html += '</div>';
         div.innerHTML = html;
         messagesDiv.appendChild(div);
         messagesDiv.scrollTop = messagesDiv.scrollHeight;
     }
 
-    // ───────────────────────────────────────────────
-    // 11. Diğer fonksiyonlar (clearChat, exportChat) aynı kalabilir
-    // ───────────────────────────────────────────────
     async function clearChat() {
         if (!confirm('Sohbet silinsin mi?')) return;
         await fetch('/clear', {
@@ -725,9 +673,8 @@ HTML_TEMPLATE = '''<!DOCTYPE html>
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({ session })
         });
-        if (messagesDiv) messagesDiv.innerHTML = '';
-        addMsg('bot', '✅ Sohbet temizlendi!', 
-               new Date().toLocaleTimeString('tr-TR', {hour: '2-digit', minute: '2-digit'}));
+        messagesDiv.innerHTML = '';
+        addMsg('bot', '✅ Sohbet temizlendi!', new Date().toLocaleTimeString('tr-TR', {hour: '2-digit', minute: '2-digit'}));
     }
 
     function exportChat() {
@@ -743,10 +690,8 @@ HTML_TEMPLATE = '''<!DOCTYPE html>
         a.click();
     }
 
-    // İlk yüklemede buton durumunu güncelle (görsel vs. için)
     updateSendButton();
 </script>
-
 </body>
 </html>'''
 
@@ -760,9 +705,9 @@ def home():
 @limiter.limit("30 per minute")
 def chat():
     try:
-        data = request.get_json()
+        data = request.get_json(silent=True)
         if not data:
-            return jsonify({"error": "JSON body gerekli"}), 400
+            return jsonify({"error": "Geçersiz JSON"}), 400
 
         msg = data.get('message', '').strip()
         img = data.get('image')
@@ -774,7 +719,7 @@ def chat():
         result = process_message(msg, sid, img)
         return jsonify(result)
     except Exception as e:
-        print(f"❌ Chat endpoint hatası: {e}")
+        print(f"❌ Chat endpoint hatası: {str(e)}")
         return jsonify({
             "text": "Bir hata oluştu, lütfen tekrar deneyin.",
             "sources": [],
@@ -785,8 +730,8 @@ def chat():
 @limiter.limit("10 per hour")
 def clear():
     try:
-        data = request.get_json()
-        sid = data.get('session')
+        data = request.get_json(silent=True)
+        sid = data.get('session') if data else None
         if sid:
             conn = sqlite3.connect(DB_PATH)
             c = conn.cursor()
@@ -812,15 +757,12 @@ if __name__ == '__main__':
     print("\n" + "="*70)
     print("🚀 ICTSMARTPRO.AI - AI CHATBOT BAŞLATILIYOR")
     print("="*70)
-    print(f"📍 Sunucu: http://0.0.0.0:5000")
+    print(f"📍 Sunucu: http://0.0.0.0:{os.environ.get('PORT', 5000)}")
     print(f"🤖 Model: {MODEL_NAME}")
     print(f"🖥️  Cihaz: {ai.device.upper()}")
     print("="*70 + "\n")
     
     clean_old_messages()
     
-    # Flask'ı Railway uyumlu şekilde çalıştır
     port = int(os.environ.get("PORT", 5000))
     app.run(host='0.0.0.0', port=port, debug=False, threaded=True)
-
-
