@@ -1,5 +1,9 @@
 """
- 
+Production-Ready AI Chatbot for ictsmartpro.ai
+- %100 Ücretsiz & Açık Kaynak
+- API Key Gerektirmez
+- Tamamen Lokal Çalışır
+- Güvenli & Hızlı
 """
 
 import os
@@ -58,30 +62,58 @@ def sanitize_input(text):
     return text.strip()[:2000]
 
 # ==================== CONFIG ====================
+
 MODEL_NAME = "Qwen/Qwen2-1.5B-Instruct"
 VISION_MODEL = "Salesforce/blip-image-captioning-base"
-DB_PATH = "/app/data/chat_history.db"   # ← BURAYI DEĞİŞTİR
 MAX_NEW_TOKENS = 400
 MAX_CONTEXT_TOKENS = 2400
 MAX_IMAGE_SIZE_MB = 5
 
+# Veritabanı yolu (Railway volume mount path ile uyumlu)
+DB_DIR = "/app/data"
+DB_PATH = os.path.join(DB_DIR, "chat_history.db")
+
+# Veritabanı klasörünü oluştur + yazılabilirlik testi
+os.makedirs(DB_DIR, exist_ok=True)
+try:
+    test_path = os.path.join(DB_DIR, ".write_test")
+    with open(test_path, 'w') as f:
+        f.write("test")
+    os.remove(test_path)
+    print(f"✓ Veritabanı dizini yazılabilir ve hazır: {DB_DIR}")
+except Exception as e:
+    print(f"CRITICAL: {DB_DIR} yazılabilir değil! Hata: {e}")
+    print("→ Railway → Servis → Volumes sekmesinde Mount Path '/app/data' olduğundan emin olun")
+    print("→ Volume attached ve Active mi? Kontrol edin.")
+
 # ==================== DATABASE ====================
 
 def init_db():
-    conn = sqlite3.connect(DB_PATH)
-    c = conn.cursor()
-    c.execute('''
-        CREATE TABLE IF NOT EXISTS messages (
-            id INTEGER PRIMARY KEY AUTOINCREMENT,
-            session_id TEXT NOT NULL,
-            role TEXT NOT NULL,
-            content TEXT NOT NULL,
-            timestamp DATETIME DEFAULT CURRENT_TIMESTAMP
-        )
-    ''')
-    conn.commit()
-    conn.close()
-    print(f"✓ Veritabanı hazır: {DB_PATH}")
+    try:
+        conn = sqlite3.connect(DB_PATH)
+        c = conn.cursor()
+        c.execute('''
+            CREATE TABLE IF NOT EXISTS messages (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                session_id TEXT NOT NULL,
+                role TEXT NOT NULL,
+                content TEXT NOT NULL,
+                timestamp DATETIME DEFAULT CURRENT_TIMESTAMP
+            )
+        ''')
+        conn.commit()
+        conn.close()
+        print(f"✓ Veritabanı hazır ve bağlandı: {DB_PATH}")
+    except sqlite3.OperationalError as e:
+        print(f"CRITICAL: Veritabanı açılamadı! Hata: {e}")
+        print(f"  DB_PATH: {DB_PATH}")
+        print("  Çözüm önerileri:")
+        print("  1. Railway → Servis → Volumes → Mount Path '/app/data' mı?")
+        print("  2. Volume gerçekten attached ve Active mi?")
+        raise
+    except Exception as e:
+        print(f"Veritabanı başlatma hatası: {e}")
+        raise
 
 def clean_old_messages():
     try:
@@ -96,7 +128,9 @@ def clean_old_messages():
     except Exception as e:
         print(f"Temizlik hatası: {e}")
 
+# Veritabanını başlat
 init_db()
+clean_old_messages()
 
 # ==================== AI MODEL ====================
 
@@ -182,17 +216,14 @@ class LocalAI:
         try:
             img_bytes = base64.b64decode(base64_str)
             
-            # Boyut kontrolü
             if len(img_bytes) > MAX_IMAGE_SIZE_MB * 1024 * 1024:
                 return f"⚠️ Görsel çok büyük (max {MAX_IMAGE_SIZE_MB}MB)"
             
-            # Dosya türü kontrolü
             file_type = imghdr.what(None, img_bytes)
             allowed_types = {'jpeg', 'png', 'webp', 'gif', 'bmp'}
             if file_type not in allowed_types:
                 return f"⚠️ Sadece JPEG, PNG, WebP, GIF, BMP dosyaları kabul edilir (algılanan: {file_type or 'bilinmeyen'})"
             
-            # PIL ile gerçek doğrulama
             try:
                 img_test = Image.open(BytesIO(img_bytes))
                 img_test.verify()
@@ -203,15 +234,12 @@ class LocalAI:
                 print(f"PIL doğrulama hatası: {pil_err}")
                 return "⚠️ Resim dosyası işlenemedi (bozuk veya desteklenmeyen format)"
             
-            # Çözünürlük kontrolü
             if max(image.size) > 4000:
                 return "⚠️ Görsel çözünürlüğü çok yüksek (max 4000px kenar)"
             
-            # Resize
             if max(image.size) > 896:
                 image.thumbnail((896, 896), Image.Resampling.LANCZOS)
             
-            # Model girişi
             inputs = self.vision_processor(images=image, return_tensors="pt").to(self.device)
             
             with torch.no_grad():
@@ -295,7 +323,6 @@ def process_message(message, session_id, image_b64=None):
         context_parts = []
         sources = []
         
-        # Görsel varsa analiz et (yoksa atla)
         if image_b64:
             description = ai.describe_image(image_b64)
             if description.startswith("⚠️"):
@@ -306,7 +333,6 @@ def process_message(message, session_id, image_b64=None):
                 }
             context_parts.append(description)
         
-        # Web arama gerekip gerekmediğini kontrol et
         if needs_web_search(message) and not image_b64:
             search_text, srcs = do_web_search(message)
             if search_text:
@@ -541,7 +567,6 @@ HTML_TEMPLATE = '''<!DOCTYPE html>
     if (!sendBtn) console.error("sendBtn bulunamadı!");
     if (!input) console.error("input textarea bulunamadı!");
 
-    // Başlangıçta buton devre dışı
     if (sendBtn) {
         sendBtn.disabled = true;
         sendBtn.style.opacity = '0.6';
@@ -554,9 +579,7 @@ HTML_TEMPLATE = '''<!DOCTYPE html>
         sendBtn.style.opacity = hasContent && !isProcessing ? '1' : '0.6';
     }
 
-    if (input) {
-        input.addEventListener('input', updateSendButton);
-    }
+    if (input) input.addEventListener('input', updateSendButton);
 
     if (fileInput) {
         fileInput.onchange = e => {
@@ -590,9 +613,7 @@ HTML_TEMPLATE = '''<!DOCTYPE html>
         });
     }
 
-    if (sendBtn) {
-        sendBtn.addEventListener('click', sendMessage);
-    }
+    if (sendBtn) sendBtn.addEventListener('click', sendMessage);
 
     async function sendMessage() {
         if (isProcessing) return;
@@ -621,9 +642,7 @@ HTML_TEMPLATE = '''<!DOCTYPE html>
                 body: JSON.stringify({ message: text, image: currentImage, session })
             });
 
-            if (!response.ok) {
-                throw new Error(`Sunucu hatası: ${response.status}`);
-            }
+            if (!response.ok) throw new Error(`Sunucu hatası: ${response.status}`);
 
             const data = await response.json();
             addMsg('bot', data.text, data.timestamp, data.sources || []);
@@ -757,8 +776,5 @@ if __name__ == '__main__':
     print(f"🖥️  Cihaz: {ai.device.upper()}")
     print("="*70 + "\n")
     
-    clean_old_messages()
-    
     port = int(os.environ.get("PORT", 5000))
     app.run(host='0.0.0.0', port=port, debug=False, threaded=True)
-
