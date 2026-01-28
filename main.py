@@ -653,4 +653,5 @@ if __name__ == "__main__":
         reload=DEBUG,
         log_level="info" if not DEBUG else "debug",
         access_log=True if DEBUG else False
-    )Şimdi tamam diyebilirmiyiz hazirmı
+    ) 
+
