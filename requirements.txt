@@ -1,67 +1,21 @@
-# ==============================================
-# 🚀 PRODUCTION-READY AI CHATBOT
-# ICTSMARTPRO.AI için optimize edilmiş
-# ==============================================
+# Core FastAPI & server
+fastapi==0.115.0
+uvicorn[standard]==0.32.0
+python-multipart==0.0.9
 
-# ==============================================
-# 🌐 WEB FRAMEWORK (Flask)
-# ==============================================
-flask==2.3.3
-flask-cors==4.0.0
-flask-limiter==3.5.0
-werkzeug==2.3.7
+# Image & OCR
+pillow==10.4.0
+easyocr==1.7.2  # En son stabil, tr+en desteği iyi
 
-# ==============================================
-# 🤖 AI & MACHINE LEARNING (Core)
-# ==============================================
-torch==2.5.1
-transformers==4.46.0
-sentencepiece==0.2.0
-accelerate==0.34.2
-safetensors==0.4.5              # Model loading için gerekli
+# Data & Finance
+pandas==2.2.3
+yfinance==0.2.44
+openpyxl==3.1.5
 
-# ==============================================
-# 🖼️ IMAGE PROCESSING
-# ==============================================
-Pillow==10.1.0
+# Rate limiting
+slowapi==0.1.9
 
-# ==============================================
-# 🔍 WEB SEARCH & UTILITIES
-# ==============================================
-duckduckgo-search==3.9.4
-requests==2.31.0
-urllib3==2.1.0
-
-# ==============================================
-# 📊 LOGGING & MONITORING
-# ==============================================
-# loguru yerine built-in logging kullanılıyor (daha hafif)
-
-# ==============================================
-# ⚙️ SYSTEM & UTILITIES
-# ==============================================
-python-dotenv==1.0.1
-
-# ==============================================
-# 🐳 DEPLOYMENT & PRODUCTION
-# ==============================================
-gunicorn==21.2.0
-
-# ==============================================
-# NOTLAR:
-# ==============================================
-# ❌ KALDIRILDI: bitsandbytes (Railway CPU ortamında gereksiz)
-# ❌ KALDIRILDI: beautifulsoup4 (kullanılmıyor)
-# ❌ KALDIRILDI: python-magic (platform bağımlı, imghdr yeterli)
-# ❌ KALDIRILDI: psutil (monitoring için gereksiz)
-# ❌ KALDIRILDI: waitress (gunicorn yeterli)
-# ❌ KALDIRILDI: whitenoise (static files yok)
-# ❌ KALDIRILDI: loguru (built-in logging yeterli)
-# ❌ KALDIRILDI: pytest (production'da gereksiz)
-#
-# ✅ EKLENDI: safetensors (transformers için kritik)
-# ✅ EKLENDI: werkzeug (Flask dependency)
-# ✅ EKLENDI: urllib3 (requests dependency)
-#
-# 📦 BOYUT: ~2.5GB (torch dahil)
-# ⚡ INSTALL SÜRESI: ~8-12 dakika (Railway)
+# Torch CPU-only (easyocr bağımlılığı – Railway düşük RAM'de patlamasın)
+--extra-index-url https://download.pytorch.org/whl/cpu
+torch==2.5.1+cpu
+torchvision==0.20.1+cpu
