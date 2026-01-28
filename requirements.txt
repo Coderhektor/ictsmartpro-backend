@@ -1,10 +1,12 @@
+# Railway için optimize edilmiş requirements.txt
 fastapi==0.104.1
-uvicorn[standard]==0.24.0
-pydantic==2.5.3
-pillow==10.1.0
-easyocr==1.7.0
-yfinance==0.2.28
-pandas==2.1.4
+uvicorn[standard]==0.27.0
+pydantic==2.6.1
+pillow==10.2.0
+easyocr==1.7.1
+yfinance==0.2.36
+pandas==2.2.0
 openpyxl==3.1.2
-python-multipart==0.0.6
-numpy==1.24.3
+python-multipart==0.0.9
+numpy==1.26.4
+setuptools==69.0.3  # distutils için gerekli
