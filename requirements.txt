@@ -1,19 +1,14 @@
-# 1. Dosyaları hazırla
-# main.py
-# requirements.txt
-# Procfile
-
-# 2. Git init
-git init
-git add .
-git commit -m "ICTSmartPro API v2.1.0"
-
-# 3. GitHub repo oluştur
-git remote add origin https://github.com/USERNAME/ictsmartpro-api.git
-git branch -M main
-git push -u origin main
-
-# 4. Railway'e git
-# - railway.app → Login
-# - New Project → Deploy from GitHub
-# - Repo seç → Otomatik deploy başlar
+fastapi==0.104.1
+uvicorn[standard]==0.27.0
+pydantic==2.6.1
+pillow==10.2.0
+torch==2.3.0 --index-url https://download.pytorch.org/whl/cpu
+torchvision==0.18.0 --index-url https://download.pytorch.org/whl/cpu
+easyocr==1.7.1
+yfinance==0.2.36
+pandas==2.2.0
+openpyxl==3.1.2
+python-multipart==0.0.9
+numpy==1.26.4
+setuptools==69.0.3
+opencv-python-headless==4.10.0.84
