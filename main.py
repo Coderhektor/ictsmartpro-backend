@@ -1,348 +1,656 @@
-import os
-import json
-import sqlite3
+from fastapi import FastAPI, UploadFile, File, HTTPException, Request
+from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import JSONResponse
+from pydantic import BaseModel
+from PIL import Image
+import pandas as pd
+import yfinance as yf
+import io
 import logging
-import re
-import hashlib
-import random
-from datetime import datetime
-from flask import Flask, request, jsonify, render_template_string
-from flask_cors import CORS
-from groq import Groq
+import os
+from typing import Optional
+from datetime import datetime, timedelta
+from slowapi import Limiter, _rate_limit_exceeded_handler
+from slowapi.util import get_remote_address
+from slowapi.errors import RateLimitExceeded
+import json
+import tempfile
+from pathlib import Path
 
-# ==================== KONFIG ====================
-class Config:
-    SECRET_KEY = "super-2026-ai-chatbot-secret"
-    DEBUG = True
-    HOST = "0.0.0.0"
-    PORT = 5006
-    DB_PATH = "chatbot_2026.db"
-    GROQ_API_KEY = os.getenv("GROQ_API_KEY") or "gsk_xxxxxxxxxxxx"  # ← BURAYA KENDİ GROQ KEY'İNİ YAZ
+# ==================== KONFİGÜRASYON ====================
+PORT = int(os.environ.get("PORT", 8000))
+DEBUG = os.environ.get("DEBUG", "False").lower() == "true"
+MODEL_DIR = os.environ.get("MODEL_DIR", "/tmp/.easyocr")
 
+# Logging
+logging.basicConfig(
+    level=logging.INFO if not DEBUG else logging.DEBUG,
+    format="%(asctime)s - %(name)s - %(levelname)s - %(message)s"
+)
+logger = logging.getLogger(__name__)
 
-# ==================== LOGGING ====================
-logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(message)s')
-logger = logging.getLogger("AI-Chatbot-2026")
+# ==================== FASTAPI APP ====================
+app = FastAPI(
+    title="ICTSmartPro.ai API",
+    description="AI Chatbot, OCR, File Processing, Finance API",
+    version="2.1.0",
+    docs_url="/docs" if DEBUG else None,
+    redoc_url="/redoc" if DEBUG else None
+)
 
+# ==================== RATE LIMITING ====================
+limiter = Limiter(
+    key_func=get_remote_address,
+    default_limits=["100/minute"],
+    storage_uri="memory://"
+)
+app.state.limiter = limiter
+app.add_exception_handler(RateLimitExceeded, _rate_limit_exceeded_handler)
 
-# ==================== VERITABANI ====================
-class SimpleDB:
-    def __init__(self):
-        self.conn = sqlite3.connect(Config.DB_PATH, check_same_thread=False)
-        self.init_db()
+# ==================== CORS ====================
+ALLOWED_ORIGINS = [
+    "https://ictsmartpro.ai",
+    "https://www.ictsmartpro.ai",
+    "https://*.vercel.app",
+    "http://localhost:3000",
+    "http://localhost:5000",
+    "http://localhost:8000",
+]
 
-    def init_db(self):
-        cursor = self.conn.cursor()
-        cursor.execute('''
-            CREATE TABLE IF NOT EXISTS chat_history (
-                id INTEGER PRIMARY KEY AUTOINCREMENT,
-                session_id TEXT,
-                role TEXT,
-                message TEXT,
-                timestamp DATETIME DEFAULT CURRENT_TIMESTAMP
-            )
-        ''')
-        self.conn.commit()
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=ALLOWED_ORIGINS,
+    allow_credentials=True,
+    allow_methods=["*"],
+    allow_headers=["*"],
+    expose_headers=["*"]
+)
 
-    def save_message(self, session_id, role, message):
-        cursor = self.conn.cursor()
-        cursor.execute(
-            "INSERT INTO chat_history (session_id, role, message) VALUES (?, ?, ?)",
-            (session_id, role, message)
-        )
-        self.conn.commit()
+# ==================== MODELS ====================
+class ChatRequest(BaseModel):
+    message: str
+    session_id: Optional[str] = "default"
+    language: Optional[str] = "tr"
 
-    def get_history(self, session_id, limit=10):
-        cursor = self.conn.cursor()
-        cursor.execute(
-            "SELECT role, message FROM chat_history WHERE session_id = ? ORDER BY timestamp DESC LIMIT ?",
-            (session_id, limit)
-        )
-        rows = cursor.fetchall()
-        return [(r[0], r[1]) for r in reversed(rows)]  # en eskiden → en yeniye
+class ChatResponse(BaseModel):
+    reply: str
+    confidence: str = "medium"
+    timestamp: str
+    session_id: Optional[str] = None
 
+class FinanceRequest(BaseModel):
+    symbol: str
+    period: Optional[str] = "1mo"
+    interval: Optional[str] = "1d"
 
-db = SimpleDB()
+class FinanceResponse(BaseModel):
+    symbol: str
+    currency: str
+    current_price: float
+    previous_close: float
+    day_change: float
+    day_change_percent: float
+    volume: int
+    market_cap: Optional[float] = None
+    data_points: int
+    fetched_at: str
 
+class OCRResponse(BaseModel):
+    text: str
+    filename: str
+    language: str
+    processing_time: float
+    word_count: int
+    confidence: str
 
-# ==================== ARAMA MOTORU (korundu) ====================
-class SearchEngine:
-    def __init__(self):
-        try:
-            from duckduckgo_search import DDGS
-            self.ddg = DDGS()
-            logger.info("Web & Görsel arama AKTİF")
-        except ImportError:
-            self.ddg = None
-            logger.warning("duckduckgo-search yüklü değil → arama kapalı")
+class HealthResponse(BaseModel):
+    status: str
+    version: str
+    uptime: float
+    timestamp: str
+    services: dict
 
-    def web_search(self, query, max_results=4):
-        if not self.ddg: return []
-        try:
-            return list(self.ddg.text(query, max_results=max_results))[:max_results]
-        except:
-            return []
+# ==================== CACHE ====================
+class SimpleCache:
+    def __init__(self, ttl_seconds=300):
+        self.cache = {}
+        self.ttl = ttl_seconds
+    
+    def get(self, key):
+        if key in self.cache:
+            value, timestamp = self.cache[key]
+            if datetime.now().timestamp() - timestamp < self.ttl:
+                return value
+            else:
+                del self.cache[key]
+        return None
+    
+    def set(self, key, value):
+        self.cache[key] = (value, datetime.now().timestamp())
+    
+    def clear_old(self):
+        now = datetime.now().timestamp()
+        keys_to_delete = []
+        for key, (_, timestamp) in self.cache.items():
+            if now - timestamp > self.ttl:
+                keys_to_delete.append(key)
+        for key in keys_to_delete:
+            del self.cache[key]
 
-    def image_search(self, query, max_results=5):
-        if not self.ddg: return []
-        try:
-            results = list(self.ddg.images(query, max_results=max_results))
-            return [r for r in results if r.get('image')][:max_results]
-        except:
-            return []
+# Cache instances
+finance_cache = SimpleCache(ttl_seconds=60)
+chat_cache = SimpleCache(ttl_seconds=300)
 
+# ==================== OCR SERVICE (LAZY LOADING) ====================
+_easyocr_reader = None
+_ocr_loading = False
 
-search = SearchEngine()
-
-
-# ==================== GERÇEK AKILLI AI ====================
-class ChatAI:
-    def __init__(self):
-        if not Config.GROQ_API_KEY or "gsk_" not in Config.GROQ_API_KEY:
-            raise ValueError("GROQ_API_KEY ortam değişkenine veya Config sınıfına eklenmemiş!")
-
-        self.client = Groq(api_key=Config.GROQ_API_KEY)
-        self.model = "llama-3.1-70b-versatile"   # çok hızlı ve çok zeki
-
-        self.greetings = [
-            "Merhabaa! 🌟 2026 enerjisiyle buradayım, sen nasılsın?",
-            "Selam! 🚀 Bugün neyi keşfetmek istiyorsun?",
-            "Heyy! 😎 Hazırım, seninle muhabbet etmek için sabırsızlanıyorum!",
-        ]
-
-    def generate_response(self, message, session_id):
-        msg_lower = message.lower().strip()
-
-        # Özel komutlar (hızlı yollar)
-        if any(w in msg_lower for w in ['merhaba', 'selam', 'hey', 'nasılsın', 'naber']):
-            return random.choice(self.greetings)
-
-        if msg_lower.startswith(('ara ', 'search ', 'bul ', 'find ')):
-            query = message.split(' ', 1)[1].strip() if ' ' in message else ""
-            if query:
-                results = search.web_search(query, 3)
-                if results:
-                    resp = f"🔍 **{query}** için bulduklarım:\n\n"
-                    for i, r in enumerate(results, 1):
-                        resp += f"{i}. **{r.get('title', 'Başlık yok')[:70]}**\n   {r.get('body', '')[:140]}...\n   {r.get('href', '#')}\n\n"
-                    return resp
-                return f"😕 '{query}' için bir şey bulamadım... Başka ne arayalım?"
-
-        if any(p in msg_lower for p in ['resim ara', 'görsel ara', 'fotoğraf ara']):
-            query = re.sub(r'(resim|görsel|fotoğraf)\s+ara', '', msg_lower, flags=re.I).strip()
-            if query:
-                results = search.image_search(query, 4)
-                if results:
-                    resp = f"🖼️ **{query}** için birkaç güzel görsel:\n\n"
-                    for i, r in enumerate(results, 1):
-                        resp += f"{i}. {r.get('title', 'Görsel')[:50]}\n   {r.get('image')}\n\n"
-                    return resp
-                return "🖼️ Bu konuda görsel bulamadım... Başka bir şey deneyelim mi?"
-
-        # Grafik (korundu)
-        if 'grafik' in msg_lower or 'chart' in msg_lower:
-            symbols = {
-                'btc': 'BTCUSDT', 'bitcoin': 'BTCUSDT',
-                'eth': 'ETHUSDT', 'ethereum': 'ETHUSDT',
-                'gold': 'XAUUSD', 'altın': 'XAUUSD',
-            }
-            for k, sym in symbols.items():
-                if k in msg_lower:
-                    return self._chart_widget(sym)
-            return "📈 Hangi varlığın grafiğini istiyorsun?\nÖrnek: grafik btc, grafik altın, grafik eth"
-
-        # Ana yol → Gerçek LLM
-        try:
-            history = db.get_history(session_id, limit=10)
-
-            messages = [{
-                "role": "system",
-                "content": (
-                    "Sen 2026 yılının en eğlenceli, zeki, yardımsever ve biraz yaramaz AI'sısın. "
-                    "Kullanıcıyı mutlu etmeyi seviyorsun. Cevaplarını doğal, samimi, kısa-orta uzunlukta tut. "
-                    "Türkçe konuşuyorsun ve çok akıcı ol. Emoji kullanmayı seviyorsun ama abartmıyorsun. "
-                    "Her soruya cevap verebiliyorsun — utanma, yargılama, sınır koyma yok."
-                )
-            }]
-
-            for role, content in history:
-                messages.append({"role": role, "content": content})
-
-            messages.append({"role": "user", "content": message})
-
-            completion = self.client.chat.completions.create(
-                model=self.model,
-                messages=messages,
-                temperature=0.78,
-                max_tokens=600,
-                top_p=0.92
-            )
-
-            answer = completion.choices[0].message.content.strip()
-
-            # Markdown → HTML uyumu için ufak düzeltme
-            answer = answer.replace("**", "<strong>").replace("**", "</strong>")
-
-            return answer
-
-        except Exception as e:
-            logger.error(f"Groq hatası: {e}")
-            return f"Oops! Beynimde ufak bir kısa devre oldu 😅 Ama pes etmem!\n\nTekrar sor bakalım, bu sefer daha dikkatli dinliyorum 🚀"
-
-    def _chart_widget(self, symbol):
-        cid = hashlib.md5(symbol.encode()).hexdigest()[:8]
-        return f"""
-📈 <strong>{symbol} Canlı Grafik</strong> 🚀
-
-<div id="chart-{cid}" style="height:420px; background:#0f0f1a; border-radius:16px; overflow:hidden; margin:16px 0;"></div>
-
-<script>
-new TradingView.widget({{
-    "container_id": "chart-{cid}",
-    "width": "100%",
-    "height": 420,
-    "symbol": "BINANCE:{symbol}",
-    "interval": "D",
-    "timezone": "Europe/Istanbul",
-    "theme": "dark",
-    "style": "1",
-    "locale": "tr",
-    "toolbar_bg": "#1a1a2e",
-    "enable_publishing": false,
-    "allow_symbol_change": true
-}});
-</script>
-💡 Zoom yap, zaman dilimi değiştir — tamamen senin kontrolünde!
-"""
-
-
-ai = ChatAI()
-
-
-# ==================== FLASK ====================
-app = Flask(__name__)
-app.secret_key = Config.SECRET_KEY
-CORS(app)
-
-
-@app.route('/')
-def home():
-    return render_template_string(HTML_TEMPLATE)   # ← aşağıda tanımlı
-
-
-@app.route('/api/chat', methods=['POST'])
-def api_chat():
+def get_ocr_reader(languages=['tr', 'en']):
+    global _easyocr_reader, _ocr_loading
+    
+    if _easyocr_reader is not None:
+        return _easyocr_reader
+    
+    if _ocr_loading:
+        # Another request is already loading OCR
+        for _ in range(10):  # Wait up to 5 seconds
+            import time
+            time.sleep(0.5)
+            if _easyocr_reader is not None:
+                return _easyocr_reader
+    
     try:
-        data = request.get_json()
-        message = (data or {}).get('message', '').strip()
-        session_id = data.get('session_id')
-
-        if not message:
-            return jsonify({'success': False, 'error': 'Mesaj boş'}), 400
-
-        if not session_id:
-            session_id = f"ses_{int(datetime.now().timestamp())}_{random.randrange(10000,999999)}"
-
-        response_text = ai.generate_response(message, session_id)
-
-        db.save_message(session_id, 'user', message)
-        db.save_message(session_id, 'bot', response_text)
-
-        return jsonify({
-            'success': True,
-            'response': response_text,
-            'session_id': session_id
-        })
-
+        _ocr_loading = True
+        import easyocr
+        
+        # Create model directory if it doesn't exist
+        Path(MODEL_DIR).mkdir(parents=True, exist_ok=True)
+        
+        logger.info(f"📥 OCR model yükleniyor ({', '.join(languages)})...")
+        _easyocr_reader = easyocr.Reader(
+            languages,
+            gpu=False,
+            model_storage_directory=MODEL_DIR,
+            download_enabled=True,
+            verbose=DEBUG
+        )
+        logger.info("✅ OCR model yüklendi")
+        return _easyocr_reader
     except Exception as e:
-        logger.error(f"API error: {e}")
-        return jsonify({'success': False, 'error': str(e)}), 500
+        logger.error(f"❌ OCR yükleme hatası: {e}")
+        raise HTTPException(
+            status_code=503,
+            detail=f"OCR servisi başlatılamadı: {str(e)}"
+        )
+    finally:
+        _ocr_loading = False
 
-
-# HTML_TEMPLATE aynı kalabilir, sadece ufak bir iyileştirme:
-# loading spinner'ı daha belirgin yap + "Düşünüyor..." yazısını değiştir
-HTML_TEMPLATE = ''' 
-<!DOCTYPE html>
-<html lang="tr">
-<head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>🌟 2026 AI - Seninle Konuşmayı Çok Seviyor</title>
-    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.0/css/all.min.css">
-    <script src="https://s3.tradingview.com/tv.js"></script>
-    <style>
-        /* Mevcut stil bloğunu buraya kopyala - çok uzun olduğu için kısalttım */
-        /* ... mevcut tüm CSS ... */
-        .message.bot { background: linear-gradient(135deg, #10b981, #34d399); }
-        .spinner {
-            display: inline-block;
-            width: 28px; height: 28px;
-            border: 4px solid #ffffff44;
-            border-top-color: #ffffff;
-            border-radius: 50%;
-            animation: spin 1s linear infinite;
-            margin-right: 12px;
-            vertical-align: middle;
-        }
-        @keyframes spin { to { transform: rotate(360deg); } }
-    </style>
-</head>
-<body>
-    <!-- Mevcut HTML yapısını koru, sadece ufak değişiklik -->
-    <!-- ... header, sidebar, chat-area vs. ... -->
-
-    <script>
-        let currentSessionId = localStorage.getItem('chatSession') || ('ses_' + Date.now() + '_' + Math.random().toString(36).slice(2));
-        localStorage.setItem('chatSession', currentSessionId);
-
-        async function sendMessage() {
-            const input = document.getElementById('messageInput');
-            const msg = input.value.trim();
-            if (!msg) return;
-
-            addMessage('user', msg);
-            input.value = '';
-
-            showLoading();
-
-            try {
-                const res = await fetch('/api/chat', {
-                    method: 'POST',
-                    headers: {'Content-Type': 'application/json'},
-                    body: JSON.stringify({message: msg, session_id: currentSessionId})
-                });
-
-                const data = await res.json();
-
-                removeLoading();
-
-                if (data.success) {
-                    addMessage('bot', data.response);
-                } else {
-                    addMessage('bot', '❌ Bir şeyler ters gitti... Ama pes etmiyoruz! 😄');
-                }
-            } catch (err) {
-                removeLoading();
-                addMessage('bot', '⚡ Bağlantı sorunu çıktı. Sunucu açık mı?');
+# ==================== CHAT ENGINE ====================
+class ChatEngine:
+    def __init__(self):
+        self.context = {}
+    
+    def get_response(self, message: str, session_id: str = "default", language: str = "tr") -> dict:
+        msg = message.lower().strip()
+        
+        # Greetings
+        greetings_tr = ["merhaba", "selam", "günaydın", "iyi günler", "nasılsın", "naber"]
+        greetings_en = ["hello", "hi", "hey", "good morning", "how are you"]
+        
+        if any(greet in msg for greet in (greetings_tr if language == "tr" else greetings_en)):
+            response = {
+                "tr": "Merhaba! ICTSmartPro AI asistanına hoş geldiniz. Size nasıl yardımcı olabilirim?",
+                "en": "Hello! Welcome to ICTSmartPro AI assistant. How can I help you today?"
             }
+            return {
+                "reply": response.get(language, response["en"]),
+                "confidence": "high"
+            }
+        
+        # Finance queries
+        finance_keywords = {
+            "tr": ["borsa", "hisse", "finans", "yatırım", "dolar", "altın", "bitcoin"],
+            "en": ["stock", "finance", "investment", "market", "currency", "gold", "bitcoin"]
+        }
+        
+        if any(keyword in msg for keyword in finance_keywords.get(language, finance_keywords["en"])):
+            response = {
+                "tr": "Finans verileri için /finance endpoint'ini kullanabilirsiniz. Örneğin: 'AAPL', 'TSLA', 'BTC-USD' gibi semboller sorgulayabilirsiniz.",
+                "en": "You can use the /finance endpoint for financial data. For example, you can query symbols like 'AAPL', 'TSLA', 'BTC-USD'."
+            }
+            return {
+                "reply": response.get(language, response["en"]),
+                "confidence": "high"
+            }
+        
+        # OCR queries
+        ocr_keywords = {
+            "tr": ["ocr", "metin oku", "resimden yazı", "fotoğraf yazı"],
+            "en": ["ocr", "text extract", "image to text", "read text"]
+        }
+        
+        if any(keyword in msg for keyword in ocr_keywords.get(language, ocr_keywords["en"])):
+            response = {
+                "tr": "Resimden metin çıkarmak için /ocr endpoint'ine JPEG, PNG veya WEBP formatında resim yükleyebilirsiniz. Maksimum dosya boyutu 5MB'dır.",
+                "en": "To extract text from images, you can upload an image in JPEG, PNG or WEBP format to the /ocr endpoint. Maximum file size is 5MB."
+            }
+            return {
+                "reply": response.get(language, response["en"]),
+                "confidence": "high"
+            }
+        
+        # File processing
+        file_keywords = {
+            "tr": ["dosya", "yükle", "upload", "işle"],
+            "en": ["file", "upload", "process", "document"]
+        }
+        
+        if any(keyword in msg for keyword in file_keywords.get(language, file_keywords["en"])):
+            response = {
+                "tr": "Dosya işlemek için /file endpoint'ini kullanabilirsiniz. CSV, TXT, JSON ve Excel dosyalarını işleyebilirim.",
+                "en": "You can use the /file endpoint to process files. I can handle CSV, TXT, JSON and Excel files."
+            }
+            return {
+                "reply": response.get(language, response["en"]),
+                "confidence": "high"
+            }
+        
+        # Help
+        help_keywords = {
+            "tr": ["yardım", "ne yapabilirsin", "özellikler", "komutlar"],
+            "en": ["help", "what can you do", "features", "commands"]
+        }
+        
+        if any(keyword in msg for keyword in help_keywords.get(language, help_keywords["en"])):
+            response = {
+                "tr": """Yardım merkezi:
+
+🤖 **Chat**: Benimle doğrudan konuşabilirsiniz
+📊 **Finance**: /finance/{sembol} ile hisse verileri
+🖼️ **OCR**: /ocr ile resimden metin çıkarma
+📁 **File**: /file ile dosya işleme
+📈 **Analytics**: Veri analizi hizmetleri
+
+Örnek: "AAPL hissesi nasıl?" veya "Bu resimdeki yazıyı oku" """,
+                "en": """Help Center:
+
+🤖 **Chat**: You can talk to me directly
+📊 **Finance**: Stock data via /finance/{symbol}
+🖼️ **OCR**: Extract text from images via /ocr
+📁 **File**: File processing via /file
+📈 **Analytics**: Data analytics services
+
+Example: "How is AAPL stock?" or "Read text in this image" """
+            }
+            return {
+                "reply": response.get(language, response["en"]),
+                "confidence": "high"
+            }
+        
+        # Default response
+        default_responses = {
+            "tr": "Anladığım kadarıyla finans, OCR veya dosya işleme ile ilgili bir sorunuz var. Daha spesifik sorarsanız daha iyi yardımcı olabilirim!",
+            "en": "I understand you have a question about finance, OCR, or file processing. If you ask more specifically, I can help better!"
+        }
+        
+        return {
+            "reply": default_responses.get(language, default_responses["en"]),
+            "confidence": "medium"
         }
 
-        // Enter tuşu ile gönderme
-        document.getElementById('messageInput').addEventListener('keypress', e => {
-            if (e.key === 'Enter' && !e.shiftKey) {
-                e.preventDefault();
-                sendMessage();
-            }
-        });
+chat_engine = ChatEngine()
 
-        // ... kalan javascript fonksiyonları (addMessage, showLoading, removeLoading vs.) aynı kalabilir ...
-    </script>
-</body>
-</html>
-'''
+# ==================== ENDPOINTS ====================
+@app.get("/")
+async def root():
+    return {
+        "service": "ICTSmartPro.ai API",
+        "status": "operational",
+        "version": "2.1.0",
+        "environment": "development" if DEBUG else "production",
+        "endpoints": {
+            "chat": "POST /chat",
+            "ocr": "POST /ocr",
+            "finance": "GET /finance/{symbol}",
+            "file": "POST /file",
+            "health": "GET /health",
+            "docs": "/docs" if DEBUG else "disabled"
+        },
+        "limits": {
+            "chat": "100 requests/minute",
+            "ocr": "10 requests/minute",
+            "finance": "30 requests/minute"
+        }
+    }
 
-if __name__ == '__main__':
-    print("🚀 2026 AI Chatbot başlıyor...")
-    print(f"   http://{Config.HOST}:{Config.PORT}")
-    print("   Groq modeli aktif → her şeye cevap verecek!")
-    app.run(host=Config.HOST, port=Config.PORT, debug=Config.DEBUG, threaded=True)
+@app.get("/health", response_model=HealthResponse)
+async def health_check():
+    services = {
+        "api": "healthy",
+        "ocr": "ready" if _easyocr_reader is not None else "lazy_loading",
+        "cache": "active",
+        "memory": "normal"
+    }
+    
+    # Calculate uptime (simplified)
+    if hasattr(app.state, 'start_time'):
+        uptime = (datetime.now() - app.state.start_time).total_seconds()
+    else:
+        uptime = 0
+    
+    return HealthResponse(
+        status="healthy",
+        version="2.1.0",
+        uptime=uptime,
+        timestamp=datetime.utcnow().isoformat(),
+        services=services
+    )
+
+@app.post("/chat", response_model=ChatResponse)
+@limiter.limit("100/minute")
+async def chat_endpoint(request: Request, chat_req: ChatRequest):
+    cache_key = f"chat_{chat_req.session_id}_{chat_req.message[:50]}"
+    cached = chat_cache.get(cache_key)
+    
+    if cached and not DEBUG:
+        return ChatResponse(
+            reply=cached["reply"],
+            confidence=cached["confidence"],
+            timestamp=datetime.utcnow().isoformat(),
+            session_id=chat_req.session_id
+        )
+    
+    if not chat_req.message.strip():
+        raise HTTPException(status_code=400, detail="Mesaj boş olamaz")
+    
+    try:
+        response = chat_engine.get_response(
+            chat_req.message,
+            chat_req.session_id,
+            chat_req.language
+        )
+        
+        # Cache the response
+        chat_cache.set(cache_key, response)
+        
+        return ChatResponse(
+            reply=response["reply"],
+            confidence=response["confidence"],
+            timestamp=datetime.utcnow().isoformat(),
+            session_id=chat_req.session_id
+        )
+    except Exception as e:
+        logger.error(f"Chat error: {e}")
+        raise HTTPException(
+            status_code=500,
+            detail="Chat servisinde geçici bir sorun oluştu"
+        )
+
+@app.post("/ocr", response_model=OCRResponse)
+@limiter.limit("10/minute")
+async def ocr_endpoint(request: Request, file: UploadFile = File(...)):
+    start_time = datetime.now()
+    
+    # Validate file type
+    allowed_types = ["image/jpeg", "image/png", "image/webp", "image/jpg"]
+    if file.content_type not in allowed_types:
+        raise HTTPException(
+            status_code=400,
+            detail=f"Desteklenmeyen dosya türü. İzin verilenler: {', '.join(allowed_types)}"
+        )
+    
+    # Validate file size (5MB max)
+    max_size = 5 * 1024 * 1024  # 5MB
+    await file.seek(0, 2)  # Seek to end
+    file_size = await file.tell()
+    await file.seek(0)  # Reset to start
+    
+    if file_size > max_size:
+        raise HTTPException(
+            status_code=413,
+            detail=f"Dosya çok büyük. Maksimum boyut: 5MB"
+        )
+    
+    try:
+        # Read and process image
+        contents = await file.read()
+        image = Image.open(io.BytesIO(contents))
+        
+        # Convert to RGB if necessary
+        if image.mode in ('RGBA', 'LA', 'P'):
+            image = image.convert('RGB')
+        
+        # Load OCR reader (lazy loading)
+        reader = get_ocr_reader(['tr', 'en'])
+        
+        # Perform OCR
+        result = reader.readtext(image, detail=0)
+        text = " ".join(result)
+        
+        processing_time = (datetime.now() - start_time).total_seconds()
+        
+        return OCRResponse(
+            text=text.strip(),
+            filename=file.filename,
+            language="tr+en",
+            processing_time=round(processing_time, 2),
+            word_count=len(text.split()),
+            confidence="high" if text.strip() else "low"
+        )
+        
+    except Exception as e:
+        logger.error(f"OCR processing error: {e}")
+        raise HTTPException(
+            status_code=500,
+            detail=f"Resim işlenirken hata oluştu: {str(e)}"
+        )
+
+@app.get("/finance/{symbol}", response_model=FinanceResponse)
+@limiter.limit("30/minute")
+async def finance_endpoint(
+    request: Request,
+    symbol: str,
+    period: Optional[str] = "1mo",
+    interval: Optional[str] = "1d"
+):
+    cache_key = f"finance_{symbol}_{period}_{interval}"
+    cached = finance_cache.get(cache_key)
+    
+    if cached and not DEBUG:
+        return FinanceResponse(**cached)
+    
+    try:
+        # Clean and validate symbol
+        symbol = symbol.upper().strip()
+        
+        # Fetch stock data
+        stock = yf.Ticker(symbol)
+        
+        # Get basic info
+        info = stock.info
+        hist = stock.history(period=period, interval=interval)
+        
+        if hist.empty:
+            raise HTTPException(
+                status_code=404,
+                detail=f"'{symbol}' için veri bulunamadı"
+            )
+        
+        # Calculate metrics
+        current_price = hist['Close'].iloc[-1]
+        previous_close = hist['Close'].iloc[-2] if len(hist) > 1 else current_price
+        day_change = current_price - previous_close
+        day_change_percent = (day_change / previous_close) * 100 if previous_close != 0 else 0
+        
+        response_data = {
+            "symbol": symbol,
+            "currency": info.get('currency', 'USD'),
+            "current_price": round(current_price, 2),
+            "previous_close": round(previous_close, 2),
+            "day_change": round(day_change, 2),
+            "day_change_percent": round(day_change_percent, 2),
+            "volume": int(hist['Volume'].iloc[-1]),
+            "market_cap": info.get('marketCap'),
+            "data_points": len(hist),
+            "fetched_at": datetime.utcnow().isoformat()
+        }
+        
+        # Cache the response
+        finance_cache.set(cache_key, response_data)
+        
+        return FinanceResponse(**response_data)
+        
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Finance data error for {symbol}: {e}")
+        raise HTTPException(
+            status_code=500,
+            detail=f"Finans verileri alınamadı: {str(e)}"
+        )
+
+@app.post("/file")
+@limiter.limit("20/minute")
+async def file_endpoint(request: Request, file: UploadFile = File(...)):
+    try:
+        # Read file content
+        content = await file.read()
+        file_size = len(content)
+        
+        # Validate file size (10MB max)
+        max_size = 10 * 1024 * 1024
+        if file_size > max_size:
+            raise HTTPException(
+                status_code=413,
+                detail="Dosya çok büyük. Maksimum 10MB"
+            )
+        
+        # Process based on file type
+        file_type = file.content_type or "application/octet-stream"
+        filename = file.filename
+        extension = filename.split('.')[-1].lower() if '.' in filename else ""
+        
+        result = {
+            "filename": filename,
+            "size_bytes": file_size,
+            "size_mb": round(file_size / (1024 * 1024), 2),
+            "type": file_type,
+            "extension": extension,
+            "processed_at": datetime.utcnow().isoformat()
+        }
+        
+        # Process CSV files
+        if extension in ['csv', 'txt'] or 'text' in file_type:
+            try:
+                content_str = content.decode('utf-8')
+                lines = content_str.split('\n')
+                result["line_count"] = len(lines)
+                result["sample"] = lines[:5] if lines else []
+            except:
+                result["note"] = "İçerik metin olarak işlenemedi"
+        
+        # Process JSON files
+        elif extension == 'json' or 'json' in file_type:
+            try:
+                json_data = json.loads(content.decode('utf-8'))
+                result["json_valid"] = True
+                result["keys"] = list(json_data.keys()) if isinstance(json_data, dict) else "array"
+            except:
+                result["json_valid"] = False
+        
+        # Process Excel files
+        elif extension in ['xlsx', 'xls'] or 'excel' in file_type:
+            try:
+                import pandas as pd
+                excel_data = pd.read_excel(io.BytesIO(content))
+                result["excel_sheets"] = "loaded"
+                result["excel_rows"] = len(excel_data)
+                result["excel_columns"] = list(excel_data.columns)
+            except Exception as e:
+                result["excel_error"] = str(e)
+        
+        return result
+        
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"File processing error: {e}")
+        raise HTTPException(
+            status_code=500,
+            detail=f"Dosya işlenirken hata oluştu: {str(e)}"
+        )
+
+# ==================== STARTUP & SHUTDOWN ====================
+@app.on_event("startup")
+async def startup_event():
+    app.state.start_time = datetime.now()
+    app.state.startup_time = app.state.start_time.isoformat()
+    
+    logger.info("🚀 ICTSmartPro API başlatılıyor...")
+    logger.info(f"📦 Version: 2.1.0")
+    logger.info(f"🌍 Environment: {'development' if DEBUG else 'production'}")
+    logger.info(f"🔌 Port: {PORT}")
+    logger.info(f"📁 Model Directory: {MODEL_DIR}")
+    
+    # Pre-warm OCR if in production
+    if not DEBUG:
+        import threading
+        
+        def preload_ocr():
+            try:
+                logger.info("🔄 OCR model ön yüklemesi başlatılıyor...")
+                get_ocr_reader()
+                logger.info("✅ OCR model ön yüklendi")
+            except Exception as e:
+                logger.warning(f"⚠️ OCR ön yükleme başarısız: {e}")
+        
+        # Start preloading in background
+        thread = threading.Thread(target=preload_ocr, daemon=True)
+        thread.start()
+
+@app.on_event("shutdown")
+async def shutdown_event():
+    logger.info("👋 ICTSmartPro API kapanıyor...")
+    
+    # Clean up cache
+    if hasattr(app.state, 'cache'):
+        app.state.cache.clear()
+    
+    logger.info("✅ Temizlik tamamlandı")
+
+# ==================== ERROR HANDLERS ====================
+@app.exception_handler(HTTPException)
+async def http_exception_handler(request: Request, exc: HTTPException):
+    return JSONResponse(
+        status_code=exc.status_code,
+        content={
+            "error": exc.detail,
+            "path": request.url.path,
+            "timestamp": datetime.utcnow().isoformat()
+        }
+    )
+
+@app.exception_handler(Exception)
+async def general_exception_handler(request: Request, exc: Exception):
+    logger.error(f"Unhandled exception: {exc}", exc_info=True)
+    return JSONResponse(
+        status_code=500,
+        content={
+            "error": "İç sunucu hatası",
+            "path": request.url.path,
+            "timestamp": datetime.utcnow().isoformat()
+        }
+    )
+
+# ==================== MAIN ====================
+if __name__ == "__main__":
+    import uvicorn
+    
+    uvicorn.run(
+        "main:app",
+        host="0.0.0.0",
+        port=PORT,
+        reload=DEBUG,
+        log_level="info" if not DEBUG else "debug",
+        access_log=True if DEBUG else False
+    ) 
