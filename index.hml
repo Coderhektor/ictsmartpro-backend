@@ -1,1 +1,144 @@
 
+<!DOCTYPE html>
+<html lang="tr">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+  <title>ICTSmartPro - Qwen AI Trading Analizi</title>
+  <style>
+    * { margin:0; padding:0; box-sizing:border-box; }
+    body {
+      font-family: system-ui, sans-serif;
+      background: #0a0e27;
+      color: #e0e3f0;
+      height: 100vh;
+      display: flex;
+      flex-direction: column;
+    }
+    header {
+      background: linear-gradient(135deg, #1a1f3a, #2d1b4e);
+      padding: 16px 24px;
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      border-bottom: 1px solid #334;
+      box-shadow: 0 4px 12px rgba(0,0,0,0.4);
+    }
+    .logo {
+      font-size: 1.7rem;
+      font-weight: bold;
+      background: linear-gradient(90deg, #667eea, #a78bfa);
+      -webkit-background-clip: text;
+      -webkit-text-fill-color: transparent;
+    }
+    .controls {
+      display: flex;
+      gap: 12px;
+    }
+    select, input, button {
+      padding: 10px 16px;
+      border-radius: 8px;
+      border: 1px solid rgba(100,200,255,0.25);
+      background: rgba(255,255,255,0.06);
+      color: white;
+      font-size: 1rem;
+    }
+    button { 
+      background: linear-gradient(135deg, #667eea, #764ba2);
+      border: none;
+      cursor: pointer;
+    }
+    main {
+      flex: 1;
+      padding: 16px;
+      display: flex;
+      flex-direction: column;
+    }
+    iframe {
+      flex: 1;
+      border: none;
+      border-radius: 12px;
+      background: #111827;
+      box-shadow: 0 8px 32px rgba(0,0,0,0.5);
+    }
+    .prompt-area {
+      margin-top: 12px;
+      display: flex;
+      gap: 8px;
+    }
+    .prompt-area input { flex: 1; }
+  </style>
+</head>
+<body>
+
+  <header>
+    <div class="logo">ICTSmartPro × Qwen AI</div>
+    <div class="controls">
+      <select id="symbol">
+        <option value="BTC/USD">BTC/USD</option>
+        <option value="ETH/USD">ETH/USD</option>
+        <option value="SOL/USD">SOL/USD</option>
+        <option value="AAPL">AAPL</option>
+        <option value="TSLA">TSLA</option>
+      </select>
+      <select id="timeframe">
+        <option value="1 aylık">1 Aylık</option>
+        <option value="3 aylık">3 Aylık</option>
+        <option value="6 aylık">6 Aylık</option>
+        <option value="1 yıllık">1 Yıllık</option>
+      </select>
+    </div>
+  </header>
+
+  <main>
+    <iframe id="qwen" src="https://chat.qwen.ai/"></iframe>
+
+    <div class="prompt-area">
+      <input id="custom" placeholder="Kendi sorunuzu yazın ve Enter'a basın..." />
+      <button onclick="sendPrompt()">Gönder</button>
+    </div>
+  </main>
+
+  <script>
+    const iframe = document.getElementById('qwen');
+    const symbolSelect = document.getElementById('symbol');
+    const timeframeSelect = document.getElementById('timeframe');
+    const customInput = document.getElementById('custom');
+
+    function buildPrompt() {
+      const symbol = symbolSelect.value;
+      const tf = timeframeSelect.value;
+      return `${symbol} için ${tf} mum grafiği çiz ve detaylı teknik analiz yap.`;
+    }
+
+    function updateIframe() {
+      const prompt = encodeURIComponent(buildPrompt());
+      iframe.src = `https://chat.qwen.ai/?prompt=${prompt}`;
+    }
+
+    function sendPrompt() {
+      const text = customInput.value.trim();
+      if (!text) {
+        updateIframe();
+        return;
+      }
+      const prompt = encodeURIComponent(text);
+      iframe.src = `https://chat.qwen.ai/?prompt=${prompt}`;
+      customInput.value = '';
+    }
+
+    // Select değişince otomatik prompt ile yenile
+    symbolSelect.onchange = updateIframe;
+    timeframeSelect.onchange = updateIframe;
+
+    // İlk açılışta varsayılan prompt ile başla
+    updateIframe();
+
+    // Enter tuşu ile de gönderme
+    customInput.addEventListener('keydown', e => {
+      if (e.key === 'Enter') sendPrompt();
+    });
+  </script>
+
+</body>
+</html>
