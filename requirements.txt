@@ -1,21 +1,14 @@
-# Railway için optimize edilmiş requirements.txt
 fastapi==0.104.1
 uvicorn[standard]==0.27.0
 pydantic==2.6.1
 pillow==10.2.0
-
-# CUDA OLMADAN torch kur
 torch==2.3.0 --index-url https://download.pytorch.org/whl/cpu
 torchvision==0.18.0 --index-url https://download.pytorch.org/whl/cpu
-
-# EasyOCR (CPU-only versiyonu)
 easyocr==1.7.1
-
-# Diğer bağımlılıklar
 yfinance==0.2.36
 pandas==2.2.0
 openpyxl==3.1.2
 python-multipart==0.0.9
 numpy==1.26.4
 setuptools==69.0.3
-opencv-python-headless==4.10.0.84  # Daha hafif versiyon
+opencv-python-headless==4.10.0.84
