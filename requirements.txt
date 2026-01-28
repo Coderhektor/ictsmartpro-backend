@@ -1,10 +1,48 @@
-fastapi==0.115.0
-uvicorn[standard]==0.30.6
-pydantic==2.9.2
-pillow==10.4.0
-easyocr==1.7.2
-yfinance==0.2.43
-slowapi==0.1.9
-pandas==2.2.3
-openpyxl==3.1.5
-python-multipart==0.0.12
+# ==============================================
+# FastAPI & Sunucu (Core)
+# ==============================================
+fastapi>=0.115.0                    # 2025 sonu / 2026 başı en güncel stabil sürüm
+uvicorn[standard]>=0.30.0           # ASGI sunucu + websockets desteği
+hypercorn>=0.17.0                   # Alternatif ASGI sunucu (uvicorn'a ek/yerine)
+
+# ==============================================
+# Veri & Analiz
+# ==============================================
+pandas>=2.2.3                       # 2.2.3 en son stabil (2025 sonu)
+numpy>=2.0.0                        # numpy 2.x serisi artık çok yaygın
+ccxt>=4.4.0                         # En güncel exchange kütüphanesi
+pycoingecko>=3.2.0                  # CoinGecko API wrapper (fallback için)
+
+# ==============================================
+# API & HTTP İstemcileri
+# ==============================================
+httpx>=0.27.2                       # async HTTP client (aiohttp alternatifi)
+aiohttp>=3.10.0                     # async requests için
+websockets>=13.0                    # realtime websocket desteği
+
+# ==============================================
+# Dosya & Form
+# ==============================================
+python-multipart>=0.0.12            # FastAPI'de UploadFile için zorunlu
+jinja2>=3.1.4                       # template rendering (isteğe bağlı)
+
+# ==============================================
+# Yardımcı & Güvenlik
+# ==============================================
+python-dotenv>=1.0.1                # .env dosyası desteği
+pydantic>=2.9.0                     # FastAPI zaten kullanıyor ama versiyon kilitlemek iyi
+pydantic-settings>=2.5.0            # settings yönetimi için (isteğe bağlı ama çok faydalı)
+
+# ==============================================
+# Loglama & Debug
+# ==============================================
+loguru>=0.7.2                       # Çok daha güzel ve renkli loglar
+rich>=13.7.0                        # terminalde güzel çıktı (loguru ile çok iyi gider)
+
+# ==============================================
+# Test & Dev (isteğe bağlı - development için)
+# ==============================================
+pytest>=8.3.0                       # test framework
+pytest-asyncio>=0.24.0              # async test desteği
+pytest-cov>=5.0.0                   # coverage raporu
+ruff>=0.6.0                         # linter & formatter (black alternatifi)
