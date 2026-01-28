@@ -16,6 +16,7 @@ from slowapi.errors import RateLimitExceeded
 import json
 import tempfile
 from pathlib import Path
+import easyocr
 
 # ==================== KONFİGÜRASYON ====================
 PORT = int(os.environ.get("PORT", 8000))
@@ -654,4 +655,5 @@ if __name__ == "__main__":
         log_level="info" if not DEBUG else "debug",
         access_log=True if DEBUG else False
     ) 
+
 
