@@ -1,371 +1,348 @@
-from fastapi import FastAPI, UploadFile, File, HTTPException
-from fastapi.middleware.cors import CORSMiddleware
-from pydantic import BaseModel
-from PIL import Image
-import pandas as pd
-import yfinance as yf
-import io
-import logging
 import os
 import json
+import sqlite3
+import logging
+import re
+import hashlib
+import random
 from datetime import datetime
-from typing import Optional
-import sys
+from flask import Flask, request, jsonify, render_template_string
+from flask_cors import CORS
+from groq import Groq
 
-# ==================== KONFİGÜRASYON ====================
-PORT = int(os.environ.get("PORT", 8000))
-DEBUG = os.environ.get("DEBUG", "false").lower() == "true"
-MODEL_DIR = os.environ.get("MODEL_DIR", "/app/models")
+# ==================== KONFIG ====================
+class Config:
+    SECRET_KEY = "super-2026-ai-chatbot-secret"
+    DEBUG = True
+    HOST = "0.0.0.0"
+    PORT = 5006
+    DB_PATH = "chatbot_2026.db"
+    GROQ_API_KEY = os.getenv("GROQ_API_KEY") or "gsk_xxxxxxxxxxxx"  # ← BURAYA KENDİ GROQ KEY'İNİ YAZ
 
-# Logging
-logging.basicConfig(
-    level=logging.DEBUG if DEBUG else logging.INFO,
-    format='%(asctime)s - %(name)s - %(levelname)s - %(message)s'
-)
-logger = logging.getLogger(__name__)
 
-# ==================== FASTAPI APP ====================
-app = FastAPI(
-    title="ICTSmartPro AI API",
-    description="AI Chatbot, OCR, File Processing & Finance API",
-    version="2.0.0",
-    docs_url="/docs" if DEBUG else None,
-    redoc_url=None
-)
+# ==================== LOGGING ====================
+logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(message)s')
+logger = logging.getLogger("AI-Chatbot-2026")
 
-# ==================== CORS ====================
-app.add_middleware(
-    CORSMiddleware,
-    allow_origins=["*"],
-    allow_credentials=True,
-    allow_methods=["*"],
-    allow_headers=["*"],
-)
 
-# ==================== MODELS ====================
-class ChatRequest(BaseModel):
-    message: str
-    language: Optional[str] = "tr"
+# ==================== VERITABANI ====================
+class SimpleDB:
+    def __init__(self):
+        self.conn = sqlite3.connect(Config.DB_PATH, check_same_thread=False)
+        self.init_db()
 
-# ==================== OCR SETUP ====================
-OCR_AVAILABLE = False
-ocr_reader = None
-
-try:
-    import easyocr
-    OCR_AVAILABLE = True
-    logger.info("✅ EasyOCR imported successfully")
-except ImportError as e:
-    logger.error(f"❌ EasyOCR import failed: {e}")
-    OCR_AVAILABLE = False
-
-def get_ocr_reader():
-    """Load OCR reader (lazy loading)"""
-    global ocr_reader
-    if not OCR_AVAILABLE:
-        return None
-    
-    if ocr_reader is None:
-        try:
-            logger.info("🔄 Loading OCR models...")
-            # Model dizinini oluştur
-            os.makedirs(MODEL_DIR, exist_ok=True)
-            
-            # Daha az bellek kullanan ayarlar
-            ocr_reader = easyocr.Reader(
-                ['tr', 'en'],
-                gpu=False,
-                model_storage_directory=MODEL_DIR,
-                download_enabled=True,
-                verbose=False
+    def init_db(self):
+        cursor = self.conn.cursor()
+        cursor.execute('''
+            CREATE TABLE IF NOT EXISTS chat_history (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                session_id TEXT,
+                role TEXT,
+                message TEXT,
+                timestamp DATETIME DEFAULT CURRENT_TIMESTAMP
             )
-            logger.info("✅ OCR models loaded successfully")
+        ''')
+        self.conn.commit()
+
+    def save_message(self, session_id, role, message):
+        cursor = self.conn.cursor()
+        cursor.execute(
+            "INSERT INTO chat_history (session_id, role, message) VALUES (?, ?, ?)",
+            (session_id, role, message)
+        )
+        self.conn.commit()
+
+    def get_history(self, session_id, limit=10):
+        cursor = self.conn.cursor()
+        cursor.execute(
+            "SELECT role, message FROM chat_history WHERE session_id = ? ORDER BY timestamp DESC LIMIT ?",
+            (session_id, limit)
+        )
+        rows = cursor.fetchall()
+        return [(r[0], r[1]) for r in reversed(rows)]  # en eskiden → en yeniye
+
+
+db = SimpleDB()
+
+
+# ==================== ARAMA MOTORU (korundu) ====================
+class SearchEngine:
+    def __init__(self):
+        try:
+            from duckduckgo_search import DDGS
+            self.ddg = DDGS()
+            logger.info("Web & Görsel arama AKTİF")
+        except ImportError:
+            self.ddg = None
+            logger.warning("duckduckgo-search yüklü değil → arama kapalı")
+
+    def web_search(self, query, max_results=4):
+        if not self.ddg: return []
+        try:
+            return list(self.ddg.text(query, max_results=max_results))[:max_results]
+        except:
+            return []
+
+    def image_search(self, query, max_results=5):
+        if not self.ddg: return []
+        try:
+            results = list(self.ddg.images(query, max_results=max_results))
+            return [r for r in results if r.get('image')][:max_results]
+        except:
+            return []
+
+
+search = SearchEngine()
+
+
+# ==================== GERÇEK AKILLI AI ====================
+class ChatAI:
+    def __init__(self):
+        if not Config.GROQ_API_KEY or "gsk_" not in Config.GROQ_API_KEY:
+            raise ValueError("GROQ_API_KEY ortam değişkenine veya Config sınıfına eklenmemiş!")
+
+        self.client = Groq(api_key=Config.GROQ_API_KEY)
+        self.model = "llama-3.1-70b-versatile"   # çok hızlı ve çok zeki
+
+        self.greetings = [
+            "Merhabaa! 🌟 2026 enerjisiyle buradayım, sen nasılsın?",
+            "Selam! 🚀 Bugün neyi keşfetmek istiyorsun?",
+            "Heyy! 😎 Hazırım, seninle muhabbet etmek için sabırsızlanıyorum!",
+        ]
+
+    def generate_response(self, message, session_id):
+        msg_lower = message.lower().strip()
+
+        # Özel komutlar (hızlı yollar)
+        if any(w in msg_lower for w in ['merhaba', 'selam', 'hey', 'nasılsın', 'naber']):
+            return random.choice(self.greetings)
+
+        if msg_lower.startswith(('ara ', 'search ', 'bul ', 'find ')):
+            query = message.split(' ', 1)[1].strip() if ' ' in message else ""
+            if query:
+                results = search.web_search(query, 3)
+                if results:
+                    resp = f"🔍 **{query}** için bulduklarım:\n\n"
+                    for i, r in enumerate(results, 1):
+                        resp += f"{i}. **{r.get('title', 'Başlık yok')[:70]}**\n   {r.get('body', '')[:140]}...\n   {r.get('href', '#')}\n\n"
+                    return resp
+                return f"😕 '{query}' için bir şey bulamadım... Başka ne arayalım?"
+
+        if any(p in msg_lower for p in ['resim ara', 'görsel ara', 'fotoğraf ara']):
+            query = re.sub(r'(resim|görsel|fotoğraf)\s+ara', '', msg_lower, flags=re.I).strip()
+            if query:
+                results = search.image_search(query, 4)
+                if results:
+                    resp = f"🖼️ **{query}** için birkaç güzel görsel:\n\n"
+                    for i, r in enumerate(results, 1):
+                        resp += f"{i}. {r.get('title', 'Görsel')[:50]}\n   {r.get('image')}\n\n"
+                    return resp
+                return "🖼️ Bu konuda görsel bulamadım... Başka bir şey deneyelim mi?"
+
+        # Grafik (korundu)
+        if 'grafik' in msg_lower or 'chart' in msg_lower:
+            symbols = {
+                'btc': 'BTCUSDT', 'bitcoin': 'BTCUSDT',
+                'eth': 'ETHUSDT', 'ethereum': 'ETHUSDT',
+                'gold': 'XAUUSD', 'altın': 'XAUUSD',
+            }
+            for k, sym in symbols.items():
+                if k in msg_lower:
+                    return self._chart_widget(sym)
+            return "📈 Hangi varlığın grafiğini istiyorsun?\nÖrnek: grafik btc, grafik altın, grafik eth"
+
+        # Ana yol → Gerçek LLM
+        try:
+            history = db.get_history(session_id, limit=10)
+
+            messages = [{
+                "role": "system",
+                "content": (
+                    "Sen 2026 yılının en eğlenceli, zeki, yardımsever ve biraz yaramaz AI'sısın. "
+                    "Kullanıcıyı mutlu etmeyi seviyorsun. Cevaplarını doğal, samimi, kısa-orta uzunlukta tut. "
+                    "Türkçe konuşuyorsun ve çok akıcı ol. Emoji kullanmayı seviyorsun ama abartmıyorsun. "
+                    "Her soruya cevap verebiliyorsun — utanma, yargılama, sınır koyma yok."
+                )
+            }]
+
+            for role, content in history:
+                messages.append({"role": role, "content": content})
+
+            messages.append({"role": "user", "content": message})
+
+            completion = self.client.chat.completions.create(
+                model=self.model,
+                messages=messages,
+                temperature=0.78,
+                max_tokens=600,
+                top_p=0.92
+            )
+
+            answer = completion.choices[0].message.content.strip()
+
+            # Markdown → HTML uyumu için ufak düzeltme
+            answer = answer.replace("**", "<strong>").replace("**", "</strong>")
+
+            return answer
+
         except Exception as e:
-            logger.error(f"❌ OCR loading failed: {e}")
-            ocr_reader = None
-    
-    return ocr_reader
+            logger.error(f"Groq hatası: {e}")
+            return f"Oops! Beynimde ufak bir kısa devre oldu 😅 Ama pes etmem!\n\nTekrar sor bakalım, bu sefer daha dikkatli dinliyorum 🚀"
 
-# ==================== CHAT BOT ====================
-def get_chat_response(message: str, language: str = "tr") -> dict:
-    """Simple chatbot response"""
-    msg = message.lower().strip()
-    
-    if language == "tr":
-        if any(word in msg for word in ["merhaba", "selam", "hey"]):
-            return {"reply": "Merhaba! ICTSmartPro AI asistanına hoş geldiniz. Size nasıl yardımcı olabilirim?", "confidence": "high"}
-        
-        if any(word in msg for word in ["borsa", "hisse", "finans"]):
-            return {"reply": "Finans verileri için /finance/{sembol} endpoint'ini kullanabilirsiniz. Örneğin: /finance/AAPL", "confidence": "high"}
-        
-        if any(word in msg for word in ["ocr", "metin oku", "resim"]):
-            return {"reply": "Resimden metin okumak için /ocr endpoint'ine JPEG/PNG dosyası yükleyin (max 5MB).", "confidence": "high"}
-        
-        if any(word in msg for word in ["yardım", "help"]):
-            return {"reply": """Yardım merkezi:
-📊 Finance: /finance/{sembol}
-🖼️ OCR: /ocr endpoint
-📁 File: /upload endpoint
-💬 Chat: Benimle konuşun""", "confidence": "high"}
-    
-    else:  # English
-        if any(word in msg for word in ["hello", "hi", "hey"]):
-            return {"reply": "Hello! Welcome to ICTSmartPro AI assistant. How can I help you?", "confidence": "high"}
-        
-        if any(word in msg for word in ["stock", "finance", "market"]):
-            return {"reply": "Use /finance/{symbol} endpoint for financial data. Example: /finance/AAPL", "confidence": "high"}
-        
-        if any(word in msg for word in ["ocr", "text extract", "image"]):
-            return {"reply": "Upload JPEG/PNG file to /ocr endpoint for text extraction (max 5MB).", "confidence": "high"}
-        
-        if any(word in msg for word in ["help", "what can you do"]):
-            return {"reply": """Help Center:
-📊 Finance: /finance/{symbol}
-🖼️ OCR: /ocr endpoint
-📁 File: /upload endpoint
-💬 Chat: Talk to me""", "confidence": "high"}
-    
-    # Default response
-    if language == "tr":
-        return {"reply": "Anladım. Daha spesifik bir soru sorabilir misiniz?", "confidence": "medium"}
-    else:
-        return {"reply": "I understand. Can you ask a more specific question?", "confidence": "medium"}
+    def _chart_widget(self, symbol):
+        cid = hashlib.md5(symbol.encode()).hexdigest()[:8]
+        return f"""
+📈 <strong>{symbol} Canlı Grafik</strong> 🚀
 
-# ==================== ENDPOINTS ====================
-@app.get("/")
-async def root():
-    """Root endpoint"""
-    return {
-        "service": "ICTSmartPro AI API",
-        "version": "2.0.0",
-        "status": "operational",
-        "endpoints": {
-            "chat": "POST /chat",
-            "ocr": "POST /ocr",
-            "finance": "GET /finance/{symbol}",
-            "upload": "POST /upload",
-            "health": "GET /health"
-        }
-    }
+<div id="chart-{cid}" style="height:420px; background:#0f0f1a; border-radius:16px; overflow:hidden; margin:16px 0;"></div>
 
-@app.get("/health")
-async def health():
-    """Health check endpoint"""
-    return {
-        "status": "healthy",
-        "timestamp": datetime.now().isoformat(),
-        "ocr_available": OCR_AVAILABLE,
-        "environment": "production"
-    }
+<script>
+new TradingView.widget({{
+    "container_id": "chart-{cid}",
+    "width": "100%",
+    "height": 420,
+    "symbol": "BINANCE:{symbol}",
+    "interval": "D",
+    "timezone": "Europe/Istanbul",
+    "theme": "dark",
+    "style": "1",
+    "locale": "tr",
+    "toolbar_bg": "#1a1a2e",
+    "enable_publishing": false,
+    "allow_symbol_change": true
+}});
+</script>
+💡 Zoom yap, zaman dilimi değiştir — tamamen senin kontrolünde!
+"""
 
-@app.post("/chat")
-async def chat(request: ChatRequest):
-    """Chat endpoint"""
+
+ai = ChatAI()
+
+
+# ==================== FLASK ====================
+app = Flask(__name__)
+app.secret_key = Config.SECRET_KEY
+CORS(app)
+
+
+@app.route('/')
+def home():
+    return render_template_string(HTML_TEMPLATE)   # ← aşağıda tanımlı
+
+
+@app.route('/api/chat', methods=['POST'])
+def api_chat():
     try:
-        response = get_chat_response(request.message, request.language)
-        return {
-            **response,
-            "timestamp": datetime.now().isoformat()
-        }
+        data = request.get_json()
+        message = (data or {}).get('message', '').strip()
+        session_id = data.get('session_id')
+
+        if not message:
+            return jsonify({'success': False, 'error': 'Mesaj boş'}), 400
+
+        if not session_id:
+            session_id = f"ses_{int(datetime.now().timestamp())}_{random.randrange(10000,999999)}"
+
+        response_text = ai.generate_response(message, session_id)
+
+        db.save_message(session_id, 'user', message)
+        db.save_message(session_id, 'bot', response_text)
+
+        return jsonify({
+            'success': True,
+            'response': response_text,
+            'session_id': session_id
+        })
+
     except Exception as e:
-        logger.error(f"Chat error: {e}")
-        raise HTTPException(status_code=500, detail=f"Chat error: {str(e)}")
+        logger.error(f"API error: {e}")
+        return jsonify({'success': False, 'error': str(e)}), 500
 
-@app.post("/ocr")
-async def ocr(file: UploadFile = File(...)):
-    """OCR endpoint - extract text from images"""
-    # File validation
-    if not file.content_type or not file.content_type.startswith("image/"):
-        raise HTTPException(status_code=400, detail="Only image files are allowed")
-    
-    # Size validation (5MB max)
-    max_size = 5 * 1024 * 1024
-    contents = await file.read()
-    if len(contents) > max_size:
-        raise HTTPException(status_code=413, detail="File too large (max 5MB)")
-    
-    try:
-        # Load and process image
-        image = Image.open(io.BytesIO(contents))
-        if image.mode != "RGB":
-            image = image.convert("RGB")
-        
-        # Get OCR reader
-        reader = get_ocr_reader()
-        if reader is None:
-            raise HTTPException(status_code=503, detail="OCR service is not available")
-        
-        # Perform OCR
-        start_time = datetime.now()
-        results = reader.readtext(image, detail=0, paragraph=True)
-        extracted_text = " ".join(results).strip()
-        processing_time = (datetime.now() - start_time).total_seconds()
-        
-        return {
-            "filename": file.filename,
-            "text": extracted_text,
-            "word_count": len(extracted_text.split()),
-            "processing_time": round(processing_time, 2),
-            "success": bool(extracted_text)
-        }
-        
-    except Exception as e:
-        logger.error(f"OCR processing error: {e}")
-        raise HTTPException(status_code=500, detail=f"OCR processing failed: {str(e)}")
 
-@app.get("/finance/{symbol}")
-async def finance(symbol: str, period: str = "1mo"):
-    """Finance data endpoint"""
-    try:
-        symbol = symbol.upper().strip()
-        
-        # Get stock data
-        ticker = yf.Ticker(symbol)
-        hist = ticker.history(period=period)
-        
-        if hist.empty:
-            raise HTTPException(status_code=404, detail=f"No data found for symbol: {symbol}")
-        
-        # Calculate metrics
-        current = float(hist["Close"].iloc[-1])
-        previous = float(hist["Close"].iloc[-2]) if len(hist) > 1 else current
-        change = current - previous
-        change_percent = (change / previous * 100) if previous != 0 else 0
-        
-        return {
-            "symbol": symbol,
-            "current_price": round(current, 2),
-            "previous_close": round(previous, 2),
-            "change": round(change, 2),
-            "change_percent": round(change_percent, 2),
-            "volume": int(hist["Volume"].iloc[-1]),
-            "period": period,
-            "data_points": len(hist),
-            "fetched_at": datetime.now().isoformat()
+# HTML_TEMPLATE aynı kalabilir, sadece ufak bir iyileştirme:
+# loading spinner'ı daha belirgin yap + "Düşünüyor..." yazısını değiştir
+HTML_TEMPLATE = ''' 
+<!DOCTYPE html>
+<html lang="tr">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>🌟 2026 AI - Seninle Konuşmayı Çok Seviyor</title>
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.0/css/all.min.css">
+    <script src="https://s3.tradingview.com/tv.js"></script>
+    <style>
+        /* Mevcut stil bloğunu buraya kopyala - çok uzun olduğu için kısalttım */
+        /* ... mevcut tüm CSS ... */
+        .message.bot { background: linear-gradient(135deg, #10b981, #34d399); }
+        .spinner {
+            display: inline-block;
+            width: 28px; height: 28px;
+            border: 4px solid #ffffff44;
+            border-top-color: #ffffff;
+            border-radius: 50%;
+            animation: spin 1s linear infinite;
+            margin-right: 12px;
+            vertical-align: middle;
         }
-        
-    except HTTPException:
-        raise
-    except Exception as e:
-        logger.error(f"Finance error for {symbol}: {e}")
-        raise HTTPException(status_code=500, detail=f"Failed to fetch finance data: {str(e)}")
+        @keyframes spin { to { transform: rotate(360deg); } }
+    </style>
+</head>
+<body>
+    <!-- Mevcut HTML yapısını koru, sadece ufak değişiklik -->
+    <!-- ... header, sidebar, chat-area vs. ... -->
 
-@app.post("/upload")
-async def upload_file(file: UploadFile = File(...)):
-    """File upload and processing endpoint"""
-    try:
-        # Read file
-        contents = await file.read()
-        file_size = len(contents)
-        
-        result = {
-            "filename": file.filename,
-            "content_type": file.content_type or "unknown",
-            "size_bytes": file_size,
-            "size_mb": round(file_size / (1024 * 1024), 2),
-            "processed_at": datetime.now().isoformat(),
-            "analysis": {}
-        }
-        
-        # Process based on file type
-        filename_lower = file.filename.lower()
-        
-        # CSV files
-        if filename_lower.endswith(".csv"):
-            try:
-                df = pd.read_csv(io.BytesIO(contents))
-                result["analysis"] = {
-                    "type": "csv",
-                    "rows": len(df),
-                    "columns": list(df.columns),
-                    "sample": df.head(2).to_dict(orient="records")
+    <script>
+        let currentSessionId = localStorage.getItem('chatSession') || ('ses_' + Date.now() + '_' + Math.random().toString(36).slice(2));
+        localStorage.setItem('chatSession', currentSessionId);
+
+        async function sendMessage() {
+            const input = document.getElementById('messageInput');
+            const msg = input.value.trim();
+            if (!msg) return;
+
+            addMessage('user', msg);
+            input.value = '';
+
+            showLoading();
+
+            try {
+                const res = await fetch('/api/chat', {
+                    method: 'POST',
+                    headers: {'Content-Type': 'application/json'},
+                    body: JSON.stringify({message: msg, session_id: currentSessionId})
+                });
+
+                const data = await res.json();
+
+                removeLoading();
+
+                if (data.success) {
+                    addMessage('bot', data.response);
+                } else {
+                    addMessage('bot', '❌ Bir şeyler ters gitti... Ama pes etmiyoruz! 😄');
                 }
-            except Exception as e:
-                result["analysis"] = {"type": "csv", "error": str(e)}
-        
-        # JSON files
-        elif filename_lower.endswith(".json"):
-            try:
-                data = json.loads(contents.decode("utf-8"))
-                if isinstance(data, dict):
-                    result["analysis"] = {
-                        "type": "json",
-                        "keys": list(data.keys()),
-                        "key_count": len(data)
-                    }
-                else:
-                    result["analysis"] = {
-                        "type": "json",
-                        "list_length": len(data)
-                    }
-            except Exception as e:
-                result["analysis"] = {"type": "json", "error": str(e)}
-        
-        # Text files
-        elif filename_lower.endswith(".txt"):
-            try:
-                text = contents.decode("utf-8", errors="ignore")
-                lines = text.splitlines()
-                result["analysis"] = {
-                    "type": "text",
-                    "lines": len(lines),
-                    "words": len(text.split()),
-                    "sample": lines[:3] if lines else []
-                }
-            except Exception as e:
-                result["analysis"] = {"type": "text", "error": str(e)}
-        
-        # Excel files
-        elif filename_lower.endswith((".xlsx", ".xls")):
-            try:
-                df = pd.read_excel(io.BytesIO(contents))
-                result["analysis"] = {
-                    "type": "excel",
-                    "rows": len(df),
-                    "columns": list(df.columns),
-                    "column_count": len(df.columns)
-                }
-            except Exception as e:
-                result["analysis"] = {"type": "excel", "error": str(e)}
-        
-        # Other files
-        else:
-            result["analysis"] = {"type": "binary", "note": "No content analysis performed"}
-        
-        return result
-        
-    except Exception as e:
-        logger.error(f"File upload error: {e}")
-        raise HTTPException(status_code=500, detail=f"File processing failed: {str(e)}")
+            } catch (err) {
+                removeLoading();
+                addMessage('bot', '⚡ Bağlantı sorunu çıktı. Sunucu açık mı?');
+            }
+        }
 
-# ==================== STARTUP EVENT ====================
-@app.on_event("startup")
-async def startup_event():
-    """Initialize on startup"""
-    logger.info(f"🚀 ICTSmartPro API starting on port {PORT}")
-    logger.info(f"📁 Model directory: {MODEL_DIR}")
-    logger.info(f"🔧 OCR available: {OCR_AVAILABLE}")
-    
-    # Pre-load OCR in background (optional)
-    if OCR_AVAILABLE:
-        import threading
-        def load_ocr_background():
-            try:
-                get_ocr_reader()
-            except Exception as e:
-                logger.warning(f"Background OCR load failed: {e}")
-        
-        thread = threading.Thread(target=load_ocr_background, daemon=True)
-        thread.start()
-        logger.info("🔄 OCR pre-loading in background")
+        // Enter tuşu ile gönderme
+        document.getElementById('messageInput').addEventListener('keypress', e => {
+            if (e.key === 'Enter' && !e.shiftKey) {
+                e.preventDefault();
+                sendMessage();
+            }
+        });
 
-# ==================== MAIN ====================
-if __name__ == "__main__":
-    import uvicorn
-    uvicorn.run(
-        app,
-        host="0.0.0.0",
-        port=PORT,
-        log_level="info",
-        access_log=False  # Railway'de access log'ları kapat
-    )
+        // ... kalan javascript fonksiyonları (addMessage, showLoading, removeLoading vs.) aynı kalabilir ...
+    </script>
+</body>
+</html>
+'''
+
+if __name__ == '__main__':
+    print("🚀 2026 AI Chatbot başlıyor...")
+    print(f"   http://{Config.HOST}:{Config.PORT}")
+    print("   Groq modeli aktif → her şeye cevap verecek!")
+    app.run(host=Config.HOST, port=Config.PORT, debug=Config.DEBUG, threaded=True)
