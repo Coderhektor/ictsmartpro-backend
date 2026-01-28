@@ -1,11 +1,10 @@
-fastapi>=0.115.0
-uvicorn>=0.30.0
-slowapi>=0.1.9
-pydantic>=2.0
-pillow>=10.0
-pandas>=2.0
-yfinance>=0.2.40
-easyocr>=1.7.1
-torch==2.4.1+cpu
-torchvision==0.19.1+cpu
---extra-index-url https://download.pytorch.org/whl/cpu
+fastapi==0.115.0
+uvicorn[standard]==0.30.6
+pydantic==2.9.2
+pillow==10.4.0
+easyocr==1.7.2
+yfinance==0.2.43
+slowapi==0.1.9
+pandas==2.2.3
+openpyxl==3.1.5
+python-multipart==0.0.12
