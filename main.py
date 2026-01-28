@@ -1,6 +1,5 @@
-from fastapi import FastAPI, UploadFile, File, HTTPException, Request
+from fastapi import FastAPI, UploadFile, File, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import JSONResponse
 from pydantic import BaseModel
 from PIL import Image
 import pandas as pd
@@ -8,37 +7,36 @@ import yfinance as yf
 import io
 import logging
 import os
-from typing import Optional
-from datetime import datetime, timedelta
 import json
-from pathlib import Path
+from datetime import datetime
+from typing import Optional
 import sys
 
 # ==================== KONFİGÜRASYON ====================
 PORT = int(os.environ.get("PORT", 8000))
-DEBUG = os.environ.get("DEBUG", "False").lower() == "true"
-MODEL_DIR = os.environ.get("MODEL_DIR", "./models")
+DEBUG = os.environ.get("DEBUG", "false").lower() == "true"
+MODEL_DIR = os.environ.get("MODEL_DIR", "/app/models")
 
-# Logging - basit hale getir
+# Logging
 logging.basicConfig(
     level=logging.DEBUG if DEBUG else logging.INFO,
-    format="%(asctime)s - %(levelname)s - %(message)s"
+    format='%(asctime)s - %(name)s - %(levelname)s - %(message)s'
 )
 logger = logging.getLogger(__name__)
 
 # ==================== FASTAPI APP ====================
 app = FastAPI(
-    title="ICTSmartPro.ai API",
-    description="AI Chatbot, OCR, File Processing, Finance API",
+    title="ICTSmartPro AI API",
+    description="AI Chatbot, OCR, File Processing & Finance API",
     version="2.0.0",
-    docs_url="/docs",
-    redoc_url="/redoc"
+    docs_url="/docs" if DEBUG else None,
+    redoc_url=None
 )
 
 # ==================== CORS ====================
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],  # Tüm origin'lere izin ver (güvenlik için daha sonra kısıtlayın)
+    allow_origins=["*"],
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
@@ -47,243 +45,204 @@ app.add_middleware(
 # ==================== MODELS ====================
 class ChatRequest(BaseModel):
     message: str
-    session_id: Optional[str] = "default"
     language: Optional[str] = "tr"
 
-class ChatResponse(BaseModel):
-    reply: str
-    confidence: str = "medium"
-    timestamp: str
-    session_id: Optional[str] = None
-
-class FinanceResponse(BaseModel):
-    symbol: str
-    currency: str
-    current_price: float
-    previous_close: float
-    day_change: float
-    day_change_percent: float
-    volume: int
-    data_points: int
-    fetched_at: str
-
-class OCRResponse(BaseModel):
-    text: str
-    filename: str
-    processing_time: float
-    word_count: int
-
-class FileResponse(BaseModel):
-    filename: str
-    size_bytes: int
-    size_mb: float
-    file_type: str
-    processed_at: str
-
-# ==================== OCR SERVICE ====================
-try:
-    import easyocr
-    EASYOCR_AVAILABLE = True
-    logger.info("✅ EasyOCR başarıyla import edildi")
-except ImportError as e:
-    EASYOCR_AVAILABLE = False
-    logger.warning(f"⚠️ EasyOCR import edilemedi: {e}")
-
-def get_ocr_reader():
-    """OCR reader'ı başlat"""
-    if not EASYOCR_AVAILABLE:
-        raise HTTPException(status_code=503, detail="OCR servisi mevcut değil")
-    
-    try:
-        # Model dizinini oluştur
-        Path(MODEL_DIR).mkdir(parents=True, exist_ok=True)
-        
-        logger.info("OCR modeli yükleniyor...")
-        reader = easyocr.Reader(
-            ['tr', 'en'],
-            gpu=False,
-            model_storage_directory=MODEL_DIR,
-            download_enabled=True
-        )
-        logger.info("OCR modeli başarıyla yüklendi")
-        return reader
-    except Exception as e:
-        logger.error(f"OCR model yükleme hatası: {e}")
-        raise HTTPException(status_code=500, detail=f"OCR başlatılamadı: {str(e)}")
-
-# OCR reader'ı global olarak sakla
+# ==================== OCR SETUP ====================
+OCR_AVAILABLE = False
 ocr_reader = None
 
-def ensure_ocr_loaded():
-    """OCR reader'ın yüklü olduğundan emin ol"""
+try:
+    import easyocr
+    OCR_AVAILABLE = True
+    logger.info("✅ EasyOCR imported successfully")
+except ImportError as e:
+    logger.error(f"❌ EasyOCR import failed: {e}")
+    OCR_AVAILABLE = False
+
+def get_ocr_reader():
+    """Load OCR reader (lazy loading)"""
     global ocr_reader
+    if not OCR_AVAILABLE:
+        return None
+    
     if ocr_reader is None:
-        ocr_reader = get_ocr_reader()
+        try:
+            logger.info("🔄 Loading OCR models...")
+            # Model dizinini oluştur
+            os.makedirs(MODEL_DIR, exist_ok=True)
+            
+            # Daha az bellek kullanan ayarlar
+            ocr_reader = easyocr.Reader(
+                ['tr', 'en'],
+                gpu=False,
+                model_storage_directory=MODEL_DIR,
+                download_enabled=True,
+                verbose=False
+            )
+            logger.info("✅ OCR models loaded successfully")
+        except Exception as e:
+            logger.error(f"❌ OCR loading failed: {e}")
+            ocr_reader = None
+    
     return ocr_reader
 
-# ==================== CHAT ENGINE ====================
-class ChatEngine:
-    def get_response(self, message: str, language: str = "tr") -> dict:
-        message_lower = message.lower().strip()
+# ==================== CHAT BOT ====================
+def get_chat_response(message: str, language: str = "tr") -> dict:
+    """Simple chatbot response"""
+    msg = message.lower().strip()
+    
+    if language == "tr":
+        if any(word in msg for word in ["merhaba", "selam", "hey"]):
+            return {"reply": "Merhaba! ICTSmartPro AI asistanına hoş geldiniz. Size nasıl yardımcı olabilirim?", "confidence": "high"}
         
-        # Basit cevaplar
-        if language == "tr":
-            if any(word in message_lower for word in ["merhaba", "selam", "hey"]):
-                return {"reply": "Merhaba! ICTSmartPro AI asistanına hoş geldiniz. Size nasıl yardımcı olabilirim?", "confidence": "high"}
-            
-            if any(word in message_lower for word in ["borsa", "hisse", "finans"]):
-                return {"reply": "Finans verileri için /finance/{sembol} endpoint'ini kullanabilirsiniz. Örnek: /finance/AAPL", "confidence": "high"}
-            
-            if any(word in message_lower for word in ["ocr", "metin oku", "resimden yazı"]):
-                return {"reply": "Resimden metin okumak için /ocr endpoint'ine JPEG veya PNG dosyası yükleyin.", "confidence": "high"}
-            
-            if any(word in message_lower for word in ["yardım", "ne yapabilirsin"]):
-                return {"reply": "Ben bir AI asistanıyım. Size şunlarda yardımcı olabilirim:\n1. Finans verileri\n2. Resimden metin okuma (OCR)\n3. Dosya işleme\n4. Genel sohbet", "confidence": "high"}
+        if any(word in msg for word in ["borsa", "hisse", "finans"]):
+            return {"reply": "Finans verileri için /finance/{sembol} endpoint'ini kullanabilirsiniz. Örneğin: /finance/AAPL", "confidence": "high"}
         
-        else:  # English
-            if any(word in message_lower for word in ["hello", "hi", "hey"]):
-                return {"reply": "Hello! Welcome to ICTSmartPro AI assistant. How can I help you?", "confidence": "high"}
-            
-            if any(word in message_lower for word in ["stock", "finance", "market"]):
-                return {"reply": "For financial data, use the /finance/{symbol} endpoint. Example: /finance/AAPL", "confidence": "high"}
-            
-            if any(word in message_lower for word in ["ocr", "text extract", "image to text"]):
-                return {"reply": "Upload a JPEG or PNG file to the /ocr endpoint to extract text from images.", "confidence": "high"}
-            
-            if any(word in message_lower for word in ["help", "what can you do"]):
-                return {"reply": "I'm an AI assistant. I can help you with:\n1. Financial data\n2. Text extraction from images (OCR)\n3. File processing\n4. General chat", "confidence": "high"}
+        if any(word in msg for word in ["ocr", "metin oku", "resim"]):
+            return {"reply": "Resimden metin okumak için /ocr endpoint'ine JPEG/PNG dosyası yükleyin (max 5MB).", "confidence": "high"}
         
-        # Default response
-        if language == "tr":
-            return {"reply": "Anladım. Daha spesifik bir soru sorarsanız size yardımcı olabilirim.", "confidence": "medium"}
-        else:
-            return {"reply": "I understand. If you ask a more specific question, I can help you better.", "confidence": "medium"}
-
-chat_engine = ChatEngine()
+        if any(word in msg for word in ["yardım", "help"]):
+            return {"reply": """Yardım merkezi:
+📊 Finance: /finance/{sembol}
+🖼️ OCR: /ocr endpoint
+📁 File: /upload endpoint
+💬 Chat: Benimle konuşun""", "confidence": "high"}
+    
+    else:  # English
+        if any(word in msg for word in ["hello", "hi", "hey"]):
+            return {"reply": "Hello! Welcome to ICTSmartPro AI assistant. How can I help you?", "confidence": "high"}
+        
+        if any(word in msg for word in ["stock", "finance", "market"]):
+            return {"reply": "Use /finance/{symbol} endpoint for financial data. Example: /finance/AAPL", "confidence": "high"}
+        
+        if any(word in msg for word in ["ocr", "text extract", "image"]):
+            return {"reply": "Upload JPEG/PNG file to /ocr endpoint for text extraction (max 5MB).", "confidence": "high"}
+        
+        if any(word in msg for word in ["help", "what can you do"]):
+            return {"reply": """Help Center:
+📊 Finance: /finance/{symbol}
+🖼️ OCR: /ocr endpoint
+📁 File: /upload endpoint
+💬 Chat: Talk to me""", "confidence": "high"}
+    
+    # Default response
+    if language == "tr":
+        return {"reply": "Anladım. Daha spesifik bir soru sorabilir misiniz?", "confidence": "medium"}
+    else:
+        return {"reply": "I understand. Can you ask a more specific question?", "confidence": "medium"}
 
 # ==================== ENDPOINTS ====================
 @app.get("/")
 async def root():
+    """Root endpoint"""
     return {
-        "service": "ICTSmartPro.ai API",
-        "status": "online",
+        "service": "ICTSmartPro AI API",
         "version": "2.0.0",
+        "status": "operational",
         "endpoints": {
             "chat": "POST /chat",
             "ocr": "POST /ocr",
             "finance": "GET /finance/{symbol}",
-            "file": "POST /file",
+            "upload": "POST /upload",
             "health": "GET /health"
         }
     }
 
 @app.get("/health")
-async def health_check():
+async def health():
+    """Health check endpoint"""
     return {
         "status": "healthy",
         "timestamp": datetime.now().isoformat(),
-        "ocr_available": EASYOCR_AVAILABLE,
-        "version": "2.0.0"
+        "ocr_available": OCR_AVAILABLE,
+        "environment": "production"
     }
 
-@app.post("/chat", response_model=ChatResponse)
-async def chat_endpoint(chat_req: ChatRequest):
+@app.post("/chat")
+async def chat(request: ChatRequest):
+    """Chat endpoint"""
     try:
-        if not chat_req.message.strip():
-            raise HTTPException(status_code=400, detail="Message cannot be empty")
-        
-        response = chat_engine.get_response(chat_req.message, chat_req.language)
-        
-        return ChatResponse(
-            reply=response["reply"],
-            confidence=response["confidence"],
-            timestamp=datetime.now().isoformat(),
-            session_id=chat_req.session_id
-        )
+        response = get_chat_response(request.message, request.language)
+        return {
+            **response,
+            "timestamp": datetime.now().isoformat()
+        }
     except Exception as e:
         logger.error(f"Chat error: {e}")
         raise HTTPException(status_code=500, detail=f"Chat error: {str(e)}")
 
-@app.post("/ocr", response_model=OCRResponse)
-async def ocr_endpoint(file: UploadFile = File(...)):
-    start_time = datetime.now()
+@app.post("/ocr")
+async def ocr(file: UploadFile = File(...)):
+    """OCR endpoint - extract text from images"""
+    # File validation
+    if not file.content_type or not file.content_type.startswith("image/"):
+        raise HTTPException(status_code=400, detail="Only image files are allowed")
     
-    # Dosya türünü kontrol et
-    allowed_types = ["image/jpeg", "image/png", "image/jpg"]
-    if file.content_type not in allowed_types:
-        raise HTTPException(status_code=400, detail="Only JPEG and PNG files are allowed")
-    
-    # Dosya boyutunu kontrol et (max 10MB)
-    max_size = 10 * 1024 * 1024
+    # Size validation (5MB max)
+    max_size = 5 * 1024 * 1024
     contents = await file.read()
     if len(contents) > max_size:
-        raise HTTPException(status_code=413, detail="File too large (max 10MB)")
+        raise HTTPException(status_code=413, detail="File too large (max 5MB)")
     
     try:
-        # Resmi aç
+        # Load and process image
         image = Image.open(io.BytesIO(contents))
+        if image.mode != "RGB":
+            image = image.convert("RGB")
         
-        # OCR için optimize et
-        if image.mode != 'RGB':
-            image = image.convert('RGB')
+        # Get OCR reader
+        reader = get_ocr_reader()
+        if reader is None:
+            raise HTTPException(status_code=503, detail="OCR service is not available")
         
-        # OCR'ı yükle ve çalıştır
-        reader = ensure_ocr_loaded()
-        
-        # OCR işlemini yap
-        results = reader.readtext(image, detail=0)
-        extracted_text = " ".join(results)
-        
+        # Perform OCR
+        start_time = datetime.now()
+        results = reader.readtext(image, detail=0, paragraph=True)
+        extracted_text = " ".join(results).strip()
         processing_time = (datetime.now() - start_time).total_seconds()
         
-        return OCRResponse(
-            text=extracted_text,
-            filename=file.filename,
-            processing_time=round(processing_time, 2),
-            word_count=len(extracted_text.split())
-        )
+        return {
+            "filename": file.filename,
+            "text": extracted_text,
+            "word_count": len(extracted_text.split()),
+            "processing_time": round(processing_time, 2),
+            "success": bool(extracted_text)
+        }
         
     except Exception as e:
         logger.error(f"OCR processing error: {e}")
         raise HTTPException(status_code=500, detail=f"OCR processing failed: {str(e)}")
 
 @app.get("/finance/{symbol}")
-async def finance_endpoint(symbol: str, period: str = "1mo", interval: str = "1d"):
+async def finance(symbol: str, period: str = "1mo"):
+    """Finance data endpoint"""
     try:
-        # Sembolü temizle
         symbol = symbol.upper().strip()
         
-        # Finans verilerini al
+        # Get stock data
         ticker = yf.Ticker(symbol)
+        hist = ticker.history(period=period)
         
-        # Temel bilgiler
-        info = ticker.info
-        
-        # Geçmiş veriler
-        history = ticker.history(period=period, interval=interval)
-        
-        if history.empty:
+        if hist.empty:
             raise HTTPException(status_code=404, detail=f"No data found for symbol: {symbol}")
         
-        # Hesaplamalar
-        current_price = float(history['Close'].iloc[-1])
-        previous_close = float(history['Close'].iloc[-2]) if len(history) > 1 else current_price
-        day_change = current_price - previous_close
-        day_change_percent = (day_change / previous_close) * 100 if previous_close != 0 else 0
+        # Calculate metrics
+        current = float(hist["Close"].iloc[-1])
+        previous = float(hist["Close"].iloc[-2]) if len(hist) > 1 else current
+        change = current - previous
+        change_percent = (change / previous * 100) if previous != 0 else 0
         
-        response_data = {
+        return {
             "symbol": symbol,
-            "currency": info.get('currency', 'USD'),
-            "current_price": round(current_price, 2),
-            "previous_close": round(previous_close, 2),
-            "day_change": round(day_change, 2),
-            "day_change_percent": round(day_change_percent, 2),
-            "volume": int(history['Volume'].iloc[-1]),
-            "data_points": len(history),
+            "current_price": round(current, 2),
+            "previous_close": round(previous, 2),
+            "change": round(change, 2),
+            "change_percent": round(change_percent, 2),
+            "volume": int(hist["Volume"].iloc[-1]),
+            "period": period,
+            "data_points": len(hist),
             "fetched_at": datetime.now().isoformat()
         }
-        
-        return response_data
         
     except HTTPException:
         raise
@@ -291,116 +250,122 @@ async def finance_endpoint(symbol: str, period: str = "1mo", interval: str = "1d
         logger.error(f"Finance error for {symbol}: {e}")
         raise HTTPException(status_code=500, detail=f"Failed to fetch finance data: {str(e)}")
 
-@app.post("/file")
-async def file_endpoint(file: UploadFile = File(...)):
+@app.post("/upload")
+async def upload_file(file: UploadFile = File(...)):
+    """File upload and processing endpoint"""
     try:
-        # Dosyayı oku
-        content = await file.read()
-        file_size = len(content)
+        # Read file
+        contents = await file.read()
+        file_size = len(contents)
         
-        # Dosya bilgilerini hazırla
         result = {
             "filename": file.filename,
+            "content_type": file.content_type or "unknown",
             "size_bytes": file_size,
             "size_mb": round(file_size / (1024 * 1024), 2),
-            "file_type": file.content_type or "unknown",
             "processed_at": datetime.now().isoformat(),
-            "info": {}
+            "analysis": {}
         }
         
-        # Dosya uzantısına göre işle
+        # Process based on file type
         filename_lower = file.filename.lower()
         
-        # CSV veya TXT dosyası
-        if filename_lower.endswith(('.csv', '.txt')):
+        # CSV files
+        if filename_lower.endswith(".csv"):
             try:
-                text_content = content.decode('utf-8')
-                lines = text_content.split('\n')
-                result["info"] = {
-                    "type": "text/csv",
-                    "line_count": len(lines),
-                    "sample": lines[:3] if lines else []
-                }
-            except:
-                result["info"] = {"type": "text/csv", "error": "Could not decode as text"}
-        
-        # JSON dosyası
-        elif filename_lower.endswith('.json'):
-            try:
-                json_content = json.loads(content.decode('utf-8'))
-                if isinstance(json_content, dict):
-                    result["info"] = {
-                        "type": "json",
-                        "keys": list(json_content.keys()),
-                        "key_count": len(json_content)
-                    }
-                else:
-                    result["info"] = {
-                        "type": "json",
-                        "list_length": len(json_content)
-                    }
-            except:
-                result["info"] = {"type": "json", "error": "Invalid JSON"}
-        
-        # Excel dosyası
-        elif filename_lower.endswith(('.xlsx', '.xls')):
-            try:
-                excel_data = pd.read_excel(io.BytesIO(content))
-                result["info"] = {
-                    "type": "excel",
-                    "rows": len(excel_data),
-                    "columns": list(excel_data.columns),
-                    "column_count": len(excel_data.columns)
+                df = pd.read_csv(io.BytesIO(contents))
+                result["analysis"] = {
+                    "type": "csv",
+                    "rows": len(df),
+                    "columns": list(df.columns),
+                    "sample": df.head(2).to_dict(orient="records")
                 }
             except Exception as e:
-                result["info"] = {"type": "excel", "error": str(e)}
+                result["analysis"] = {"type": "csv", "error": str(e)}
         
-        # Diğer dosyalar
+        # JSON files
+        elif filename_lower.endswith(".json"):
+            try:
+                data = json.loads(contents.decode("utf-8"))
+                if isinstance(data, dict):
+                    result["analysis"] = {
+                        "type": "json",
+                        "keys": list(data.keys()),
+                        "key_count": len(data)
+                    }
+                else:
+                    result["analysis"] = {
+                        "type": "json",
+                        "list_length": len(data)
+                    }
+            except Exception as e:
+                result["analysis"] = {"type": "json", "error": str(e)}
+        
+        # Text files
+        elif filename_lower.endswith(".txt"):
+            try:
+                text = contents.decode("utf-8", errors="ignore")
+                lines = text.splitlines()
+                result["analysis"] = {
+                    "type": "text",
+                    "lines": len(lines),
+                    "words": len(text.split()),
+                    "sample": lines[:3] if lines else []
+                }
+            except Exception as e:
+                result["analysis"] = {"type": "text", "error": str(e)}
+        
+        # Excel files
+        elif filename_lower.endswith((".xlsx", ".xls")):
+            try:
+                df = pd.read_excel(io.BytesIO(contents))
+                result["analysis"] = {
+                    "type": "excel",
+                    "rows": len(df),
+                    "columns": list(df.columns),
+                    "column_count": len(df.columns)
+                }
+            except Exception as e:
+                result["analysis"] = {"type": "excel", "error": str(e)}
+        
+        # Other files
         else:
-            result["info"] = {"type": "binary", "note": "Binary file - no content analysis"}
+            result["analysis"] = {"type": "binary", "note": "No content analysis performed"}
         
         return result
         
     except Exception as e:
-        logger.error(f"File processing error: {e}")
+        logger.error(f"File upload error: {e}")
         raise HTTPException(status_code=500, detail=f"File processing failed: {str(e)}")
 
-# ==================== STARTUP ====================
+# ==================== STARTUP EVENT ====================
 @app.on_event("startup")
 async def startup_event():
-    logger.info("=" * 50)
-    logger.info("🚀 ICTSmartPro.ai API Starting...")
-    logger.info(f"📦 Version: 2.0.0")
-    logger.info(f"🌍 Environment: {'Development' if DEBUG else 'Production'}")
-    logger.info(f"🔌 Port: {PORT}")
-    logger.info(f"📁 Model Directory: {MODEL_DIR}")
-    logger.info(f"🔧 OCR Available: {EASYOCR_AVAILABLE}")
-    logger.info("=" * 50)
-
-# ==================== ERROR HANDLING ====================
-@app.exception_handler(HTTPException)
-async def http_exception_handler(request: Request, exc: HTTPException):
-    return JSONResponse(
-        status_code=exc.status_code,
-        content={"error": exc.detail}
-    )
-
-@app.exception_handler(Exception)
-async def general_exception_handler(request: Request, exc: Exception):
-    logger.error(f"Unhandled exception: {exc}")
-    return JSONResponse(
-        status_code=500,
-        content={"error": "Internal server error"}
-    )
+    """Initialize on startup"""
+    logger.info(f"🚀 ICTSmartPro API starting on port {PORT}")
+    logger.info(f"📁 Model directory: {MODEL_DIR}")
+    logger.info(f"🔧 OCR available: {OCR_AVAILABLE}")
+    
+    # Pre-load OCR in background (optional)
+    if OCR_AVAILABLE:
+        import threading
+        def load_ocr_background():
+            try:
+                get_ocr_reader()
+            except Exception as e:
+                logger.warning(f"Background OCR load failed: {e}")
+        
+        thread = threading.Thread(target=load_ocr_background, daemon=True)
+        thread.start()
+        logger.info("🔄 OCR pre-loading in background")
 
 # ==================== MAIN ====================
 if __name__ == "__main__":
     import uvicorn
-    
     uvicorn.run(
         app,
         host="0.0.0.0",
         port=PORT,
-        log_level="debug" if DEBUG else "info",
-        reload=DEBUG
+        log_level="info",
+        access_log=False  # Railway'de access log'ları kapat
     )
