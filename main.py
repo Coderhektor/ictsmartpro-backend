@@ -10,18 +10,17 @@ import httpx
 from dotenv import load_dotenv
 
 # ==================== KONFIGÜRASYON ====================
-load_dotenv()  # .env dosyasını yükle (aynı klasörde olmalı)
+load_dotenv()  # Yerel geliştirme için .env okur (Railway'de gerek yok, ortam değişkeni kullanır)
 
 PORT = int(os.environ.get("PORT", 8000))
 DEBUG = os.environ.get("DEBUG", "false").lower() == "true"
 
-# OpenRouter ayarları - buraya kendi key'ini .env'ye koy
-OPENROUTER_API_KEY = os.getenv("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")
+OPENROUTER_API_KEY = os.getenv("OPENROUTER_API_KEY")
 OPENROUTER_BASE_URL = "https://openrouter.ai/api/v1"
-QWEN_MODEL = "qwen/qwen3-coder:free"          # Ücretsiz model (Ocak 2026 aktif)
+QWEN_MODEL = "qwen/qwen3-coder:free"  # Ücretsiz model - limit olabilir
 
 if not OPENROUTER_API_KEY:
-    print("⚠️  DİKKAT: OPENROUTER_API_KEY .env dosyasında tanımlı değil!")
+    print("⚠️  DİKKAT: OPENROUTER_API_KEY ortam değişkeni tanımlı değil!")
 
 # Logging
 logging.basicConfig(level=logging.DEBUG if DEBUG else logging.INFO)
@@ -42,14 +41,14 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-# ==================== QWEN ÇAĞIRMA FONKSİYONU ====================
+# ==================== QWEN ÇAĞIRMA ====================
 async def call_qwen(messages: List[Dict[str, str]], temperature: float = 0.65, max_tokens: int = 1400) -> str:
     if not OPENROUTER_API_KEY:
-        return "❌ OpenRouter API anahtarı eksik. .env dosyasına OPENROUTER_API_KEY=sk-or-v1-... şeklinde ekleyin."
+        return "❌ OpenRouter API anahtarı eksik. Railway Variables'a ekleyin veya .env dosyasına OPENROUTER_API_KEY=sk-or-v1-... yazın."
 
     headers = {
         "Authorization": f"Bearer {OPENROUTER_API_KEY}",
-        "HTTP-Referer": "https://github.com/your-repo",  # İstersen kendi linkini koy
+        "HTTP-Referer": "https://your-railway-app.up.railway.app",  # Railway domainini buraya yazabilirsin
         "X-Title": "ICTSmartPro Trading AI",
         "Content-Type": "application/json"
     }
@@ -68,16 +67,18 @@ async def call_qwen(messages: List[Dict[str, str]], temperature: float = 0.65, m
                 f"{OPENROUTER_BASE_URL}/chat/completions",
                 headers=headers,
                 json=payload,
-                timeout=80.0
+                timeout=90.0
             )
             response.raise_for_status()
             data = response.json()
             return data["choices"][0]["message"]["content"].strip()
         except Exception as e:
-            logger.error(f"Qwen çağrı hatası: {e}")
-            return f"AI bağlantı hatası: {str(e)} (loglara bakın)"
+            logger.error(f"Qwen hatası: {e}")
+            if "429" in str(e):
+                return "❌ Rate limit aşıldı (ücretsiz model sınırı). Biraz bekleyin."
+            return f"AI bağlantı hatası: {str(e)}"
 
-# ==================== FİNANS VERİ ÇEKME ====================
+# ==================== FİNANS VERİ ====================
 async def get_finance_data(symbol: str, period: str = "1mo") -> Dict:
     try:
         symbol = symbol.upper().strip()
@@ -124,7 +125,7 @@ async def get_finance_data(symbol: str, period: str = "1mo") -> Dict:
         logger.error(f"Finance hatası {symbol}: {e}")
         return {"symbol": symbol, "error": str(e), "historical_data": {"dates": [], "prices": []}}
 
-# ==================== ANA SAYFA (HTML + JS) ====================
+# ==================== ROUTES ====================
 @app.get("/")
 async def home():
     html_content = """
@@ -195,7 +196,7 @@ async def home():
         <div class="card">
             <h2>🤖 Qwen AI Analizi</h2>
             <label>Soru / Talimat:</label>
-            <textarea id="aiQuery" rows="5" placeholder="Örnek:\\nTHYAO son 1 ay teknik görünümü nasıl?\\nAKBNK için alım-satım önerisi ver"></textarea>
+            <textarea id="aiQuery" rows="5" placeholder="Örnek:\nTHYAO son 1 ay teknik görünümü nasıl?\nAKBNK için alım-satım önerisi ver"></textarea>
             <button id="askBtn">Qwen'e Sor</button>
             <div id="aiResult" class="result"><div class="loading">Soru bekleniyor...</div></div>
         </div>
@@ -233,7 +234,7 @@ async def home():
 
             resDiv.innerHTML = html;
 
-            if (data.historical_data && data.historical_data.prices && data.historical_data.prices.length > 0) {
+            if (data.historical_data?.prices?.length > 0) {
                 drawChart(data.historical_data, data.symbol);
             }
         } catch (err) {
@@ -300,11 +301,9 @@ async def home():
         });
     }
 
-    // Event listener ile bağla (onclick yerine daha güvenli)
     document.addEventListener('DOMContentLoaded', () => {
         document.getElementById('analyzeBtn').addEventListener('click', analyzeStock);
         document.getElementById('askBtn').addEventListener('click', askQwen);
-        // İlk yüklemede otomatik analiz
         analyzeStock();
     });
 </script>
@@ -313,7 +312,6 @@ async def home():
     """
     return HTMLResponse(content=html_content)
 
-# ==================== API ENDPOINT'LER ====================
 @app.get("/api/finance/{symbol}")
 async def get_finance(symbol: str, period: str = "1mo"):
     return await get_finance_data(symbol, period)
@@ -336,7 +334,6 @@ Spekülasyon yapma, veriye dayalı ol. Türkçe cevap ver."""
         ]
 
         reply = await call_qwen(messages)
-
         return {"reply": reply}
     except Exception as e:
         raise HTTPException(500, detail=str(e))
@@ -346,7 +343,8 @@ async def health_check():
     return {
         "status": "ok",
         "qwen_model": QWEN_MODEL,
-        "api_key_set": bool(OPENROUTER_API_KEY)
+        "api_key_set": bool(OPENROUTER_API_KEY),
+        "environment": "Railway" if "RAILWAY_ENVIRONMENT" in os.environ else "Local"
     }
 
 if __name__ == "__main__":
