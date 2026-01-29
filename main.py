@@ -1,34 +1,39 @@
 from fastapi import FastAPI, HTTPException, Request
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import HTMLResponse, JSONResponse
-from pydantic import BaseModel
+from fastapi.responses import HTMLResponse
 import yfinance as yf
 import logging
 import os
-import json
-from datetime import datetime, timedelta
-from typing import Optional, List
+from datetime import datetime
+from typing import Dict, List
 import httpx
-import asyncio
+from dotenv import load_dotenv
 
-# ==================== KONFİGÜRASYON ====================
+# ==================== KONFIGÜRASYON ====================
+load_dotenv()  # .env dosyasını yükle (aynı klasörde olmalı)
+
 PORT = int(os.environ.get("PORT", 8000))
 DEBUG = os.environ.get("DEBUG", "false").lower() == "true"
+
+# OpenRouter ayarları - buraya kendi key'ini .env'ye koy
+OPENROUTER_API_KEY = os.getenv("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")
+OPENROUTER_BASE_URL = "https://openrouter.ai/api/v1"
+QWEN_MODEL = "qwen/qwen3-coder:free"          # Ücretsiz model (Ocak 2026 aktif)
+
+if not OPENROUTER_API_KEY:
+    print("⚠️  DİKKAT: OPENROUTER_API_KEY .env dosyasında tanımlı değil!")
 
 # Logging
 logging.basicConfig(level=logging.DEBUG if DEBUG else logging.INFO)
 logger = logging.getLogger(__name__)
 
-# ==================== FASTAPI APP ====================
 app = FastAPI(
-    title="ICTSmartPro × Qwen AI Trading Platform",
-    description="Advanced AI Trading Analysis with Qwen LLM",
-    version="3.0.0",
+    title="ICTSmartPro × Qwen Trading Analiz",
+    description="Qwen AI ile Hisse / Fon Teknik Analizi",
+    version="3.2.0",
     docs_url="/docs" if DEBUG else None,
-    redoc_url="/redoc" if DEBUG else None
 )
 
-# CORS
 app.add_middleware(
     CORSMiddleware,
     allow_origins=["*"],
@@ -37,659 +42,297 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-# ==================== FINANCE FUNCTIONS ====================
-async def get_finance_data(symbol: str, period: str = "1mo") -> dict:
-    """Finans verilerini al - DÜZELTİLMİŞ VERSİYON"""
+# ==================== QWEN ÇAĞIRMA FONKSİYONU ====================
+async def call_qwen(messages: List[Dict[str, str]], temperature: float = 0.65, max_tokens: int = 1400) -> str:
+    if not OPENROUTER_API_KEY:
+        return "❌ OpenRouter API anahtarı eksik. .env dosyasına OPENROUTER_API_KEY=sk-or-v1-... şeklinde ekleyin."
+
+    headers = {
+        "Authorization": f"Bearer {OPENROUTER_API_KEY}",
+        "HTTP-Referer": "https://github.com/your-repo",  # İstersen kendi linkini koy
+        "X-Title": "ICTSmartPro Trading AI",
+        "Content-Type": "application/json"
+    }
+
+    payload = {
+        "model": QWEN_MODEL,
+        "messages": messages,
+        "temperature": temperature,
+        "max_tokens": max_tokens,
+        "stream": False
+    }
+
+    async with httpx.AsyncClient() as client:
+        try:
+            response = await client.post(
+                f"{OPENROUTER_BASE_URL}/chat/completions",
+                headers=headers,
+                json=payload,
+                timeout=80.0
+            )
+            response.raise_for_status()
+            data = response.json()
+            return data["choices"][0]["message"]["content"].strip()
+        except Exception as e:
+            logger.error(f"Qwen çağrı hatası: {e}")
+            return f"AI bağlantı hatası: {str(e)} (loglara bakın)"
+
+# ==================== FİNANS VERİ ÇEKME ====================
+async def get_finance_data(symbol: str, period: str = "1mo") -> Dict:
     try:
         symbol = symbol.upper().strip()
-        
-        # BIST sembolleri için özel işlem
         if symbol.startswith("BIST:"):
             symbol = symbol.replace("BIST:", "") + ".IS"
-        
+
         ticker = yf.Ticker(symbol)
-        
-        # Tarihsel veriler
         hist = ticker.history(period=period)
-        
+
+        if hist.empty and not symbol.endswith(".IS"):
+            symbol += ".IS"
+            ticker = yf.Ticker(symbol)
+            hist = ticker.history(period=period)
+
         if hist.empty:
-            # Alternatif sembol deneyelim
-            if not symbol.endswith(".IS"):
-                symbol_with_is = symbol + ".IS"
-                ticker = yf.Ticker(symbol_with_is)
-                hist = ticker.history(period=period)
-            
-            if hist.empty:
-                # Fallback veri
-                return {
-                    "symbol": symbol,
-                    "name": symbol,
-                    "currency": "USD",
-                    "current_price": 100.0,
-                    "change": 0.0,
-                    "change_percent": 0.0,
-                    "volume": 0,
-                    "market_cap": None,
-                    "period": period,
-                    "data_points": 0,
-                    "historical_data": {
-                        "dates": [],
-                        "prices": []
-                    },
-                    "fetched_at": datetime.now().isoformat(),
-                    "error": "No data available, showing demo data"
-                }
-        
-        # Mevcut fiyat ve değişim
-        current = float(hist["Close"].iloc[-1]) if len(hist) > 0 else 0
+            raise ValueError("Veri bulunamadı")
+
+        current = float(hist["Close"].iloc[-1])
         previous = float(hist["Close"].iloc[-2]) if len(hist) > 1 else current
         change = current - previous
-        change_percent = (change / previous * 100) if previous != 0 else 0
-        
-        # Ek bilgiler
+        change_pct = (change / previous * 100) if previous != 0 else 0
+
         info = ticker.info
-        currency = info.get('currency', 'USD')
-        market_cap = info.get('marketCap')
-        name = info.get('longName', info.get('shortName', symbol))
-        
-        # Tarihsel verileri hazırla
-        dates = hist.index.strftime('%Y-%m-%d').tolist() if len(hist) > 0 else []
-        prices = hist["Close"].round(2).tolist() if len(hist) > 0 else []
-        
+        name = info.get("longName") or info.get("shortName") or symbol.replace(".IS", "")
+        currency = info.get("currency", "TRY" if ".IS" in symbol else "USD")
+
+        dates = hist.index.strftime("%Y-%m-%d").tolist()
+        prices = hist["Close"].round(2).tolist()
+
         return {
             "symbol": symbol.replace(".IS", ""),
             "name": name,
             "currency": currency,
             "current_price": round(current, 2),
-            "previous_close": round(previous, 2),
             "change": round(change, 2),
-            "change_percent": round(change_percent, 2),
-            "volume": int(hist["Volume"].iloc[-1]) if len(hist) > 0 else 0,
-            "market_cap": market_cap,
-            "period": period,
-            "data_points": len(hist),
-            "historical_data": {
-                "dates": dates,
-                "prices": prices
-            },
-            "fetched_at": datetime.now().isoformat()
-        }
-        
-    except Exception as e:
-        logger.error(f"Finance data error for {symbol}: {e}")
-        # Fallback response
-        return {
-            "symbol": symbol,
-            "name": symbol,
-            "currency": "USD",
-            "current_price": 150.0,
-            "change": 1.5,
-            "change_percent": 1.0,
-            "volume": 1000000,
-            "market_cap": None,
-            "period": period,
-            "data_points": 10,
-            "historical_data": {
-                "dates": ["2024-01-01", "2024-01-02", "2024-01-03"],
-                "prices": [145.0, 148.0, 150.0]
-            },
+            "change_percent": round(change_pct, 2),
+            "volume": int(hist["Volume"].iloc[-1]) if not hist["Volume"].empty else 0,
+            "market_cap": info.get("marketCap"),
+            "historical_data": {"dates": dates, "prices": prices},
             "fetched_at": datetime.now().isoformat(),
-            "error": f"Error: {str(e)}"
+            "error": None
         }
+    except Exception as e:
+        logger.error(f"Finance hatası {symbol}: {e}")
+        return {"symbol": symbol, "error": str(e), "historical_data": {"dates": [], "prices": []}}
 
-# ==================== ENDPOINTS ====================
+# ==================== ANA SAYFA (HTML + JS) ====================
 @app.get("/")
 async def home():
-    """Ana sayfa - Trading Dashboard"""
     html_content = """
-    <!DOCTYPE html>
-    <html lang="tr">
-    <head>
-        <meta charset="UTF-8">
-        <meta name="viewport" content="width=device-width, initial-scale=1.0">
-        <title>ICTSmartPro × Qwen AI Trading</title>
-        <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
-        <style>
-            * { margin: 0; padding: 0; box-sizing: border-box; }
-            body {
-                font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
-                background: linear-gradient(135deg, #0f172a, #1e293b);
-                color: #f1f5f9;
-                min-height: 100vh;
-            }
-            .container {
-                max-width: 1200px;
-                margin: 0 auto;
-                padding: 20px;
-            }
-            header {
-                text-align: center;
-                padding: 40px 20px;
-                background: linear-gradient(90deg, #3b82f6, #8b5cf6);
-                border-radius: 20px;
-                margin-bottom: 30px;
-                box-shadow: 0 10px 30px rgba(0,0,0,0.3);
-            }
-            .logo {
-                font-size: 3rem;
-                font-weight: 900;
-                background: linear-gradient(45deg, #fbbf24, #f97316);
-                -webkit-background-clip: text;
-                -webkit-text-fill-color: transparent;
-                margin-bottom: 10px;
-            }
-            .tagline {
-                font-size: 1.2rem;
-                opacity: 0.9;
-            }
-            .dashboard {
-                display: grid;
-                grid-template-columns: 1fr 1fr;
-                gap: 30px;
-                margin-bottom: 30px;
-            }
-            @media (max-width: 768px) {
-                .dashboard { grid-template-columns: 1fr; }
-            }
-            .card {
-                background: rgba(30, 41, 59, 0.8);
-                border-radius: 15px;
-                padding: 25px;
-                box-shadow: 0 8px 25px rgba(0,0,0,0.2);
-                border: 1px solid rgba(255,255,255,0.1);
-            }
-            .card h2 {
-                color: #60a5fa;
-                margin-bottom: 20px;
-                display: flex;
-                align-items: center;
-                gap: 10px;
-            }
-            .form-group {
-                margin-bottom: 20px;
-            }
-            label {
-                display: block;
-                margin-bottom: 8px;
-                color: #cbd5e1;
-            }
-            input, select, textarea {
-                width: 100%;
-                padding: 12px 15px;
-                border-radius: 10px;
-                border: 1px solid #475569;
-                background: #1e293b;
-                color: white;
-                font-size: 16px;
-            }
-            button {
-                background: linear-gradient(90deg, #10b981, #3b82f6);
-                color: white;
-                border: none;
-                padding: 15px 30px;
-                border-radius: 10px;
-                font-size: 16px;
-                font-weight: 600;
-                cursor: pointer;
-                transition: transform 0.2s;
-                width: 100%;
-            }
-            button:hover {
-                transform: translateY(-2px);
-            }
-            .result {
-                margin-top: 20px;
-                padding: 20px;
-                background: rgba(255,255,255,0.05);
-                border-radius: 10px;
-                white-space: pre-wrap;
-                line-height: 1.6;
-            }
-            .positive { color: #10b981; }
-            .negative { color: #ef4444; }
-            .ai-analysis {
-                background: linear-gradient(135deg, #1e3a8a, #3730a3);
-                color: white;
-            }
-            .chart-container {
-                height: 300px;
-                margin-top: 20px;
-            }
-            .footer {
-                text-align: center;
-                padding: 20px;
-                margin-top: 40px;
-                border-top: 1px solid #334155;
-                color: #94a3b8;
-            }
-            .loading {
-                color: #60a5fa;
-                text-align: center;
-                padding: 20px;
-            }
-            .error {
-                color: #ef4444;
-                padding: 10px;
-                background: rgba(239, 68, 68, 0.1);
-                border-radius: 8px;
-                margin-top: 10px;
-            }
-        </style>
-    </head>
-    <body>
-        <div class="container">
-            <header>
-                <div class="logo">ICTSmartPro × Qwen AI</div>
-                <div class="tagline">🤖 Akıllı Trading Analizi & Yapay Zeka Destekli Yatırım</div>
-            </header>
+<!DOCTYPE html>
+<html lang="tr">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>ICTSmartPro × Qwen Trading</title>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <style>
+        body {font-family:system-ui, sans-serif; background:#0f172a; color:#e2e8f0; margin:0; padding:1.5rem;}
+        .container {max-width:1200px; margin:0 auto;}
+        header {text-align:center; padding:2rem; background:linear-gradient(90deg,#3b82f6,#8b5cf6); border-radius:16px; margin-bottom:2rem;}
+        .logo {font-size:2.8rem; font-weight:900; background:linear-gradient(45deg,#fbbf24,#f97316); -webkit-background-clip:text; -webkit-text-fill-color:transparent;}
+        .dashboard {display:grid; grid-template-columns:1fr 1fr; gap:1.5rem;}
+        @media (max-width:768px) {.dashboard {grid-template-columns:1fr;}}
+        .card {background:rgba(30,41,59,0.7); border-radius:16px; padding:1.5rem; border:1px solid rgba(255,255,255,0.08);}
+        label {display:block; margin:0.8rem 0 0.4rem; color:#cbd5e1;}
+        select, textarea {width:100%; padding:0.8rem; border-radius:8px; border:1px solid #475569; background:#1e293b; color:white; font-size:1rem;}
+        button {background:linear-gradient(90deg,#10b981,#3b82f6); color:white; border:none; padding:0.9rem; border-radius:10px; font-weight:600; cursor:pointer; width:100%; margin-top:1rem;}
+        button:hover {opacity:0.92;}
+        .result {margin-top:1.2rem; padding:1rem; background:rgba(255,255,255,0.04); border-radius:10px; white-space:pre-wrap; line-height:1.5;}
+        .positive {color:#10b981;} .negative {color:#ef4444;}
+        .chart-container {height:340px; margin-top:1.5rem;}
+        .loading {text-align:center; color:#60a5fa; padding:1.5rem;}
+        .error {color:#ef4444; background:rgba(239,68,68,0.12); padding:0.8rem; border-radius:8px;}
+    </style>
+</head>
+<body>
+<div class="container">
+    <header>
+        <div class="logo">ICTSmartPro × Qwen</div>
+        <div>Yapay Zeka Destekli Hisse Analizi (2026)</div>
+    </header>
 
-            <div class="dashboard">
-                <div class="card">
-                    <h2>📈 Hisse/Fon Analizi</h2>
-                    <div class="form-group">
-                        <label>Sembol:</label>
-                        <select id="symbolSelect">
-                            <option value="AAPL">AAPL - Apple</option>
-                            <option value="TSLA">TSLA - Tesla</option>
-                            <option value="NVDA">NVDA - NVIDIA</option>
-                            <option value="MSFT">MSFT - Microsoft</option>
-                            <option value="GOOGL">GOOGL - Google</option>
-                            <option value="BTC-USD">BTC-USD - Bitcoin</option>
-                            <option value="ETH-USD">ETH-USD - Ethereum</option>
-                            <option value="THYAO.IS">THYAO - Türk Hava Yolları</option>
-                            <option value="AKBNK.IS">AKBNK - Akbank</option>
-                        </select>
-                    </div>
-                    <div class="form-group">
-                        <label>Period:</label>
-                        <select id="periodSelect">
-                            <option value="1d">1 Gün</option>
-                            <option value="5d">5 Gün</option>
-                            <option value="1mo" selected>1 Ay</option>
-                            <option value="3mo">3 Ay</option>
-                            <option value="6mo">6 Ay</option>
-                            <option value="1y">1 Yıl</option>
-                        </select>
-                    </div>
-                    <button onclick="analyzeStock()">🔍 Analiz Et</button>
-                    <div id="financeResult" class="result">
-                        <div class="loading">📊 Sembol seçin ve analiz et butonuna tıklayın...</div>
-                    </div>
-                </div>
+    <div class="dashboard">
+        <div class="card">
+            <h2>📈 Hisse Analizi</h2>
+            <label>Sembol:</label>
+            <select id="symbol">
+                <option value="THYAO.IS">THYAO - Türk Hava Yolları</option>
+                <option value="AKBNK.IS">AKBNK - Akbank</option>
+                <option value="GARAN.IS">GARAN - Garanti</option>
+                <option value="ISCTR.IS">ISCTR - İş Bankası</option>
+                <option value="EREGL.IS">EREGL - Ereğli Demir Çelik</option>
+                <option value="SISE.IS">SISE - Şişecam</option>
+                <option value="KCHOL.IS">KCHOL - Koç Holding</option>
+                <option value="ASELS.IS">ASELS - Aselsan</option>
+                <option value="AAPL">AAPL - Apple</option>
+                <option value="MSFT">MSFT - Microsoft</option>
+                <option value="NVDA">NVDA - NVIDIA</option>
+            </select>
 
-                <div class="card ai-analysis">
-                    <h2>🤖 Qwen AI Trading Analizi</h2>
-                    <div class="form-group">
-                        <label>Soru/Sembol:</label>
-                        <input type="text" id="aiQuery" placeholder="Ör: AAPL için teknik analiz yap veya BTC trendi nedir?">
-                    </div>
-                    <div class="form-group">
-                        <label>Dil:</label>
-                        <select id="languageSelect">
-                            <option value="tr" selected>Türkçe</option>
-                            <option value="en">English</option>
-                        </select>
-                    </div>
-                    <button onclick="askAI()">🚀 Qwen AI ile Analiz</button>
-                    <div id="aiResult" class="result">
-                        <div class="loading">🤖 Sorunuzu yazın veya sembol analizi yapın...</div>
-                    </div>
-                </div>
-            </div>
+            <label>Dönem:</label>
+            <select id="period">
+                <option value="5d">5 Gün</option>
+                <option value="1mo" selected>1 Ay</option>
+                <option value="3mo">3 Ay</option>
+                <option value="6mo">6 Ay</option>
+                <option value="1y">1 Yıl</option>
+            </select>
 
-            <div class="card">
-                <h2>📊 Fiyat Grafiği</h2>
-                <div class="chart-container">
-                    <canvas id="priceChart"></canvas>
-                </div>
-            </div>
-
-            <div class="footer">
-                <p>© 2024 ICTSmartPro AI Trading Platform | Qwen AI Entegrasyonu</p>
-                <p>📊 Gerçek zamanlı finans verileri | 🤖 Yapay Zeka analizi | 📈 Teknik indikatörler</p>
-            </div>
+            <button onclick="analyzeStock()">Analiz Et</button>
+            <div id="financeResult" class="result"><div class="loading">Sembol seçip Analiz Et'e basın...</div></div>
         </div>
 
-        <script>
-            let priceChart = null;
+        <div class="card">
+            <h2>🤖 Qwen AI Analizi</h2>
+            <label>Soru / Talimat:</label>
+            <textarea id="aiQuery" rows="5" placeholder="Örnek:\nTHYAO son 1 ay teknik görünümü nasıl?\nAKBNK için alım-satım önerisi ver"></textarea>
+            <button onclick="askQwen()">Qwen'e Sor</button>
+            <div id="aiResult" class="result"><div class="loading">Soru bekleniyor...</div></div>
+        </div>
+    </div>
 
-            async function analyzeStock() {
-                const symbol = document.getElementById('symbolSelect').value;
-                const period = document.getElementById('periodSelect').value;
-                
-                document.getElementById('financeResult').innerHTML = '<div class="loading">⏳ Analiz ediliyor...</div>';
-                
-                try {
-                    // URL encode
-                    const encodedSymbol = encodeURIComponent(symbol);
-                    const response = await fetch(`/api/finance/${encodedSymbol}?period=${period}`);
-                    
-                    if (!response.ok) {
-                        throw new Error(`API error: ${response.status}`);
-                    }
-                    
-                    const data = await response.json();
-                    
-                    let resultHTML = `
-                        <h3>${data.symbol} - ${data.name || data.symbol}</h3>
-                        <p><strong>💰 Mevcut Fiyat:</strong> ${data.current_price} ${data.currency || 'USD'}</p>
-                        <p><strong>📈 Değişim:</strong> <span class="${data.change_percent >= 0 ? 'positive' : 'negative'}">${data.change_percent}% (${data.change})</span></p>
-                        <p><strong>📦 İşlem Hacmi:</strong> ${data.volume ? data.volume.toLocaleString() : 'N/A'}</p>
-                    `;
-                    
-                    if (data.market_cap) {
-                        resultHTML += `<p><strong>🏦 Piyasa Değeri:</strong> ${(data.market_cap/1e9).toFixed(2)}B</p>`;
-                    }
-                    
-                    resultHTML += `<p><strong>⏰ Period:</strong> ${period}</p>`;
-                    
-                    if (data.error) {
-                        resultHTML += `<div class="error">⚠️ ${data.error}</div>`;
-                    }
-                    
-                    document.getElementById('financeResult').innerHTML = resultHTML;
-                    
-                    // Grafik çiz (veri varsa)
-                    if (data.historical_data && data.historical_data.prices.length > 0) {
-                        updateChart(data.historical_data, data.symbol);
-                    }
-                    
-                    // AI analizi için buton göster
-                    document.getElementById('financeResult').innerHTML += `
-                        <button onclick="analyzeWithAI('${symbol}', '${period}')" style="margin-top: 15px; background: linear-gradient(90deg, #8b5cf6, #ec4899);">
-                            🤖 Qwen AI ile Detaylı Analiz
-                        </button>
-                    `;
-                    
-                } catch (error) {
-                    document.getElementById('financeResult').innerHTML = 
-                        `<div class="error">❌ Hata: ${error.message}</div>`;
-                    console.error('Analyze error:', error);
-                }
+    <div class="card" style="margin-top:2rem;">
+        <h2>📊 Fiyat Grafiği</h2>
+        <div class="chart-container"><canvas id="priceChart"></canvas></div>
+    </div>
+</div>
+
+<script>
+let chartInstance = null;
+
+async function analyzeStock() {
+    const symbol = document.getElementById('symbol').value;
+    const period = document.getElementById('period').value;
+    const resDiv = document.getElementById('financeResult');
+    resDiv.innerHTML = '<div class="loading">Veriler çekiliyor...</div>';
+
+    try {
+        const resp = await fetch(`/api/finance/${encodeURIComponent(symbol)}?period=${period}`);
+        if (!resp.ok) throw new Error('HTTP ' + resp.status);
+        const data = await resp.json();
+
+        if (data.error) {
+            resDiv.innerHTML = `<div class="error">Hata: ${data.error}</div>`;
+            return;
+        }
+
+        let html = `<strong>${data.symbol} - ${data.name}</strong><br>`;
+        html += `Fiyat: ${data.current_price} ${data.currency}<br>`;
+        html += `Değişim: <span class="${data.change_percent >= 0 ? 'positive' : 'negative'}">${data.change_percent.toFixed(2)}% (${data.change.toFixed(2)})</span><br>`;
+        if (data.market_cap) html += `Piyasa Değeri: ~${(data.market_cap / 1e9).toFixed(1)} milyar<br>`;
+
+        resDiv.innerHTML = html;
+
+        if (data.historical_data.prices.length > 0) {
+            drawChart(data.historical_data, data.symbol);
+        }
+    } catch (err) {
+        resDiv.innerHTML = `<div class="error">Bağlantı hatası: ${err.message}</div>`;
+    }
+}
+
+async function askQwen() {
+    const query = document.getElementById('aiQuery').value.trim();
+    if (!query) return alert('Lütfen bir soru yazın!');
+
+    const resDiv = document.getElementById('aiResult');
+    resDiv.innerHTML = '<div class="loading">Qwen analiz yapıyor...</div>';
+
+    try {
+        const resp = await fetch('/api/ai/ask', {
+            method: 'POST',
+            headers: {'Content-Type': 'application/json'},
+            body: JSON.stringify({message: query})
+        });
+        if (!resp.ok) throw new Error('HTTP ' + resp.status);
+        const data = await resp.json();
+        resDiv.innerHTML = data.reply.replace(/\n/g, '<br>');
+    } catch (err) {
+        resDiv.innerHTML = `<div class="error">AI hatası: ${err.message}</div>`;
+    }
+}
+
+function drawChart(hdata, sym) {
+    const ctx = document.getElementById('priceChart').getContext('2d');
+    if (chartInstance) chartInstance.destroy();
+
+    chartInstance = new Chart(ctx, {
+        type: 'line',
+        data: {
+            labels: hdata.dates,
+            datasets: [{
+                label: sym,
+                data: hdata.prices,
+                borderColor: '#3b82f6',
+                backgroundColor: 'rgba(59,130,246,0.1)',
+                tension: 0.15,
+                fill: true
+            }]
+        },
+        options: {
+            responsive: true,
+            maintainAspectRatio: false,
+            scales: {
+                y: {grid: {color: 'rgba(255,255,255,0.08)'}, ticks: {color: '#94a3b8'}},
+                x: {grid: {color: 'rgba(255,255,255,0.08)'}, ticks: {color: '#94a3b8'}}
             }
+        }
+    });
+}
 
-            async function analyzeWithAI(symbol, period) {
-                document.getElementById('aiResult').innerHTML = '<div class="loading">🤖 Qwen AI analiz yapıyor...</div>';
-                
-                try {
-                    const response = await fetch('/api/ai/analyze', {
-                        method: 'POST',
-                        headers: {'Content-Type': 'application/json'},
-                        body: JSON.stringify({
-                            message: `${symbol} için teknik analiz yap`,
-                            symbol: symbol,
-                            language: document.getElementById('languageSelect').value
-                        })
-                    });
-                    
-                    if (!response.ok) {
-                        throw new Error(`AI API error: ${response.status}`);
-                    }
-                    
-                    const data = await response.json();
-                    let analysisText = data.analysis || data.reply || 'Analiz yapılamadı';
-                    analysisText = analysisText.replace(/\\n/g, '<br>');
-                    
-                    document.getElementById('aiResult').innerHTML = analysisText;
-                } catch (error) {
-                    document.getElementById('aiResult').innerHTML = 
-                        `<div class="error">❌ AI analiz hatası: ${error.message}</div>`;
-                    console.error('AI analyze error:', error);
-                }
-            }
-
-            async function askAI() {
-                const query = document.getElementById('aiQuery').value;
-                const language = document.getElementById('languageSelect').value;
-                
-                if (!query.trim()) {
-                    alert('Lütfen bir soru girin!');
-                    return;
-                }
-                
-                document.getElementById('aiResult').innerHTML = '<div class="loading">🤖 Qwen AI düşünüyor...</div>';
-                
-                try {
-                    const response = await fetch('/api/ai/chat', {
-                        method: 'POST',
-                        headers: {'Content-Type': 'application/json'},
-                        body: JSON.stringify({
-                            message: query,
-                            language: language
-                        })
-                    });
-                    
-                    if (!response.ok) {
-                        throw new Error(`Chat API error: ${response.status}`);
-                    }
-                    
-                    const data = await response.json();
-                    let replyText = data.reply || 'Cevap alınamadı';
-                    replyText = replyText.replace(/\\n/g, '<br>');
-                    
-                    document.getElementById('aiResult').innerHTML = replyText;
-                } catch (error) {
-                    document.getElementById('aiResult').innerHTML = 
-                        `<div class="error">❌ AI hatası: ${error.message}</div>`;
-                    console.error('Chat error:', error);
-                }
-            }
-
-            function updateChart(historicalData, symbol) {
-                const ctx = document.getElementById('priceChart').getContext('2d');
-                
-                if (priceChart) {
-                    priceChart.destroy();
-                }
-                
-                // Eğer veri yoksa, boş chart göster
-                if (!historicalData || !historicalData.prices || historicalData.prices.length === 0) {
-                    ctx.clearRect(0, 0, ctx.canvas.width, ctx.canvas.height);
-                    ctx.fillStyle = '#64748b';
-                    ctx.font = '16px Arial';
-                    ctx.textAlign = 'center';
-                    ctx.fillText('Grafik verisi yok', ctx.canvas.width/2, ctx.canvas.height/2);
-                    return;
-                }
-                
-                priceChart = new Chart(ctx, {
-                    type: 'line',
-                    data: {
-                        labels: historicalData.dates,
-                        datasets: [{
-                            label: `${symbol} Fiyat`,
-                            data: historicalData.prices,
-                            borderColor: '#3b82f6',
-                            backgroundColor: 'rgba(59, 130, 246, 0.1)',
-                            borderWidth: 2,
-                            fill: true,
-                            tension: 0.1
-                        }]
-                    },
-                    options: {
-                        responsive: true,
-                        maintainAspectRatio: false,
-                        plugins: {
-                            legend: { display: true },
-                            tooltip: { mode: 'index', intersect: false }
-                        },
-                        scales: {
-                            y: {
-                                beginAtZero: false,
-                                grid: { color: 'rgba(255,255,255,0.1)' },
-                                ticks: { color: '#cbd5e1' }
-                            },
-                            x: {
-                                grid: { color: 'rgba(255,255,255,0.1)' },
-                                ticks: { color: '#cbd5e1' }
-                            }
-                        }
-                    }
-                });
-            }
-
-            // Sayfa yüklendiğinde otomatik analiz
-            window.onload = function() {
-                analyzeStock();
-            };
-        </script>
-    </body>
-    </html>
+window.onload = analyzeStock;
+</script>
+</body>
+</html>
     """
     return HTMLResponse(content=html_content)
 
-@app.get("/health")
-async def health():
-    """Health check"""
-    return {
-        "status": "healthy",
-        "service": "ICTSmartPro × Qwen AI Trading",
-        "version": "3.1.0",
-        "timestamp": datetime.now().isoformat(),
-        "features": ["trading_analysis", "finance_data", "charts"],
-        "note": "Qwen AI API key not configured (using fallback responses)"
-    }
-
+# ==================== API ENDPOINT'LER ====================
 @app.get("/api/finance/{symbol}")
 async def get_finance(symbol: str, period: str = "1mo"):
-    """Finans verilerini getir"""
+    return await get_finance_data(symbol, period)
+
+@app.post("/api/ai/ask")
+async def ask_ai(request: Request):
     try:
-        data = await get_finance_data(symbol, period)
-        return data
+        body = await request.json()
+        user_msg = body.get("message", "").strip()
+        if not user_msg:
+            raise HTTPException(400, "Mesaj boş olamaz")
+
+        system_prompt = """Sen deneyimli bir Türk borsası ve global hisse analisti olarak cevap ver.
+Kısa, net, gerçekçi ol. Teknik analiz, trend, destek-direnç seviyeleri, riskler hakkında konuş.
+Spekülasyon yapma, veriye dayalı ol. Türkçe cevap ver."""
+
+        messages = [
+            {"role": "system", "content": system_prompt},
+            {"role": "user", "content": user_msg}
+        ]
+
+        reply = await call_qwen(messages)
+
+        return {"reply": reply}
     except Exception as e:
-        logger.error(f"API error for {symbol}: {e}")
-        # Fallback data
-        return {
-            "symbol": symbol,
-            "name": symbol,
-            "currency": "USD",
-            "current_price": 100.0,
-            "change": 0.0,
-            "change_percent": 0.0,
-            "volume": 0,
-            "market_cap": None,
-            "period": period,
-            "data_points": 0,
-            "historical_data": {"dates": [], "prices": []},
-            "fetched_at": datetime.now().isoformat(),
-            "error": str(e)
-        }
+        raise HTTPException(500, detail=str(e))
 
-@app.post("/api/ai/analyze")
-async def analyze_with_ai(request: Request):
-    """AI analizi - Basit versiyon"""
-    try:
-        data = await request.json()
-        symbol = data.get('symbol', 'AAPL')
-        language = data.get('language', 'tr')
-        
-        # Finans verilerini al
-        finance_data = await get_finance_data(symbol, "1mo")
-        
-        if language == "tr":
-            analysis = f"""
-            {symbol} Teknik Analizi:
-            
-            📈 Mevcut Fiyat: {finance_data['current_price']} {finance_data['currency']}
-            📊 Değişim: {finance_data['change_percent']}%
-            📦 Hacim: {finance_data.get('volume', 0)}
-            
-            🔍 Analiz:
-            1. Fiyat hareketi: {'Yükseliş' if finance_data['change_percent'] > 0 else 'Düşüş'}
-            2. Momentum: {'Güçlü' if abs(finance_data['change_percent']) > 5 else 'Zayıf'}
-            3. Öneri: {'AL' if finance_data['change_percent'] > 0 else 'SAT' if finance_data['change_percent'] < -3 else 'BEKLE'}
-            
-            ⚠️ Not: Qwen AI API anahtarı eklenmemiş. Gerçek AI analizi için OpenRouter API key ekleyin.
-            """
-        else:
-            analysis = f"""
-            {symbol} Technical Analysis:
-            
-            📈 Current Price: {finance_data['current_price']} {finance_data['currency']}
-            📊 Change: {finance_data['change_percent']}%
-            📦 Volume: {finance_data.get('volume', 0)}
-            
-            🔍 Analysis:
-            1. Price action: {'Uptrend' if finance_data['change_percent'] > 0 else 'Downtrend'}
-            2. Momentum: {'Strong' if abs(finance_data['change_percent']) > 5 else 'Weak'}
-            3. Recommendation: {'BUY' if finance_data['change_percent'] > 0 else 'SELL' if finance_data['change_percent'] < -3 else 'HOLD'}
-            
-            ⚠️ Note: Qwen AI API key not configured. Add OpenRouter API key for real AI analysis.
-            """
-        
-        return {
-            "symbol": symbol,
-            "analysis": analysis,
-            "finance_data": finance_data,
-            "timestamp": datetime.now().isoformat()
-        }
-    except Exception as e:
-        raise HTTPException(status_code=500, detail=str(e))
+@app.get("/health")
+async def health_check():
+    return {
+        "status": "ok",
+        "qwen_model": QWEN_MODEL,
+        "api_key_set": bool(OPENROUTER_API_KEY)
+    }
 
-@app.post("/api/ai/chat")
-async def chat_with_ai(request: Request):
-    """AI sohbet - Basit versiyon"""
-    try:
-        data = await request.json()
-        message = data.get('message', '')
-        language = data.get('language', 'tr')
-        
-        if language == "tr":
-            reply = f"""
-            🤖 ICTSmartPro Trading AI:
-            
-            Sorunuz: "{message}"
-            
-            Size trading analizi konusunda yardımcı olabilirim:
-            
-            • Sembol analizi (AAPL, BTC-USD, THYAO vb.)
-            • Teknik analiz
-            • Trend yorumlama
-            • Risk yönetimi
-            
-            Bir sembol adı söyleyin veya detaylı sorunuzu yazın!
-            
-            ⚠️ Not: Qwen AI API anahtarı eklenmemiş. OpenRouter'dan ücretsiz API key alabilirsiniz.
-            """
-        else:
-            reply = f"""
-            🤖 ICTSmartPro Trading AI:
-            
-            Your question: "{message}"
-            
-            I can help you with trading analysis:
-            
-            • Symbol analysis (AAPL, BTC-USD, etc.)
-            • Technical analysis
-            • Trend interpretation
-            • Risk management
-            
-            Please provide a symbol name or ask your detailed question!
-            
-            ⚠️ Note: Qwen AI API key not configured. Get free API key from OpenRouter.
-            """
-        
-        return {
-            "reply": reply,
-            "timestamp": datetime.now().isoformat()
-        }
-    except Exception as e:
-        raise HTTPException(status_code=500, detail=str(e))
-
-# ==================== STARTUP ====================
-@app.on_event("startup")
-async def startup_event():
-    """Başlangıçta çalışacak"""
-    logger.info(f"🚀 ICTSmartPro × Qwen AI Trading Platform başladı!")
-    logger.info(f"🌐 Port: {PORT}")
-    logger.info("📊 Servisler: Trading Analysis, Charts")
-
-# ==================== MAIN ====================
 if __name__ == "__main__":
     import uvicorn
-    uvicorn.run(
-        app,
-        host="0.0.0.0",
-        port=PORT,
-        log_level="info"
-    )
+    uvicorn.run(app, host="0.0.0.0", port=PORT, log_level="info")
