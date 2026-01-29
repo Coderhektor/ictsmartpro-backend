@@ -158,7 +158,7 @@ async def home():
 <div class="container">
     <header>
         <div class="logo">ICTSmartPro × Qwen</div>
-        <div>Yapay Zeka Destekli Hisse Analizi (2026)</div>
+        <div>Yapay Zeka Destekli Hisse Analizi</div>
     </header>
 
     <div class="dashboard">
@@ -188,15 +188,15 @@ async def home():
                 <option value="1y">1 Yıl</option>
             </select>
 
-            <button onclick="analyzeStock()">Analiz Et</button>
+            <button id="analyzeBtn">Analiz Et</button>
             <div id="financeResult" class="result"><div class="loading">Sembol seçip Analiz Et'e basın...</div></div>
         </div>
 
         <div class="card">
             <h2>🤖 Qwen AI Analizi</h2>
             <label>Soru / Talimat:</label>
-            <textarea id="aiQuery" rows="5" placeholder="Örnek:\nTHYAO son 1 ay teknik görünümü nasıl?\nAKBNK için alım-satım önerisi ver"></textarea>
-            <button onclick="askQwen()">Qwen'e Sor</button>
+            <textarea id="aiQuery" rows="5" placeholder="Örnek:\\nTHYAO son 1 ay teknik görünümü nasıl?\\nAKBNK için alım-satım önerisi ver"></textarea>
+            <button id="askBtn">Qwen'e Sor</button>
             <div id="aiResult" class="result"><div class="loading">Soru bekleniyor...</div></div>
         </div>
     </div>
@@ -208,89 +208,105 @@ async def home():
 </div>
 
 <script>
-let chartInstance = null;
+    let chartInstance = null;
 
-async function analyzeStock() {
-    const symbol = document.getElementById('symbol').value;
-    const period = document.getElementById('period').value;
-    const resDiv = document.getElementById('financeResult');
-    resDiv.innerHTML = '<div class="loading">Veriler çekiliyor...</div>';
+    async function analyzeStock() {
+        const symbol = document.getElementById('symbol').value;
+        const period = document.getElementById('period').value;
+        const resDiv = document.getElementById('financeResult');
+        resDiv.innerHTML = '<div class="loading">Veriler çekiliyor...</div>';
 
-    try {
-        const resp = await fetch(`/api/finance/${encodeURIComponent(symbol)}?period=${period}`);
-        if (!resp.ok) throw new Error('HTTP ' + resp.status);
-        const data = await resp.json();
+        try {
+            const resp = await fetch(`/api/finance/${encodeURIComponent(symbol)}?period=${period}`);
+            if (!resp.ok) throw new Error('HTTP ' + resp.status);
+            const data = await resp.json();
 
-        if (data.error) {
-            resDiv.innerHTML = `<div class="error">Hata: ${data.error}</div>`;
+            if (data.error) {
+                resDiv.innerHTML = `<div class="error">Hata: ${data.error}</div>`;
+                return;
+            }
+
+            let html = `<strong>${data.symbol} - ${data.name}</strong><br>`;
+            html += `Fiyat: ${data.current_price} ${data.currency}<br>`;
+            html += `Değişim: <span class="${data.change_percent >= 0 ? 'positive' : 'negative'}">${data.change_percent.toFixed(2)}% (${data.change.toFixed(2)})</span><br>`;
+            if (data.market_cap) html += `Piyasa Değeri: ~${(data.market_cap / 1e9).toFixed(1)} milyar<br>`;
+
+            resDiv.innerHTML = html;
+
+            if (data.historical_data && data.historical_data.prices && data.historical_data.prices.length > 0) {
+                drawChart(data.historical_data, data.symbol);
+            }
+        } catch (err) {
+            resDiv.innerHTML = `<div class="error">Bağlantı hatası: ${err.message}</div>`;
+            console.error(err);
+        }
+    }
+
+    async function askQwen() {
+        const query = document.getElementById('aiQuery').value.trim();
+        if (!query) {
+            alert('Lütfen bir soru yazın!');
             return;
         }
 
-        let html = `<strong>${data.symbol} - ${data.name}</strong><br>`;
-        html += `Fiyat: ${data.current_price} ${data.currency}<br>`;
-        html += `Değişim: <span class="${data.change_percent >= 0 ? 'positive' : 'negative'}">${data.change_percent.toFixed(2)}% (${data.change.toFixed(2)})</span><br>`;
-        if (data.market_cap) html += `Piyasa Değeri: ~${(data.market_cap / 1e9).toFixed(1)} milyar<br>`;
+        const resDiv = document.getElementById('aiResult');
+        resDiv.innerHTML = '<div class="loading">Qwen analiz yapıyor...</div>';
 
-        resDiv.innerHTML = html;
+        try {
+            const resp = await fetch('/api/ai/ask', {
+                method: 'POST',
+                headers: {'Content-Type': 'application/json'},
+                body: JSON.stringify({message: query})
+            });
 
-        if (data.historical_data.prices.length > 0) {
-            drawChart(data.historical_data, data.symbol);
-        }
-    } catch (err) {
-        resDiv.innerHTML = `<div class="error">Bağlantı hatası: ${err.message}</div>`;
-    }
-}
-
-async function askQwen() {
-    const query = document.getElementById('aiQuery').value.trim();
-    if (!query) return alert('Lütfen bir soru yazın!');
-
-    const resDiv = document.getElementById('aiResult');
-    resDiv.innerHTML = '<div class="loading">Qwen analiz yapıyor...</div>';
-
-    try {
-        const resp = await fetch('/api/ai/ask', {
-            method: 'POST',
-            headers: {'Content-Type': 'application/json'},
-            body: JSON.stringify({message: query})
-        });
-        if (!resp.ok) throw new Error('HTTP ' + resp.status);
-        const data = await resp.json();
-        resDiv.innerHTML = data.reply.replace(/\n/g, '<br>');
-    } catch (err) {
-        resDiv.innerHTML = `<div class="error">AI hatası: ${err.message}</div>`;
-    }
-}
-
-function drawChart(hdata, sym) {
-    const ctx = document.getElementById('priceChart').getContext('2d');
-    if (chartInstance) chartInstance.destroy();
-
-    chartInstance = new Chart(ctx, {
-        type: 'line',
-        data: {
-            labels: hdata.dates,
-            datasets: [{
-                label: sym,
-                data: hdata.prices,
-                borderColor: '#3b82f6',
-                backgroundColor: 'rgba(59,130,246,0.1)',
-                tension: 0.15,
-                fill: true
-            }]
-        },
-        options: {
-            responsive: true,
-            maintainAspectRatio: false,
-            scales: {
-                y: {grid: {color: 'rgba(255,255,255,0.08)'}, ticks: {color: '#94a3b8'}},
-                x: {grid: {color: 'rgba(255,255,255,0.08)'}, ticks: {color: '#94a3b8'}}
+            if (!resp.ok) {
+                const errText = await resp.text();
+                throw new Error(`HTTP ${resp.status}: ${errText}`);
             }
-        }
-    });
-}
 
-window.onload = analyzeStock;
+            const data = await resp.json();
+            resDiv.innerHTML = (data.reply || 'Cevap alınamadı').replace(/\\n/g, '<br>');
+        } catch (err) {
+            resDiv.innerHTML = `<div class="error">AI hatası: ${err.message}</div>`;
+            console.error(err);
+        }
+    }
+
+    function drawChart(hdata, sym) {
+        const ctx = document.getElementById('priceChart').getContext('2d');
+        if (chartInstance) chartInstance.destroy();
+
+        chartInstance = new Chart(ctx, {
+            type: 'line',
+            data: {
+                labels: hdata.dates,
+                datasets: [{
+                    label: sym,
+                    data: hdata.prices,
+                    borderColor: '#3b82f6',
+                    backgroundColor: 'rgba(59,130,246,0.1)',
+                    tension: 0.15,
+                    fill: true
+                }]
+            },
+            options: {
+                responsive: true,
+                maintainAspectRatio: false,
+                scales: {
+                    y: {grid: {color: 'rgba(255,255,255,0.08)'}, ticks: {color: '#94a3b8'}},
+                    x: {grid: {color: 'rgba(255,255,255,0.08)'}, ticks: {color: '#94a3b8'}}
+                }
+            }
+        });
+    }
+
+    // Event listener ile bağla (onclick yerine daha güvenli)
+    document.addEventListener('DOMContentLoaded', () => {
+        document.getElementById('analyzeBtn').addEventListener('click', analyzeStock);
+        document.getElementById('askBtn').addEventListener('click', askQwen);
+        // İlk yüklemede otomatik analiz
+        analyzeStock();
+    });
 </script>
 </body>
 </html>
