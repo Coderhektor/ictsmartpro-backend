@@ -61,15 +61,10 @@ async def root():
     </html>
     """
 
-@app.get("/health", response_class=JSONResponse)
-async def health_check():
-    """Railway healthcheck için ultra hızlı endpoint"""
-    return {
-        "status": "healthy",
-        "version": "12.7.0",
-        "service": "ICTSmartPro AI Trading Platform",
-        "timestamp": datetime.utcnow().isoformat() + "Z"
-    }
+ # YENİ (önerilen)
+@app.get("/health")
+def health():
+    return {"status": "ok"}
 
 @app.get("/ready")
 async def ready_check():
