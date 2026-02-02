@@ -15,7 +15,7 @@ import websockets
 from contextlib import asynccontextmanager
 import pandas as pd
 import numpy as np
-
+from dataclasses import dataclass 
 # Simple logging
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
