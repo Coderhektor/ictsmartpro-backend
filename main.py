@@ -1,13 +1,14 @@
 """
-🚀 PROFESSIONAL TRADING BOT v3.0 - REAL-TIME INTEGRATION
-✅ Gerçek Zamanlı Veri ✅ TradingView Integration ✅ EMA/RSI Signals
-✅ 12 Candlestick Patterns ✅ Railway Optimized ✅ Binance WebSocket
+🚀 PROFESSIONAL TRADING BOT v4.0 - TRADINGVIEW INTEGRATION
+✅ Gerçek Zamanlı Veri ✅ Advanced TradingView Charts ✅ Multiple Timeframes
+✅ EMA/RSI Signals ✅ 12 Candlestick Patterns ✅ Binance WebSocket
+✅ 9 Timeframes (1m to 1M) ✅ Railway Optimized
 """
 
 import os
 import logging
 from datetime import datetime, timezone
-from typing import Dict, List, Optional
+from typing import Dict, List, Optional, Tuple
 import asyncio
 import json
 import websockets
@@ -17,9 +18,57 @@ from contextlib import asynccontextmanager
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
-from fastapi import FastAPI, HTTPException
+from fastapi import FastAPI, HTTPException, Query
 from fastapi.responses import HTMLResponse, JSONResponse, PlainTextResponse
 from fastapi.middleware.cors import CORSMiddleware
+
+# ==================== TRADINGVIEW CONFIG ====================
+class TradingViewConfig:
+    """TradingView widget configuration"""
+    
+    # Supported timeframes with TradingView intervals
+    TIMEFRAMES = {
+        "1m": "1",      # 1 minute
+        "3m": "3",      # 3 minutes
+        "5m": "5",      # 5 minutes
+        "15m": "15",    # 15 minutes
+        "30m": "30",    # 30 minutes
+        "1h": "60",     # 1 hour
+        "4h": "240",    # 4 hours
+        "1d": "1D",     # 1 day
+        "1w": "1W",     # 1 week
+        "1M": "1M",     # 1 month
+    }
+    
+    # Default symbols with TradingView format
+    DEFAULT_SYMBOLS = [
+        "BTCUSDT", "ETHUSDT", "SOLUSDT", 
+        "XRPUSDT", "ADAUSDT", "BNBUSDT",
+        "DOGEUSDT", "DOTUSDT", "AVAXUSDT"
+    ]
+    
+    # Chart themes
+    THEMES = {
+        "dark": "Dark",
+        "light": "Light"
+    }
+    
+    @staticmethod
+    def get_tradingview_symbol(symbol: str) -> str:
+        """Convert symbol to TradingView format"""
+        symbol = symbol.upper().strip()
+        
+        # Binance format for cryptocurrencies
+        if symbol.endswith("USDT"):
+            return f"BINANCE:{symbol}"
+        # Forex pairs
+        elif len(symbol) == 6 and "USD" in symbol:
+            return f"FX:{symbol}"
+        # Stocks
+        elif symbol.isalpha() and len(symbol) <= 5:
+            return f"NASDAQ:{symbol}"
+        else:
+            return symbol
 
 # ==================== GERÇEK ZAMANLI VERİ MODÜLÜ ====================
 class BinanceRealTimeData:
@@ -131,20 +180,19 @@ class BinanceRealTimeData:
                 }
     
     async def get_candles(self, symbol: str, count: int = 50) -> List[Dict]:
-        """Sembol için mum verisi getir (simüle değil, gerçek cache)"""
+        """Sembol için mum verisi getir"""
         symbol = symbol.upper()
         
         # Gerçek veri varsa kullan
         if symbol in self.symbol_data:
             real_data = self.symbol_data[symbol]
             
-            # Simüle değil, gerçek veriye dayalı tarihsel veri oluştur
+            # Gerçek veriye dayalı tarihsel veri oluştur
             base_price = real_data['price']
             candles = []
             
             for i in range(count):
-                # Gerçek fiyat hareketine dayalı varyasyon
-                variation = 1 + (i * 0.0001)  # Çok küçük trend
+                variation = 1 + (i * 0.0001)
                 price_variation = base_price * variation
                 
                 candles.append({
@@ -214,7 +262,6 @@ class TechnicalAnalyzer:
             current_ema = (closes[i] - ema[-1]) * multiplier + ema[-1]
             ema.append(current_ema)
         
-        # Başlangıç için None değerler ekle
         none_list = [None] * (period - 1)
         return none_list + ema
     
@@ -237,7 +284,6 @@ class TechnicalAnalyzer:
                 gains.append(0)
                 losses.append(abs(change))
         
-        # Ortalama kazanç ve kayıp
         avg_gain = sum(gains[-period:]) / period
         avg_loss = sum(losses[-period:]) / period
         
@@ -247,7 +293,6 @@ class TechnicalAnalyzer:
             rs = avg_gain / avg_loss
             rsi = 100 - (100 / (1 + rs))
         
-        # Sinyal belirle
         if rsi > 70:
             signal = "OVERBOUGHT"
         elif rsi < 30:
@@ -323,59 +368,49 @@ class SignalGenerator:
     async def generate_signal(self, symbol: str, interval: str = "1h") -> Dict:
         """Gerçek zamanlı sinyal üret"""
         try:
-            # Gerçek veriyi al
             real_data = await self.data_provider.get_symbol_info(symbol)
             candles = await self.data_provider.get_candles(symbol, 50)
             
             if not real_data or len(candles) < 20:
                 return await self.get_fallback_signal(symbol)
             
-            # İndikatörleri hesapla
             sma_9 = self.analyzer.calculate_sma(candles, 9)
             sma_21 = self.analyzer.calculate_sma(candles, 21)
             ema_12 = self.analyzer.calculate_ema(candles, 12)
             ema_26 = self.analyzer.calculate_ema(candles, 26)
             rsi_data = self.analyzer.calculate_rsi(candles)
             
-            # Formasyonları tespit et
             patterns = self.analyzer.detect_patterns(candles)
             
-            # Fiyat değişimi
             if len(candles) >= 2:
                 change = ((candles[-1]["close"] - candles[-2]["close"]) / candles[-2]["close"]) * 100
             else:
                 change = 0
             
-            # Sinyal puanı hesapla
             signal_score = 0
             
-            # EMA sinyali
             if ema_12 and ema_26 and ema_12[-1] and ema_26[-1]:
                 if ema_12[-1] > ema_26[-1]:
-                    signal_score += 20  # Bullish EMA crossover
+                    signal_score += 20
                 else:
-                    signal_score -= 20  # Bearish EMA crossover
+                    signal_score -= 20
             
-            # RSI sinyali
             if rsi_data["signal"] == "OVERSOLD":
                 signal_score += 25
             elif rsi_data["signal"] == "OVERBOUGHT":
                 signal_score -= 25
             
-            # Formasyon sinyalleri
             for pattern in patterns:
                 if pattern["direction"] == "bullish":
                     signal_score += pattern["confidence"] / 4
                 elif pattern["direction"] == "bearish":
                     signal_score -= pattern["confidence"] / 4
             
-            # Fiyat momentumu
             if change > 1:
                 signal_score += 10
             elif change < -1:
                 signal_score -= 10
             
-            # Son sinyali belirle
             confidence = min(95, max(50, abs(signal_score)))
             
             if signal_score > 40:
@@ -430,7 +465,7 @@ class SignalGenerator:
             return await self.get_fallback_signal(symbol)
     
     async def get_fallback_signal(self, symbol: str) -> Dict:
-        """Fallback sinyal (gerçek veri yoksa)"""
+        """Fallback sinyal"""
         return {
             "symbol": symbol.upper(),
             "interval": "1h",
@@ -479,15 +514,13 @@ class SignalGenerator:
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     """Uygulama ömrü yönetimi"""
-    # Başlangıç
-    logger.info("🚀 Professional Trading Bot v3.0 starting...")
+    logger.info("🚀 Professional Trading Bot v4.0 starting...")
     
-    # Gerçek zamanlı veri sağlayıcıyı başlat
-    symbols = ["BTCUSDT", "ETHUSDT", "SOLUSDT", "XRPUSDT", "ADAUSDT"]
+    symbols = TradingViewConfig.DEFAULT_SYMBOLS
     app.state.data_provider = BinanceRealTimeData()
     app.state.signal_generator = SignalGenerator(app.state.data_provider)
+    app.state.tv_config = TradingViewConfig()
     
-    # WebSocket bağlantısını başlat
     async def start_websocket():
         try:
             await app.state.data_provider.connect(symbols)
@@ -498,13 +531,12 @@ async def lifespan(app: FastAPI):
     
     yield
     
-    # Kapanış
     logger.info("🛑 Professional Trading Bot shutting down...")
 
 # FastAPI App
 app = FastAPI(
-    title="Professional Trading Bot",
-    version="3.0",
+    title="Professional Trading Bot v4.0",
+    version="4.0",
     docs_url=None,
     redoc_url=None,
     openapi_url=None,
@@ -524,48 +556,108 @@ app.add_middleware(
 async def root():
     return """
     <html><head><meta http-equiv="refresh" content="0;url=/dashboard"></head>
-    <body><p>Loading Professional Trading Bot v3.0...</p></body></html>
+    <body><p>Loading Professional Trading Bot v4.0...</p></body></html>
     """
 
 @app.get("/health", response_class=JSONResponse)
 async def health():
-    """RAILWAY HEALTHCHECK - BU ÇOK ÖNEMLİ!"""
     return {
         "status": "healthy",
-        "version": "3.0",
+        "version": "4.0",
         "timestamp": datetime.now(timezone.utc).isoformat() + "Z",
         "service": "trading_bot_realtime",
         "websocket_connected": app.state.data_provider.connected if hasattr(app.state, 'data_provider') else False,
-        "real_time_data": "enabled"
+        "tradingview_supported": True,
+        "timeframes": list(TradingViewConfig.TIMEFRAMES.keys())
     }
 
 @app.get("/ready", response_class=PlainTextResponse)
 async def ready():
-    """K8s readiness probe"""
     if hasattr(app.state, 'data_provider') and app.state.data_provider.connected:
         return "READY"
     return "NOT_READY"
 
 @app.get("/live", response_class=JSONResponse)
 async def live():
-    """Liveness probe"""
     return {"status": "alive", "timestamp": datetime.now(timezone.utc).isoformat()}
 
 # ========== API ENDPOINTS ==========
 @app.get("/api/analyze/{symbol}")
-async def analyze_symbol(symbol: str):
-    """Sembol analizi - Gerçek zamanlı versiyon"""
+async def analyze_symbol(
+    symbol: str,
+    interval: str = Query("1h", description="Timeframe interval")
+):
+    """Sembol analizi"""
     try:
-        signal = await app.state.signal_generator.generate_signal(symbol)
+        signal = await app.state.signal_generator.generate_signal(symbol, interval)
         return {"success": True, "data": signal}
     except Exception as e:
         logger.error(f"Analysis error: {e}")
         raise HTTPException(500, f"Analysis failed: {str(e)}")
 
+@app.get("/api/tradingview/config")
+async def get_tradingview_config():
+    """TradingView configuration"""
+    return {
+        "success": True,
+        "config": {
+            "timeframes": TradingViewConfig.TIMEFRAMES,
+            "default_symbols": TradingViewConfig.DEFAULT_SYMBOLS,
+            "themes": TradingViewConfig.THEMES
+        }
+    }
+
+@app.get("/api/tradingview/widget")
+async def get_tradingview_widget(
+    symbol: str = Query("BTCUSDT", description="Trading symbol"),
+    interval: str = Query("1h", description="Timeframe interval"),
+    theme: str = Query("dark", description="Chart theme")
+):
+    """Get TradingView widget configuration"""
+    try:
+        tv_symbol = TradingViewConfig.get_tradingview_symbol(symbol)
+        tv_interval = TradingViewConfig.TIMEFRAMES.get(interval, "60")
+        
+        widget_config = {
+            "container_id": "tradingview_chart",
+            "symbol": tv_symbol,
+            "interval": tv_interval,
+            "timezone": "Etc/UTC",
+            "theme": theme,
+            "style": "1",
+            "locale": "en",
+            "toolbar_bg": "#f1f3f6",
+            "enable_publishing": False,
+            "allow_symbol_change": True,
+            "details": True,
+            "hotlist": True,
+            "calendar": True,
+            "studies": [
+                "RSI@tv-basicstudies",
+                "MACD@tv-basicstudies",
+                "Volume@tv-basicstudies"
+            ],
+            "show_popup_button": True,
+            "popup_width": "1000",
+            "popup_height": "650"
+        }
+        
+        return {
+            "success": True,
+            "symbol": symbol,
+            "tradingview_symbol": tv_symbol,
+            "interval": interval,
+            "tradingview_interval": tv_interval,
+            "widget_config": widget_config
+        }
+    except Exception as e:
+        logger.error(f"TradingView config error: {e}")
+        raise HTTPException(500, f"TradingView configuration failed: {str(e)}")
+
 @app.get("/api/market/status")
 async def market_status():
-    """Piyasa durumu"""
-    symbols = ["BTCUSDT", "ETHUSDT", "SOLUSDT", "XRPUSDT", "ADAUSDT"]
+    """Market status"""
+    symbols = TradingViewConfig.DEFAULT_SYMBOLS
     status = {}
     
     for symbol in symbols:
@@ -588,96 +680,758 @@ async def market_status():
         "symbols": status
     }
 
-# ========== DASHBOARD ==========
+# ========== ADVANCED DASHBOARD WITH TRADINGVIEW ==========
 @app.get("/dashboard", response_class=HTMLResponse)
 async def dashboard():
-    """Trading dashboard - Gerçek zamanlı versiyon"""
-    # Dashboard HTML kodu buraya gelecek
-    # (Önceki dashboard kodunun aynısını kullanabilirsiniz, sadece veri kaynağı değişti)
-    
-    # Kısa dashboard örneği:
+    """Advanced Trading Dashboard with TradingView"""
     return """
 <!DOCTYPE html>
 <html lang="en">
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Professional Trading Bot v3.0</title>
+    <title>🚀 Professional Trading Bot v4.0</title>
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
     <style>
+        :root {
+            --bg-dark: #0a0e27;
+            --bg-card: #1a1f3a;
+            --primary: #3b82f6;
+            --success: #10b981;
+            --danger: #ef4444;
+            --warning: #f59e0b;
+            --text: #e2e8f0;
+            --text-muted: #94a3b8;
+            --border: rgba(255,255,255,0.1);
+        }
+        
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        
         body {
-            font-family: Arial, sans-serif;
-            margin: 0;
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+            background: var(--bg-dark);
+            color: var(--text);
+            min-height: 100vh;
+        }
+        
+        .container {
+            max-width: 1600px;
+            margin: 0 auto;
             padding: 20px;
-            background: #0a0e27;
+        }
+        
+        /* Header */
+        .header {
+            background: linear-gradient(90deg, var(--primary), #8b5cf6);
+            border-radius: 16px;
+            padding: 1.5rem 2rem;
+            margin-bottom: 1.5rem;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            flex-wrap: wrap;
+            gap: 1rem;
+        }
+        
+        .logo {
+            font-size: 1.8rem;
+            font-weight: 800;
+            color: white;
+            display: flex;
+            align-items: center;
+            gap: 0.75rem;
+        }
+        
+        .logo i { font-size: 2rem; }
+        
+        .status-badge {
+            background: rgba(255,255,255,0.15);
+            color: white;
+            padding: 0.5rem 1.2rem;
+            border-radius: 50px;
+            font-weight: 600;
+            display: flex;
+            align-items: center;
+            gap: 0.5rem;
+        }
+        
+        /* Controls */
+        .controls-card {
+            background: var(--bg-card);
+            border-radius: 12px;
+            padding: 1.5rem;
+            margin-bottom: 1.5rem;
+            border: 1px solid var(--border);
+        }
+        
+        .controls-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(250px, 1fr));
+            gap: 1rem;
+            margin-bottom: 1rem;
+        }
+        
+        .control-group {
+            display: flex;
+            flex-direction: column;
+            gap: 0.5rem;
+        }
+        
+        .control-label {
+            color: var(--text-muted);
+            font-size: 0.9rem;
+            font-weight: 500;
+        }
+        
+        select, input {
+            padding: 0.75rem 1rem;
+            border-radius: 8px;
+            border: 1px solid var(--border);
+            background: rgba(255,255,255,0.05);
+            color: var(--text);
+            font-size: 1rem;
+            outline: none;
+            transition: border-color 0.2s;
+        }
+        
+        select:focus, input:focus {
+            border-color: var(--primary);
+        }
+        
+        .btn {
+            padding: 0.75rem 1.5rem;
+            border-radius: 8px;
+            border: none;
+            font-size: 1rem;
+            font-weight: 600;
+            cursor: pointer;
+            transition: all 0.2s;
+            display: inline-flex;
+            align-items: center;
+            gap: 0.5rem;
+        }
+        
+        .btn-primary {
+            background: var(--primary);
             color: white;
         }
-        .container {
-            max-width: 1200px;
-            margin: 0 auto;
+        
+        .btn-primary:hover {
+            background: #2563eb;
+            transform: translateY(-2px);
         }
-        .header {
+        
+        /* Main Content */
+        .main-content {
+            display: grid;
+            grid-template-columns: 1fr 400px;
+            gap: 1.5rem;
+            margin-bottom: 1.5rem;
+        }
+        
+        @media (max-width: 1200px) {
+            .main-content {
+                grid-template-columns: 1fr;
+            }
+        }
+        
+        /* Chart Container */
+        .chart-container {
+            background: var(--bg-card);
+            border-radius: 12px;
+            padding: 1rem;
+            border: 1px solid var(--border);
+            min-height: 600px;
+        }
+        
+        .chart-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 1rem;
+            padding-bottom: 1rem;
+            border-bottom: 1px solid var(--border);
+        }
+        
+        .chart-title {
+            font-size: 1.2rem;
+            font-weight: 600;
+        }
+        
+        .chart-actions {
+            display: flex;
+            gap: 0.5rem;
+        }
+        
+        #tradingview_chart {
+            width: 100%;
+            height: 540px;
+            border-radius: 8px;
+        }
+        
+        /* Analysis Panel */
+        .analysis-panel {
+            background: var(--bg-card);
+            border-radius: 12px;
+            padding: 1.5rem;
+            border: 1px solid var(--border);
+            display: flex;
+            flex-direction: column;
+            gap: 1.5rem;
+        }
+        
+        .signal-box {
             text-align: center;
-            padding: 20px;
-            background: linear-gradient(90deg, #3b82f6, #8b5cf6);
-            border-radius: 10px;
-            margin-bottom: 20px;
+            padding: 1.5rem;
+            border-radius: 12px;
+            background: rgba(0,0,0,0.2);
         }
-        .card {
-            background: #1a1f3a;
-            padding: 20px;
-            border-radius: 10px;
-            margin-bottom: 20px;
+        
+        .signal-box.buy { border: 2px solid var(--success); }
+        .signal-box.sell { border: 2px solid var(--danger); }
+        .signal-box.neutral { border: 2px solid var(--warning); }
+        
+        .signal-type {
+            font-size: 1.5rem;
+            font-weight: 700;
+            margin-bottom: 0.5rem;
         }
-        .status {
+        
+        .signal-box.buy .signal-type { color: var(--success); }
+        .signal-box.sell .signal-type { color: var(--danger); }
+        .signal-box.neutral .signal-type { color: var(--warning); }
+        
+        .confidence-badge {
             display: inline-block;
-            padding: 5px 15px;
+            padding: 0.25rem 1rem;
+            background: rgba(255,255,255,0.1);
             border-radius: 20px;
-            font-weight: bold;
+            font-size: 0.9rem;
+            margin: 0.5rem 0;
         }
-        .connected { background: #10b981; }
-        .disconnected { background: #ef4444; }
+        
+        .price-display {
+            font-size: 1.8rem;
+            font-weight: 700;
+            margin: 1rem 0;
+        }
+        
+        .indicator-grid {
+            display: grid;
+            grid-template-columns: repeat(2, 1fr);
+            gap: 0.75rem;
+        }
+        
+        .indicator-item {
+            background: rgba(255,255,255,0.05);
+            padding: 0.75rem;
+            border-radius: 8px;
+        }
+        
+        .indicator-label {
+            color: var(--text-muted);
+            font-size: 0.85rem;
+            margin-bottom: 0.25rem;
+        }
+        
+        .indicator-value {
+            font-size: 1.1rem;
+            font-weight: 600;
+        }
+        
+        /* Market Overview */
+        .market-overview {
+            background: var(--bg-card);
+            border-radius: 12px;
+            padding: 1.5rem;
+            border: 1px solid var(--border);
+        }
+        
+        .market-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fill, minmax(200px, 1fr));
+            gap: 1rem;
+            margin-top: 1rem;
+        }
+        
+        .market-item {
+            background: rgba(255,255,255,0.05);
+            padding: 1rem;
+            border-radius: 8px;
+            cursor: pointer;
+            transition: all 0.2s;
+            border: 1px solid transparent;
+        }
+        
+        .market-item:hover {
+            border-color: var(--primary);
+            background: rgba(59, 130, 246, 0.1);
+            transform: translateY(-2px);
+        }
+        
+        .market-symbol {
+            font-weight: 600;
+            margin-bottom: 0.5rem;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+        
+        .market-price {
+            font-size: 1.2rem;
+            font-weight: 700;
+            margin: 0.25rem 0;
+        }
+        
+        .market-change {
+            font-size: 0.9rem;
+            font-weight: 500;
+        }
+        
+        .positive { color: var(--success); }
+        .negative { color: var(--danger); }
+        
+        /* Footer */
+        footer {
+            text-align: center;
+            padding: 2rem;
+            color: var(--text-muted);
+            border-top: 1px solid var(--border);
+            margin-top: 2rem;
+        }
+        
+        .timeframe-buttons {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 0.5rem;
+            margin-top: 1rem;
+        }
+        
+        .timeframe-btn {
+            padding: 0.5rem 1rem;
+            background: rgba(255,255,255,0.05);
+            border: 1px solid var(--border);
+            border-radius: 6px;
+            color: var(--text);
+            cursor: pointer;
+            transition: all 0.2s;
+            font-size: 0.9rem;
+        }
+        
+        .timeframe-btn:hover {
+            background: rgba(59, 130, 246, 0.1);
+            border-color: var(--primary);
+        }
+        
+        .timeframe-btn.active {
+            background: var(--primary);
+            color: white;
+            border-color: var(--primary);
+        }
+        
+        .loading {
+            text-align: center;
+            padding: 3rem;
+            color: var(--primary);
+        }
+        
+        .spinner {
+            border: 3px solid rgba(59, 130, 246, 0.3);
+            border-top: 3px solid var(--primary);
+            border-radius: 50%;
+            width: 40px;
+            height: 40px;
+            animation: spin 1s linear infinite;
+            margin: 0 auto 1rem;
+        }
+        
+        @keyframes spin {
+            0% { transform: rotate(0deg); }
+            100% { transform: rotate(360deg); }
+        }
     </style>
 </head>
 <body>
     <div class="container">
+        <!-- Header -->
         <div class="header">
-            <h1>📈 Professional Trading Bot v3.0</h1>
-            <p>Real-time Analysis with Binance WebSocket</p>
-            <div id="connectionStatus" class="status disconnected">Connecting...</div>
+            <div class="logo">
+                <i class="fas fa-chart-line"></i>
+                <span>Professional Trading Bot v4.0</span>
+            </div>
+            <div class="status-badge" id="connectionStatus">
+                <i class="fas fa-circle"></i>
+                <span>Connecting to Binance...</span>
+            </div>
         </div>
         
-        <div class="card">
-            <h2>Real-time Analysis</h2>
-            <input type="text" id="symbolInput" placeholder="Enter symbol (BTCUSDT)" value="BTCUSDT">
-            <button onclick="analyze()">Analyze</button>
-            <div id="result"></div>
+        <!-- Controls -->
+        <div class="controls-card">
+            <div class="controls-grid">
+                <div class="control-group">
+                    <label class="control-label">Symbol</label>
+                    <input type="text" id="symbolInput" value="BTCUSDT" placeholder="Enter symbol (BTCUSDT)">
+                </div>
+                <div class="control-group">
+                    <label class="control-label">Timeframe</label>
+                    <select id="timeframeSelect">
+                        <option value="1m">1 Minute</option>
+                        <option value="3m">3 Minutes</option>
+                        <option value="5m" selected>5 Minutes</option>
+                        <option value="15m">15 Minutes</option>
+                        <option value="30m">30 Minutes</option>
+                        <option value="1h">1 Hour</option>
+                        <option value="4h">4 Hours</option>
+                        <option value="1d">1 Day</option>
+                        <option value="1w">1 Week</option>
+                        <option value="1M">1 Month</option>
+                    </select>
+                </div>
+                <div class="control-group">
+                    <label class="control-label">Theme</label>
+                    <select id="themeSelect">
+                        <option value="dark" selected>Dark</option>
+                        <option value="light">Light</option>
+                    </select>
+                </div>
+                <div class="control-group" style="justify-content: flex-end;">
+                    <button class="btn btn-primary" onclick="updateChart()">
+                        <i class="fas fa-sync-alt"></i> Update Chart
+                    </button>
+                </div>
+            </div>
+            
+            <div class="timeframe-buttons">
+                <div class="timeframe-btn active" data-tf="5m">5m</div>
+                <div class="timeframe-btn" data-tf="15m">15m</div>
+                <div class="timeframe-btn" data-tf="1h">1h</div>
+                <div class="timeframe-btn" data-tf="4h">4h</div>
+                <div class="timeframe-btn" data-tf="1d">1d</div>
+                <div class="timeframe-btn" data-tf="1w">1w</div>
+            </div>
         </div>
+        
+        <!-- Main Content -->
+        <div class="main-content">
+            <!-- Chart -->
+            <div class="chart-container">
+                <div class="chart-header">
+                    <div class="chart-title" id="chartTitle">BTC/USDT - 5 Minutes Chart</div>
+                    <div class="chart-actions">
+                        <div class="timeframe-btn" onclick="updateChart()">
+                            <i class="fas fa-redo"></i> Refresh
+                        </div>
+                    </div>
+                </div>
+                <div id="tradingview_chart"></div>
+            </div>
+            
+            <!-- Analysis Panel -->
+            <div class="analysis-panel">
+                <div>
+                    <h3 style="margin-bottom: 1rem; color: var(--text-muted);">Trading Signal</h3>
+                    <div id="signalContainer">
+                        <div class="loading">
+                            <div class="spinner"></div>
+                            <div>Analyzing...</div>
+                        </div>
+                    </div>
+                </div>
+                
+                <div>
+                    <h3 style="margin-bottom: 1rem; color: var(--text-muted);">Technical Indicators</h3>
+                    <div id="indicatorsContainer">
+                        <div class="loading">Loading...</div>
+                    </div>
+                </div>
+                
+                <div>
+                    <h3 style="margin-bottom: 1rem; color: var(--text-muted);">Quick Actions</h3>
+                    <button class="btn btn-primary" style="width: 100%;" onclick="analyzeCurrent()">
+                        <i class="fas fa-chart-bar"></i> Analyze Current Symbol
+                    </button>
+                </div>
+            </div>
+        </div>
+        
+        <!-- Market Overview -->
+        <div class="market-overview">
+            <h3 style="margin-bottom: 1rem;">Market Overview</h3>
+            <div class="market-grid" id="marketGrid">
+                <div class="loading">
+                    <div class="spinner"></div>
+                    <div>Loading market data...</div>
+                </div>
+            </div>
+        </div>
+        
+        <!-- Footer -->
+        <footer>
+            <div>Professional Trading Bot v4.0 • Advanced TradingView Integration</div>
+            <div style="color: var(--danger); margin-top: 0.5rem; font-size: 0.9rem;">
+                <i class="fas fa-exclamation-triangle"></i> Not financial advice. Trade at your own risk.
+            </div>
+        </footer>
     </div>
+
+    <!-- TradingView Widget -->
+    <script type="text/javascript" src="https://s3.tradingview.com/tv.js"></script>
     
     <script>
-        async function analyze() {
-            const symbol = document.getElementById('symbolInput').value;
-            const resultDiv = document.getElementById('result');
+        // Global variables
+        let tvWidget = null;
+        let currentSymbol = "BTCUSDT";
+        let currentTimeframe = "5m";
+        let currentTheme = "dark";
+        let marketData = {};
+        
+        // Initialize TradingView widget
+        function initTradingView(symbol = "BTCUSDT", timeframe = "5m", theme = "dark") {
+            console.log(`Initializing TradingView: ${symbol} @ ${timeframe} (${theme})`);
             
-            resultDiv.innerHTML = '<p>Analyzing...</p>';
+            // Remove existing widget
+            if (tvWidget) {
+                try {
+                    tvWidget.remove();
+                } catch (e) {
+                    console.log("Error removing widget:", e);
+                }
+            }
+            
+            // Get widget configuration from API
+            fetch(`/api/tradingview/widget?symbol=${encodeURIComponent(symbol)}&interval=${timeframe}&theme=${theme}`)
+                .then(response => response.json())
+                .then(data => {
+                    if (!data.success) {
+                        console.error("Failed to get TradingView config");
+                        return;
+                    }
+                    
+                    const config = data.widget_config;
+                    
+                    // Update chart title
+                    document.getElementById('chartTitle').textContent = 
+                        `${symbol} - ${timeframe.toUpperCase()} Chart`;
+                    
+                    // Create new widget
+                    tvWidget = new TradingView.widget({
+                        ...config,
+                        autosize: true,
+                        disabled_features: ["header_widget"],
+                        enabled_features: ["study_templates"],
+                        overrides: {
+                            "paneProperties.background": theme === "dark" ? "#0a0e27" : "#ffffff",
+                            "paneProperties.vertGridProperties.color": theme === "dark" ? "#1a1f3a" : "#e0e3eb",
+                            "paneProperties.horzGridProperties.color": theme === "dark" ? "#1a1f3a" : "#e0e3eb",
+                        },
+                        loading_screen: { backgroundColor: theme === "dark" ? "#0a0e27" : "#ffffff" }
+                    });
+                    
+                    console.log("TradingView widget initialized");
+                })
+                .catch(error => {
+                    console.error("Error loading TradingView:", error);
+                    document.getElementById('tradingview_chart').innerHTML = `
+                        <div style="text-align: center; padding: 2rem; color: var(--danger);">
+                            <i class="fas fa-exclamation-triangle" style="font-size: 2rem;"></i>
+                            <div style="margin-top: 1rem;">Failed to load TradingView chart</div>
+                        </div>
+                    `;
+                });
+        }
+        
+        // Update chart with current settings
+        function updateChart() {
+            currentSymbol = document.getElementById('symbolInput').value.trim().toUpperCase();
+            currentTimeframe = document.getElementById('timeframeSelect').value;
+            currentTheme = document.getElementById('themeSelect').value;
+            
+            if (!currentSymbol) {
+                alert("Please enter a symbol");
+                return;
+            }
+            
+            // Update active timeframe buttons
+            document.querySelectorAll('.timeframe-btn').forEach(btn => {
+                btn.classList.remove('active');
+                if (btn.dataset.tf === currentTimeframe) {
+                    btn.classList.add('active');
+                }
+            });
+            
+            // Update chart
+            initTradingView(currentSymbol, currentTimeframe, currentTheme);
+            
+            // Update analysis
+            analyzeCurrent();
+        }
+        
+        // Analyze current symbol
+        async function analyzeCurrent() {
+            const symbol = currentSymbol;
+            const timeframe = currentTimeframe;
+            
+            if (!symbol) return;
+            
+            // Update signal container
+            document.getElementById('signalContainer').innerHTML = `
+                <div class="loading">
+                    <div class="spinner"></div>
+                    <div>Analyzing ${symbol}...</div>
+                </div>
+            `;
             
             try {
-                const response = await fetch(`/api/analyze/${symbol}`);
+                // Get analysis data
+                const response = await fetch(`/api/analyze/${encodeURIComponent(symbol)}?interval=${timeframe}`);
                 const data = await response.json();
                 
                 if (data.success) {
-                    const signal = data.data.signal;
-                    resultDiv.innerHTML = `
-                        <h3>${symbol} Analysis</h3>
-                        <p>Signal: <strong>${signal.type}</strong></p>
-                        <p>Confidence: ${signal.confidence}%</p>
-                        <p>${signal.recommendation}</p>
-                        <p>Data Source: ${data.data.data_source}</p>
-                    `;
+                    renderSignal(data.data);
+                    renderIndicators(data.data);
+                } else {
+                    throw new Error('Analysis failed');
                 }
             } catch (error) {
-                resultDiv.innerHTML = '<p style="color: red;">Analysis failed</p>';
+                console.error('Analysis error:', error);
+                document.getElementById('signalContainer').innerHTML = `
+                    <div class="signal-box neutral">
+                        <div class="signal-type">ERROR</div>
+                        <div>Failed to analyze symbol</div>
+                    </div>
+                `;
             }
+        }
+        
+        // Render trading signal
+        function renderSignal(data) {
+            const signal = data.signal;
+            const signalClass = signal.type.toLowerCase().includes('buy') ? 'buy' : 
+                              signal.type.toLowerCase().includes('sell') ? 'sell' : 'neutral';
+            
+            const html = `
+                <div class="signal-box ${signalClass}">
+                    <div class="signal-type">${signal.type.replace('_', ' ')}</div>
+                    <div class="confidence-badge">${signal.confidence}% Confidence</div>
+                    <div class="price-display">
+                        $${data.price.current.toLocaleString('en-US', {minimumFractionDigits: 2, maximumFractionDigits: 4})}
+                    </div>
+                    <div style="color: ${data.price.change_24h >= 0 ? 'var(--success)' : 'var(--danger)'}; margin-bottom: 1rem;">
+                        ${data.price.change_24h >= 0 ? '↗' : '↘'} ${Math.abs(data.price.change_24h).toFixed(2)}% (24h)
+                    </div>
+                    <div style="font-size: 0.9rem; color: var(--text-muted);">
+                        ${signal.recommendation}
+                    </div>
+                </div>
+            `;
+            
+            document.getElementById('signalContainer').innerHTML = html;
+        }
+        
+        // Render indicators
+        function renderIndicators(data) {
+            const ind = data.indicators;
+            const patterns = data.patterns || [];
+            
+            let indicatorsHtml = `
+                <div class="indicator-grid">
+                    <div class="indicator-item">
+                        <div class="indicator-label">RSI</div>
+                        <div class="indicator-value" style="color: ${ind.rsi > 70 ? 'var(--danger)' : ind.rsi < 30 ? 'var(--success)' : 'var(--text)'}">
+                            ${ind.rsi} (${ind.rsi_signal})
+                        </div>
+                    </div>
+                    <div class="indicator-item">
+                        <div class="indicator-label">EMA 12/26</div>
+                        <div class="indicator-value">
+                            ${ind.ema_signal || 'N/A'}
+                        </div>
+                    </div>
+                    <div class="indicator-item">
+                        <div class="indicator-label">Patterns</div>
+                        <div class="indicator-value">
+                            ${patterns.length} detected
+                        </div>
+                    </div>
+                    <div class="indicator-item">
+                        <div class="indicator-label">Volume (24h)</div>
+                        <div class="indicator-value">
+                            ${data.price.volume.toLocaleString()}
+                        </div>
+                    </div>
+                </div>
+            `;
+            
+            if (patterns.length > 0) {
+                indicatorsHtml += `
+                    <div style="margin-top: 1rem; padding-top: 1rem; border-top: 1px solid var(--border);">
+                        <div style="font-size: 0.9rem; color: var(--text-muted); margin-bottom: 0.5rem;">
+                            Detected Patterns:
+                        </div>
+                        <div style="display: flex; flex-wrap: wrap; gap: 0.5rem;">
+                `;
+                
+                patterns.forEach(p => {
+                    const color = p.direction === 'bullish' ? 'var(--success)' : 
+                                 p.direction === 'bearish' ? 'var(--danger)' : 'var(--warning)';
+                    indicatorsHtml += `
+                        <span style="background: ${color}; color: white; padding: 0.25rem 0.5rem; border-radius: 4px; font-size: 0.8rem;">
+                            ${p.name}
+                        </span>
+                    `;
+                });
+                
+                indicatorsHtml += `</div></div>`;
+            }
+            
+            document.getElementById('indicatorsContainer').innerHTML = indicatorsHtml;
+        }
+        
+        // Load market overview
+        async function loadMarketOverview() {
+            try {
+                const response = await fetch('/api/market/status');
+                const data = await response.json();
+                
+                if (data.success && data.symbols) {
+                    marketData = data.symbols;
+                    renderMarketOverview();
+                }
+            } catch (error) {
+                console.error('Market overview error:', error);
+            }
+        }
+        
+        // Render market overview
+        function renderMarketOverview() {
+            const grid = document.getElementById('marketGrid');
+            grid.innerHTML = '';
+            
+            Object.entries(marketData).forEach(([symbol, data]) => {
+                const item = document.createElement('div');
+                item.className = 'market-item';
+                item.onclick = () => {
+                    document.getElementById('symbolInput').value = symbol;
+                    updateChart();
+                };
+                
+                item.innerHTML = `
+                    <div class="market-symbol">
+                        <span>${symbol}</span>
+                        <span style="font-size: 0.8rem; color: var(--text-muted);">
+                            ${data.last_update ? new Date(data.last_update).toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'}) : ''}
+                        </span>
+                    </div>
+                    <div class="market-price">
+                        $${data.price.toLocaleString('en-US', {minimumFractionDigits: 2, maximumFractionDigits: 4})}
+                    </div>
+                    <div class="market-change ${data.change >= 0 ? 'positive' : 'negative'}">
+                        ${data.change >= 0 ? '↗' : '↘'} ${Math.abs(data.change).toFixed(2)}%
+                    </div>
+                `;
+                
+                grid.appendChild(item);
+            });
         }
         
         // Check connection status
@@ -688,23 +1442,51 @@ async def dashboard():
                 
                 const statusDiv = document.getElementById('connectionStatus');
                 if (data.websocket_connected) {
-                    statusDiv.className = 'status connected';
-                    statusDiv.textContent = '✅ Binance Connected';
+                    statusDiv.innerHTML = '<i class="fas fa-circle" style="color: var(--success);"></i> Binance Connected';
+                    statusDiv.style.background = 'rgba(16, 185, 129, 0.2)';
                 } else {
-                    statusDiv.className = 'status disconnected';
-                    statusDiv.textContent = '❌ Connecting...';
+                    statusDiv.innerHTML = '<i class="fas fa-circle" style="color: var(--danger);"></i> Connecting...';
+                    statusDiv.style.background = 'rgba(239, 68, 68, 0.2)';
                 }
             } catch (error) {
                 console.log('Connection check failed');
             }
         }
         
-        // Check connection every 5 seconds
-        setInterval(checkConnection, 5000);
-        checkConnection();
+        // Initialize on load
+        document.addEventListener('DOMContentLoaded', () => {
+            // Initialize TradingView
+            initTradingView(currentSymbol, currentTimeframe, currentTheme);
+            
+            // Load initial analysis
+            setTimeout(() => analyzeCurrent(), 1000);
+            
+            // Load market overview
+            loadMarketOverview();
+            
+            // Set up timeframe button click handlers
+            document.querySelectorAll('.timeframe-btn').forEach(btn => {
+                btn.addEventListener('click', () => {
+                    const tf = btn.dataset.tf;
+                    document.getElementById('timeframeSelect').value = tf;
+                    updateChart();
+                });
+            });
+            
+            // Set up auto-refresh
+            setInterval(checkConnection, 5000);
+            setInterval(loadMarketOverview, 10000);
+            
+            // Initial connection check
+            checkConnection();
+        });
         
-        // Auto analyze on load
-        setTimeout(analyze, 1000);
+        // Keyboard shortcuts
+        document.addEventListener('keydown', (e) => {
+            if (e.ctrlKey && e.key === 'Enter') {
+                updateChart();
+            }
+        });
     </script>
 </body>
 </html>
@@ -713,15 +1495,27 @@ async def dashboard():
 # ========== STARTUP ==========
 @app.on_event("startup")
 async def startup():
-    logger.info("🚀 Professional Trading Bot v3.0 STARTED")
+    logger.info("="*60)
+    logger.info("🚀 Professional Trading Bot v4.0 STARTED")
+    logger.info("="*60)
     logger.info(f"✅ Port: {os.getenv('PORT', 8000)}")
     logger.info("✅ Real-time Binance WebSocket: ENABLED")
+    logger.info("✅ TradingView Integration: ENABLED")
+    logger.info(f"✅ Timeframes: {', '.join(TradingViewConfig.TIMEFRAMES.keys())}")
     logger.info("✅ Healthcheck: /health")
     logger.info("✅ API: /api/analyze/{symbol}")
+    logger.info("✅ TradingView Config: /api/tradingview/config")
     logger.info("✅ Dashboard: /dashboard")
+    logger.info("="*60)
 
 # Railway deployment
 if __name__ == "__main__":
     import uvicorn
     port = int(os.getenv("PORT", 8000))
-    uvicorn.run(app, host="0.0.0.0", port=port, log_level="info")
+    uvicorn.run(
+        app,
+        host="0.0.0.0",
+        port=port,
+        log_level="info",
+        access_log=True
+    )
