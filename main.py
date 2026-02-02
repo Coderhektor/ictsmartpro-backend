@@ -1,15 +1,25 @@
 """
 ICTSmartPro Trading AI Platform
-Production-Ready Trading Analysis with Qwen AI + Lightweight ML
-Version: 5.2.0 - 2026 February - Intraday Interval Support
+Production-Ready Trading Analysis with Qwen AI + XGBoost & LSTM ML
+Version: 5.4.0 - 2026 February - Dual ML Models (XGBoost + LSTM)
 """
 
 import os
 import logging
 from datetime import datetime, timedelta
-from typing import Dict, Optional
+from typing import Dict, Optional, List
 import re
-
+import joblib
+import numpy as np
+import pandas as pd
+import pandas_ta_classic as ta
+from xgboost import XGBRegressor
+from sklearn.model_selection import train_test_split
+from sklearn.preprocessing import MinMaxScaler
+from sklearn.metrics import mean_absolute_error
+from tensorflow.keras.models import Sequential, load_model
+from tensorflow.keras.layers import LSTM, Dense, Dropout
+from tensorflow.keras.callbacks import EarlyStopping
 from fastapi import FastAPI, HTTPException, Request
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import HTMLResponse, JSONResponse
@@ -17,10 +27,7 @@ from slowapi import Limiter
 from slowapi.util import get_remote_address
 from slowapi.errors import RateLimitExceeded
 from pydantic import BaseModel, Field
-
 import yfinance as yf
-import pandas as pd
-import pandas_ta_classic as ta
 import httpx
 from dotenv import load_dotenv
 
@@ -37,32 +44,28 @@ OPENROUTER_API_KEY = os.getenv("OPENROUTER_API_KEY")
 QWEN_MODEL = os.getenv("QWEN_MODEL", "qwen/qwen3-coder:free")
 
 RATE_LIMIT_PER_MINUTE = 15
-RATE_LIMIT_PER_HOUR   = 150
+RATE_LIMIT_PER_HOUR = 150
 
-# Desteklenen interval'lar (kullanıcıya gösterilecek + yfinance eşleşmesi)
 SUPPORTED_INTERVALS = {
-    "1m":   {"yf": "1m",   "label": "1 Dakika",   "max_days": 7},
-    "3m":   {"yf": "2m",   "label": "3 Dakika (yakın)", "max_days": 60},
-    "5m":   {"yf": "5m",   "label": "5 Dakika",   "max_days": 60},
-    "15m":  {"yf": "15m",  "label": "15 Dakika",  "max_days": 60},
-    "30m":  {"yf": "30m",  "label": "30 Dakika",  "max_days": 60},
-    "45m":  {"yf": "60m",  "label": "45 Dakika (yakın)", "max_days": 60},
-    "1h":   {"yf": "1h",   "label": "1 Saat",    "max_days": None},
-    "4h":   {"yf": "1h",   "label": "4 Saat (1h bazlı)", "max_days": None},
-    "1d":   {"yf": "1d",   "label": "1 Gün",      "max_days": None},
-    "1wk":  {"yf": "1wk",  "label": "1 Hafta",    "max_days": None},
+    "1m": {"yf": "1m", "label": "1 Dakika", "max_days": 7},
+    "5m": {"yf": "5m", "label": "5 Dakika", "max_days": 60},
+    "15m": {"yf": "15m", "label": "15 Dakika", "max_days": 60},
+    "30m": {"yf": "30m", "label": "30 Dakika", "max_days": 60},
+    "1h": {"yf": "1h", "label": "1 Saat", "max_days": None},
+    "1d": {"yf": "1d", "label": "1 Gün", "max_days": None},
+    "1wk": {"yf": "1wk", "label": "1 Hafta", "max_days": None},
 }
 
 ALLOWED_PERIODS = list(SUPPORTED_INTERVALS.keys())
 
-# ==================== RATE LIMITER & APP ====================
+# ==================== APP & LIMITER ====================
 limiter = Limiter(key_func=get_remote_address)
-app = FastAPI(title="ICTSmartPro Trading AI", version="5.2.0")
+app = FastAPI(title="ICTSmartPro Trading AI", version="5.4.0")
 app.state.limiter = limiter
 
 @app.exception_handler(RateLimitExceeded)
 async def rate_limit_handler(request: Request, exc: RateLimitExceeded):
-    return JSONResponse(status_code=429, content={"detail": "Çok fazla istek. Lütfen bekleyin."})
+    return JSONResponse(status_code=429, content={"detail": "Çok fazla istek."})
 
 app.add_middleware(
     CORSMiddleware,
@@ -74,9 +77,9 @@ app.add_middleware(
 
 # ==================== CACHE ====================
 class SimpleCache:
-    def __init__(self, ttl_seconds: int = 300):
+    def __init__(self, ttl: int = 300):
         self.data = {}
-        self.ttl = ttl_seconds
+        self.ttl = ttl
 
     def get(self, key: str) -> Optional[Dict]:
         if key in self.data:
@@ -112,7 +115,7 @@ async def call_qwen(messages: list, temperature: float = 0.65, max_tokens: int =
         "stream": False
     }
 
-    async with httpx.AsyncClient(timeout=75) as client:
+    async with httpx.AsyncClient(timeout=75.0) as client:
         try:
             r = await client.post("https://openrouter.ai/api/v1/chat/completions", headers=headers, json=payload)
             r.raise_for_status()
@@ -128,89 +131,190 @@ async def get_finance_data(symbol: str, interval_key: str = "1d") -> Dict:
         return cached
 
     try:
-        int_cfg = SUPPORTED_INTERVALS.get(interval_key, SUPPORTED_INTERVALS["1d"])
-        yf_interval = int_cfg["yf"]
+        cfg = SUPPORTED_INTERVALS.get(interval_key, SUPPORTED_INTERVALS["1d"])
+        yf_int = cfg["yf"]
+        period = "60d" if cfg.get("max_days") else "max"
 
         symbol = symbol.upper().strip()
         if symbol in ["THYAO", "AKBNK", "GARAN", "ISCTR", "EREGL", "SISE", "KCHOL", "ASELS"]:
             symbol += ".IS"
 
         ticker = yf.Ticker(symbol)
-        # Kısa interval'lar için period otomatik sınırlanır
-        hist = ticker.history(interval=yf_interval, period="max" if int_cfg["max_days"] is None else "60d")
+        hist = ticker.history(interval=yf_int, period=period)
 
         if hist.empty:
-            raise ValueError("Veri yok")
+            raise ValueError("Veri bulunamadı")
 
-        current = float(hist["Close"].iloc[-1])
-        prev = float(hist["Close"].iloc[-2]) if len(hist) > 1 else current
-
-        info = ticker.info
         result = {
             "symbol": symbol.replace(".IS", ""),
-            "name": info.get("longName") or symbol,
-            "currency": info.get("currency", "TRY" if ".IS" in symbol else "USD"),
-            "current_price": round(current, 2),
-            "change_percent": round((current - prev) / prev * 100 if prev else 0, 2),
+            "name": ticker.info.get("longName") or symbol,
+            "currency": ticker.info.get("currency", "TRY" if ".IS" in symbol else "USD"),
+            "current_price": round(float(hist["Close"].iloc[-1]), 2),
+            "change_percent": round(((hist["Close"].iloc[-1] - hist["Close"].iloc[-2]) / hist["Close"].iloc[-2] * 100) if len(hist) > 1 else 0, 2),
             "volume": int(hist["Volume"].iloc[-1]),
-            "interval": interval_key,
             "historical_data": {
                 "dates": hist.index.strftime("%Y-%m-%d %H:%M").tolist(),
                 "prices": hist["Close"].round(2).tolist(),
-            },
-            "fetched_at": datetime.now().isoformat()
+                "highs": hist["High"].round(2).tolist(),
+                "lows": hist["Low"].round(2).tolist(),
+                "volumes": hist["Volume"].tolist()
+            }
         }
 
         finance_cache.set(cache_key, result)
         return result
 
     except Exception as e:
+        logger.error(f"Finance error {symbol}: {e}")
         return {"error": str(e)}
 
-# ==================== ML TAHMİN (Hafif) ====================
-async def get_ml_prediction(symbol: str) -> Dict:
-    cache_key = f"ml_{symbol}"
-    if cached := ml_cache.get(cache_key):
-        return cached
+# ==================== ML MANAGER (XGBoost + LSTM) ====================
+class MLManager:
+    def __init__(self):
+        self.xgb_path = "xgb_model.pkl"
+        self.lstm_path = "lstm_model.h5"
+        self.scaler_path = "scaler.pkl"
+        self.xgb_model = None
+        self.lstm_model = None
+        self.scaler = None
+        self.trained_at = None
+        self.mae_xgb = None
+        self.mae_lstm = None
+        self._load_models()
 
-    try:
-        data = await get_finance_data(symbol, "1d")  # Günlük bazlı tahmin
+    def _load_models(self):
+        if os.path.exists(self.xgb_path):
+            self.xgb_model = joblib.load(self.xgb_path)
+        if os.path.exists(self.lstm_path):
+            self.lstm_model = load_model(self.lstm_path)
+        if os.path.exists(self.scaler_path):
+            self.scaler = joblib.load(self.scaler_path)
+
+    async def train(self, symbol: str = "AAPL", period: str = "2y"):
+        data = await get_finance_data(symbol, "1d")
+        if "error" in data:
+            return {"error": data["error"]}
+
+        df = pd.DataFrame({
+            "Close": data["historical_data"]["prices"]
+        }, index=pd.to_datetime(data["historical_data"]["dates"]))
+
+        # Özellikler
+        df["rsi_14"] = ta.rsi(df["Close"], 14)
+        df["macd"] = ta.macd(df["Close"])["MACD_12_26_9"]
+        df["sma_20"] = ta.sma(df["Close"], 20)
+        df["atr_14"] = ta.atr(df["High"], df["Low"], df["Close"], 14) if "High" in data["historical_data"] else 0
+        df["volatility"] = df["Close"].rolling(20).std()
+        df = df.dropna()
+
+        if len(df) < 100:
+            return {"error": "Yeterli veri yok"}
+
+        df["target"] = df["Close"].shift(-5)
+        df = df.dropna()
+
+        # XGBoost
+        X = df[["rsi_14", "macd", "sma_20", "atr_14", "volatility"]]
+        y = df["target"]
+        X_train, X_test, y_train, y_test = train_test_split(X, y, test_size=0.2, shuffle=False)
+
+        xgb = XGBRegressor(n_estimators=100, learning_rate=0.1, random_state=42)
+        xgb.fit(X_train, y_train)
+        self.mae_xgb = mean_absolute_error(y_test, xgb.predict(X_test))
+
+        joblib.dump(xgb, self.xgb_path)
+        self.xgb_model = xgb
+
+        # LSTM
+        scaler = MinMaxScaler()
+        scaled = scaler.fit_transform(df[["Close"]])
+
+        seq_length = 60
+        X_lstm, y_lstm = [], []
+        for i in range(seq_length, len(scaled)-5):
+            X_lstm.append(scaled[i-seq_length:i])
+            y_lstm.append(scaled[i+5-1])  # 5 gün sonrası
+
+        X_lstm, y_lstm = np.array(X_lstm), np.array(y_lstm)
+
+        if len(X_lstm) < 10:
+            return {"error": "LSTM için yeterli veri yok"}
+
+        split = int(0.8 * len(X_lstm))
+        X_train_l, X_test_l = X_lstm[:split], X_lstm[split:]
+        y_train_l, y_test_l = y_lstm[:split], y_lstm[split:]
+
+        lstm = Sequential([
+            LSTM(50, return_sequences=True, input_shape=(seq_length, 1)),
+            Dropout(0.2),
+            LSTM(50),
+            Dropout(0.2),
+            Dense(1)
+        ])
+        lstm.compile(optimizer='adam', loss='mse')
+        lstm.fit(X_train_l, y_train_l, epochs=20, batch_size=32, validation_split=0.1, verbose=0,
+                 callbacks=[EarlyStopping(patience=5)])
+
+        preds_l = lstm.predict(X_test_l)
+        self.mae_lstm = mean_absolute_error(y_test_l, preds_l)
+
+        lstm.save(self.lstm_path)
+        joblib.dump(scaler, self.scaler_path)
+        self.lstm_model = lstm
+        self.scaler = scaler
+
+        self.trained_at = datetime.now().isoformat()
+        logger.info(f"Modeller eğitildi - XGBoost MAE: {self.mae_xgb:.2f}, LSTM MAE: {self.mae_lstm:.4f}")
+
+        return {"status": "eğitildi", "xgb_mae": self.mae_xgb, "lstm_mae": self.mae_lstm}
+
+    async def predict(self, symbol: str, horizon: int = 5) -> Dict:
+        cache_key = f"pred_{symbol}_{horizon}"
+        if cached := ml_cache.get(cache_key):
+            return cached
+
+        data = await get_finance_data(symbol, "6mo")
         if "error" in data:
             return data
 
         df = pd.DataFrame({
             "Close": data["historical_data"]["prices"]
-        }, index=pd.to_datetime(data["historical_data"]["dates"], format="%Y-%m-%d %H:%M"))
+        }, index=pd.to_datetime(data["historical_data"]["dates"]))
 
-        df["rsi_14"] = ta.rsi(df["Close"], length=14)
-        df = df.dropna()
+        results = {"current_price": round(float(df["Close"].iloc[-1]), 2)}
 
-        if len(df) < 30:
-            return {"error": "Yeterli veri yok"}
+        # XGBoost tahmini
+        if self.xgb_model:
+            df["rsi_14"] = ta.rsi(df["Close"], 14)
+            df["macd"] = ta.macd(df["Close"])["MACD_12_26_9"]
+            df["sma_20"] = ta.sma(df["Close"], 20)
+            df["atr_14"] = ta.atr(df["High"], df["Low"], df["Close"], 14) if "High" in data["historical_data"] else 0
+            df["volatility"] = df["Close"].rolling(20).std()
+            df = df.dropna()
 
-        current = df["Close"].iloc[-1]
-        rsi = df["rsi_14"].iloc[-1]
-        change_10 = df["Close"].iloc[-10:].pct_change().mean()
+            if len(df) >= 20:
+                last_x = df[["rsi_14", "macd", "sma_20", "atr_14", "volatility"]].iloc[-1:].values
+                pred_xgb = self.xgb_model.predict(last_x)[0]
+                results["xgb_pred"] = round(float(pred_xgb), 2)
+                results["xgb_direction"] = "↑" if pred_xgb > results["current_price"] else "↓"
 
-        adj = 1.0
-        if rsi > 70: adj = 0.96
-        elif rsi < 30: adj = 1.04
+        # LSTM tahmini
+        if self.lstm_model and self.scaler:
+            scaled = self.scaler.transform(df[["Close"]])
+            if len(scaled) >= 60:
+                seq = scaled[-60:].reshape(1, 60, 1)
+                pred_lstm_scaled = self.lstm_model.predict(seq, verbose=0)
+                pred_lstm = self.scaler.inverse_transform(pred_lstm_scaled)[0][0]
+                results["lstm_pred"] = round(float(pred_lstm), 2)
+                results["lstm_direction"] = "↑" if pred_lstm > results["current_price"] else "↓"
 
-        pred = current * (1 + change_10 * 5 * adj)  # 5 gün tahmini
+        results["note"] = "XGBoost & LSTM tahminleri – yatırım tavsiyesi değildir"
+        results["trained_at"] = self.trained_at
 
-        result = {
-            "predicted_price": round(float(pred), 2),
-            "current_price": round(float(current), 2),
-            "direction": "↑ YUKARI" if pred > current else "↓ AŞAĞI",
-            "rsi": round(float(rsi), 1),
-            "note": "Hafif tahmin – tavsiye değildir"
-        }
+        ml_cache.set(cache_key, results)
+        return results
 
-        ml_cache.set(cache_key, result)
-        return result
-
-    except Exception as e:
-        return {"error": str(e)}
+ml_manager = MLManager()
 
 # ==================== MODELS ====================
 class AIRequest(BaseModel):
@@ -219,7 +323,7 @@ class AIRequest(BaseModel):
 # ==================== ROUTES ====================
 @app.get("/")
 async def home():
-    html = """<!DOCTYPE html>
+    html_content = """<!DOCTYPE html>
 <html lang="tr">
 <head>
     <meta charset="UTF-8">
@@ -263,9 +367,6 @@ async def home():
                 <option value="1m">1 Dakika</option>
                 <option value="5m">5 Dakika</option>
                 <option value="15m">15 Dakika</option>
-                <option value="30m">30 Dakika</option>
-                <option value="1h">1 Saat</option>
-                <option value="4h">4 Saat</option>
                 <option value="1d" selected>1 Gün</option>
                 <option value="1wk">1 Hafta</option>
             </select>
@@ -290,84 +391,40 @@ async def home():
 
 <script>
     let chart = null;
-async function analyze() {
-    const symbol = document.getElementById('symbol').value;
-    const interval = document.getElementById('interval').value;
-    const div = document.getElementById('financeResult');
-    div.className = 'result loading';
-    div.innerHTML = '<div class="loading">Veriler çekiliyor...</div>';
 
-    try {
-        const response = await fetch(`/api/finance/${encodeURIComponent(symbol)}?interval=${interval}`);
-        
-        if (!response.ok) {
-            const err = await response.json().catch(() => ({}));
-            throw new Error(err.detail || `Sunucu hatası: ${response.status}`);
+    async function analyze() {
+        const symbol = document.getElementById('symbol').value;
+        const interval = document.getElementById('interval').value;
+        const div = document.getElementById('financeResult');
+        div.className = 'result loading';
+        div.innerHTML = '<div class="loading">Yükleniyor...</div>';
+
+        try {
+            const r = await fetch(`/api/finance/${encodeURIComponent(symbol)}?interval=${interval}`);
+            const d = await r.json();
+            if (d.error) throw new Error(d.error);
+
+            let h = `<strong>${d.symbol} - ${d.name}</strong><br>`;
+            h += `Fiyat: ${d.current_price} ${d.currency}<br>`;
+            h += `Değişim: <span class="${d.change_percent >= 0 ? 'positive' : 'negative'}">${d.change_percent.toFixed(2)}%</span><br>`;
+
+            div.className = 'result';
+            div.innerHTML = h;
+
+            if (d.historical_data?.prices?.length > 0) {
+                const ctx = document.getElementById('priceChart').getContext('2d');
+                if (chart) chart.destroy();
+                chart = new Chart(ctx, {
+                    type: 'line',
+                    data: {labels:d.historical_data.dates, datasets:[{label:symbol,data:d.historical_data.prices,borderColor:'#3b82f6',fill:true}]},
+                    options: {responsive:true}
+                });
+            }
+        } catch(e) {
+            div.className = 'result error';
+            div.innerHTML = `Hata: ${e.message}`;
         }
-
-        const data = await response.json();
-
-        if (data.error) {
-            throw new Error(data.error);
-        }
-
-        // Başarılı sonuç
-        let html = `
-            <strong>${data.symbol} - ${data.name || 'Bilinmiyor'}</strong><br>
-            Fiyat: <strong>${data.current_price} ${data.currency}</strong><br>
-            Değişim: <span class="${data.change_percent >= 0 ? 'positive' : 'negative'}">
-                ${data.change_percent.toFixed(2)}% (${data.change_percent >= 0 ? '+' : ''}${data.change_percent.toFixed(2)})
-            </span><br>
-            Hacim: ${data.volume.toLocaleString('tr-TR')}
-        `;
-
-        div.className = 'result';
-        div.innerHTML = html;
-
-        // Grafik çiz
-        if (data.historical_data?.prices?.length > 0) {
-            const ctx = document.getElementById('priceChart').getContext('2d');
-            if (chart) chart.destroy();
-
-            // Tarihleri daha güvenli parse et
-            const labels = data.historical_data.dates.map(d => {
-                try { return new Date(d).toLocaleString('tr-TR', {dateStyle: 'short', timeStyle: 'short'}); }
-                catch { return d; }
-            });
-
-            chart = new Chart(ctx, {
-                type: 'line',
-                data: {
-                    labels: labels,
-                    datasets: [{
-                        label: data.symbol,
-                        data: data.historical_data.prices,
-                        borderColor: '#3b82f6',
-                        backgroundColor: 'rgba(59,130,246,0.1)',
-                        tension: 0.1,
-                        fill: true
-                    }]
-                },
-                options: {
-                    responsive: true,
-                    maintainAspectRatio: false,
-                    scales: {
-                        y: { grid: { color: 'rgba(255,255,255,0.08)' }, ticks: { color: '#94a3b8' } },
-                        x: { grid: { color: 'rgba(255,255,255,0.08)' }, ticks: { color: '#94a3b8', maxRotation: 45, minRotation: 45 } }
-                    }
-                }
-            });
-        } else {
-            div.innerHTML += '<br><small>Grafik verisi yok</small>';
-        }
-
-    } catch (error) {
-        console.error('Analyze error:', error);
-        div.className = 'result error';
-        div.innerHTML = `<strong>Hata:</strong> ${error.message || 'Bilinmeyen hata. Lütfen tekrar deneyin.'}`;
     }
-}
- 
 
     async function ask() {
         const q = document.getElementById('aiQuery').value.trim();
@@ -380,7 +437,7 @@ async function analyze() {
             const d = await r.json();
             div.innerHTML = d.reply.replace(/\n/g,'<br>');
         } catch(e) {
-            div.innerHTML = `<div class="error">Hata: ${e.message}</div>`;
+            div.innerHTML = `Hata: ${e.message}`;
         }
     }
 
@@ -394,11 +451,16 @@ async function analyze() {
 </html>"""
     return HTMLResponse(html)
 
+@app.get("/api/train_ml")
+async def train_ml(symbol: str = "AAPL"):
+    result = await ml_manager.train(symbol)
+    return result
+
 @app.get("/api/finance/{symbol}")
 @limiter.limit(f"{RATE_LIMIT_PER_MINUTE}/minute")
 async def finance(symbol: str, interval: str = "1d", request: Request = None):
     if interval not in ALLOWED_PERIODS:
-        raise HTTPException(400, f"Geçersiz zaman dilimi. Desteklenen: {', '.join(ALLOWED_PERIODS)}")
+        raise HTTPException(400, "Geçersiz interval")
     data = await get_finance_data(symbol, interval)
     if "error" in data:
         raise HTTPException(400, data["error"])
@@ -407,7 +469,7 @@ async def finance(symbol: str, interval: str = "1d", request: Request = None):
 @app.get("/api/predict/{symbol}")
 @limiter.limit(f"{RATE_LIMIT_PER_MINUTE}/minute")
 async def predict(symbol: str, request: Request = None):
-    data = await get_ml_prediction(symbol)
+    data = await ml_manager.predict(symbol)
     if "error" in data:
         raise HTTPException(400, data["error"])
     return data
@@ -419,12 +481,16 @@ async def ask_ai(body: AIRequest, request: Request = None):
     symbol_match = re.search(r'\b([A-Z]{3,5}(\.[A-Z]{2})?)\b', msg.upper())
     symbol = symbol_match.group(1) if symbol_match else "THYAO"
 
-    ml = await get_ml_prediction(symbol)
+    ml = await ml_manager.predict(symbol)
     ml_text = ""
     if "error" not in ml:
-        ml_text = f"ML Tahmini (5 gün): {ml['predicted_price']} ({ml['direction']}), RSI: {ml['rsi']}"
+        ml_text = f"""
+XGBoost Tahmini: {ml.get('xgb_pred', 'N/A')} ({ml.get('xgb_direction', '')})
+LSTM Tahmini: {ml.get('lstm_pred', 'N/A')} ({ml.get('lstm_direction', '')})
+Mevcut: {ml['current_price']}
+"""
 
-    system = "Deneyimli borsa analisti olarak kısa, gerçekçi Türkçe cevap ver. Teknik analiz yap, risk belirt."
+    system = "Deneyimli borsa analisti olarak kısa, gerçekçi Türkçe cevap ver. Teknik analiz yap, risk belirt. ML tahminlerini değerlendir."
 
     messages = [
         {"role": "system", "content": system},
@@ -434,19 +500,20 @@ async def ask_ai(body: AIRequest, request: Request = None):
     reply = await call_qwen(messages)
     return {"reply": reply}
 
- @app.get("/health")
+@app.get("/health")
 async def health():
     return {
         "status": "ok",
-        "version": "5.2.0",
-        "environment": os.getenv("ENVIRONMENT", "production"),
+        "version": "5.4.0",
         "qwen_configured": bool(OPENROUTER_API_KEY),
-        "timestamp": datetime.now().isoformat(),
-        "uptime_seconds": int((datetime.now() - datetime.fromtimestamp(os.path.getctime(__file__))).total_seconds()),
-        "cache_size": {
-            "finance": len(finance_cache.data),
-            "ml": len(ml_cache.data)
-        }
+        "ml_models_loaded": {
+            "xgboost": ml_manager.xgb_model is not None,
+            "lstm": ml_manager.lstm_model is not None
+        },
+        "trained_at": ml_manager.trained_at,
+        "mae_xgb": ml_manager.mae_xgb,
+        "mae_lstm": ml_manager.mae_lstm,
+        "timestamp": datetime.now().isoformat()
     }
 
 if __name__ == "__main__":
