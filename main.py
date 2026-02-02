@@ -8,11 +8,13 @@
 import os
 import logging
 from datetime import datetime, timezone
-from typing import Dict, List, Optional, Tuple
+from typing import Dict, List, Optional, Tuple, Any
 import asyncio
 import json
 import websockets
 from contextlib import asynccontextmanager
+import pandas as pd
+import numpy as np
 
 # Simple logging
 logging.basicConfig(level=logging.INFO)
@@ -357,6 +359,348 @@ class TechnicalAnalyzer:
         
         return patterns
 
+# ==================== GROK INDICATORS PRO ====================
+@dataclass
+class SignalResult:
+    pair: str
+    timeframe: str
+    current_price: float
+    signal: str
+    score: int
+    strength: str
+    killzone: str
+    triggers: List[str]
+    last_update: str
+    market_structure: Dict[str, Any]
+    confidence: float
+    recommended_action: str
+    risk_reward: Dict[str, float]
+    entry_levels: List[float]
+    stop_loss: float
+    take_profit: List[float]
+
+def clean_nan(obj):
+    """Recursive NaN Temizleyici: NaN'leri None'a Çevirir (JSON Uyumlu)"""
+    if isinstance(obj, dict):
+        return {k: clean_nan(v) for k, v in obj.items()}
+    elif isinstance(obj, list):
+        return [clean_nan(v) for v in obj]
+    elif isinstance(obj, float) and (np.isnan(obj) or np.isinf(obj)):
+        return None
+    else:
+        return obj
+
+class GrokIndicatorsPro:
+    """Dünyanın En İyi ICT & SMC Sinyal Sistemi"""
+    
+    def __init__(self):
+        self._fib_levels = [0.0, 0.236, 0.382, 0.5, 0.618, 0.705, 0.786, 0.886, 1.0, 1.272, 1.618]
+        self._periods = {
+            'rsi6': 6, 'rsi14': 14, 'rsi21': 21,
+            'sma50': 50, 'sma200': 200, 'ema9': 9, 'ema21': 21, 'ema50': 50,
+            'bb': 20, 'atr': 14, 'ichimoku': 26
+        }
+        self._cache = {}
+        self._mtf_cache = {}
+        self._backtest_results = {}
+
+    # Yardımcı fonksiyonlar
+    def _safe_float(self, val, default=0.0) -> float:
+        try:
+            if isinstance(val, (int, float, np.floating, np.integer)):
+                if np.isnan(val) or np.isinf(val) or val is None:
+                    return float(default)
+                return float(val)
+            elif isinstance(val, str):
+                return float(val.replace(',', '')) if val else default
+            return float(default)
+        except:
+            return float(default)
+
+    def _clean_dataframe(self, df: pd.DataFrame) -> pd.DataFrame:
+        df = df.copy()
+        if df.empty:
+            return df
+        
+        try:
+            df.index = pd.to_datetime(df.index, errors='coerce')
+            df = df[~df.index.duplicated(keep='last')]
+        except:
+            pass
+        
+        numeric_cols = ['open', 'high', 'low', 'close', 'volume']
+        for col in numeric_cols:
+            if col in df.columns:
+                df[col] = pd.to_numeric(df[col], errors='coerce')
+        
+        df[numeric_cols] = df[numeric_cols].replace([np.inf, -np.inf], np.nan)
+        df[numeric_cols] = df[numeric_cols].interpolate(method='linear').ffill().bfill().fillna(0)
+        
+        if 'volume' in df.columns:
+            df = df[df['volume'] > 0]
+        
+        return df
+
+    # Tüm indikatörleri ve pattern'leri toplayan fonksiyon
+    def get_all_indicators_and_patterns(self, df: pd.DataFrame) -> Dict[str, Any]:
+        """
+        Tüm indikatörleri ve pattern'leri tek bir fonksiyonda toplar.
+        """
+        
+        try:
+            # 1. Veri temizleme
+            df_clean = self._clean_dataframe(df)
+            
+            if len(df_clean) < 50:
+                return {
+                    "error": "Yetersiz veri",
+                    "timestamp": datetime.utcnow().isoformat(),
+                    "status": "error"
+                }
+            
+            # Basit indikatör hesaplamaları
+            close = df_clean['close']
+            high = df_clean['high']
+            low = df_clean['low']
+            
+            # Moving Averages
+            ema9 = close.ewm(span=9, adjust=False).mean()
+            ema21 = close.ewm(span=21, adjust=False).mean()
+            ema50 = close.ewm(span=50, adjust=False).mean()
+            sma50 = close.rolling(50).mean()
+            sma200 = close.rolling(200).mean()
+            
+            # RSI
+            def calculate_rsi(series, period):
+                delta = series.diff()
+                gain = delta.clip(lower=0)
+                loss = -delta.clip(upper=0)
+                avg_gain = gain.ewm(alpha=1/period, min_periods=1, adjust=False).mean()
+                avg_loss = loss.ewm(alpha=1/period, min_periods=1, adjust=False).mean()
+                rs = avg_gain / (avg_loss + 1e-10)
+                return 100 - (100 / (1 + rs))
+            
+            rsi6 = calculate_rsi(close, 6)
+            rsi14 = calculate_rsi(close, 14)
+            rsi21 = calculate_rsi(close, 21)
+            
+            # MACD
+            ema12 = close.ewm(span=12, adjust=False).mean()
+            ema26 = close.ewm(span=26, adjust=False).mean()
+            macd = ema12 - ema26
+            macd_signal = macd.ewm(span=9, adjust=False).mean()
+            macd_hist = macd - macd_signal
+            
+            # Bollinger Bands
+            sma20 = close.rolling(20).mean()
+            std20 = close.rolling(20).std()
+            bb_upper = sma20 + (std20 * 2)
+            bb_middle = sma20
+            bb_lower = sma20 - (std20 * 2)
+            
+            # ATR
+            tr1 = high - low
+            tr2 = (high - close.shift()).abs()
+            tr3 = (low - close.shift()).abs()
+            tr = pd.concat([tr1, tr2, tr3], axis=1).max(axis=1)
+            atr = tr.rolling(14).mean()
+            
+            # Son değerler
+            last_idx = -1
+            
+            indicator_values = {
+                'ema9': self._safe_float(ema9.iloc[last_idx]),
+                'ema21': self._safe_float(ema21.iloc[last_idx]),
+                'ema50': self._safe_float(ema50.iloc[last_idx]),
+                'sma50': self._safe_float(sma50.iloc[last_idx]),
+                'sma200': self._safe_float(sma200.iloc[last_idx]),
+                'rsi6': self._safe_float(rsi6.iloc[last_idx]),
+                'rsi14': self._safe_float(rsi14.iloc[last_idx]),
+                'rsi21': self._safe_float(rsi21.iloc[last_idx]),
+                'macd': self._safe_float(macd.iloc[last_idx]),
+                'macd_signal': self._safe_float(macd_signal.iloc[last_idx]),
+                'macd_hist': self._safe_float(macd_hist.iloc[last_idx]),
+                'bb_upper': self._safe_float(bb_upper.iloc[last_idx]),
+                'bb_middle': self._safe_float(bb_middle.iloc[last_idx]),
+                'bb_lower': self._safe_float(bb_lower.iloc[last_idx]),
+                'atr': self._safe_float(atr.iloc[last_idx]),
+                'volume': self._safe_float(df_clean['volume'].iloc[last_idx]) if 'volume' in df_clean.columns else 0
+            }
+            
+            # Pattern tespitleri (basitleştirilmiş)
+            pattern_values = {}
+            
+            # Trend
+            current_price = self._safe_float(close.iloc[last_idx])
+            pattern_values['uptrend'] = current_price > indicator_values['ema21']
+            pattern_values['downtrend'] = current_price < indicator_values['ema21']
+            
+            # RSI sinyalleri
+            pattern_values['rsi_oversold_6'] = indicator_values['rsi6'] < 30
+            pattern_values['rsi_overbought_6'] = indicator_values['rsi6'] > 70
+            pattern_values['rsi_oversold_14'] = indicator_values['rsi14'] < 30
+            pattern_values['rsi_overbought_14'] = indicator_values['rsi14'] > 70
+            
+            # MACD sinyalleri
+            pattern_values['macd_bullish'] = indicator_values['macd'] > indicator_values['macd_signal']
+            pattern_values['macd_bearish'] = indicator_values['macd'] < indicator_values['macd_signal']
+            
+            # Killzone (basit versiyon)
+            now = datetime.utcnow()
+            hour = now.hour
+            pattern_values['in_killzone'] = (hour >= 0 and hour < 4) or (hour >= 7 and hour < 10) or (hour >= 13 and hour < 16)
+            
+            # Sinyal skoru hesapla
+            score = 0
+            triggers = []
+            
+            # Bullish faktörler
+            if pattern_values['uptrend']:
+                score += 20
+                triggers.append("Uptrend detected")
+            
+            if pattern_values['rsi_oversold_6'] or pattern_values['rsi_oversold_14']:
+                score += 25
+                triggers.append("RSI oversold")
+            
+            if pattern_values['macd_bullish']:
+                score += 20
+                triggers.append("MACD bullish")
+            
+            # Bearish faktörler
+            if pattern_values['downtrend']:
+                score -= 20
+                triggers.append("Downtrend detected")
+            
+            if pattern_values['rsi_overbought_6'] or pattern_values['rsi_overbought_14']:
+                score -= 25
+                triggers.append("RSI overbought")
+            
+            if pattern_values['macd_bearish']:
+                score -= 20
+                triggers.append("MACD bearish")
+            
+            # Killzone bonus
+            if pattern_values['in_killzone']:
+                score += 15
+                triggers.append("In killzone")
+            
+            score = max(-100, min(100, score))
+            
+            # Sinyal tipini belirle
+            if score >= 60:
+                signal_type = "STRONG_BUY"
+                strength = "GÜÇLÜ BULLISH"
+            elif score >= 30:
+                signal_type = "BUY"
+                strength = "BULLISH"
+            elif score <= -60:
+                signal_type = "STRONG_SELL"
+                strength = "GÜÇLÜ BEARISH"
+            elif score <= -30:
+                signal_type = "SELL"
+                strength = "BEARISH"
+            else:
+                signal_type = "NEUTRAL"
+                strength = "NÖTR"
+            
+            # Piyasa yapısı
+            market_structure = {
+                "trend": "Bullish" if pattern_values['uptrend'] else "Bearish" if pattern_values['downtrend'] else "Sideways",
+                "momentum": "Bullish" if indicator_values['rsi14'] > 50 else "Bearish",
+                "volatility": "High" if indicator_values['atr'] > self._safe_float(atr.mean()) else "Normal",
+                "key_levels": [
+                    {"type": "support", "price": round(indicator_values['bb_lower'], 4)},
+                    {"type": "resistance", "price": round(indicator_values['bb_upper'], 4)},
+                    {"type": "ema21", "price": round(indicator_values['ema21'], 4)}
+                ]
+            }
+            
+            result = {
+                "timestamp": datetime.utcnow().isoformat(),
+                "data_points": len(df_clean),
+                "current_price": current_price,
+                "indicators": indicator_values,
+                "patterns": pattern_values,
+                "market_structure": market_structure,
+                "signal_summary": {
+                    "score": score,
+                    "signal_type": signal_type,
+                    "strength": strength,
+                    "triggers": triggers[:10],
+                    "confidence": min(abs(score) / 100, 1.0)
+                },
+                "trend_indicators": {
+                    "ema_9": indicator_values['ema9'],
+                    "ema_21": indicator_values['ema21'],
+                    "ema_50": indicator_values['ema50'],
+                    "sma_50": indicator_values['sma50'],
+                    "sma_200": indicator_values['sma200'],
+                    "trend": market_structure['trend']
+                },
+                "momentum_indicators": {
+                    "rsi_6": indicator_values['rsi6'],
+                    "rsi_14": indicator_values['rsi14'],
+                    "rsi_21": indicator_values['rsi21'],
+                    "macd": indicator_values['macd'],
+                    "macd_signal": indicator_values['macd_signal'],
+                    "macd_hist": indicator_values['macd_hist'],
+                    "momentum": market_structure['momentum']
+                },
+                "recommendation": {
+                    "action": signal_type,
+                    "reason": strength,
+                    "key_levels": market_structure['key_levels']
+                }
+            }
+            
+            return clean_nan(result)
+            
+        except Exception as e:
+            logger.error(f"get_all_indicators_and_patterns error: {e}")
+            return {
+                "error": str(e),
+                "timestamp": datetime.utcnow().isoformat(),
+                "status": "error"
+            }
+
+# Global instance
+grok_pro = GrokIndicatorsPro()
+
+def get_all_indicators(df: pd.DataFrame, symbol: str = "BTCUSDT", timeframe: str = "1h") -> Dict[str, Any]:
+    """Public API: Tüm indikatörleri ve pattern'leri JSON formatında döndürür."""
+    return grok_pro.get_all_indicators_and_patterns(df)
+
+def get_technical_summary(df: pd.DataFrame) -> Dict[str, Any]:
+    """Teknik analiz özeti"""
+    try:
+        all_data = grok_pro.get_all_indicators_and_patterns(df)
+        
+        if "error" in all_data:
+            return all_data
+        
+        summary = {
+            "current_price": all_data.get("current_price", 0),
+            "trend": all_data.get("trend_indicators", {}).get("trend", "Nötr"),
+            "signal": all_data.get("signal_summary", {}).get("signal_type", "NEUTRAL"),
+            "strength": all_data.get("signal_summary", {}).get("strength", "NÖTR"),
+            "score": all_data.get("signal_summary", {}).get("score", 0),
+            "key_levels": all_data.get("recommendation", {}).get("key_levels", []),
+            "top_triggers": all_data.get("signal_summary", {}).get("triggers", [])[:3],
+            "timestamp": all_data.get("timestamp", "")
+        }
+        
+        return clean_nan(summary)
+        
+    except Exception as e:
+        return {
+            "error": str(e),
+            "current_price": 0,
+            "trend": "Bilinmiyor",
+            "signal": "HATA",
+            "timestamp": datetime.utcnow().isoformat()
+        }
+
 # ==================== SİNYAL ÜRETİCİ ====================
 class SignalGenerator:
     """Gerçek veri ile sinyal üret"""
@@ -374,6 +718,15 @@ class SignalGenerator:
             if not real_data or len(candles) < 20:
                 return await self.get_fallback_signal(symbol)
             
+            # Convert candles to DataFrame for Grok Indicators
+            df = pd.DataFrame(candles)
+            if not df.empty and 'timestamp' in df.columns:
+                df.set_index('timestamp', inplace=True)
+            
+            # Get Grok analysis
+            grok_analysis = get_all_indicators(df, symbol, interval)
+            
+            # Simple technical analysis
             sma_9 = self.analyzer.calculate_sma(candles, 9)
             sma_21 = self.analyzer.calculate_sma(candles, 21)
             ema_12 = self.analyzer.calculate_ema(candles, 12)
@@ -382,34 +735,11 @@ class SignalGenerator:
             
             patterns = self.analyzer.detect_patterns(candles)
             
-            if len(candles) >= 2:
-                change = ((candles[-1]["close"] - candles[-2]["close"]) / candles[-2]["close"]) * 100
-            else:
-                change = 0
-            
+            # Combine signals
             signal_score = 0
             
-            if ema_12 and ema_26 and ema_12[-1] and ema_26[-1]:
-                if ema_12[-1] > ema_26[-1]:
-                    signal_score += 20
-                else:
-                    signal_score -= 20
-            
-            if rsi_data["signal"] == "OVERSOLD":
-                signal_score += 25
-            elif rsi_data["signal"] == "OVERBOUGHT":
-                signal_score -= 25
-            
-            for pattern in patterns:
-                if pattern["direction"] == "bullish":
-                    signal_score += pattern["confidence"] / 4
-                elif pattern["direction"] == "bearish":
-                    signal_score -= pattern["confidence"] / 4
-            
-            if change > 1:
-                signal_score += 10
-            elif change < -1:
-                signal_score -= 10
+            if "signal_summary" in grok_analysis:
+                signal_score = grok_analysis["signal_summary"].get("score", 0)
             
             confidence = min(95, max(50, abs(signal_score)))
             
@@ -445,6 +775,7 @@ class SignalGenerator:
                     "rsi": rsi_data["value"],
                     "rsi_signal": rsi_data["signal"]
                 },
+                "grok_analysis": grok_analysis if "error" not in grok_analysis else None,
                 "patterns": patterns,
                 "signal": {
                     "type": final_signal,
@@ -454,7 +785,7 @@ class SignalGenerator:
                         "ema_signal": "BULLISH" if (ema_12[-1] and ema_26[-1] and ema_12[-1] > ema_26[-1]) else "BEARISH",
                         "rsi_signal": rsi_data["signal"],
                         "pattern_count": len(patterns),
-                        "price_momentum": "UP" if change > 0 else "DOWN"
+                        "grok_score": signal_score
                     },
                     "recommendation": self.get_recommendation(final_signal, confidence)
                 }
@@ -492,8 +823,7 @@ class SignalGenerator:
                 "components": {
                     "ema_signal": "NEUTRAL",
                     "rsi_signal": "NEUTRAL",
-                    "pattern_count": 0,
-                    "price_momentum": "NEUTRAL"
+                    "pattern_count": 0
                 },
                 "recommendation": "Waiting for real-time data from Binance..."
             }
@@ -1332,6 +1662,7 @@ async def dashboard():
         function renderIndicators(data) {
             const ind = data.indicators;
             const patterns = data.patterns || [];
+            const grok = data.grok_analysis || {};
             
             let indicatorsHtml = `
                 <div class="indicator-grid">
@@ -1361,6 +1692,20 @@ async def dashboard():
                     </div>
                 </div>
             `;
+            
+            if (grok.signal_summary) {
+                indicatorsHtml += `
+                    <div style="margin-top: 1rem; padding-top: 1rem; border-top: 1px solid var(--border);">
+                        <div style="font-size: 0.9rem; color: var(--text-muted); margin-bottom: 0.5rem;">
+                            Grok Analysis: ${grok.signal_summary.strength || ''}
+                        </div>
+                        <div style="font-size: 0.85rem;">
+                            Score: ${grok.signal_summary.score || 0}<br>
+                            Triggers: ${(grok.signal_summary.triggers || []).slice(0, 2).join(', ')}
+                        </div>
+                    </div>
+                `;
+            }
             
             if (patterns.length > 0) {
                 indicatorsHtml += `
