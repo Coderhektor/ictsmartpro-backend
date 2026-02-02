@@ -434,9 +434,20 @@ async def ask_ai(body: AIRequest, request: Request = None):
     reply = await call_qwen(messages)
     return {"reply": reply}
 
-@app.get("/health")
+ @app.get("/health")
 async def health():
-    return {"status": "ok", "version": "5.2.0"}
+    return {
+        "status": "ok",
+        "version": "5.2.0",
+        "environment": os.getenv("ENVIRONMENT", "production"),
+        "qwen_configured": bool(OPENROUTER_API_KEY),
+        "timestamp": datetime.now().isoformat(),
+        "uptime_seconds": int((datetime.now() - datetime.fromtimestamp(os.path.getctime(__file__))).total_seconds()),
+        "cache_size": {
+            "finance": len(finance_cache.data),
+            "ml": len(ml_cache.data)
+        }
+    }
 
 if __name__ == "__main__":
     import uvicorn
