@@ -8,28 +8,33 @@ from datetime import datetime
 from typing import Dict, List
 import httpx
 from dotenv import load_dotenv
+import pandas as pd
+import pandas_ta as ta
+from xgboost import XGBRegressor
+from sklearn.model_selection import train_test_split
+from sklearn.metrics import mean_absolute_error
+import re  # sembol çıkarma için
 
 # ==================== KONFIGÜRASYON ====================
-load_dotenv()  # Yerel geliştirme için .env okur (Railway'de gerek yok, ortam değişkeni kullanır)
+load_dotenv()
 
 PORT = int(os.environ.get("PORT", 8000))
 DEBUG = os.environ.get("DEBUG", "false").lower() == "true"
 
 OPENROUTER_API_KEY = os.getenv("OPENROUTER_API_KEY")
 OPENROUTER_BASE_URL = "https://openrouter.ai/api/v1"
-QWEN_MODEL = "qwen/qwen3-coder:free"  # Ücretsiz model - limit olabilir
+QWEN_MODEL = "qwen/qwen3-coder:free"
 
 if not OPENROUTER_API_KEY:
-    print("⚠️  DİKKAT: OPENROUTER_API_KEY ortam değişkeni tanımlı değil!")
+    print("⚠️ OPENROUTER_API_KEY tanımlı değil!")
 
-# Logging
 logging.basicConfig(level=logging.DEBUG if DEBUG else logging.INFO)
 logger = logging.getLogger(__name__)
 
 app = FastAPI(
     title="ICTSmartPro × Qwen Trading Analiz",
-    description="Qwen AI ile Hisse / Fon Teknik Analizi",
-    version="3.2.0",
+    description="Qwen AI + ML ile Hisse Analizi",
+    version="3.3.0",
     docs_url="/docs" if DEBUG else None,
 )
 
@@ -44,11 +49,11 @@ app.add_middleware(
 # ==================== QWEN ÇAĞIRMA ====================
 async def call_qwen(messages: List[Dict[str, str]], temperature: float = 0.65, max_tokens: int = 1400) -> str:
     if not OPENROUTER_API_KEY:
-        return "❌ OpenRouter API anahtarı eksik. Railway Variables'a ekleyin veya .env dosyasına OPENROUTER_API_KEY=sk-or-v1-... yazın."
+        return "❌ OpenRouter API anahtarı eksik."
 
     headers = {
         "Authorization": f"Bearer {OPENROUTER_API_KEY}",
-        "HTTP-Referer": "https://your-railway-app.up.railway.app",  # Railway domainini buraya yazabilirsin
+        "HTTP-Referer": "https://your-railway-app.up.railway.app",
         "X-Title": "ICTSmartPro Trading AI",
         "Content-Type": "application/json"
     }
@@ -70,15 +75,14 @@ async def call_qwen(messages: List[Dict[str, str]], temperature: float = 0.65, m
                 timeout=90.0
             )
             response.raise_for_status()
-            data = response.json()
-            return data["choices"][0]["message"]["content"].strip()
+            return response.json()["choices"][0]["message"]["content"].strip()
         except Exception as e:
             logger.error(f"Qwen hatası: {e}")
             if "429" in str(e):
-                return "❌ Rate limit aşıldı (ücretsiz model sınırı). Biraz bekleyin."
-            return f"AI bağlantı hatası: {str(e)}"
+                return "❌ Rate limit aşıldı. Biraz bekleyin."
+            return f"AI hatası: {str(e)}"
 
-# ==================== FİNANS VERİ ====================
+# ==================== FİNANS VERİ (High/Low/Volume eklendi) ====================
 async def get_finance_data(symbol: str, period: str = "1mo") -> Dict:
     try:
         symbol = symbol.upper().strip()
@@ -107,6 +111,9 @@ async def get_finance_data(symbol: str, period: str = "1mo") -> Dict:
 
         dates = hist.index.strftime("%Y-%m-%d").tolist()
         prices = hist["Close"].round(2).tolist()
+        highs = hist["High"].round(2).tolist()
+        lows = hist["Low"].round(2).tolist()
+        volumes = hist["Volume"].tolist()
 
         return {
             "symbol": symbol.replace(".IS", ""),
@@ -117,13 +124,78 @@ async def get_finance_data(symbol: str, period: str = "1mo") -> Dict:
             "change_percent": round(change_pct, 2),
             "volume": int(hist["Volume"].iloc[-1]) if not hist["Volume"].empty else 0,
             "market_cap": info.get("marketCap"),
-            "historical_data": {"dates": dates, "prices": prices},
+            "historical_data": {"dates": dates, "prices": prices, "highs": highs, "lows": lows, "volumes": volumes},
             "fetched_at": datetime.now().isoformat(),
             "error": None
         }
     except Exception as e:
         logger.error(f"Finance hatası {symbol}: {e}")
-        return {"symbol": symbol, "error": str(e), "historical_data": {"dates": [], "prices": []}}
+        return {"symbol": symbol, "error": str(e), "historical_data": {"dates": [], "prices": [], "highs": [], "lows": [], "volumes": []}}
+
+# ==================== ML + İNDİKATÖRLER ====================
+async def enrich_with_indicators_and_predict(symbol: str, period: str = "6mo", forecast_horizon: int = 5) -> Dict:
+    data = await get_finance_data(symbol, period)
+    if data.get("error"):
+        return {"error": data["error"]}
+
+    df = pd.DataFrame({
+        "Date": data["historical_data"]["dates"],
+        "Close": data["historical_data"]["prices"],
+        "High": data["historical_data"]["highs"],
+        "Low": data["historical_data"]["lows"],
+        "Volume": data["historical_data"]["volumes"]
+    }).set_index("Date")
+    df.index = pd.to_datetime(df.index)
+
+    # Hafif indikatör seti
+    df["sma_20"] = ta.sma(df["Close"], length=20)
+    df["ema_50"] = ta.ema(df["Close"], length=50)
+    df["rsi_14"] = ta.rsi(df["Close"], length=14)
+    macd = ta.macd(df["Close"])
+    df["macd"] = macd["MACD_12_26_9"]
+    df["macd_sig"] = macd["MACDs_12_26_9"]
+    df["macd_hist"] = macd["MACDh_12_26_9"]
+    bb = ta.bbands(df["Close"], length=20)
+    df["bb_upper"] = bb["BBU_20_2.0"]
+    df["bb_lower"] = bb["BBL_20_2.0"]
+    df["bb_percent"] = bb["BBP_20_2.0"]
+    df["atr_14"] = ta.atr(df["High"], df["Low"], df["Close"], length=14)
+    stoch = ta.stoch(df["High"], df["Low"], df["Close"])
+    df["stoch_k"] = stoch["STOCHk_14_3_3"]
+    adx = ta.adx(df["High"], df["Low"], df["Close"], length=14)
+    df["adx_14"] = adx["ADX_14"]
+    df["obv"] = ta.obv(df["Close"], df["Volume"])
+
+    df = df.dropna()
+
+    if len(df) < 60:
+        return {"error": "Yeterli veri yok (indikatörler için ≥60 satır lazım)"}
+
+    df["target"] = df["Close"].shift(-forecast_horizon)
+    df = df.dropna()
+
+    features = [c for c in df.columns if c not in ["Close", "target", "Date", "High", "Low", "Volume"]]
+    X = df[features]
+    y = df["target"]
+
+    X_train, X_test, y_train, y_test = train_test_split(X, y, test_size=0.2, shuffle=False)
+
+    model = XGBRegressor(n_estimators=100, learning_rate=0.1, random_state=42)
+    model.fit(X_train, y_train)
+
+    last_features = X.iloc[-1:].values
+    pred = model.predict(last_features)[0]
+    mae = mean_absolute_error(y_test, model.predict(X_test))
+
+    return {
+        "predicted_price": round(float(pred), 2),
+        "current_price": round(df["Close"].iloc[-1], 2),
+        "horizon": forecast_horizon,
+        "direction": "↑ YUKARI" if pred > df["Close"].iloc[-1] else "↓ AŞAĞI",
+        "mae": round(float(mae), 2),
+        "features_count": len(features),
+        "note": "İstatistiksel tahmin – yatırım tavsiyesi değildir"
+    }
 
 # ==================== ROUTES ====================
 @app.get("/")
@@ -158,8 +230,8 @@ async def home():
 <body>
 <div class="container">
     <header>
-        <div class="logo">ICTSmartPro × Qwen</div>
-        <div>Yapay Zeka Destekli Hisse Analizi</div>
+        <div class="logo">ICTSmartPro × Qwen + ML</div>
+        <div>Yapay Zeka + Makine Öğrenmesi Destekli Hisse Analizi</div>
     </header>
 
     <div class="dashboard">
@@ -181,16 +253,18 @@ async def home():
             </select>
 
             <label>Dönem:</label>
-          <select id="period">
-            <option value="5d">5 Gün</option>
-            <option value="1mo" selected>1 Ay</option>
-            <option value="3mo">3 Ay</option>
-            <option value="6mo">6 Ay</option>
-            <option value="1y">1 Yıl</option>
+            <select id="period">
+                <option value="5d">5 Gün</option>
+                <option value="1mo" selected>1 Ay</option>
+                <option value="3mo">3 Ay</option>
+                <option value="6mo">6 Ay</option>
+                <option value="1y">1 Yıl</option>
             </select>
 
             <button id="analyzeBtn">Analiz Et</button>
+            <button id="predictBtn" style="margin-top:0.8rem; background:linear-gradient(90deg,#8b5cf6,#d946ef);">ML Tahmin Al (5 gün)</button>
             <div id="financeResult" class="result"><div class="loading">Sembol seçip Analiz Et'e basın...</div></div>
+            <div id="mlResult" class="result" style="margin-top:1rem;"><div class="loading">ML tahmini burada görünecek...</div></div>
         </div>
 
         <div class="card">
@@ -243,6 +317,35 @@ async def home():
         }
     }
 
+    async function getMLPrediction() {
+        const symbol = document.getElementById('symbol').value;
+        const mlDiv = document.getElementById('mlResult');
+        mlDiv.innerHTML = '<div class="loading">ML tahmin hesaplanıyor (XGBoost + indikatörler)...</div>';
+
+        try {
+            const resp = await fetch(`/api/predict/${encodeURIComponent(symbol)}?period=6mo&horizon=5`);
+            if (!resp.ok) throw new Error('HTTP ' + resp.status);
+            const data = await resp.json();
+
+            if (data.error) {
+                mlDiv.innerHTML = `<div class="error">Hata: ${data.error}</div>`;
+                return;
+            }
+
+            let html = `<strong>5 Gün Sonrası ML Tahmini</strong><br>`;
+            html += `Tahmini fiyat: ${data.predicted_price} ${data.current_price > data.predicted_price ? '↓' : '↑'}<br>`;
+            html += `Mevcut fiyat: ${data.current_price}<br>`;
+            html += `Yön: <span class="${data.direction.includes('YUKARI') ? 'positive' : 'negative'}">${data.direction}</span><br>`;
+            html += `Hata (MAE): ${data.mae}<br>`;
+            html += `<small>${data.note}</small>`;
+
+            mlDiv.innerHTML = html;
+        } catch (err) {
+            mlDiv.innerHTML = `<div class="error">ML hatası: ${err.message}</div>`;
+            console.error(err);
+        }
+    }
+
     async function askQwen() {
         const query = document.getElementById('aiQuery').value.trim();
         if (!query) {
@@ -251,7 +354,7 @@ async def home():
         }
 
         const resDiv = document.getElementById('aiResult');
-        resDiv.innerHTML = '<div class="loading">Qwen analiz yapıyor...</div>';
+        resDiv.innerHTML = '<div class="loading">Qwen analiz yapıyor (ML bilgisi eklendi)...</div>';
 
         try {
             const resp = await fetch('/api/ai/ask', {
@@ -303,8 +406,9 @@ async def home():
 
     document.addEventListener('DOMContentLoaded', () => {
         document.getElementById('analyzeBtn').addEventListener('click', analyzeStock);
+        document.getElementById('predictBtn').addEventListener('click', getMLPrediction);
         document.getElementById('askBtn').addEventListener('click', askQwen);
-        analyzeStock();
+        analyzeStock();  // Sayfa açıldığında otomatik çalışsın
     });
 </script>
 </body>
@@ -316,6 +420,10 @@ async def home():
 async def get_finance(symbol: str, period: str = "1mo"):
     return await get_finance_data(symbol, period)
 
+@app.get("/api/predict/{symbol}")
+async def predict(symbol: str, period: str = "6mo", horizon: int = 5):
+    return await enrich_with_indicators_and_predict(symbol, period, horizon)
+
 @app.post("/api/ai/ask")
 async def ask_ai(request: Request):
     try:
@@ -324,13 +432,33 @@ async def ask_ai(request: Request):
         if not user_msg:
             raise HTTPException(400, "Mesaj boş olamaz")
 
+        # Mesajdan sembol çıkar (ör: THYAO, AAPL, AKBNK.IS vb.)
+        symbol_match = re.search(r'\b([A-Z]{3,5}(?:\.[A-Z]{2})?)\b', user_msg.upper())
+        symbol = symbol_match.group(1) if symbol_match else "THYAO"
+
+        ml_result = await enrich_with_indicators_and_predict(symbol, "6mo", 5)
+
+        ml_info = ""
+        if not ml_result.get("error"):
+            ml_info = f"""
+ML Tahmini (XGBoost + indikatörler, {ml_result['horizon']} gün sonrası):
+Tahmini fiyat: {ml_result['predicted_price']}
+Mevcut: {ml_result['current_price']}
+Yön: {ml_result['direction']}
+Hata (MAE): {ml_result['mae']}
+Özellik sayısı: {ml_result['features_count']}
+{ml_result['note']}
+"""
+
         system_prompt = """Sen deneyimli bir Türk borsası ve global hisse analisti olarak cevap ver.
 Kısa, net, gerçekçi ol. Teknik analiz, trend, destek-direnç seviyeleri, riskler hakkında konuş.
-Spekülasyon yapma, veriye dayalı ol. Türkçe cevap ver."""
+ML tahminlerini de değerlendirerek yorum yap. Spekülasyon yapma, veriye dayalı ol. Türkçe cevap ver."""
+
+        enhanced_msg = f"{user_msg}\n\n{ml_info}"
 
         messages = [
             {"role": "system", "content": system_prompt},
-            {"role": "user", "content": user_msg}
+            {"role": "user", "content": enhanced_msg}
         ]
 
         reply = await call_qwen(messages)
@@ -344,6 +472,7 @@ async def health_check():
         "status": "ok",
         "qwen_model": QWEN_MODEL,
         "api_key_set": bool(OPENROUTER_API_KEY),
+        "ml_enabled": True,
         "environment": "Railway" if "RAILWAY_ENVIRONMENT" in os.environ else "Local"
     }
 
