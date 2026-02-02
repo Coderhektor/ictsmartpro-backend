@@ -1,7 +1,7 @@
 """
 ICTSmartPro Trading AI Platform
 Production-Ready Trading Analysis with Qwen AI + ML
-Version: 4.0.0
+Version: 5.0.0 - Updated Dependencies
 """
 
 import os
@@ -12,15 +12,14 @@ from typing import Dict, List, Optional, Any
 import re
 import json
 
-from fastapi import FastAPI, HTTPException, Request, Depends, BackgroundTasks
+from fastapi import FastAPI, HTTPException, Request, BackgroundTasks
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import HTMLResponse, JSONResponse
+from fastapi.responses import HTMLResponse
 from fastapi.staticfiles import StaticFiles
-from fastapi.templating import Jinja2Templates
-from slowapi import Limiter, _rate_limit_exceeded_handler
+from slowapi import Limiter
 from slowapi.util import get_remote_address
 from slowapi.errors import RateLimitExceeded
-from pydantic import BaseModel, Field, validator
+from pydantic import BaseModel, Field, field_validator, computed_field
 from slugify import slugify
 
 import yfinance as yf
@@ -65,9 +64,10 @@ ALLOWED_PERIODS = {"5d", "1mo", "3mo", "6mo", "1y", "2y", "5y", "max"}
 # ==================== VALIDATION MODELS ====================
 class SymbolRequest(BaseModel):
     symbol: str = Field(..., min_length=2, max_length=15)
-    period: str = Field("1mo", min_length=2, max_length=10)
+    period: str = Field(default="1mo", min_length=2, max_length=10)
 
-    @validator("symbol")
+    @field_validator("symbol")
+    @classmethod
     def validate_symbol(cls, v):
         v = v.strip().upper()
         if not re.match(r"^[A-Z0-9]{2,6}(\.[A-Z]{2})?$", v):
@@ -76,7 +76,8 @@ class SymbolRequest(BaseModel):
             raise ValueError("Bu sembol izin verilmiyor")
         return v
 
-    @validator("period")
+    @field_validator("period")
+    @classmethod
     def validate_period(cls, v):
         if v not in ALLOWED_PERIODS:
             raise ValueError(f"Dönem {ALLOWED_PERIODS} arasında olmalı")
@@ -85,7 +86,8 @@ class SymbolRequest(BaseModel):
 class AIQueryRequest(BaseModel):
     message: str = Field(..., min_length=5, max_length=1000)
 
-    @validator("message")
+    @field_validator("message")
+    @classmethod
     def validate_message(cls, v):
         # Potansiyel XSS saldırılarını temizle
         v = re.sub(r"<script.*?>.*?</script>", "", v, flags=re.IGNORECASE)
@@ -97,13 +99,19 @@ limiter = Limiter(key_func=get_remote_address)
 app = FastAPI(
     title="ICTSmartPro Trading AI",
     description="Production-Ready Trading Analysis Platform with Qwen AI + ML",
-    version="4.0.0",
+    version="5.0.0",
     docs_url="/docs" if DEBUG else None,
     redoc_url="/redoc" if DEBUG else None,
 )
 
 app.state.limiter = limiter
-app.add_exception_handler(RateLimitExceeded, _rate_limit_exceeded_handler)
+
+@app.exception_handler(RateLimitExceeded)
+async def rate_limit_exceeded_handler(request: Request, exc: RateLimitExceeded):
+    return JSONResponse(
+        status_code=429,
+        content={"detail": "Rate limit aşıldı. Lütfen biraz bekleyin."}
+    )
 
 # ==================== CORS & MIDDLEWARE ====================
 app.add_middleware(
@@ -111,7 +119,6 @@ app.add_middleware(
     allow_origins=["*"] if DEBUG else [
         "https://ictsmartpro.ai",
         "https://www.ictsmartpro.ai",
-        "https://your-railway-app.up.railway.app"
     ],
     allow_credentials=True,
     allow_methods=["GET", "POST"],
@@ -380,7 +387,7 @@ async def health_check():
     """Health check endpoint"""
     return {
         "status": "healthy",
-        "version": "4.0.0",
+        "version": "5.0.0",
         "environment": ENVIRONMENT,
         "timestamp": datetime.now().isoformat(),
         "qwen_configured": bool(OPENROUTER_API_KEY),
@@ -404,7 +411,12 @@ async def get_symbols():
             {"symbol": "KCHOL", "name": "Koç Holding"},
             {"symbol": "ASELS", "name": "Aselsan"},
             {"symbol": "TUPRS", "name": "Tüpraş"},
-            {"symbol": "FROTO", "name": "Ford Otosan"}
+            {"symbol": "FROTO", "name": "Ford Otosan"},
+            {"symbol": "PETKM", "name": "Petkim"},
+            {"symbol": "SAHOL", "name": "Sasa Polyester"},
+            {"symbol": "ENJSA", "name": "Enerjisa"},
+            {"symbol": "MGROS", "name": "Migros"},
+            {"symbol": "TKFEN", "name": "Tofaş"}
         ],
         "global": [
             {"symbol": "AAPL", "name": "Apple"},
@@ -414,7 +426,11 @@ async def get_symbols():
             {"symbol": "AMZN", "name": "Amazon"},
             {"symbol": "TSLA", "name": "Tesla"},
             {"symbol": "META", "name": "Meta"},
-            {"symbol": "BTC-USD", "name": "Bitcoin"}
+            {"symbol": "AMD", "name": "AMD"},
+            {"symbol": "INTC", "name": "Intel"},
+            {"symbol": "COIN", "name": "Coinbase"},
+            {"symbol": "BTC-USD", "name": "Bitcoin"},
+            {"symbol": "ETH-USD", "name": "Ethereum"}
         ]
     }
 
