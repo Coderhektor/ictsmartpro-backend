@@ -290,34 +290,84 @@ async def home():
 
 <script>
     let chart = null;
+async function analyze() {
+    const symbol = document.getElementById('symbol').value;
+    const interval = document.getElementById('interval').value;
+    const div = document.getElementById('financeResult');
+    div.className = 'result loading';
+    div.innerHTML = '<div class="loading">Veriler çekiliyor...</div>';
 
-    async function analyze() {
-        const s = document.getElementById('symbol').value;
-        const i = document.getElementById('interval').value;
-        const div = document.getElementById('financeResult');
-        div.innerHTML = '<div class="loading">Yükleniyor...</div>';
-
-        try {
-            const r = await fetch(`/api/finance/${encodeURIComponent(s)}?interval=${i}`);
-            const d = await r.json();
-            if (d.error) throw new Error(d.error);
-
-            let h = `<strong>${d.symbol}</strong><br>Fiyat: ${d.current_price}<br>Değişim: <span class="${d.change_percent>=0?'positive':'negative'}">${d.change_percent.toFixed(2)}%</span>`;
-            div.innerHTML = h;
-
-            if (d.historical_data?.prices?.length) {
-                const ctx = document.getElementById('priceChart').getContext('2d');
-                if (chart) chart.destroy();
-                chart = new Chart(ctx, {
-                    type: 'line',
-                    data: {labels:d.historical_data.dates, datasets:[{label:s,data:d.historical_data.prices,borderColor:'#3b82f6',fill:true}]},
-                    options: {responsive:true}
-                });
-            }
-        } catch(e) {
-            div.innerHTML = `<div class="error">Hata: ${e.message}</div>`;
+    try {
+        const response = await fetch(`/api/finance/${encodeURIComponent(symbol)}?interval=${interval}`);
+        
+        if (!response.ok) {
+            const err = await response.json().catch(() => ({}));
+            throw new Error(err.detail || `Sunucu hatası: ${response.status}`);
         }
+
+        const data = await response.json();
+
+        if (data.error) {
+            throw new Error(data.error);
+        }
+
+        // Başarılı sonuç
+        let html = `
+            <strong>${data.symbol} - ${data.name || 'Bilinmiyor'}</strong><br>
+            Fiyat: <strong>${data.current_price} ${data.currency}</strong><br>
+            Değişim: <span class="${data.change_percent >= 0 ? 'positive' : 'negative'}">
+                ${data.change_percent.toFixed(2)}% (${data.change_percent >= 0 ? '+' : ''}${data.change_percent.toFixed(2)})
+            </span><br>
+            Hacim: ${data.volume.toLocaleString('tr-TR')}
+        `;
+
+        div.className = 'result';
+        div.innerHTML = html;
+
+        // Grafik çiz
+        if (data.historical_data?.prices?.length > 0) {
+            const ctx = document.getElementById('priceChart').getContext('2d');
+            if (chart) chart.destroy();
+
+            // Tarihleri daha güvenli parse et
+            const labels = data.historical_data.dates.map(d => {
+                try { return new Date(d).toLocaleString('tr-TR', {dateStyle: 'short', timeStyle: 'short'}); }
+                catch { return d; }
+            });
+
+            chart = new Chart(ctx, {
+                type: 'line',
+                data: {
+                    labels: labels,
+                    datasets: [{
+                        label: data.symbol,
+                        data: data.historical_data.prices,
+                        borderColor: '#3b82f6',
+                        backgroundColor: 'rgba(59,130,246,0.1)',
+                        tension: 0.1,
+                        fill: true
+                    }]
+                },
+                options: {
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    scales: {
+                        y: { grid: { color: 'rgba(255,255,255,0.08)' }, ticks: { color: '#94a3b8' } },
+                        x: { grid: { color: 'rgba(255,255,255,0.08)' }, ticks: { color: '#94a3b8', maxRotation: 45, minRotation: 45 } }
+                    }
+                }
+            });
+        } else {
+            div.innerHTML += '<br><small>Grafik verisi yok</small>';
+        }
+
+    } catch (error) {
+        console.error('Analyze error:', error);
+        div.className = 'result error';
+        div.innerHTML = `<strong>Hata:</strong> ${error.message || 'Bilinmeyen hata. Lütfen tekrar deneyin.'}`;
     }
+}
+ 
 
     async function ask() {
         const q = document.getElementById('aiQuery').value.trim();
