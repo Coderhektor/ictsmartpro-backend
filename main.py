@@ -181,12 +181,12 @@ async def home():
             </select>
 
             <label>Dönem:</label>
-            <select id="period">
-                <option value="5d">5 Gün</option>
-                <option value="1mo" selected>1 Ay</option>
-                <option value="3mo">3 Ay</option>
-                <option value="6mo">6 Ay</option>
-                <option value="1y">1 Yıl</option>
+          <select id="period">
+            <option value="5d">5 Gün</option>
+            <option value="1mo" selected>1 Ay</option>
+            <option value="3mo">3 Ay</option>
+            <option value="6mo">6 Ay</option>
+            <option value="1y">1 Yıl</option>
             </select>
 
             <button id="analyzeBtn">Analiz Et</button>
@@ -349,4 +349,4 @@ async def health_check():
 
 if __name__ == "__main__":
     import uvicorn
-    uvicorn.run(app, host="0.0.0.0", port=PORT, log_level="info")xxxx
+    uvicorn.run(app, host="0.0.0.0", port=PORT, log_level="info")
