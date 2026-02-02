@@ -304,60 +304,205 @@ class TechnicalAnalyzer:
         
         return {"value": round(rsi, 2), "signal": signal}
     
-    @staticmethod
-    def detect_patterns(candles: List[Dict]) -> List[Dict]:
-        """Mum formasyonlarını tespit et"""
-        if len(candles) < 3:
-            return []
-        
-        patterns = []
-        latest = candles[-1]
-        prev = candles[-2]
-        prev2 = candles[-3]
-        
-        # Bullish Engulfing
-        if (prev["close"] < prev["open"] and 
-            latest["close"] > latest["open"] and
-            latest["open"] <= prev["close"] and
-            latest["close"] >= prev["open"]):
-            patterns.append({
-                "name": "Bullish Engulfing",
-                "direction": "bullish",
-                "confidence": 75
-            })
-        
-        # Bearish Engulfing
-        if (prev["close"] > prev["open"] and 
-            latest["close"] < latest["open"] and
-            latest["open"] >= prev["close"] and
-            latest["close"] <= prev["open"]):
-            patterns.append({
-                "name": "Bearish Engulfing",
-                "direction": "bearish",
-                "confidence": 75
-            })
-        
-        # Doji
-        body = abs(latest["close"] - latest["open"])
-        range_ = latest["high"] - latest["low"]
-        if body < range_ * 0.1:
-            patterns.append({
-                "name": "Doji",
-                "direction": "neutral",
-                "confidence": 65
-            })
-        
-        # Hammer
-        if (latest["close"] > latest["open"] and
-            (latest["close"] - latest["low"]) > 2 * body and
-            (latest["high"] - latest["close"]) < body * 0.3):
-            patterns.append({
-                "name": "Hammer",
-                "direction": "bullish",
-                "confidence": 70
-            })
-        
-        return patterns
+  @staticmethod
+def detect_patterns(candles: List[Dict]) -> List[Dict]:
+    """Mum formasyonlarını tespit et"""
+    if len(candles) < 3:
+        return []
+    
+    patterns = []
+    latest = candles[-1]
+    prev = candles[-2]
+    prev2 = candles[-3] if len(candles) >= 3 else None
+    
+    # Helper calculations
+    body_latest = abs(latest["close"] - latest["open"])
+    body_prev = abs(prev["close"] - prev["open"])
+    range_latest = latest["high"] - latest["low"]
+    range_prev = prev["high"] - prev["low"]
+    
+    # Calculate simple support and resistance for custom patterns
+    # Using last 20 candles for simplicity (min low as support, max high as resistance)
+    recent_candles = candles[-20:] if len(candles) >= 20 else candles
+    support = min(c["low"] for c in recent_candles)
+    resistance = max(c["high"] for c in recent_candles)
+    price_tolerance = (resistance - support) * 0.01  # 1% tolerance for "near" support/resistance
+    
+    current_price = latest["close"]
+    near_support = abs(current_price - support) <= price_tolerance
+    near_resistance = abs(current_price - resistance) <= price_tolerance
+    
+    # Custom Bullish Mum Pattern (as per user request)
+    if near_support and current_price > prev["close"] and current_price > prev2["close"]:
+        patterns.append({
+            "name": "Bullish Mum Pattern",
+            "direction": "bullish",
+            "confidence": 80
+        })
+    
+    # Custom Bearish Mum Pattern (as per user request)
+    if near_resistance and current_price < prev["close"] and current_price < prev2["close"]:
+        patterns.append({
+            "name": "Bearish Mum Pattern",
+            "direction": "bearish",
+            "confidence": 80
+        })
+    
+    # Bullish Engulfing
+    if (prev["close"] < prev["open"] and 
+        latest["close"] > latest["open"] and
+        latest["open"] <= prev["close"] and
+        latest["close"] >= prev["open"]):
+        patterns.append({
+            "name": "Bullish Engulfing",
+            "direction": "bullish",
+            "confidence": 75
+        })
+    
+    # Bearish Engulfing
+    if (prev["close"] > prev["open"] and 
+        latest["close"] < latest["open"] and
+        latest["open"] >= prev["close"] and
+        latest["close"] <= prev["open"]):
+        patterns.append({
+            "name": "Bearish Engulfing",
+            "direction": "bearish",
+            "confidence": 75
+        })
+    
+    # Doji
+    if body_latest < range_latest * 0.1:
+        patterns.append({
+            "name": "Doji",
+            "direction": "neutral",
+            "confidence": 65
+        })
+    
+    # Hammer
+    if (latest["close"] > latest["open"] and
+        (latest["close"] - latest["low"]) > 2 * body_latest and
+        (latest["high"] - latest["close"]) < body_latest * 0.3):
+        patterns.append({
+            "name": "Hammer",
+            "direction": "bullish",
+            "confidence": 70
+        })
+    
+    # Inverted Hammer
+    if (latest["close"] > latest["open"] and
+        (latest["high"] - latest["close"]) > 2 * body_latest and
+        (latest["close"] - latest["low"]) < body_latest * 0.3):
+        patterns.append({
+            "name": "Inverted Hammer",
+            "direction": "bullish",
+            "confidence": 70
+        })
+    
+    # Shooting Star
+    if (latest["close"] < latest["open"] and
+        (latest["high"] - latest["open"]) > 2 * body_latest and
+        (latest["open"] - latest["low"]) < body_latest * 0.3):
+        patterns.append({
+            "name": "Shooting Star",
+            "direction": "bearish",
+            "confidence": 70
+        })
+    
+    # Hanging Man
+    if (latest["close"] < latest["open"] and
+        (latest["open"] - latest["low"]) > 2 * body_latest and
+        (latest["high"] - latest["open"]) < body_latest * 0.3):
+        patterns.append({
+            "name": "Hanging Man",
+            "direction": "bearish",
+            "confidence": 70
+        })
+    
+    # Bullish Harami
+    if (prev["close"] < prev["open"] and body_prev > body_latest and
+        latest["open"] > prev["close"] and latest["close"] < prev["open"]):
+        patterns.append({
+            "name": "Bullish Harami",
+            "direction": "bullish",
+            "confidence": 65
+        })
+    
+    # Bearish Harami
+    if (prev["close"] > prev["open"] and body_prev > body_latest and
+        latest["open"] < prev["close"] and latest["close"] > prev["open"]):
+        patterns.append({
+            "name": "Bearish Harami",
+            "direction": "bearish",
+            "confidence": 65
+        })
+    
+    # Morning Star (3-candle pattern)
+    if len(candles) >= 3 and prev2 and (
+        prev2["close"] < prev2["open"] and  # Bearish first
+        body_prev < range_prev * 0.3 and    # Small body second (star)
+        latest["close"] > latest["open"] and latest["close"] > (prev2["open"] + prev2["close"]) / 2):  # Bullish third closing in first body
+        patterns.append({
+            "name": "Morning Star",
+            "direction": "bullish",
+            "confidence": 75
+        })
+    
+    # Evening Star (3-candle pattern)
+    if len(candles) >= 3 and prev2 and (
+        prev2["close"] > prev2["open"] and  # Bullish first
+        body_prev < range_prev * 0.3 and    # Small body second (star)
+        latest["close"] < latest["open"] and latest["close"] < (prev2["open"] + prev2["close"]) / 2):  # Bearish third closing in first body
+        patterns.append({
+            "name": "Evening Star",
+            "direction": "bearish",
+            "confidence": 75
+        })
+    
+    # Three White Soldiers (3-candle bullish)
+    if len(candles) >= 3 and prev2 and (
+        prev2["close"] > prev2["open"] and prev["close"] > prev["open"] and latest["close"] > latest["open"] and
+        prev2["close"] > prev2["open"] * 1.01 and prev["close"] > prev["open"] * 1.01 and latest["close"] > latest["open"] * 1.01):  # Consecutive strong bulls
+        patterns.append({
+            "name": "Three White Soldiers",
+            "direction": "bullish",
+            "confidence": 80
+        })
+    
+    # Three Black Crows (3-candle bearish)
+    if len(candles) >= 3 and prev2 and (
+        prev2["close"] < prev2["open"] and prev["close"] < prev["open"] and latest["close"] < latest["open"] and
+        prev2["close"] < prev2["open"] * 0.99 and prev["close"] < prev["open"] * 0.99 and latest["close"] < latest["open"] * 0.99):  # Consecutive strong bears
+        patterns.append({
+            "name": "Three Black Crows",
+            "direction": "bearish",
+            "confidence": 80
+        })
+    
+    # Spinning Top
+    if body_latest < range_latest * 0.3 and (latest["high"] - max(latest["open"], latest["close"])) > body_latest and (min(latest["open"], latest["close"]) - latest["low"]) > body_latest:
+        patterns.append({
+            "name": "Spinning Top",
+            "direction": "neutral",
+            "confidence": 60
+        })
+    
+    # Bullish Marubozu
+    if latest["close"] > latest["open"] and body_latest > range_latest * 0.95:  # Almost no shadows
+        patterns.append({
+            "name": "Bullish Marubozu",
+            "direction": "bullish",
+            "confidence": 70
+        })
+    
+    # Bearish Marubozu
+    if latest["close"] < latest["open"] and body_latest > range_latest * 0.95:
+        patterns.append({
+            "name": "Bearish Marubozu",
+            "direction": "bearish",
+            "confidence": 70
+        })
+    
+    return patterns
 
 # ==================== GROK INDICATORS PRO ====================
 @dataclass
