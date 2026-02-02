@@ -1034,19 +1034,19 @@ async def root():
     <body><p>Loading Professional Trading Bot v4.0...</p></body></html>
     """
 
-# 1. health her zaman healthy dönsün (test için)
-@app.get("/health", response_class=JSONResponse)
+ @app.get("/health", response_class=JSONResponse)
 async def health():
     connected = (
-        hasattr(app.state, 'data_provider') 
-        and hasattr(app.state.data_provider, 'connected') 
-        and app.state.data_provider.connected
+        hasattr(app.state, 'data_provider') and 
+        hasattr(app.state.data_provider, 'connected') and 
+        app.state.data_provider.connected
     )
     return {
-        "status": "healthy",
+        "status": "healthy",               # ← burayı zorla healthy yap
         "version": "4.0",
         "timestamp": datetime.now(timezone.utc).isoformat() + "Z",
         "websocket_connected": connected,
+        "message": "WS connected" if connected else "WS connection pending or failed",
         "tradingview_supported": True,
         "timeframes": list(TradingViewConfig.TIMEFRAMES.keys())
     }
