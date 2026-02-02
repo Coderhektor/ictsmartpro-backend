@@ -1697,7 +1697,7 @@ async def dashboard():
                 indicatorsHtml += `
                     <div style="margin-top: 1rem; padding-top: 1rem; border-top: 1px solid var(--border);">
                         <div style="font-size: 0.9rem; color: var(--text-muted); margin-bottom: 0.5rem;">
-                            Grok Analysis: ${grok.signal_summary.strength || ''}
+                            BASE AI Analysis: ${grok.signal_summary.strength || ''}
                         </div>
                         <div style="font-size: 0.85rem;">
                             Score: ${grok.signal_summary.score || 0}<br>
