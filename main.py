@@ -1445,37 +1445,20 @@ async def _background_data_updater():
         except Exception as e:
             logger.error(f"Background data updater error: {e}")
             await asyncio.sleep(30)
-
 async def _background_analysis_updater():
-    """Background task to update analysis for major symbols"""
     major_symbols = Config.SYMBOLS['major']
     
     while True:
         try:
-            for symbol in major_symbols[:3]:  # Analyze top 3 symbols
-                # Get latest data
+            for symbol in major_symbols[:3]:
                 candles = await data_manager.fetch_binance_klines(symbol, "1h", 100)
                 if candles and len(candles) >= 50:
-                    # Perform analysis
-                    analysis = AdvancedTechnicalAnalysis.calculate_all_indicators(
-                        candles, symbol, "1h"
-                    )
-                    
-                    if analysis:
-                        # Calculate signal
-                        df = pd.DataFrame(candles)
-                        signal = await trading_engine.calculate_trading_signal(analysis, df)
-                        
-                        # Broadcast to subscribers
-                        await ws_manager.send_to_subscribers(symbol, {
-                            "type": "analysis_update",
-                            "symbol": symbol,
-                            "analysis": analysis,
-                            "signal": signal,
-                            "timestamp": datetime.now(timezone.utc).isoformat()
-                        })
-            
-            await asyncio.sleep(60)  # Update every minute
+                    # ← Burayı geçici olarak yorum satırına al veya basit bir log koy
+                    # analysis = AdvancedTechnicalAnalysis.calculate_all_indicators(...)
+                    logger.info(f"Analysis skipped for {symbol} - class missing")
+                    # df = pd.DataFrame(candles)
+                    # signal = await trading_engine.calculate_trading_signal({}, df)  # boş analysis ile dene
+            await asyncio.sleep(60)
         except Exception as e:
             logger.error(f"Background analysis updater error: {e}")
             await asyncio.sleep(60)
