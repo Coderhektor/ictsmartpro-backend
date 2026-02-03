@@ -1079,7 +1079,8 @@ class EnhancedDataManager:
         data_logger.info("Data Manager closed")
 
 # ==========================================
-# MACHINE LEARNING PREDICTOR
+# ==========================================
+# MACHINE LEARNING PREDICTOR (TA-Lib olmadan)
 # ==========================================
 class MLPredictor:
     """Machine Learning predictor for trading signals using XGBoost"""
@@ -1170,77 +1171,236 @@ class MLPredictor:
         return mapping.get(pred, "HOLD")
     
     def add_indicators(self, data: pd.DataFrame) -> pd.DataFrame:
-        """Add technical indicators"""
+        """Add technical indicators without TA-Lib"""
         df = data.copy()
         
-        # Rename columns if needed
-        if 'adj close' in df.columns.str.lower():
-            df.rename(columns={'Adj Close': 'Close'}, inplace=True)
+        # Ensure we have required columns
+        if 'close' not in df.columns.str.lower():
+            # Try to find close column
+            for col in df.columns:
+                if 'close' in col.lower():
+                    df['Close'] = df[col]
+                    break
         
-        # RSI
+        # Ensure Close column exists
+        if 'Close' not in df.columns:
+            logger.warning("No Close column found for indicators")
+            return df
+        
+        # RSI (Relative Strength Index)
+        def calculate_rsi(prices, period=14):
+            delta = prices.diff()
+            gain = (delta.where(delta > 0, 0)).rolling(window=period).mean()
+            loss = (-delta.where(delta < 0, 0)).rolling(window=period).mean()
+            rs = gain / loss
+            return 100 - (100 / (1 + rs))
+        
         for length in [5, 10, 15]:
-            df[f"rsi_{length}"] = pd.Series(ta.rsi(df["Close"], length=length))
+            df[f"rsi_{length}"] = calculate_rsi(df["Close"], length)
         
-        # ROC and MOM
-        df["roc_10"] = ta.roc(df["Close"], length=10)
-        df["mom_10"] = ta.mom(df["Close"], length=10)
+        # Rate of Change (ROC)
+        def calculate_roc(prices, period=10):
+            return (prices / prices.shift(period) - 1) * 100
         
-        # STOCHRSI
-        stochrsi = ta.stochrsi(df["Close"])
-        df = pd.concat([df, stochrsi], axis=1)
+        df["roc_10"] = calculate_roc(df["Close"], 10)
         
-        # CCI
-        df["cci_20"] = ta.cci(df["High"], df["Low"], df["Close"], length=20)
+        # Momentum
+        def calculate_mom(prices, period=10):
+            return prices - prices.shift(period)
         
-        # Williams R
-        df["wr_14"] = ta.willr(df["High"], df["Low"], df["Close"], length=14)
+        df["mom_10"] = calculate_mom(df["Close"], 10)
         
-        # KST
-        kst = ta.kst(df["Close"])
-        df = pd.concat([df, kst], axis=1)
+        # Stochastic RSI (simplified)
+        def calculate_stoch_rsi(prices, period=14):
+            rsi = calculate_rsi(prices, period)
+            lowest = rsi.rolling(window=period).min()
+            highest = rsi.rolling(window=period).max()
+            return ((rsi - lowest) / (highest - lowest)) * 100
+        
+        df["stochrsi_k"] = calculate_stoch_rsi(df["Close"], 14)
+        df["stochrsi_d"] = df["stochrsi_k"].rolling(window=3).mean()
+        
+        # CCI (Commodity Channel Index)
+        def calculate_cci(high, low, close, period=20):
+            tp = (high + low + close) / 3
+            sma_tp = tp.rolling(window=period).mean()
+            mad = tp.rolling(window=period).apply(lambda x: np.mean(np.abs(x - np.mean(x))))
+            return (tp - sma_tp) / (0.015 * mad)
+        
+        if 'High' in df.columns and 'Low' in df.columns:
+            df["cci_20"] = calculate_cci(df["High"], df["Low"], df["Close"], 20)
+        
+        # Williams %R
+        def calculate_williams_r(high, low, close, period=14):
+            highest_high = high.rolling(window=period).max()
+            lowest_low = low.rolling(window=period).min()
+            return ((highest_high - close) / (highest_high - lowest_low)) * -100
+        
+        if 'High' in df.columns and 'Low' in df.columns:
+            df["wr_14"] = calculate_williams_r(df["High"], df["Low"], df["Close"], 14)
         
         # MACD
-        macd = ta.macd(df["Close"])["MACD_12_26_9"]
-        df["macd"] = macd
+        def calculate_macd(prices, fast=12, slow=26, signal=9):
+            ema_fast = prices.ewm(span=fast).mean()
+            ema_slow = prices.ewm(span=slow).mean()
+            macd_line = ema_fast - ema_slow
+            signal_line = macd_line.ewm(span=signal).mean()
+            histogram = macd_line - signal_line
+            return macd_line, signal_line, histogram
         
-        # SMA and EMA
-        for length in [5, 10, 20]:
-            df[f"sma_{length}"] = ta.sma(df["Close"], length=length)
-            df[f"ema_{length}"] = ta.ema(df["Close"], length=length)
+        macd_line, signal_line, histogram = calculate_macd(df["Close"], 12, 26, 9)
+        df["macd_line"] = macd_line
+        df["macd_signal"] = signal_line
+        df["macd_histogram"] = histogram
         
-        # VWMA
-        df["vwma_20"] = ta.vwma(df["Close"], df["Volume"], length=20)
+        # Simple Moving Averages
+        for length in [5, 10, 20, 50, 200]:
+            if len(df) >= length:
+                df[f"sma_{length}"] = df["Close"].rolling(window=length).mean()
         
-        # BBANDS
-        bbands = ta.bbands(df["Close"], length=20)
-        df = pd.concat([df, bbands], axis=1)
+        # Exponential Moving Averages
+        for length in [5, 10, 20, 50]:
+            if len(df) >= length:
+                df[f"ema_{length}"] = df["Close"].ewm(span=length).mean()
         
-        # ATR
-        df["atr_14"] = ta.atr(df["High"], df["Low"], df["Close"], length=14)
+        # Volume Weighted Moving Average
+        def calculate_vwma(close, volume, period=20):
+            vw = (close * volume).rolling(window=period).sum()
+            v = volume.rolling(window=period).sum()
+            return vw / v
         
-        # KC
-        kc = ta.kc(df["High"], df["Low"], df["Close"], length=20)
-        df = pd.concat([df, kc], axis=1)
+        if 'Volume' in df.columns:
+            df["vwma_20"] = calculate_vwma(df["Close"], df["Volume"], 20)
         
-        # OBV
-        df["obv"] = ta.obv(df["Close"], df["Volume"])
+        # Bollinger Bands
+        def calculate_bollinger_bands(prices, period=20, std_dev=2):
+            sma = prices.rolling(window=period).mean()
+            std = prices.rolling(window=period).std()
+            upper = sma + (std * std_dev)
+            lower = sma - (std * std_dev)
+            return upper, sma, lower
         
-        # AD
-        df["ad"] = ta.ad(df["High"], df["Low"], df["Close"], df["Volume"])
+        bb_upper, bb_middle, bb_lower = calculate_bollinger_bands(df["Close"], 20, 2)
+        df["bb_upper"] = bb_upper
+        df["bb_middle"] = bb_middle
+        df["bb_lower"] = bb_lower
+        df["bb_width"] = (bb_upper - bb_lower) / bb_middle
+        df["bb_position"] = (df["Close"] - bb_lower) / (bb_upper - bb_lower)
         
-        # EFI
-        df["efi"] = ta.efi(df["Close"], df["Volume"])
+        # Average True Range (ATR)
+        def calculate_atr(high, low, close, period=14):
+            tr1 = high - low
+            tr2 = abs(high - close.shift())
+            tr3 = abs(low - close.shift())
+            tr = pd.concat([tr1, tr2, tr3], axis=1).max(axis=1)
+            return tr.rolling(window=period).mean()
         
-        # NVI
-        df["nvi"] = ta.nvi(df["Close"], df["Volume"])
+        if 'High' in df.columns and 'Low' in df.columns:
+            df["atr_14"] = calculate_atr(df["High"], df["Low"], df["Close"], 14)
         
-        # PVI
-        df["pvi"] = ta.pvi(df["Close"], df["Volume"])
+        # Keltner Channels
+        def calculate_keltner_channels(high, low, close, period=20, atr_mult=2):
+            middle = close.ewm(span=period).mean()
+            atr = calculate_atr(high, low, close, period)
+            upper = middle + (atr * atr_mult)
+            lower = middle - (atr * atr_mult)
+            return upper, middle, lower
+        
+        if 'High' in df.columns and 'Low' in df.columns:
+            kc_upper, kc_middle, kc_lower = calculate_keltner_channels(
+                df["High"], df["Low"], df["Close"], 20, 2
+            )
+            df["kc_upper"] = kc_upper
+            df["kc_middle"] = kc_middle
+            df["kc_lower"] = kc_lower
+        
+        # On-Balance Volume (OBV)
+        def calculate_obv(close, volume):
+            obv = pd.Series(0, index=close.index)
+            for i in range(1, len(close)):
+                if close.iloc[i] > close.iloc[i-1]:
+                    obv.iloc[i] = obv.iloc[i-1] + volume.iloc[i]
+                elif close.iloc[i] < close.iloc[i-1]:
+                    obv.iloc[i] = obv.iloc[i-1] - volume.iloc[i]
+                else:
+                    obv.iloc[i] = obv.iloc[i-1]
+            return obv
+        
+        if 'Volume' in df.columns:
+            df["obv"] = calculate_obv(df["Close"], df["Volume"])
+        
+        # Accumulation/Distribution Line
+        def calculate_ad_line(high, low, close, volume):
+            clv = ((close - low) - (high - close)) / (high - low)
+            clv = clv.replace([np.inf, -np.inf], 0)
+            return (clv * volume).cumsum()
+        
+        if 'High' in df.columns and 'Low' in df.columns and 'Volume' in df.columns:
+            df["ad_line"] = calculate_ad_line(df["High"], df["Low"], df["Close"], df["Volume"])
+        
+        # Elder's Force Index
+        def calculate_efi(close, volume, period=13):
+            force = (close - close.shift(1)) * volume
+            return force.ewm(span=period).mean()
+        
+        if 'Volume' in df.columns:
+            df["efi"] = calculate_efi(df["Close"], df["Volume"], 13)
+        
+        # Negative Volume Index (NVI)
+        def calculate_nvi(close, volume):
+            pct_change = close.pct_change()
+            nvi = pd.Series(1000, index=close.index)  # Start with 1000
+            for i in range(1, len(close)):
+                if volume.iloc[i] < volume.iloc[i-1]:
+                    nvi.iloc[i] = nvi.iloc[i-1] * (1 + pct_change.iloc[i])
+                else:
+                    nvi.iloc[i] = nvi.iloc[i-1]
+            return nvi
+        
+        if 'Volume' in df.columns:
+            df["nvi"] = calculate_nvi(df["Close"], df["Volume"])
+        
+        # Positive Volume Index (PVI)
+        def calculate_pvi(close, volume):
+            pct_change = close.pct_change()
+            pvi = pd.Series(1000, index=close.index)  # Start with 1000
+            for i in range(1, len(close)):
+                if volume.iloc[i] > volume.iloc[i-1]:
+                    pvi.iloc[i] = pvi.iloc[i-1] * (1 + pct_change.iloc[i])
+                else:
+                    pvi.iloc[i] = pvi.iloc[i-1]
+            return pvi
+        
+        if 'Volume' in df.columns:
+            df["pvi"] = calculate_pvi(df["Close"], df["Volume"])
+        
+        # Price velocity (rate of change of price)
+        df["price_velocity_5"] = df["Close"].pct_change(5)
+        df["price_velocity_10"] = df["Close"].pct_change(10)
+        df["price_velocity_20"] = df["Close"].pct_change(20)
+        
+        # Volume ratio
+        if 'Volume' in df.columns:
+            df["volume_ratio_5"] = df["Volume"] / df["Volume"].rolling(window=5).mean()
+            df["volume_ratio_10"] = df["Volume"] / df["Volume"].rolling(window=10).mean()
+        
+        # Price position within recent range
+        if 'High' in df.columns and 'Low' in df.columns:
+            df["price_position"] = (df["Close"] - df["Low"].rolling(window=20).min()) / \
+                                   (df["High"].rolling(window=20).max() - df["Low"].rolling(window=20).min())
+        
+        # Volatility indicators
+        df["volatility_5"] = df["Close"].rolling(window=5).std() / df["Close"].rolling(window=5).mean()
+        df["volatility_10"] = df["Close"].rolling(window=10).std() / df["Close"].rolling(window=10).mean()
+        df["volatility_20"] = df["Close"].rolling(window=20).std() / df["Close"].rolling(window=20).mean()
         
         return df
     
     def generate_label(self, data: pd.DataFrame, lookahead: int = 5, thresh: float = 0.01, col: str = "Close") -> pd.Series:
-        """Generate labels"""
+        """Generate labels for ML training"""
+        if col not in data.columns:
+            col = 'Close' if 'Close' in data.columns else data.columns[0]
+        
         future_mean = (
             data[col]
             .shift(-lookahead)
@@ -1673,20 +1833,30 @@ async def _background_data_updater():
         except Exception as e:
             logger.error(f"Background data updater error: {e}")
             await asyncio.sleep(30)
-async def _background_analysis_updater():
+ async def _background_analysis_updater():
+    """Background task to update analysis for major symbols"""
     major_symbols = Config.SYMBOLS['major']
     
     while True:
         try:
-            for symbol in major_symbols[:3]:
+            for symbol in major_symbols[:3]:  # Only first 3 symbols
                 candles = await data_manager.fetch_binance_klines(symbol, "1h", 100)
                 if candles and len(candles) >= 50:
-                    # ← Burayı geçici olarak yorum satırına al veya basit bir log koy
-                    # analysis = AdvancedTechnicalAnalysis.calculate_all_indicators(...)
-                    logger.info(f"Analysis skipped for {symbol} - class missing")
-                    # df = pd.DataFrame(candles)
-                    # signal = await trading_engine.calculate_trading_signal({}, df)  # boş analysis ile dene
-            await asyncio.sleep(60)
+                    # Perform analysis
+                    analysis = AdvancedTechnicalAnalysis.calculate_all_indicators(candles, symbol, "1h")
+                    
+                    if analysis:
+                        df = pd.DataFrame(candles)
+                        # Get trading signal
+                        signal = await trading_engine.calculate_trading_signal(analysis, df)
+                        
+                        # Log the signal
+                        logger.info(f"Signal for {symbol}: {signal['signal']} with {signal['confidence']}% confidence")
+                    
+                await asyncio.sleep(2)  # Small delay between symbols
+            
+            await asyncio.sleep(60)  # Wait 1 minute before next update
+            
         except Exception as e:
             logger.error(f"Background analysis updater error: {e}")
             await asyncio.sleep(60)
