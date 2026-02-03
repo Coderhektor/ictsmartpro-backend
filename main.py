@@ -21,7 +21,7 @@ import psutil
 from sklearn.model_selection import train_test_split
 from sklearn.preprocessing import StandardScaler
 from xgboost import XGBClassifier
-
+from fastapi import FastAPI
 # ==========================================
 # ENHANCED CONFIGURATION
 # ==========================================
