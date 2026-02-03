@@ -1,15 +1,17 @@
-fastapi==0.109.0        # API core
-uvicorn==0.27.0         # ASGI server
-pandas==2.2.0           # data handling
-numpy==1.26.4           # math
-httpx==0.26.0           # async HTTP (Binance, CoinGecko)
-python-dotenv==1.0.0    # env config
-slowapi==0.1.9          # rate limit
-pydantic==2.6.0         # schema
-websockets==12.0        # realtime
-aiohttp==3.9.1          # async requests
-scipy==1.11.4           # indicators
-python-multipart==0.0.6 # form upload
-jinja2==3.1.3           # TradingView template
-redis>=4.5.0
-scikit-learn>=1.3.0
+# Core Packages
+fastapi>=0.104.1
+uvicorn>=0.24.0
+aiohttp>=3.9.1
+websockets>=12.0
+
+# Data & ML Packages
+pandas>=2.1.3
+numpy>=1.24.3
+scikit-learn>=1.3.2  # sklearn'in resmi adı bu
+scipy>=1.11.4
+
+# Optional/Cache (eğer kodda kullanıyorsanız)
+redis>=5.0.1
+
+# Pydantic
+pydantic>=2.5.0
