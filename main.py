@@ -18,6 +18,9 @@ from collections import defaultdict, deque
 import hashlib
 from enum import Enum
 import psutil
+from sklearn.model_selection import train_test_split
+from sklearn.preprocessing import StandardScaler
+from xgboost import XGBClassifier
 
 # ==========================================
 # ENHANCED CONFIGURATION
@@ -93,6 +96,15 @@ class Config:
             'obv': True,
             'vwap': True
         }
+    }
+    
+    # ML Configuration
+    ML_CONFIG = {
+        'retrain_interval': 3600,  # 1 hour
+        'min_data_points': 200,
+        'lookback_periods': 100,
+        'lookahead': 5,
+        'threshold': 0.01
     }
 
 # ==========================================
@@ -839,577 +851,183 @@ class EnhancedDataManager:
         data_logger.info("Data Manager closed")
 
 # ==========================================
-# ADVANCED TECHNICAL ANALYSIS ENGINE
+# MACHINE LEARNING PREDICTOR
 # ==========================================
-class AdvancedTechnicalAnalysis:
-    """Advanced technical analysis with multiple indicators and validation"""
+class MLPredictor:
+    """Machine Learning predictor for trading signals using XGBoost"""
     
-    @staticmethod
-    def validate_data(candles: List[Dict]) -> bool:
-        """Validate candle data"""
-        if not candles or len(candles) < 50:
-            return False
-        
-        # Check for NaN or infinite values
-        for candle in candles[-50:]:
-            for key in ['open', 'high', 'low', 'close', 'volume']:
-                value = candle.get(key, 0)
-                if not (isinstance(value, (int, float)) and np.isfinite(value)):
-                    return False
-        
-        return True
+    def __init__(self):
+        self.models = {}
+        self.scalers = {}
+        self.last_train_time = {}
+        self.feature_cols = None
     
-    @staticmethod
-    def calculate_all_indicators(candles: List[Dict], symbol: str, timeframe: str) -> Dict:
-        """Calculate all technical indicators with validation"""
-        try:
-            if not AdvancedTechnicalAnalysis.validate_data(candles):
-                analysis_logger.warning(f"Invalid data for {symbol} {timeframe}")
-                return {}
-            
-            # Extract data arrays
-            closes = np.array([c["close"] for c in candles], dtype=np.float64)
-            opens = np.array([c["open"] for c in candles], dtype=np.float64)
-            highs = np.array([c["high"] for c in candles], dtype=np.float64)
-            lows = np.array([c["low"] for c in candles], dtype=np.float64)
-            volumes = np.array([c.get("volume", 0) for c in candles], dtype=np.float64)
-            
-            current_price = closes[-1]
-            
-            # Calculate indicators
-            indicators = {}
-            
-            # Moving Averages
-            for period in Config.TA_CONFIG['indicators']['sma']:
-                indicators[f'sma_{period}'] = AdvancedTechnicalAnalysis.sma(closes, period)
-            
-            for period in Config.TA_CONFIG['indicators']['ema']:
-                indicators[f'ema_{period}'] = AdvancedTechnicalAnalysis.ema(closes, period)
-            
-            # Momentum Indicators
-            rsi_period = Config.TA_CONFIG['indicators']['rsi']
-            indicators['rsi'] = AdvancedTechnicalAnalysis.rsi(closes, rsi_period)
-            
-            macd_fast, macd_slow, macd_signal = Config.TA_CONFIG['indicators']['macd']
-            macd_line, signal_line, histogram = AdvancedTechnicalAnalysis.macd(
-                closes, macd_fast, macd_slow, macd_signal
-            )
-            indicators['macd'] = macd_line
-            indicators['macd_signal'] = signal_line
-            indicators['macd_histogram'] = histogram
-            
-            # Stochastic
-            stoch_k, stoch_d = AdvancedTechnicalAnalysis.stochastic(
-                highs, lows, closes, Config.TA_CONFIG['indicators']['stochastic'][0], Config.TA_CONFIG['indicators']['stochastic'][1]
-            )
-            indicators['stochastic_k'] = stoch_k
-            indicators['stochastic_d'] = stoch_d
-            
-            # Volatility Indicators
-            bb_period = Config.TA_CONFIG['indicators']['bb']
-            bb_upper, bb_middle, bb_lower = AdvancedTechnicalAnalysis.bollinger_bands(closes, bb_period)
-            indicators['bb_upper'] = bb_upper
-            indicators['bb_middle'] = bb_middle
-            indicators['bb_lower'] = bb_lower
-            
-            atr_period = Config.TA_CONFIG['indicators']['atr']
-            indicators['atr'] = AdvancedTechnicalAnalysis.atr(highs, lows, closes, atr_period)
-            
-            # Volume Indicators
-            if Config.TA_CONFIG['indicators']['obv']:
-                indicators['obv'] = AdvancedTechnicalAnalysis.obv(closes, volumes)
-            
-            if Config.TA_CONFIG['indicators']['vwap']:
-                indicators['vwap'] = AdvancedTechnicalAnalysis.vwap(highs, lows, closes, volumes)
-            
-            # Additional Indicators
-            indicators['adx'] = AdvancedTechnicalAnalysis.adx(highs, lows, closes, 14)
-            indicators['cci'] = AdvancedTechnicalAnalysis.cci(highs, lows, closes, 20)
-            indicators['mfi'] = AdvancedTechnicalAnalysis.mfi(highs, lows, closes, volumes, 14)
-            
-            # Prepare result
-            result = {
-                "symbol": symbol,
-                "timeframe": timeframe,
-                "current_price": float(current_price),
-                "timestamp": datetime.now(timezone.utc).isoformat(),
-                "indicators": {},
-                "signals": {},
-                "trend": {},
-                "patterns": []
-            }
-            
-            # Extract latest values
-            for key, values in indicators.items():
-                if values is not None and len(values) > 0:
-                    result["indicators"][key] = float(values[-1])
-            
-            # Generate signals
-            result["signals"] = AdvancedTechnicalAnalysis.generate_signals(result["indicators"], current_price)
-            
-            # Trend analysis
-            result["trend"] = AdvancedTechnicalAnalysis.analyze_trend(closes, result["indicators"])
-            
-            # Pattern detection
-            result["patterns"] = AdvancedTechnicalAnalysis.detect_patterns(opens, highs, lows, closes)
-            
-            analysis_logger.debug(f"Analysis complete for {symbol} {timeframe}")
-            return result
-            
-        except Exception as e:
-            analysis_logger.error(f"Error in technical analysis: {e}")
-            return {}
+    async def train(self, symbol: str, df: pd.DataFrame):
+        """Train ML model"""
+        if len(df) < Config.ML_CONFIG['min_data_points']:
+            return
+        
+        # Add indicators
+        df_ta = self.add_indicators(df)
+        
+        # Generate labels
+        lookahead = Config.ML_CONFIG['lookahead']
+        thresh = Config.ML_CONFIG['threshold']
+        labels = self.generate_label(df_ta, lookahead, thresh)
+        
+        df_ta['label'] = labels
+        
+        # Drop NaN
+        df_ta.dropna(inplace=True)
+        
+        # Features
+        feature_cols = [c for c in df_ta.columns if c not in ["Open","High","Low","Close","Adj Close","Volume","label"]]
+        self.feature_cols = feature_cols
+        
+        X = df_ta[feature_cols]
+        y = df_ta['label']
+        
+        if len(X) < 100:
+            return
+        
+        # Split
+        X_train, X_test, y_train, y_test = train_test_split(X, y, test_size=0.2, random_state=42)
+        
+        # Scale
+        scaler = StandardScaler().fit(X_train)
+        X_train_scaled = scaler.transform(X_train)
+        X_test_scaled = scaler.transform(X_test)
+        
+        # Model
+        model = XGBClassifier(
+            n_estimators=300,
+            max_depth=6,
+            learning_rate=0.05,
+            subsample=0.9,
+            colsample_bytree=0.8,
+            objective='multi:softprob',
+            num_class=3,
+            n_jobs=-1,
+            eval_metric='mlogloss',
+            random_state=42
+        )
+        
+        model.fit(X_train_scaled, y_train)
+        
+        self.models[symbol] = model
+        self.scalers[symbol] = scaler
+        self.last_train_time[symbol] = time.time()
     
-    # Indicator calculation methods (similar to before but enhanced)
-    @staticmethod
-    def sma(prices: np.ndarray, period: int) -> np.ndarray:
-        if len(prices) < period:
-            return np.array([])
-        return np.convolve(prices, np.ones(period)/period, mode='valid')
+    async def predict(self, symbol: str, df: pd.DataFrame) -> str:
+        """Predict using ML model"""
+        if symbol not in self.models or time.time() - self.last_train_time.get(symbol, 0) > Config.ML_CONFIG['retrain_interval']:
+            await self.train(symbol, df)
+        
+        if symbol not in self.models:
+            return "HOLD"
+        
+        # Add indicators to latest data
+        df_ta = self.add_indicators(df.iloc[-100:])  # Use last 100 for indicators
+        
+        # Features
+        X = df_ta[self.feature_cols].iloc[-1:]  # Latest row
+        
+        # Scale
+        X_scaled = self.scalers[symbol].transform(X)
+        
+        # Predict
+        pred = self.models[symbol].predict(X_scaled)[0]
+        
+        mapping = {0: "HOLD", 1: "SELL", 2: "BUY"}
+        return mapping.get(pred, "HOLD")
     
-    @staticmethod
-    def ema(prices: np.ndarray, period: int) -> np.ndarray:
-        if len(prices) < period:
-            return np.array([])
-        alpha = 2 / (period + 1)
-        ema_values = np.zeros_like(prices)
-        ema_values[0] = prices[0]
-        for i in range(1, len(prices)):
-            ema_values[i] = alpha * prices[i] + (1 - alpha) * ema_values[i-1]
-        return ema_values
+    def add_indicators(self, data: pd.DataFrame) -> pd.DataFrame:
+        """Add technical indicators"""
+        df = data.copy()
+        
+        # Rename columns if needed
+        if 'adj close' in df.columns.str.lower():
+            df.rename(columns={'Adj Close': 'Close'}, inplace=True)
+        
+        # RSI
+        for length in [5, 10, 15]:
+            df[f"rsi_{length}"] = pd.Series(ta.rsi(df["Close"], length=length))
+        
+        # ROC and MOM
+        df["roc_10"] = ta.roc(df["Close"], length=10)
+        df["mom_10"] = ta.mom(df["Close"], length=10)
+        
+        # STOCHRSI
+        stochrsi = ta.stochrsi(df["Close"])
+        df = pd.concat([df, stochrsi], axis=1)
+        
+        # CCI
+        df["cci_20"] = ta.cci(df["High"], df["Low"], df["Close"], length=20)
+        
+        # Williams R
+        df["wr_14"] = ta.willr(df["High"], df["Low"], df["Close"], length=14)
+        
+        # KST
+        kst = ta.kst(df["Close"])
+        df = pd.concat([df, kst], axis=1)
+        
+        # MACD
+        macd = ta.macd(df["Close"])["MACD_12_26_9"]
+        df["macd"] = macd
+        
+        # SMA and EMA
+        for length in [5, 10, 20]:
+            df[f"sma_{length}"] = ta.sma(df["Close"], length=length)
+            df[f"ema_{length}"] = ta.ema(df["Close"], length=length)
+        
+        # VWMA
+        df["vwma_20"] = ta.vwma(df["Close"], df["Volume"], length=20)
+        
+        # BBANDS
+        bbands = ta.bbands(df["Close"], length=20)
+        df = pd.concat([df, bbands], axis=1)
+        
+        # ATR
+        df["atr_14"] = ta.atr(df["High"], df["Low"], df["Close"], length=14)
+        
+        # KC
+        kc = ta.kc(df["High"], df["Low"], df["Close"], length=20)
+        df = pd.concat([df, kc], axis=1)
+        
+        # OBV
+        df["obv"] = ta.obv(df["Close"], df["Volume"])
+        
+        # AD
+        df["ad"] = ta.ad(df["High"], df["Low"], df["Close"], df["Volume"])
+        
+        # EFI
+        df["efi"] = ta.efi(df["Close"], df["Volume"])
+        
+        # NVI
+        df["nvi"] = ta.nvi(df["Close"], df["Volume"])
+        
+        # PVI
+        df["pvi"] = ta.pvi(df["Close"], df["Volume"])
+        
+        return df
     
-    @staticmethod
-    def rsi(prices: np.ndarray, period: int = 14) -> np.ndarray:
-        if len(prices) < period + 1:
-            return np.array([])
+    def generate_label(self, data: pd.DataFrame, lookahead: int = 5, thresh: float = 0.01, col: str = "Close") -> pd.Series:
+        """Generate labels"""
+        future_mean = (
+            data[col]
+            .shift(-lookahead)
+            .rolling(window=lookahead, min_periods=lookahead)
+            .mean()
+        )
+        pct_change = (future_mean - data[col]) / data[col]
         
-        deltas = np.diff(prices)
-        seed = deltas[:period+1]
-        up = seed[seed >= 0].sum() / period
-        down = -seed[seed < 0].sum() / period
-        rs = up / down if down != 0 else 0
-        rsi = np.zeros_like(prices)
-        rsi[:period] = 100.0 - 100.0 / (1.0 + rs)
+        labels = np.select(
+            [pct_change >= thresh, pct_change <= -thresh],
+            [2, 1],
+            default=0
+        )
         
-        for i in range(period, len(prices)):
-            delta = deltas[i-1]
-            if delta > 0:
-                upval = delta
-                downval = 0.0
-            else:
-                upval = 0.0
-                downval = -delta
-            
-            up = (up * (period - 1) + upval) / period
-            down = (down * (period - 1) + downval) / period
-            rs = up / down if down != 0 else 0
-            rsi[i] = 100.0 - 100.0 / (1.0 + rs)
-        
-        return rsi
-    
-    @staticmethod
-    def macd(prices: np.ndarray, fast: int = 12, slow: int = 26, signal: int = 9) -> tuple:
-        if len(prices) < slow:
-            return np.array([]), np.array([]), np.array([])
-        
-        ema_fast = AdvancedTechnicalAnalysis.ema(prices, fast)
-        ema_slow = AdvancedTechnicalAnalysis.ema(prices, slow)
-        
-        # Align lengths
-        min_len = min(len(ema_fast), len(ema_slow))
-        ema_fast = ema_fast[-min_len:]
-        ema_slow = ema_slow[-min_len:]
-        
-        macd_line = ema_fast - ema_slow
-        signal_line = AdvancedTechnicalAnalysis.ema(macd_line, signal)
-        histogram = macd_line - signal_line
-        
-        return macd_line, signal_line, histogram
-    
-    @staticmethod
-    def bollinger_bands(prices: np.ndarray, period: int = 20, std_dev: int = 2) -> tuple:
-        if len(prices) < period:
-            return np.array([]), np.array([]), np.array([])
-        
-        sma = AdvancedTechnicalAnalysis.sma(prices, period)
-        rolling_std = np.array([np.std(prices[i-period+1:i+1]) for i in range(period-1, len(prices))])
-        
-        upper_band = sma + (rolling_std * std_dev)
-        lower_band = sma - (rolling_std * std_dev)
-        
-        return upper_band, sma, lower_band
-    
-    @staticmethod
-    def stochastic(highs: np.ndarray, lows: np.ndarray, closes: np.ndarray, 
-                  k_period: int = 14, d_period: int = 3) -> tuple:
-        if len(closes) < k_period:
-            return np.array([]), np.array([])
-        
-        k_values = []
-        for i in range(k_period-1, len(closes)):
-            high_window = highs[i-k_period+1:i+1]
-            low_window = lows[i-k_period+1:i+1]
-            close = closes[i]
-            
-            highest_high = np.max(high_window)
-            lowest_low = np.min(low_window)
-            
-            if highest_high != lowest_low:
-                k = 100 * (close - lowest_low) / (highest_high - lowest_low)
-            else:
-                k = 50
-            k_values.append(k)
-        
-        k_line = np.array(k_values)
-        d_line = AdvancedTechnicalAnalysis.sma(k_line, d_period)
-        
-        return k_line, d_line
-    
-    @staticmethod
-    def atr(highs: np.ndarray, lows: np.ndarray, closes: np.ndarray, period: int = 14) -> np.ndarray:
-        if len(closes) < period + 1:
-            return np.array([])
-        
-        tr = np.zeros(len(closes))
-        tr[0] = highs[0] - lows[0]
-        
-        for i in range(1, len(closes)):
-            hl = highs[i] - lows[i]
-            hc = abs(highs[i] - closes[i-1])
-            lc = abs(lows[i] - closes[i-1])
-            tr[i] = max(hl, hc, lc)
-        
-        atr_values = np.zeros_like(closes)
-        atr_values[period-1] = np.mean(tr[:period])
-        
-        for i in range(period, len(closes)):
-            atr_values[i] = (atr_values[i-1] * (period - 1) + tr[i]) / period
-        
-        return atr_values
-    
-    @staticmethod
-    def obv(closes: np.ndarray, volumes: np.ndarray) -> np.ndarray:
-        if len(closes) < 2:
-            return np.array([])
-        
-        obv_values = np.zeros_like(closes)
-        obv_values[0] = volumes[0]
-        
-        for i in range(1, len(closes)):
-            if closes[i] > closes[i-1]:
-                obv_values[i] = obv_values[i-1] + volumes[i]
-            elif closes[i] < closes[i-1]:
-                obv_values[i] = obv_values[i-1] - volumes[i]
-            else:
-                obv_values[i] = obv_values[i-1]
-        
-        return obv_values
-    
-    @staticmethod
-    def vwap(highs: np.ndarray, lows: np.ndarray, closes: np.ndarray, volumes: np.ndarray) -> np.ndarray:
-        if len(closes) < 1:
-            return np.array([])
-        
-        typical_price = (highs + lows + closes) / 3
-        vwap_values = np.zeros_like(closes)
-        cumulative_tp_volume = 0
-        cumulative_volume = 0
-        
-        for i in range(len(closes)):
-            cumulative_tp_volume += typical_price[i] * volumes[i]
-            cumulative_volume += volumes[i]
-            vwap_values[i] = cumulative_tp_volume / cumulative_volume if cumulative_volume > 0 else 0
-        
-        return vwap_values
-    
-    @staticmethod
-    def adx(highs: np.ndarray, lows: np.ndarray, closes: np.ndarray, period: int = 14) -> np.ndarray:
-        if len(closes) < period * 2:
-            return np.array([])
-        
-        # Simplified ADX calculation
-        # For full implementation, use TA-Lib or detailed formula
-        return np.full(len(closes), 25.0)  # Placeholder for now
-    
-    @staticmethod
-    def cci(highs: np.ndarray, lows: np.ndarray, closes: np.ndarray, period: int = 20) -> np.ndarray:
-        if len(closes) < period:
-            return np.array([])
-        
-        tp = (highs + lows + closes) / 3
-        cci_values = np.zeros_like(closes)
-        
-        for i in range(period-1, len(closes)):
-            sma_tp = np.mean(tp[i-period+1:i+1])
-            mean_dev = np.mean(np.abs(tp[i-period+1:i+1] - sma_tp))
-            cci_values[i] = (tp[i] - sma_tp) / (0.015 * mean_dev) if mean_dev != 0 else 0
-        
-        return cci_values
-    
-    @staticmethod
-    def mfi(highs: np.ndarray, lows: np.ndarray, closes: np.ndarray, volumes: np.ndarray, period: int = 14) -> np.ndarray:
-        if len(closes) < period:
-            return np.array([])
-        
-        tp = (highs + lows + closes) / 3
-        mfi_values = np.zeros_like(closes)
-        
-        for i in range(period-1, len(closes)):
-            positive_flow = 0
-            negative_flow = 0
-            
-            for j in range(i-period+1, i+1):
-                if tp[j] > tp[j-1]:
-                    positive_flow += tp[j] * volumes[j]
-                elif tp[j] < tp[j-1]:
-                    negative_flow += tp[j] * volumes[j]
-            
-            if negative_flow == 0:
-                mfi_values[i] = 100
-            else:
-                money_ratio = positive_flow / negative_flow
-                mfi_values[i] = 100 - (100 / (1 + money_ratio))
-        
-        return mfi_values
-    
-    @staticmethod
-    def generate_signals(indicators: Dict, current_price: float) -> Dict:
-        """Generate trading signals from indicators"""
-        signals = {
-            "overall": "NEUTRAL",
-            "confidence": 50,
-            "entries": [],
-            "exits": []
-        }
-        
-        try:
-            score = 50
-            
-            # RSI Signal
-            rsi = indicators.get('rsi', 50)
-            if rsi < 30:
-                score += 20
-                signals["entries"].append({"indicator": "RSI", "signal": "OVERSOLD", "strength": "STRONG"})
-            elif rsi > 70:
-                score -= 20
-                signals["exits"].append({"indicator": "RSI", "signal": "OVERBOUGHT", "strength": "STRONG"})
-            elif rsi < 40:
-                score += 10
-                signals["entries"].append({"indicator": "RSI", "signal": "BULLISH", "strength": "WEAK"})
-            elif rsi > 60:
-                score -= 10
-                signals["exits"].append({"indicator": "RSI", "signal": "BEARISH", "strength": "WEAK"})
-            
-            # MACD Signal
-            macd = indicators.get('macd', 0)
-            macd_signal = indicators.get('macd_signal', 0)
-            if macd > macd_signal:
-                score += 15
-                signals["entries"].append({"indicator": "MACD", "signal": "BULLISH", "strength": "MEDIUM"})
-            else:
-                score -= 15
-                signals["exits"].append({"indicator": "MACD", "signal": "BEARISH", "strength": "MEDIUM"})
-            
-            # Bollinger Bands Signal
-            bb_upper = indicators.get('bb_upper', current_price)
-            bb_lower = indicators.get('bb_lower', current_price)
-            if current_price < bb_lower:
-                score += 15
-                signals["entries"].append({"indicator": "BB", "signal": "OVERSOLD", "strength": "STRONG"})
-            elif current_price > bb_upper:
-                score -= 15
-                signals["exits"].append({"indicator": "BB", "signal": "OVERBOUGHT", "strength": "STRONG"})
-            
-            # Stochastic Signal
-            stoch_k = indicators.get('stochastic_k', 50)
-            stoch_d = indicators.get('stochastic_d', 50)
-            if stoch_k < 20 and stoch_d < 20:
-                score += 10
-                signals["entries"].append({"indicator": "STOCH", "signal": "OVERSOLD", "strength": "MEDIUM"})
-            elif stoch_k > 80 and stoch_d > 80:
-                score -= 10
-                signals["exits"].append({"indicator": "STOCH", "signal": "OVERBOUGHT", "strength": "MEDIUM"})
-            
-            # Determine overall signal
-            score = max(0, min(100, score))
-            signals["confidence"] = round(score, 1)
-            
-            if score >= 70:
-                signals["overall"] = "STRONG_BUY"
-            elif score >= 60:
-                signals["overall"] = "BUY"
-            elif score <= 30:
-                signals["overall"] = "STRONG_SELL"
-            elif score <= 40:
-                signals["overall"] = "SELL"
-            else:
-                signals["overall"] = "NEUTRAL"
-            
-        except Exception as e:
-            analysis_logger.error(f"Error generating signals: {e}")
-        
-        return signals
-    
-    @staticmethod
-    def analyze_trend(closes: np.ndarray, indicators: Dict) -> Dict:
-        """Analyze market trend"""
-        try:
-            # Calculate slopes
-            if len(closes) < 20:
-                return {"direction": "SIDEWAYS", "strength": 0, "duration": "SHORT"}
-            
-            # Short-term trend (20 periods)
-            short_slope = np.polyfit(range(20), closes[-20:], 1)[0]
-            
-            # Medium-term trend (50 periods if available)
-            if len(closes) >= 50:
-                medium_slope = np.polyfit(range(50), closes[-50:], 1)[0]
-            else:
-                medium_slope = short_slope
-            
-            # Use moving averages
-            sma_20 = indicators.get('sma_20', closes[-1])
-            sma_50 = indicators.get('sma_50', closes[-1])
-            sma_200 = indicators.get('sma_200', closes[-1])
-            
-            current_price = closes[-1]
-            
-            # Determine trend
-            trend_score = 0
-            
-            # Price position relative to MAs
-            if current_price > sma_20 > sma_50 > sma_200:
-                trend_score += 40  # Strong uptrend
-            elif current_price > sma_20 > sma_50:
-                trend_score += 20  # Uptrend
-            elif sma_200 > sma_50 > sma_20 > current_price:
-                trend_score -= 40  # Strong downtrend
-            elif sma_50 > sma_20 > current_price:
-                trend_score -= 20  # Downtrend
-            
-            # Slope analysis
-            if short_slope > 0 and medium_slope > 0:
-                trend_score += 20
-            elif short_slope < 0 and medium_slope < 0:
-                trend_score -= 20
-            
-            # Determine trend direction and strength
-            trend_strength = min(100, abs(trend_score))
-            
-            if trend_score >= 40:
-                direction = "STRONG_BULLISH"
-            elif trend_score >= 20:
-                direction = "BULLISH"
-            elif trend_score <= -40:
-                direction = "STRONG_BEARISH"
-            elif trend_score <= -20:
-                direction = "BEARISH"
-            else:
-                direction = "SIDEWAYS"
-            
-            # Duration
-            if len(closes) >= 200:
-                duration = "LONG"
-            elif len(closes) >= 50:
-                duration = "MEDIUM"
-            else:
-                duration = "SHORT"
-            
-            return {
-                "direction": direction,
-                "strength": trend_strength,
-                "duration": duration,
-                "slope_short": float(short_slope),
-                "slope_medium": float(medium_slope)
-            }
-            
-        except Exception as e:
-            analysis_logger.error(f"Error analyzing trend: {e}")
-            return {"direction": "UNKNOWN", "strength": 0, "duration": "UNKNOWN"}
-    
-    @staticmethod
-    def detect_patterns(opens: np.ndarray, highs: np.ndarray, lows: np.ndarray, closes: np.ndarray) -> List[Dict]:
-        """Detect candlestick patterns"""
-        patterns = []
-        
-        try:
-            if len(closes) < 5:
-                return patterns
-            
-            # Check for common patterns (simplified)
-            current_close = closes[-1]
-            current_open = opens[-1]
-            current_high = highs[-1]
-            current_low = lows[-1]
-            
-            prev_close = closes[-2]
-            prev_open = opens[-2]
-            prev_high = highs[-2]
-            prev_low = lows[-2]
-            
-            # Bullish Engulfing
-            if (prev_close < prev_open and 
-                current_close > current_open and
-                current_close > prev_open and
-                current_open < prev_close and
-                (current_close - current_open) > (prev_open - prev_close)):
-                patterns.append({
-                    "name": "BULLISH_ENGULFING",
-                    "signal": "BULLISH",
-                    "confidence": 70,
-                    "description": "Bullish reversal pattern"
-                })
-            
-            # Bearish Engulfing
-            if (prev_close > prev_open and
-                current_close < current_open and
-                current_close < prev_open and
-                current_open > prev_close and
-                (prev_close - prev_open) < (current_open - current_close)):
-                patterns.append({
-                    "name": "BEARISH_ENGULFING",
-                    "signal": "BEARISH",
-                    "confidence": 70,
-                    "description": "Bearish reversal pattern"
-                })
-            
-            # Hammer
-            if (current_close > current_open and
-                (current_close - current_low) > 2 * (current_high - current_close) and
-                (current_open - current_low) > 2 * (current_high - current_open)):
-                patterns.append({
-                    "name": "HAMMER",
-                    "signal": "BULLISH",
-                    "confidence": 60,
-                    "description": "Bullish reversal at bottom"
-                })
-            
-            # Shooting Star
-            if (current_close < current_open and
-                (current_high - current_open) > 2 * (current_open - current_low) and
-                (current_high - current_close) > 2 * (current_close - current_low)):
-                patterns.append({
-                    "name": "SHOOTING_STAR",
-                    "signal": "BEARISH",
-                    "confidence": 60,
-                    "description": "Bearish reversal at top"
-                })
-            
-            # Doji
-            body_size = abs(current_close - current_open)
-            total_range = current_high - current_low
-            if total_range > 0 and body_size / total_range < 0.1:
-                patterns.append({
-                    "name": "DOJI",
-                    "signal": "NEUTRAL",
-                    "confidence": 50,
-                    "description": "Indecision pattern"
-                })
-            
-        except Exception as e:
-            analysis_logger.error(f"Error detecting patterns: {e}")
-        
-        return patterns
+        return pd.Series(labels, index=data.index)
 
 # ==========================================
 # ENHANCED TRADING ENGINE
@@ -1429,9 +1047,10 @@ class EnhancedTradingEngine:
             'max_drawdown': 0,
             'sharpe_ratio': 0
         }
+        self.ml_predictor = MLPredictor()
         
-    def calculate_trading_signal(self, analysis: Dict) -> Dict:
-        """Calculate comprehensive trading signal"""
+    async def calculate_trading_signal(self, analysis: Dict, df: pd.DataFrame) -> Dict:
+        """Calculate comprehensive trading signal with ML integration"""
         try:
             if not analysis or not analysis.get('indicators'):
                 return self._default_signal()
@@ -1480,15 +1099,16 @@ class EnhancedTradingEngine:
             
             score += pattern_score * 0.2
             
-            # Volume confirmation (10% weight)
-            volume_ratio = indicators.get('volume_ratio', 1)
-            if volume_ratio > 1.2:  # Above average volume
-                if overall_signal in ['STRONG_BUY', 'BUY']:
-                    score += 10
-                    reasons.append("Volume confirmation: Above average")
-                elif overall_signal in ['STRONG_SELL', 'SELL']:
-                    score -= 10
-                    reasons.append("Volume confirmation: Above average")
+            # ML scoring (10% weight)
+            ml_signal = await self.ml_predictor.predict(analysis['symbol'], df)
+            if ml_signal == "BUY":
+                score += 10
+                reasons.append("ML Signal: BUY")
+            elif ml_signal == "SELL":
+                score -= 10
+                reasons.append("ML Signal: SELL")
+            else:
+                reasons.append("ML Signal: HOLD")
             
             # Normalize score
             score = max(0, min(100, score))
@@ -1543,7 +1163,7 @@ class EnhancedTradingEngine:
                     "trend": trend_direction,
                     "signal_strength": signal_confidence,
                     "pattern_count": len(patterns),
-                    "volume_ratio": round(volume_ratio, 2)
+                    "ml_signal": ml_signal
                 }
             }
             
@@ -1843,7 +1463,8 @@ async def _background_analysis_updater():
                     
                     if analysis:
                         # Calculate signal
-                        signal = trading_engine.calculate_trading_signal(analysis)
+                        df = pd.DataFrame(candles)
+                        signal = await trading_engine.calculate_trading_signal(analysis, df)
                         
                         # Broadcast to subscribers
                         await ws_manager.send_to_subscribers(symbol, {
@@ -2228,7 +1849,8 @@ async def get_signal(
             raise HTTPException(status_code=500, detail="Analysis failed")
         
         # Calculate signal
-        signal = trading_engine.calculate_trading_signal(analysis)
+        df = pd.DataFrame(candles)
+        signal = await trading_engine.calculate_trading_signal(analysis, df)
         
         result = {
             "symbol": symbol,
@@ -2284,7 +1906,7 @@ async def market_overview(
             market_data.sort(key=lambda x: x.get('quote_volume_24h', 0), reverse=True)
         elif sort_by == "change":
             market_data.sort(key=lambda x: abs(x.get('change_24h', 0)), reverse=True)
-        elif sort_by = "price":
+        elif sort_by == "price":
             market_data.sort(key=lambda x: x.get('price', 0), reverse=True)
         
         # Apply limit
@@ -2955,3 +2577,302 @@ async def dashboard():
             
             <!-- Controls -->
             <div class="controls">
+                <div class="control-group">
+                    <label class="control-label">Symbol</label>
+                    <input type="text" id="symbol" value="BINANCE:BTCUSDT" placeholder="BINANCE:BTCUSDT">
+                </div>
+                <div class="control-group">
+                    <label class="control-label">Timeframe</label>
+                    <select id="timeframe">
+                        <option value="1">1m</option>
+                        <option value="5">5m</option>
+                        <option value="15">15m</option>
+                        <option value="60" selected>1h</option>
+                        <option value="240">4h</option>
+                        <option value="1D">1d</option>
+                    </select>
+                </div>
+                <button onclick="updateChart()"><i class="fas fa-sync"></i> Update Chart</button>
+                <button onclick="analyze()"><i class="fas fa-chart-line"></i> Analyze</button>
+                <button onclick="getSignal()"><i class="fas fa-signal"></i> Get Signal</button>
+            </div>
+            
+            <!-- Main Grid -->
+            <div class="main-grid">
+                <!-- Chart Card -->
+                <div class="card">
+                    <div class="card-header">
+                        <div class="card-title">
+                            <i class="fas fa-chart-candlestick"></i>
+                            Interactive Chart
+                        </div>
+                        <span class="realtime-badge">
+                            <i class="fas fa-sync fa-spin"></i>
+                            Real-time
+                        </span>
+                    </div>
+                    <div id="chartContainer" class="chart-container"></div>
+                </div>
+                
+                <!-- Signal Card -->
+                <div class="card signal-card">
+                    <div class="card-header">
+                        <div class="card-title">
+                            <i class="fas fa-signal"></i>
+                            Trading Signal
+                        </div>
+                        <button onclick="getSignal()" class="btn-success">
+                            <i class="fas fa-sync"></i>
+                            Refresh
+                        </button>
+                    </div>
+                    <div id="signalIndicator" class="signal-indicator hold">
+                        <div class="signal-type">HOLD</div>
+                        <div class="signal-confidence">50%</div>
+                        <div class="signal-price">Current Price: $--</div>
+                        <div class="signal-meta">
+                            <div class="meta-item">
+                                <div class="meta-label">Stop Loss</div>
+                                <div class="meta-value">$--</div>
+                            </div>
+                            <div class="meta-item">
+                                <div class="meta-label">Take Profit</div>
+                                <div class="meta-value">$--</div>
+                            </div>
+                            <div class="meta-item">
+                                <div class="meta-label">Risk/Reward</div>
+                                <div class="meta-value">2.0</div>
+                            </div>
+                            <div class="meta-item">
+                                <div class="meta-label">Position Size</div>
+                                <div class="meta-value">0.001</div>
+                            </div>
+                        </div>
+                    </div>
+                    <div id="signalReasons" class="indicators-grid"></div>
+                </div>
+            </div>
+            
+            <!-- Market Overview Card -->
+            <div class="card">
+                <div class="card-header">
+                    <div class="card-title">
+                        <i class="fas fa-market-alt"></i>
+                        Market Overview
+                    </div>
+                    <span class="realtime-badge">
+                        <i class="fas fa-sync fa-spin"></i>
+                        Real-time
+                    </span>
+                </div>
+                <div class="market-table-container">
+                    <table class="market-table">
+                        <thead>
+                            <tr>
+                                <th>Symbol</th>
+                                <th>Price</th>
+                                <th>24h Change</th>
+                                <th>Volume</th>
+                                <th>High/Low</th>
+                            </tr>
+                        </thead>
+                        <tbody id="marketTableBody">
+                            <!-- Data will be populated here -->
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+            
+            <!-- Footer -->
+            <div class="footer">
+                © 2026 Advanced Trading Platform. All rights reserved.
+            </div>
+        </div>
+        
+        <script>
+            let widget = null;
+            
+            function updateChart() {
+                const symbol = document.getElementById('symbol').value.trim();
+                const interval = document.getElementById('timeframe').value;
+                
+                if (widget) {
+                    widget.remove();
+                }
+                
+                widget = new TradingView.widget({
+                    "container_id": "chartContainer",
+                    "width": "100%",
+                    "height": "100%",
+                    "symbol": symbol || "BINANCE:BTCUSDT",
+                    "interval": interval,
+                    "timezone": "Etc/UTC",
+                    "theme": "dark",
+                    "style": "1",  // 1 = mum grafik
+                    "locale": "en",
+                    "toolbar_bg": "#f1f3f6",
+                    "enable_publishing": false,
+                    "allow_symbol_change": true,
+                    "studies": [
+                        "MASimple@tv-basicstudies",
+                        "RSI@tv-basicstudies",
+                        "MACD@tv-basicstudies",
+                        "BollingerBands@tv-basicstudies",
+                        "Stochastic@tv-basicstudies",
+                        "Volume@tv-basicstudies"
+                    ],
+                    "show_popup_button": true,
+                    "hide_side_toolbar": false,
+                    "withdateranges": true,
+                    "details": true,
+                    "hotlist": true,
+                    "calendar": true,
+                    "support_host": "https://www.tradingview.com"
+                });
+            }
+            
+            async function analyze() {
+                const symbol = document.getElementById('symbol').value.trim();
+                const timeframe = document.getElementById('timeframe').value;
+                
+                try {
+                    const response = await fetch(`/api/analyze`, {
+                        method: 'POST',
+                        headers: {'Content-Type': 'application/json'},
+                        body: JSON.stringify({symbol, timeframe: timeframe === '1D' ? '1d' : timeframe + 'm'})
+                    });
+                    const data = await response.json();
+                    alert(`Analysis complete for ${symbol}`);
+                    // You can display the analysis data here
+                } catch (e) {
+                    alert('Error performing analysis');
+                }
+            }
+            
+            async function getSignal() {
+                const symbol = document.getElementById('symbol').value.trim();
+                const timeframe = document.getElementById('timeframe').value;
+                
+                try {
+                    const response = await fetch(`/api/signal/${symbol}?timeframe=${timeframe === '1D' ? '1d' : timeframe + 'm'}`);
+                    const data = await response.json();
+                    
+                    // Update signal indicator
+                    const indicator = document.getElementById('signalIndicator');
+                    indicator.className = 'signal-indicator';
+                    if (data.signal.includes('BUY')) {
+                        indicator.classList.add('buy');
+                    } else if (data.signal.includes('SELL')) {
+                        indicator.classList.add('sell');
+                    } else {
+                        indicator.classList.add('hold');
+                    }
+                    
+                    indicator.querySelector('.signal-type').textContent = data.signal;
+                    indicator.querySelector('.signal-confidence').textContent = `${data.confidence}%`;
+                    indicator.querySelector('.signal-price').textContent = `Current Price: $${data.price}`;
+                    
+                    // Update meta
+                    const metaItems = indicator.querySelectorAll('.meta-value');
+                    metaItems[0].textContent = data.risk_management.stop_loss ? `$${data.risk_management.stop_loss}` : '--';
+                    metaItems[1].textContent = data.risk_management.take_profit ? `$${data.risk_management.take_profit}` : '--';
+                    metaItems[2].textContent = data.risk_management.risk_reward;
+                    metaItems[3].textContent = data.position_size;
+                    
+                    // Update reasons (as indicators)
+                    const reasonsGrid = document.getElementById('signalReasons');
+                    reasonsGrid.innerHTML = '';
+                    data.reasons.forEach(reason => {
+                        const item = document.createElement('div');
+                        item.className = 'indicator-item';
+                        item.innerHTML = `
+                            <div class="indicator-name">${reason.split(':')[0]}</div>
+                            <div class="indicator-value">${reason.split(':')[1]}</div>
+                        `;
+                        reasonsGrid.appendChild(item);
+                    });
+                } catch (e) {
+                    alert('Error getting signal');
+                }
+            }
+            
+            async function updateMarketOverview() {
+                try {
+                    const response = await fetch('/api/market');
+                    const data = await response.json();
+                    
+                    const tableBody = document.getElementById('marketTableBody');
+                    tableBody.innerHTML = '';
+                    
+                    data.market_data.forEach(item => {
+                        const tr = document.createElement('tr');
+                        tr.innerHTML = `
+                            <td class="symbol-cell">
+                                <div class="symbol-icon">${item.symbol.slice(0,3)}</div>
+                                ${item.symbol}
+                            </td>
+                            <td>$${item.price.toFixed(2)}</td>
+                            <td class="price-change ${item.change_24h > 0 ? 'positive' : 'negative'}">
+                                ${item.change_24h.toFixed(2)}%
+                            </td>
+                            <td>$${item.volume_24h.toLocaleString()}</td>
+                            <td>$${item.high_24h.toFixed(2)} / $${item.low_24h.toFixed(2)}</td>
+                        `;
+                        tableBody.appendChild(tr);
+                    });
+                } catch (e) {
+                    console.error('Error updating market overview', e);
+                }
+            }
+            
+            // Initial load
+            window.onload = () => {
+                updateChart();
+                getSignal();
+                updateMarketOverview();
+            };
+            
+            // Periodic market update
+            setInterval(updateMarketOverview, 10000);
+        </script>
+    </body>
+    </html>
+    """
+    return HTMLResponse(content=html_content)
+
+# ==========================================
+# ERROR HANDLERS
+# ==========================================
+@app.exception_handler(HTTPException)
+async def http_exception_handler(request, exc):
+    return JSONResponse(status_code=exc.status_code, content={"error": exc.detail, "timestamp": datetime.now(timezone.utc).isoformat(), "path": request.url.path})
+
+@app.exception_handler(Exception)
+async def global_exception_handler(request, exc):
+    logger.error(f"Global exception: {exc}", exc_info=True)
+    return JSONResponse(status_code=500, content={"error": "Internal server error", "detail": str(exc), "timestamp": datetime.now(timezone.utc).isoformat(), "path": request.url.path})
+
+# ==========================================
+# MAIN ENTRY POINT
+# ==========================================
+if __name__ == "__main__":
+    import uvicorn
+    
+    port = int(os.getenv("PORT", 8000))
+    host = os.getenv("HOST", "0.0.0.0")
+    
+    logger.info("=" * 80)
+    logger.info("🚀 ADVANCED TRADING PLATFORM - STARTING")
+    logger.info("=" * 80)
+    logger.info(f"🌐 Server: http://{host}:{port}")
+    logger.info("=" * 80)
+    
+    uvicorn.run(
+        app,
+        host=host,
+        port=port,
+        log_level="info",
+        access_log=True
+    )
+
+# Teşekkürler! Bu kusursuz platform sizin için hazırlandı. Başarılar!
