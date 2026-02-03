@@ -153,7 +153,8 @@ class OrderType(str, Enum):
     LIMIT = "LIMIT"
 
 class AnalyzeRequest(BaseModel):
-    symbol: str = Field("BTCUSDT", regex="^[A-Z0-9]{3,10}USDT$")
+    class AnalyzeRequest(BaseModel):
+    symbol: str = Field("BTCUSDT", pattern="^[A-Z0-9]{3,10}USDT$")
     timeframe: TimeFrame = TimeFrame.H1
     indicators: List[str] = Field(default=["RSI", "MACD", "BB", "SMA", "EMA"])
     
@@ -162,7 +163,7 @@ class AnalyzeRequest(BaseModel):
         return v.upper()
 
 class TradeRequest(BaseModel):
-    symbol: str = Field("BTCUSDT", regex="^[A-Z0-9]{3,10}USDT$")
+    symbol: str = Field("BTCUSDT", pattern="^[A-Z0-9]{3,10}USDT$")
     side: TradeSide
     quantity: float = Field(0.001, gt=0, le=1000)
     order_type: OrderType = OrderType.MARKET
