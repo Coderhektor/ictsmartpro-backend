@@ -74,10 +74,7 @@ class RealTimeTicker:
     
     # Popular cryptocurrencies
     DEFAULT_SYMBOLS = [
-        "BTCUSDT", "ETHUSDT", "BNBUSDT", "XRPUSDT", "ADAUSDT",
-        "SOLUSDT", "DOTUSDT", "DOGEUSDT", "AVAXUSDT", "LINKUSDT",
-        "MATICUSDT", "UNIUSDT", "LTCUSDT", "BCHUSDT", "XLMUSDT"
-    ]
+        "BTCUSDT", "ETHUSDT", "BNBUSDT", "XRPUSDT", "ADAUSDT"]
     
     # CoinGecko to Binance mapping
     COINGECKO_TO_BINANCE = {
