@@ -106,7 +106,6 @@ class BinanceRealTimeData:
         except Exception as e:
             logger.error(f"WebSocket connection error: {type(e).__name__} - {str(e)}")
             self.connected = False
-            # raise kaldırıldı → uygulama çökmesin
             
     async def process_message(self, data: Dict):
         try:
@@ -955,7 +954,7 @@ async def market_status():
         "symbols": status
     }
 
-# ==================== TAM DASHBOARD (TRADINGVIEW ENTEGRASYONU İLE) ====================
+# ==================== TAM DASHBOARD (TRADINGVIEW + COINGECKO MARQUEE) ====================
 @app.get("/dashboard", response_class=HTMLResponse)
 async def dashboard():
     return """
@@ -993,21 +992,6 @@ async def dashboard():
             margin: 0 auto;
             padding: 20px;
         }
-        .controls-card
-
-<!-- Header'dan sonra, controls-card'dan önce -->
-<div class="coingecko-marquee-wrapper" style="margin: 1.5rem 0; background: var(--bg-card); border-radius: 12px; padding: 1rem; border: 1px solid var(--border);">
-    <div class="chart-title" style="margin-bottom: 0.8rem;">Live Crypto Prices (CoinGecko)</div>
-    <div class="coingecko-marquee" 
-         data-coingecko-coin-id="bitcoin,ethereum,solana,ripple,cardano,binancecoin,dogecoin,polkadot,avalanche-2,chainlink"
-         data-coingecko-currency="usd"
-         data-coingecko-order="market_cap_desc"
-         data-coingecko-per-page="12"
-         data-coingecko-sparkline="false"
-         data-coingecko-price-change-percentage="24h,7d"
-         data-coingecko-locale="en">
-    </div>
-</div>
         
         .header {
             background: linear-gradient(90deg, var(--primary), #8b5cf6);
@@ -1329,6 +1313,14 @@ async def dashboard():
             0% { transform: rotate(0deg); }
             100% { transform: rotate(360deg); }
         }
+
+        .coingecko-marquee-wrapper {
+            margin: 1.5rem 0;
+            background: var(--bg-card);
+            border-radius: 12px;
+            padding: 1rem;
+            border: 1px solid var(--border);
+        }
     </style>
 </head>
 <body>
@@ -1341,6 +1333,20 @@ async def dashboard():
             <div class="status-badge" id="connectionStatus">
                 <i class="fas fa-circle"></i>
                 <span>Connecting to Binance...</span>
+            </div>
+        </div>
+
+        <!-- CoinGecko Kayan Fiyat Ticker (Marquee) - Header'dan hemen sonra -->
+        <div class="coingecko-marquee-wrapper">
+            <div class="chart-title" style="margin-bottom: 0.8rem;">Live Crypto Prices (CoinGecko)</div>
+            <div class="coingecko-marquee" 
+                 data-coingecko-coin-id="bitcoin,ethereum,solana,ripple,cardano,binancecoin,dogecoin,polkadot,avalanche-2,chainlink"
+                 data-coingecko-currency="usd"
+                 data-coingecko-order="market_cap_desc"
+                 data-coingecko-per-page="12"
+                 data-coingecko-sparkline="false"
+                 data-coingecko-price-change-percentage="24h,7d"
+                 data-coingecko-locale="en">
             </div>
         </div>
         
@@ -1449,6 +1455,9 @@ async def dashboard():
 
     <script type="text/javascript" src="https://s3.tradingview.com/tv.js"></script>
     
+    <!-- CoinGecko Marquee Widget Script - Body kapanışından hemen önce -->
+    <script async src="https://widgets.coingecko.com/coingecko-price-ticker-marquee-widget.js"></script>
+
     <script>
         let tvWidget = null;
         let currentSymbol = "BTCUSDT";
@@ -1661,7 +1670,7 @@ async def dashboard():
                 };
                 
                 const changeClass = info.change >= 0 ? 'positive' : 'negative';
-                const changeIcon = info.change >= 0 ? '���' : '↘';
+                const changeIcon = info.change >= 0 ? '↗' : '↘';
                 
                 item.innerHTML = `
                     <div class="market-symbol">
@@ -1747,4 +1756,4 @@ if __name__ == "__main__":
         port=port,
         log_level="info",
         access_log=True
-    ) 
+    )
