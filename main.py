@@ -1585,12 +1585,7 @@ async def _background_analysis_updater():
 # ==========================================
 # FASTAPI APP
 # ==========================================
- app = FastAPI(
-    title="Advanced Trading Platform (No API Keys Required)",
-    description="Real-time trading platform with advanced technical analysis, no API keys needed",
-    version="3.0.0",
-    lifespan=lifespan
-)
+ 
 
 # ================ BURAYA EKLEYİN ================
 @app.get("/health")
