@@ -1833,7 +1833,8 @@ async def _background_data_updater():
         except Exception as e:
             logger.error(f"Background data updater error: {e}")
             await asyncio.sleep(30)
- async def _background_analysis_updater():
+            
+async def _background_analysis_updater():
     """Background task to update analysis for major symbols"""
     major_symbols = Config.SYMBOLS['major']
     
@@ -2090,7 +2091,8 @@ async def get_klines(
             cg_id = await data_manager._symbol_to_coingecko_id(symbol)
             if cg_id:
                 cg_url = f"{Config.COINGECKO_BASE_URL}/coins/{cg_id}/ohlc?vs_currency=usd&days={limit}"
-                async with self.session.get(cg_url) as response:
+                
+             async with data_manager.session.get(cg_url) as response:
                     if response.status == 200:
                         data = await response.json()
                         candles = []
