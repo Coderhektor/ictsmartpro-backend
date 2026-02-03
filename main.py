@@ -412,6 +412,234 @@ class AdvancedWebSocketManager:
             await asyncio.sleep(10)
 
 # ==========================================
+# ADVANCED TECHNICAL ANALYSIS
+# ==========================================
+class AdvancedTechnicalAnalysis:
+    """Advanced technical analysis with multiple indicators"""
+    
+    @staticmethod
+    def calculate_all_indicators(candles: List[Dict], symbol: str, timeframe: str) -> Dict:
+        """Calculate comprehensive technical indicators"""
+        try:
+            if not candles or len(candles) < 20:
+                return None
+            
+            df = pd.DataFrame(candles)
+            
+            # Ensure we have required columns
+            required_cols = ['open', 'high', 'low', 'close', 'volume']
+            df.columns = df.columns.str.lower()
+            
+            # Rename columns if needed
+            col_mapping = {
+                'open': 'open', 'high': 'high', 'low': 'low', 
+                'close': 'close', 'volume': 'volume'
+            }
+            
+            for req in required_cols:
+                if req not in df.columns:
+                    # Try to find similar columns
+                    for col in df.columns:
+                        if req in col:
+                            col_mapping[req] = col
+                            break
+            
+            # Calculate basic indicators
+            current_price = float(df[col_mapping['close']].iloc[-1])
+            price_24h_ago = float(df[col_mapping['close']].iloc[-24]) if len(df) > 24 else current_price
+            change_24h = ((current_price - price_24h_ago) / price_24h_ago * 100) if price_24h_ago > 0 else 0
+            
+            # Simple moving averages
+            closes = df[col_mapping['close']].astype(float)
+            sma_20 = closes.rolling(window=20).mean().iloc[-1]
+            sma_50 = closes.rolling(window=50).mean().iloc[-1]
+            sma_200 = closes.rolling(window=200).mean().iloc[-1] if len(df) >= 200 else None
+            
+            # Exponential moving averages
+            ema_12 = closes.ewm(span=12).mean().iloc[-1]
+            ema_26 = closes.ewm(span=26).mean().iloc[-1]
+            
+            # RSI (Relative Strength Index)
+            delta = closes.diff()
+            gain = (delta.where(delta > 0, 0)).rolling(window=14).mean()
+            loss = (-delta.where(delta < 0, 0)).rolling(window=14).mean()
+            rs = gain / loss
+            rsi = 100 - (100 / (1 + rs))
+            current_rsi = rsi.iloc[-1] if not rsi.empty else 50
+            
+            # MACD
+            ema_12 = closes.ewm(span=12).mean()
+            ema_26 = closes.ewm(span=26).mean()
+            macd_line = ema_12 - ema_26
+            signal_line = macd_line.ewm(span=9).mean()
+            macd_histogram = macd_line - signal_line
+            
+            # Bollinger Bands
+            bb_upper = closes.rolling(window=20).mean() + (closes.rolling(window=20).std() * 2)
+            bb_lower = closes.rolling(window=20).mean() - (closes.rolling(window=20).std() * 2)
+            bb_middle = closes.rolling(window=20).mean()
+            
+            # Volume analysis
+            volume = df[col_mapping['volume']].astype(float)
+            volume_sma = volume.rolling(window=20).mean().iloc[-1]
+            current_volume = volume.iloc[-1]
+            volume_ratio = current_volume / volume_sma if volume_sma > 0 else 1
+            
+            # Support and Resistance levels (simplified)
+            recent_highs = df[col_mapping['high']].astype(float).rolling(window=20).max().iloc[-1]
+            recent_lows = df[col_mapping['low']].astype(float).rolling(window=20).min().iloc[-1]
+            
+            # Volatility (ATR approximation)
+            high_low = df[col_mapping['high']].astype(float) - df[col_mapping['low']].astype(float)
+            atr = high_low.rolling(window=14).mean().iloc[-1]
+            
+            # Trend analysis
+            trend_score = 0
+            if sma_20 > sma_50:
+                trend_score += 1
+            if current_price > sma_20:
+                trend_score += 1
+            if current_price > sma_50:
+                trend_score += 1
+            
+            trend_map = {
+                0: "STRONG_BEARISH",
+                1: "BEARISH",
+                2: "NEUTRAL",
+                3: "BULLISH"
+            }
+            
+            # Signal generation
+            signals = {}
+            signal_score = 0
+            
+            # RSI signal
+            if current_rsi < 30:
+                signals['rsi'] = "OVERSOLD"
+                signal_score += 1
+            elif current_rsi > 70:
+                signals['rsi'] = "OVERBOUGHT"
+                signal_score -= 1
+            else:
+                signals['rsi'] = "NEUTRAL"
+            
+            # MACD signal
+            macd_value = macd_line.iloc[-1] if not macd_line.empty else 0
+            signal_value = signal_line.iloc[-1] if not signal_line.empty else 0
+            if macd_value > signal_value and macd_histogram.iloc[-1] > 0:
+                signals['macd'] = "BULLISH"
+                signal_score += 1
+            elif macd_value < signal_value and macd_histogram.iloc[-1] < 0:
+                signals['macd'] = "BEARISH"
+                signal_score -= 1
+            else:
+                signals['macd'] = "NEUTRAL"
+            
+            # Bollinger Bands signal
+            if current_price > bb_upper.iloc[-1]:
+                signals['bb'] = "OVERBOUGHT"
+                signal_score -= 1
+            elif current_price < bb_lower.iloc[-1]:
+                signals['bb'] = "OVERSOLD"
+                signal_score += 1
+            else:
+                signals['bb'] = "NEUTRAL"
+            
+            # Volume signal
+            if volume_ratio > 1.5:
+                signals['volume'] = "HIGH_VOLUME"
+                signal_score += 0.5
+            elif volume_ratio < 0.5:
+                signals['volume'] = "LOW_VOLUME"
+                signal_score -= 0.5
+            else:
+                signals['volume'] = "NORMAL"
+            
+            # Overall signal
+            if signal_score >= 2:
+                overall_signal = "STRONG_BUY"
+            elif signal_score >= 1:
+                overall_signal = "BUY"
+            elif signal_score <= -2:
+                overall_signal = "STRONG_SELL"
+            elif signal_score <= -1:
+                overall_signal = "SELL"
+            else:
+                overall_signal = "NEUTRAL"
+            
+            # Calculate confidence
+            confidence = min(abs(signal_score) * 25, 100)
+            
+            # Candlestick patterns (simplified)
+            patterns = []
+            if len(df) >= 3:
+                last_close = closes.iloc[-1]
+                last_open = float(df[col_mapping['open']].iloc[-1])
+                prev_close = closes.iloc[-2]
+                prev_open = float(df[col_mapping['open']].iloc[-2])
+                
+                # Bullish engulfing
+                if (last_close > last_open and prev_close < prev_open and 
+                    last_close > prev_open and last_open < prev_close):
+                    patterns.append({"name": "Bullish Engulfing", "signal": "BULLISH", "confidence": 70})
+                
+                # Bearish engulfing
+                if (last_close < last_open and prev_close > prev_open and 
+                    last_close < prev_open and last_open > prev_close):
+                    patterns.append({"name": "Bearish Engulfing", "signal": "BEARISH", "confidence": 70})
+                
+                # Doji
+                body_size = abs(last_close - last_open)
+                total_range = float(df[col_mapping['high']].iloc[-1]) - float(df[col_mapping['low']].iloc[-1])
+                if total_range > 0 and body_size / total_range < 0.1:
+                    patterns.append({"name": "Doji", "signal": "REVERSAL", "confidence": 60})
+            
+            return {
+                "symbol": symbol,
+                "timeframe": timeframe,
+                "current_price": round(current_price, 4),
+                "change_24h": round(change_24h, 2),
+                "indicators": {
+                    "sma_20": round(sma_20, 4),
+                    "sma_50": round(sma_50, 4),
+                    "sma_200": round(sma_200, 4) if sma_200 else None,
+                    "ema_12": round(ema_12, 4),
+                    "ema_26": round(ema_26, 4),
+                    "rsi": round(current_rsi, 2),
+                    "macd_line": round(macd_value, 4),
+                    "macd_signal": round(signal_value, 4),
+                    "macd_histogram": round(macd_histogram.iloc[-1], 4) if not macd_histogram.empty else 0,
+                    "bb_upper": round(bb_upper.iloc[-1], 4) if not bb_upper.empty else 0,
+                    "bb_middle": round(bb_middle.iloc[-1], 4) if not bb_middle.empty else 0,
+                    "bb_lower": round(bb_lower.iloc[-1], 4) if not bb_lower.empty else 0,
+                    "atr": round(atr, 4),
+                    "volume_ratio": round(volume_ratio, 2)
+                },
+                "levels": {
+                    "support": round(recent_lows, 4),
+                    "resistance": round(recent_highs, 4)
+                },
+                "trend": {
+                    "direction": trend_map.get(trend_score, "NEUTRAL"),
+                    "strength": trend_score,
+                    "score": trend_score
+                },
+                "signals": {
+                    **signals,
+                    "overall": overall_signal,
+                    "confidence": round(confidence, 1),
+                    "score": signal_score
+                },
+                "patterns": patterns,
+                "timestamp": datetime.now(timezone.utc).isoformat(),
+                "data_points": len(df)
+            }
+            
+        except Exception as e:
+            logger.error(f"Technical analysis error for {symbol}: {e}")
+            return None
+
+# ==========================================
 # ENHANCED DATA MANAGER
 # ==========================================
 class EnhancedDataManager:
