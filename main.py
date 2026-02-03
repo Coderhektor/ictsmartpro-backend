@@ -3105,7 +3105,7 @@ async def dashboard():
                             WebSocket
                         </div>
                     </div>
-                    <div id="chartContainer" class="chart-container">
+                    <div id="chartContainer" class="chart-container"></div>
                         <div id="chart"></div>
                     </div>
                 </div>
@@ -3255,101 +3255,90 @@ async def dashboard():
             }
             
             // Load TradingView-like chart
+          
             async function loadChart() {
-                const symbol = document.getElementById('symbol').value;
-                const timeframe = document.getElementById('timeframe').value;
-                
-                try {
-                    // Show loading
-                    document.getElementById('chart').innerHTML = '<div class="spinner"></div>';
-                    
-                    // Fetch klines data
-                    const response = await fetch(`/api/klines/${symbol}?interval=${timeframe}&limit=200`);
-                    const data = await response.json();
-                    
-                    if (!data.candles || data.candles.length === 0) {
-                        document.getElementById('chart').innerHTML = '<div style="text-align: center; padding: 40px; color: #64748b;">No chart data available</div>';
-                        return;
-                    }
-                    
-                    // Prepare chart data
-                    const chartData = data.candles.map(candle => ({
-                        time: candle.timestamp / 1000,
-                        open: candle.open,
-                        high: candle.high,
-                        low: candle.low,
-                        close: candle.close,
-                        volume: candle.volume
-                    }));
-                    
-                    // Create or update chart
-                    if (!chart) {
-                        chart = LightweightCharts.createChart(document.getElementById('chart'), {
-                            width: document.getElementById('chartContainer').clientWidth,
-                            height: 450,
-                            layout: {
-                                background: { color: 'transparent' },
-                                textColor: '#e2e8f0',
-                            },
-                            grid: {
-                                vertLines: { color: 'rgba(255, 255, 255, 0.05)' },
-                                horzLines: { color: 'rgba(255, 255, 255, 0.05)' },
-                            },
-                            crosshair: {
-                                mode: LightweightCharts.CrosshairMode.Normal,
-                            },
-                            rightPriceScale: {
-                                borderColor: 'rgba(255, 255, 255, 0.1)',
-                            },
-                            timeScale: {
-                                borderColor: 'rgba(255, 255, 255, 0.1)',
-                                timeVisible: true,
-                            },
-                        });
-                        
-                        // Create candlestick series
-                        candlestickSeries = chart.addCandlestickSeries({
-                            upColor: '#22c55e',
-                            downColor: '#ef4444',
-                            borderVisible: false,
-                            wickUpColor: '#22c55e',
-                            wickDownColor: '#ef4444',
-                        });
-                        
-                        // Create volume series
-                        volumeSeries = chart.addHistogramSeries({
-                            color: '#3b82f6',
-                            priceFormat: {
-                                type: 'volume',
-                            },
-                            priceScaleId: '',
-                            scaleMargins: {
-                                top: 0.8,
-                                bottom: 0,
-                            },
-                        });
-                    }
-                    
-                    // Update chart data
-                    candlestickSeries.setData(chartData);
-                    
-                    // Add volume data
-                    const volumeData = chartData.map(item => ({
-                        time: item.time,
-                        value: item.volume,
-                        color: item.close >= item.open ? 'rgba(34, 197, 94, 0.3)' : 'rgba(239, 68, 68, 0.3)',
-                    }));
-                    volumeSeries.setData(volumeData);
-                    
-                    // Fit content
-                    chart.timeScale().fitContent();
-                    
-                } catch (error) {
-                    console.error('Error loading chart:', error);
-                    document.getElementById('chart').innerHTML = '<div style="text-align: center; padding: 40px; color: #ef4444;">Error loading chart: ' + error.message + '</div>';
-                }
-            }
+    const symbol = document.getElementById('symbol').value;
+    const timeframe = document.getElementById('timeframe').value;
+    
+    try {
+        // Loading göster
+        document.getElementById('chartContainer').innerHTML = '<div class="spinner"></div>';
+        
+        const response = await fetch(`/api/klines/${symbol}?interval=${timeframe}&limit=200`);
+        const data = await response.json();
+        
+        if (!data.candles || data.candles.length === 0) {
+            document.getElementById('chartContainer').innerHTML = 
+                '<div style="text-align:center; padding:100px; color:#64748b;">Veri yok</div>';
+            return;
+        }
+        
+        const chartData = data.candles.map(c => ({
+            time: Math.floor(c.timestamp / 1000),   // saniye cinsinden UNIX timestamp
+            open:  c.open,
+            high:  c.high,
+            low:   c.low,
+            close: c.close
+        }));
+        
+        // Volume için ayrı veri
+        const volumeData = data.candles.map(c => ({
+            time: Math.floor(c.timestamp / 1000),
+            value: c.volume,
+            color: c.close >= c.open ? 'rgba(0, 150, 136, 0.4)' : 'rgba(239, 83, 80, 0.4)'
+        }));
+        
+        // Chart yoksa oluştur
+        if (!chart) {
+            const container = document.getElementById('chartContainer');
             
+            chart = LightweightCharts.createChart(container, {
+                width: container.clientWidth,
+                height: container.clientHeight || 500,
+                layout: {
+                    background: { type: 'solid', color: 'transparent' },
+                    textColor: '#d1d5db',
+                },
+                grid: {
+                    vertLines: { color: 'rgba(255,255,255,0.05)' },
+                    horzLines: { color: 'rgba(255,255,255,0.05)' },
+                },
+                rightPriceScale: { borderColor: 'rgba(197, 203, 206, 0.2)' },
+                timeScale: { borderColor: 'rgba(197, 203, 206, 0.2)', timeVisible: true, secondsVisible: false },
+                crosshair: { mode: LightweightCharts.CrosshairMode.Normal },
+            });
+            
+            candlestickSeries = chart.addCandlestickSeries({
+                upColor: '#26a69a',
+                downColor: '#ef5350',
+                borderVisible: false,
+                wickUpColor: '#26a69a',
+                wickDownColor: '#ef5350',
+            });
+            
+            volumeSeries = chart.addHistogramSeries({
+                color: '#26a69a',
+                priceFormat: { type: 'volume' },
+                priceScaleId: '',
+                scaleMargins: { top: 0.8, bottom: 0 },
+            });
+        }
+        
+        // Veriyi güncelle
+        candlestickSeries.setData(chartData);
+        volumeSeries.setData(volumeData);
+        
+        // Grafiği otomatik sığdır
+        chart.timeScale().fitContent();
+        
+    } catch (err) {
+        console.error('Chart yüklenemedi:', err);
+        document.getElementById('chartContainer').innerHTML = 
+            `<div style="color:#ef4444; text-align:center; padding:100px;">
+                Hata: ${err.message || 'Bilinmeyen hata'}
+            </div>`;
+    }
+}
             // Analyze symbol
             async function analyze() {
                 const symbol = document.getElementById('symbol').value;
