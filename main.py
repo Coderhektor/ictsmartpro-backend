@@ -1586,6 +1586,10 @@ async def _background_analysis_updater():
 # FASTAPI APP
 # ==========================================
  
+# ==========================================
+# FASTAPI APP
+# ==========================================
+app = FastAPI(lifespan=lifespan)
 
 # ================ BURAYA EKLEYİN ================
 @app.get("/health")
@@ -1600,7 +1604,6 @@ app.add_middleware(
     allow_methods=["*"],
     allow_headers=["*"],
 )
-
 # ==========================================
 # WEBSOCKET ENDPOINTS
 # ==========================================
