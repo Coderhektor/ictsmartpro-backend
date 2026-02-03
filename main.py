@@ -2060,6 +2060,7 @@ async def root():
     }
 
 @app.get("/api/health")
+@app.get("/health")             
 async def health():
     """Comprehensive health check"""
     try:
