@@ -1336,18 +1336,18 @@ async def dashboard():
             </div>
         </div>
 
-        <!-- CoinGecko Kayan Fiyat Ticker (Marquee) - Header'dan hemen sonra -->
-        <div class="coingecko-marquee-wrapper">
-            <div class="chart-title" style="margin-bottom: 0.8rem;">Live Crypto Prices (CoinGecko)</div>
-            <div class="coingecko-marquee" 
-                 data-coingecko-coin-id="bitcoin,ethereum,solana,ripple,cardano,binancecoin,dogecoin,polkadot,avalanche-2,chainlink"
-                 data-coingecko-currency="usd"
-                 data-coingecko-order="market_cap_desc"
-                 data-coingecko-per-page="12"
-                 data-coingecko-sparkline="false"
-                 data-coingecko-price-change-percentage="24h,7d"
-                 data-coingecko-locale="en">
-            </div>
+       <div class="coingecko-marquee-wrapper">
+    <div class="chart-title" style="margin-bottom: 0.8rem;">Live Crypto Prices (CoinGecko)</div>
+    <div class="coingecko-marquee"
+         data-coingecko-coin-id="bitcoin,ethereum,solana,ripple,cardano,binancecoin,dogecoin,polkadot,avalanche-2,chainlink"
+         data-coingecko-currency="usd"
+         data-coingecko-order="market_cap_desc"
+         data-coingecko-per-page="12"
+         data-coingecko-sparkline="false"
+         data-coingecko-price-change-percentage="24h,7d"
+         data-coingecko-locale="en">
+    </div>
+</div>
         </div>
         
         <div class="controls-card">
