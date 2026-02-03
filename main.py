@@ -3106,7 +3106,7 @@ async def dashboard():
                         </div>
                     </div>
                     <div id="chartContainer" class="chart-container"></div>
-                        <div id="chart"></div>
+                        
                     </div>
                 </div>
                 
