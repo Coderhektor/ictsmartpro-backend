@@ -153,7 +153,6 @@ class OrderType(str, Enum):
     LIMIT = "LIMIT"
 
 class AnalyzeRequest(BaseModel):
-    class AnalyzeRequest(BaseModel):
     symbol: str = Field("BTCUSDT", pattern="^[A-Z0-9]{3,10}USDT$")
     timeframe: TimeFrame = TimeFrame.H1
     indicators: List[str] = Field(default=["RSI", "MACD", "BB", "SMA", "EMA"])
