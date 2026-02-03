@@ -1335,20 +1335,19 @@ async def dashboard():
                 <span>Connecting to Binance...</span>
             </div>
         </div>
-
-       <div class="coingecko-marquee-wrapper">
+ <div class="coingecko-marquee-wrapper">
     <div class="chart-title" style="margin-bottom: 0.8rem;">Live Crypto Prices (CoinGecko)</div>
-    <div class="coingecko-marquee"
-         data-coingecko-coin-id="bitcoin,ethereum,solana,ripple,cardano,binancecoin,dogecoin,polkadot,avalanche-2,chainlink"
-         data-coingecko-currency="usd"
-         data-coingecko-order="market_cap_desc"
-         data-coingecko-per-page="12"
-         data-coingecko-sparkline="false"
-         data-coingecko-price-change-percentage="24h,7d"
-         data-coingecko-locale="en">
+    <!-- DOĞRU CoinGecko class ve attribute'ları -->
+    <div class="coingecko-coin-price-ticker-marquee-widget"
+         data-coin-ids="bitcoin,ethereum,solana,ripple,cardano,binancecoin,dogecoin,polkadot,avalanche-2,chainlink"
+         data-currency="usd"
+         data-order="market_cap_desc"
+         data-per-page="12"
+         data-sparkline="false"
+         data-price-change-percentage="24h,7d"
+         data-locale="en">
     </div>
-</div>
-        </div>
+</div>  <!-- Bu satır düzeltildi - kapanış etiketi burada -->
         
         <div class="controls-card">
             <div class="controls-grid">
