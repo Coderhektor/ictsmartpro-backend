@@ -1,4 +1,4 @@
-import time 
+import time
 import json
 import asyncio
 from typing import Dict, List, Optional, Any
@@ -35,12 +35,12 @@ class Config:
     
     # Cache Configuration
     CACHE_TTL = {
-        'ticker': 2,  # 2 seconds for real-time data
-        'klines': 60,  # 1 minute for OHLCV
-        'market': 30,  # 30 seconds for market overview
-        'analysis': 10,  # 10 seconds for analysis
-        'signal': 5,   # 5 seconds for signals
-        'orderbook': 3  # 3 seconds for order book
+        'ticker': 2,
+        'klines': 60,
+        'market': 30,
+        'analysis': 10,
+        'signal': 5,
+        'orderbook': 3
     }
     
     # Rate Limiting
@@ -61,7 +61,7 @@ class Config:
         'stop_loss_pct': 0.02,
         'take_profit_pct': 0.04,
         'max_position_size': 0.01,
-        'risk_per_trade': 0.01  # 1% risk per trade
+        'risk_per_trade': 0.01
     }
     
     # WebSocket Configuration
@@ -100,7 +100,7 @@ class Config:
     
     # ML Configuration
     ML_CONFIG = {
-        'retrain_interval': 3600,  # 1 hour
+        'retrain_interval': 3600,
         'min_data_points': 200,
         'lookback_periods': 100,
         'lookahead': 5,
@@ -121,7 +121,6 @@ logging.basicConfig(
 )
 logger = logging.getLogger(__name__)
 
-# Additional loggers
 ws_logger = logging.getLogger('websocket')
 data_logger = logging.getLogger('data')
 analysis_logger = logging.getLogger('analysis')
@@ -180,8 +179,6 @@ class TradeRequest(BaseModel):
 # ADVANCED WEB SOCKET MANAGER
 # ==========================================
 class AdvancedWebSocketManager:
-    """Advanced WebSocket manager with reconnection, heartbeat, and data validation"""
-    
     def __init__(self):
         self.connections = {}
         self.price_data = {}
@@ -195,7 +192,6 @@ class AdvancedWebSocketManager:
         self._data_queues = defaultdict(deque)
         
     async def _validate_ws_data(self, data: Dict, data_type: str) -> bool:
-        """Validate WebSocket data"""
         try:
             if data_type == 'ticker':
                 required_fields = ['s', 'c', 'P', 'h', 'l', 'v', 'q']
@@ -211,7 +207,6 @@ class AdvancedWebSocketManager:
             return False
     
     async def connect_multi_stream(self, streams: List[str], stream_type: str = 'ticker'):
-        """Connect to multiple streams"""
         stream_url = f"{Config.BINANCE_WS_URL}/stream?streams={'/'.join(streams)}"
         connection_id = hashlib.md5(stream_url.encode()).hexdigest()[:8]
         
@@ -225,7 +220,7 @@ class AdvancedWebSocketManager:
                 ) as websocket:
                     
                     self._connection_status[connection_id] = 'connected'
-                    ws_logger.info(f"✅ WebSocket connected: {stream_type} ({len(streams)} streams)")
+                    ws_logger.info(f"WebSocket connected: {stream_type} ({len(streams)} streams)")
                     reconnect_attempts = 0
                     
                     async for message in websocket:
@@ -259,7 +254,6 @@ class AdvancedWebSocketManager:
                 await asyncio.sleep(Config.WS_CONFIG['reconnect_delay'])
     
     async def _process_ticker_data(self, data: Dict):
-        """Process ticker data with validation"""
         symbol = data['s']
         current_time = datetime.now(timezone.utc)
         
@@ -281,10 +275,8 @@ class AdvancedWebSocketManager:
             'validated': True
         }
         
-        # Update market data
         self.market_data[symbol] = self.price_data[symbol]
         
-        # Add to queue for history
         if symbol not in self._data_queues:
             self._data_queues[symbol] = deque(maxlen=1000)
         self._data_queues[symbol].append(self.price_data[symbol])
@@ -292,7 +284,6 @@ class AdvancedWebSocketManager:
         self._last_update[symbol] = current_time.timestamp()
     
     async def _process_kline_data(self, data: Dict):
-        """Process kline data"""
         kline = data['k']
         symbol = kline['s']
         interval = kline['i']
@@ -319,7 +310,6 @@ class AdvancedWebSocketManager:
         self.kline_data[key] = candle_data
     
     async def _process_depth_data(self, data: Dict):
-        """Process order book depth data"""
         symbol = data['s'].lower()
         
         self.orderbook_data[symbol] = {
@@ -330,22 +320,18 @@ class AdvancedWebSocketManager:
         }
     
     async def get_historical_prices(self, symbol: str, limit: int = 100) -> List[Dict]:
-        """Get historical price data from queue"""
         if symbol in self._data_queues:
             return list(self._data_queues[symbol])[-limit:]
         return []
     
     async def get_realtime_price(self, symbol: str) -> Optional[Dict]:
-        """Get real-time price with validation"""
         if symbol in self.price_data:
             data = self.price_data[symbol]
-            # Check if data is fresh (less than 5 seconds old)
             if time.time() - self._last_update.get(symbol, 0) < 5:
                 return data
         return None
     
     async def update_ticker_list(self):
-        """Update ticker list sorted by volume"""
         ticker_list = []
         for symbol, data in self.price_data.items():
             if data.get('validated', False):
@@ -365,8 +351,6 @@ class AdvancedWebSocketManager:
         self.ticker_data = ticker_list
     
     async def start_all_streams(self):
-        """Start all required WebSocket streams"""
-        # Start ticker streams for all symbols
         all_symbols = Config.SYMBOLS['major'] + Config.SYMBOLS['mid'] + Config.SYMBOLS['minor']
         stream_groups = [all_symbols[i:i+10] for i in range(0, len(all_symbols), 10)]
         
@@ -374,13 +358,11 @@ class AdvancedWebSocketManager:
             streams = [f"{symbol.lower()}@ticker" for symbol in group]
             asyncio.create_task(self.connect_multi_stream(streams, 'ticker'))
         
-        # Start kline streams for major symbols
         for symbol in Config.SYMBOLS['major'][:5]:
             for interval in ['1m', '5m', '15m', '1h', '4h']:
                 stream = f"{symbol.lower()}@kline_{interval}"
                 asyncio.create_task(self.connect_multi_stream([stream], 'kline'))
         
-        # Start order book streams
         for symbol in Config.SYMBOLS['major'][:3]:
             streams = [
                 f"{symbol.lower()}@depth20@100ms",
@@ -388,21 +370,18 @@ class AdvancedWebSocketManager:
             ]
             asyncio.create_task(self.connect_multi_stream(streams, 'depth'))
         
-        # Start periodic ticker list updates
         asyncio.create_task(self._periodic_updates())
         
         ws_logger.info(f"Started WebSocket streams for {len(all_symbols)} symbols")
     
     async def _periodic_updates(self):
-        """Periodic updates and maintenance"""
         while True:
             await self.update_ticker_list()
             
-            # Clean up old data
             current_time = time.time()
             old_symbols = []
             for symbol, last_update in self._last_update.items():
-                if current_time - last_update > 300:  # 5 minutes
+                if current_time - last_update > 300:
                     old_symbols.append(symbol)
             
             for symbol in old_symbols:
@@ -415,22 +394,17 @@ class AdvancedWebSocketManager:
 # ADVANCED TECHNICAL ANALYSIS
 # ==========================================
 class AdvancedTechnicalAnalysis:
-    """Advanced technical analysis with multiple indicators"""
-    
     @staticmethod
     def calculate_all_indicators(candles: List[Dict], symbol: str, timeframe: str) -> Dict:
-        """Calculate comprehensive technical indicators"""
         try:
             if not candles or len(candles) < 20:
                 return None
             
             df = pd.DataFrame(candles)
             
-            # Ensure we have required columns
             required_cols = ['open', 'high', 'low', 'close', 'volume']
             df.columns = df.columns.str.lower()
             
-            # Rename columns if needed
             col_mapping = {
                 'open': 'open', 'high': 'high', 'low': 'low', 
                 'close': 'close', 'volume': 'volume'
@@ -438,28 +412,23 @@ class AdvancedTechnicalAnalysis:
             
             for req in required_cols:
                 if req not in df.columns:
-                    # Try to find similar columns
                     for col in df.columns:
                         if req in col:
                             col_mapping[req] = col
                             break
             
-            # Calculate basic indicators
             current_price = float(df[col_mapping['close']].iloc[-1])
             price_24h_ago = float(df[col_mapping['close']].iloc[-24]) if len(df) > 24 else current_price
             change_24h = ((current_price - price_24h_ago) / price_24h_ago * 100) if price_24h_ago > 0 else 0
             
-            # Simple moving averages
             closes = df[col_mapping['close']].astype(float)
             sma_20 = closes.rolling(window=20).mean().iloc[-1]
             sma_50 = closes.rolling(window=50).mean().iloc[-1]
             sma_200 = closes.rolling(window=200).mean().iloc[-1] if len(df) >= 200 else None
             
-            # Exponential moving averages
             ema_12 = closes.ewm(span=12).mean().iloc[-1]
             ema_26 = closes.ewm(span=26).mean().iloc[-1]
             
-            # RSI (Relative Strength Index)
             delta = closes.diff()
             gain = (delta.where(delta > 0, 0)).rolling(window=14).mean()
             loss = (-delta.where(delta < 0, 0)).rolling(window=14).mean()
@@ -467,33 +436,27 @@ class AdvancedTechnicalAnalysis:
             rsi = 100 - (100 / (1 + rs))
             current_rsi = rsi.iloc[-1] if not rsi.empty else 50
             
-            # MACD
-            ema_12 = closes.ewm(span=12).mean()
-            ema_26 = closes.ewm(span=26).mean()
-            macd_line = ema_12 - ema_26
+            ema_12_series = closes.ewm(span=12).mean()
+            ema_26_series = closes.ewm(span=26).mean()
+            macd_line = ema_12_series - ema_26_series
             signal_line = macd_line.ewm(span=9).mean()
             macd_histogram = macd_line - signal_line
             
-            # Bollinger Bands
             bb_upper = closes.rolling(window=20).mean() + (closes.rolling(window=20).std() * 2)
             bb_lower = closes.rolling(window=20).mean() - (closes.rolling(window=20).std() * 2)
             bb_middle = closes.rolling(window=20).mean()
             
-            # Volume analysis
             volume = df[col_mapping['volume']].astype(float)
             volume_sma = volume.rolling(window=20).mean().iloc[-1]
             current_volume = volume.iloc[-1]
             volume_ratio = current_volume / volume_sma if volume_sma > 0 else 1
             
-            # Support and Resistance levels (simplified)
             recent_highs = df[col_mapping['high']].astype(float).rolling(window=20).max().iloc[-1]
             recent_lows = df[col_mapping['low']].astype(float).rolling(window=20).min().iloc[-1]
             
-            # Volatility (ATR approximation)
             high_low = df[col_mapping['high']].astype(float) - df[col_mapping['low']].astype(float)
             atr = high_low.rolling(window=14).mean().iloc[-1]
             
-            # Trend analysis
             trend_score = 0
             if sma_20 > sma_50:
                 trend_score += 1
@@ -509,11 +472,9 @@ class AdvancedTechnicalAnalysis:
                 3: "BULLISH"
             }
             
-            # Signal generation
             signals = {}
             signal_score = 0
             
-            # RSI signal
             if current_rsi < 30:
                 signals['rsi'] = "OVERSOLD"
                 signal_score += 1
@@ -523,7 +484,6 @@ class AdvancedTechnicalAnalysis:
             else:
                 signals['rsi'] = "NEUTRAL"
             
-            # MACD signal
             macd_value = macd_line.iloc[-1] if not macd_line.empty else 0
             signal_value = signal_line.iloc[-1] if not signal_line.empty else 0
             if macd_value > signal_value and macd_histogram.iloc[-1] > 0:
@@ -535,7 +495,6 @@ class AdvancedTechnicalAnalysis:
             else:
                 signals['macd'] = "NEUTRAL"
             
-            # Bollinger Bands signal
             if current_price > bb_upper.iloc[-1]:
                 signals['bb'] = "OVERBOUGHT"
                 signal_score -= 1
@@ -545,7 +504,6 @@ class AdvancedTechnicalAnalysis:
             else:
                 signals['bb'] = "NEUTRAL"
             
-            # Volume signal
             if volume_ratio > 1.5:
                 signals['volume'] = "HIGH_VOLUME"
                 signal_score += 0.5
@@ -555,7 +513,6 @@ class AdvancedTechnicalAnalysis:
             else:
                 signals['volume'] = "NORMAL"
             
-            # Overall signal
             if signal_score >= 2:
                 overall_signal = "STRONG_BUY"
             elif signal_score >= 1:
@@ -567,10 +524,8 @@ class AdvancedTechnicalAnalysis:
             else:
                 overall_signal = "NEUTRAL"
             
-            # Calculate confidence
             confidence = min(abs(signal_score) * 25, 100)
             
-            # Candlestick patterns (simplified)
             patterns = []
             if len(df) >= 3:
                 last_close = closes.iloc[-1]
@@ -578,17 +533,14 @@ class AdvancedTechnicalAnalysis:
                 prev_close = closes.iloc[-2]
                 prev_open = float(df[col_mapping['open']].iloc[-2])
                 
-                # Bullish engulfing
                 if (last_close > last_open and prev_close < prev_open and 
                     last_close > prev_open and last_open < prev_close):
                     patterns.append({"name": "Bullish Engulfing", "signal": "BULLISH", "confidence": 70})
                 
-                # Bearish engulfing
                 if (last_close < last_open and prev_close > prev_open and 
                     last_close < prev_open and last_open > prev_close):
                     patterns.append({"name": "Bearish Engulfing", "signal": "BEARISH", "confidence": 70})
                 
-                # Doji
                 body_size = abs(last_close - last_open)
                 total_range = float(df[col_mapping['high']].iloc[-1]) - float(df[col_mapping['low']].iloc[-1])
                 if total_range > 0 and body_size / total_range < 0.1:
@@ -643,8 +595,6 @@ class AdvancedTechnicalAnalysis:
 # ENHANCED DATA MANAGER
 # ==========================================
 class EnhancedDataManager:
-    """Enhanced data manager with failover, validation, and caching"""
-    
     def __init__(self):
         self.session = None
         self.cache = {}
@@ -659,13 +609,11 @@ class EnhancedDataManager:
         }
     
     async def initialize(self):
-        """Initialize the data manager"""
         self.session = aiohttp.ClientSession(
             timeout=aiohttp.ClientTimeout(total=30),
             connector=aiohttp.TCPConnector(limit=100, ttl_dns_cache=300)
         )
         
-        # Initialize rate limiters
         for service in ['binance', 'coingecko']:
             self.rate_limiters[service] = {
                 'last_request': 0,
@@ -673,18 +621,15 @@ class EnhancedDataManager:
                 'window_start': time.time()
             }
         
-        # Initialize WebSocket manager
         await self.ws_manager.start_all_streams()
         
         data_logger.info("Enhanced Data Manager initialized")
     
     async def _get_cache_key(self, prefix: str, params: Dict) -> str:
-        """Generate cache key"""
         param_str = json.dumps(params, sort_keys=True)
         return f"{prefix}:{hashlib.md5(param_str.encode()).hexdigest()}"
     
     async def _get_cached(self, cache_key: str, ttl: int) -> Optional[Any]:
-        """Get cached data with TTL check"""
         if cache_key in self.cache:
             data, timestamp = self.cache[cache_key]
             if time.time() - timestamp < ttl:
@@ -697,20 +642,16 @@ class EnhancedDataManager:
         return None
     
     async def _set_cached(self, cache_key: str, data: Any):
-        """Set cached data"""
         self.cache[cache_key] = (data, time.time())
     
     async def _rate_limit(self, service: str):
-        """Enhanced rate limiting with sliding window"""
         limiter = self.rate_limiters[service]
         current_time = time.time()
         
-        # Reset window if needed
         if current_time - limiter['window_start'] > 60:
             limiter['window_start'] = current_time
             limiter['request_count'] = 0
         
-        # Check rate limit
         max_requests = Config.RATE_LIMITS[service]['requests']
         if limiter['request_count'] >= max_requests:
             wait_time = 60 - (current_time - limiter['window_start'])
@@ -720,7 +661,6 @@ class EnhancedDataManager:
             limiter['window_start'] = current_time
             limiter['request_count'] = 0
         
-        # Check minimum delay between requests
         min_delay = 60 / max_requests
         time_since_last = current_time - limiter['last_request']
         if time_since_last < min_delay:
@@ -731,26 +671,22 @@ class EnhancedDataManager:
         self._stats['requests'][service] += 1
     
     async def fetch_binance_klines(self, symbol: str, interval: str, limit: int = 500) -> List[Dict]:
-        """Fetch OHLCV data from Binance with validation"""
         try:
             cache_key = await self._get_cache_key(
                 f"binance:klines:{symbol}:{interval}",
                 {'limit': limit}
             )
             
-            # Try cache first
             cached = await self._get_cached(cache_key, Config.CACHE_TTL['klines'])
             if cached:
                 return cached
             
-            # Try WebSocket first
             ws_data = await self._get_ws_klines(symbol, interval, limit)
-            if ws_data and len(ws_data) >= limit * 0.8:  # At least 80% data from WS
+            if ws_data and len(ws_data) >= limit * 0.8:
                 data_logger.debug(f"Using WebSocket data for {symbol} {interval}")
                 await self._set_cached(cache_key, ws_data)
                 return ws_data
             
-            # Fallback to API
             await self._rate_limit('binance')
             
             url = f"{Config.BINANCE_BASE_URL}/api/v3/klines"
@@ -764,7 +700,6 @@ class EnhancedDataManager:
                 if response.status == 200:
                     data = await response.json()
                     
-                    # Validate data
                     if not isinstance(data, list) or len(data) == 0:
                         raise ValueError("Invalid data format")
                     
@@ -788,7 +723,6 @@ class EnhancedDataManager:
                                 "valid": True
                             }
                             
-                            # Validate candle data
                             if not (candle['high'] >= candle['low'] >= 0 and
                                    candle['high'] >= candle['close'] >= candle['low'] and
                                    candle['high'] >= candle['open'] >= candle['low']):
@@ -800,13 +734,11 @@ class EnhancedDataManager:
                             data_logger.error(f"Error parsing candle {i}: {e}")
                             continue
                     
-                    # Filter valid candles
                     valid_candles = [c for c in candles if c['valid']]
                     
-                    if len(valid_candles) < limit * 0.5:  # Need at least 50% valid data
+                    if len(valid_candles) < limit * 0.5:
                         raise ValueError(f"Insufficient valid data: {len(valid_candles)}/{len(data)}")
                     
-                    # Cache result
                     await self._set_cached(cache_key, valid_candles)
                     
                     data_logger.info(f"Fetched {len(valid_candles)} candles for {symbol} {interval}")
@@ -815,28 +747,22 @@ class EnhancedDataManager:
                     error_text = await response.text()
                     data_logger.error(f"Binance API error {response.status}: {error_text}")
                     
-                    # Try WebSocket as fallback
                     return await self._get_ws_klines(symbol, interval, limit)
                     
         except Exception as e:
             self._stats['errors']['binance_klines'] += 1
             data_logger.error(f"Error fetching Binance klines for {symbol}: {e}")
             
-            # Final fallback to WebSocket
             return await self._get_ws_klines(symbol, interval, limit)
     
     async def _get_ws_klines(self, symbol: str, interval: str, limit: int) -> List[Dict]:
-        """Get kline data from WebSocket without synthetic generation"""
         try:
             key = f"{symbol}_{interval}"
             if key in self.ws_manager.kline_data:
                 ws_candle = self.ws_manager.kline_data[key]
-                
-                # Use real data only, if not enough, return what is available
                 candles = []
-                # Assuming we have only latest from WS, fetch more from API if needed
                 candles.append(ws_candle)
-                return candles  # Only latest, or extend with API in production
+                return candles
             return []
             
         except Exception as e:
@@ -861,14 +787,12 @@ class EnhancedDataManager:
             
             cache_key = await self._get_cache_key(f"coingecko:{coin_id}", {})
             
-            # Try cache
             cached = await self._get_cached(cache_key, Config.CACHE_TTL['ticker'])
             if cached:
                 return cached
             
             await self._rate_limit('coingecko')
             
-            # Fetch comprehensive data
             url = f"{Config.COINGECKO_BASE_URL}/coins/{coin_id}"
             params = {
                 "localization": "false",
@@ -921,7 +845,6 @@ class EnhancedDataManager:
             return None
     
     async def _symbol_to_coingecko_id(self, symbol: str) -> Optional[str]:
-        """Convert symbol to CoinGecko ID"""
         symbol_map = {
             'BTC': 'bitcoin', 'ETH': 'ethereum', 'BNB': 'binancecoin',
             'XRP': 'ripple', 'ADA': 'cardano', 'SOL': 'solana',
@@ -936,16 +859,13 @@ class EnhancedDataManager:
         return symbol_map.get(clean_symbol, clean_symbol.lower())
     
     async def get_realtime_ticker(self, symbol: str) -> Optional[Dict]:
-        """Get real-time ticker data with priority: WebSocket > API"""
         try:
             symbol_upper = symbol.upper()
             
-            # Try WebSocket first
             ws_price = await self.ws_manager.get_realtime_price(symbol_upper)
             if ws_price:
                 return ws_price
             
-            # Fallback to API
             cache_key = await self._get_cache_key(f"binance:ticker:{symbol}", {})
             cached = await self._get_cached(cache_key, Config.CACHE_TTL['ticker'])
             if cached:
@@ -988,18 +908,15 @@ class EnhancedDataManager:
             return None
     
     async def get_market_overview(self) -> List[Dict]:
-        """Get comprehensive market overview"""
         try:
             cache_key = "market:overview:all"
             cached = await self._get_cached(cache_key, Config.CACHE_TTL['market'])
             if cached:
                 return cached
             
-            # Use WebSocket data if available
             if self.ws_manager.ticker_data:
                 result = self.ws_manager.ticker_data[:20]
             else:
-                # Fallback to API
                 result = []
                 symbols = Config.SYMBOLS['major'] + Config.SYMBOLS['mid'][:5]
                 
@@ -1026,15 +943,12 @@ class EnhancedDataManager:
             return []
     
     async def get_order_book(self, symbol: str, limit: int = 20) -> Optional[Dict]:
-        """Get order book data"""
         try:
             symbol_lower = symbol.lower()
             
-            # Try WebSocket first
             if symbol_lower in self.ws_manager.orderbook_data:
                 return self.ws_manager.orderbook_data[symbol_lower]
             
-            # Fallback to API
             cache_key = await self._get_cache_key(f"orderbook:{symbol}", {'limit': limit})
             cached = await self._get_cached(cache_key, Config.CACHE_TTL['orderbook'])
             if cached:
@@ -1072,19 +986,15 @@ class EnhancedDataManager:
             return None
     
     async def close(self):
-        """Close the session"""
         if self.session:
             await self.session.close()
         
         data_logger.info("Data Manager closed")
 
 # ==========================================
-# ==========================================
-# MACHINE LEARNING PREDICTOR (TA-Lib olmadan)
+# MACHINE LEARNING PREDICTOR
 # ==========================================
 class MLPredictor:
-    """Machine Learning predictor for trading signals using XGBoost"""
-    
     def __init__(self):
         self.models = {}
         self.scalers = {}
@@ -1092,24 +1002,19 @@ class MLPredictor:
         self.feature_cols = None
     
     async def train(self, symbol: str, df: pd.DataFrame):
-        """Train ML model"""
         if len(df) < Config.ML_CONFIG['min_data_points']:
             return
         
-        # Add indicators
         df_ta = self.add_indicators(df)
         
-        # Generate labels
         lookahead = Config.ML_CONFIG['lookahead']
         thresh = Config.ML_CONFIG['threshold']
         labels = self.generate_label(df_ta, lookahead, thresh)
         
         df_ta['label'] = labels
         
-        # Drop NaN
         df_ta.dropna(inplace=True)
         
-        # Features
         feature_cols = [c for c in df_ta.columns if c not in ["Open","High","Low","Close","Adj Close","Volume","label"]]
         self.feature_cols = feature_cols
         
@@ -1119,15 +1024,12 @@ class MLPredictor:
         if len(X) < 100:
             return
         
-        # Split
         X_train, X_test, y_train, y_test = train_test_split(X, y, test_size=0.2, random_state=42)
         
-        # Scale
         scaler = StandardScaler().fit(X_train)
         X_train_scaled = scaler.transform(X_train)
         X_test_scaled = scaler.transform(X_test)
         
-        # Model
         model = XGBClassifier(
             n_estimators=300,
             max_depth=6,
@@ -1148,46 +1050,36 @@ class MLPredictor:
         self.last_train_time[symbol] = time.time()
     
     async def predict(self, symbol: str, df: pd.DataFrame) -> str:
-        """Predict using ML model"""
         if symbol not in self.models or time.time() - self.last_train_time.get(symbol, 0) > Config.ML_CONFIG['retrain_interval']:
             await self.train(symbol, df)
         
         if symbol not in self.models:
             return "HOLD"
         
-        # Add indicators to latest data
-        df_ta = self.add_indicators(df.iloc[-100:])  # Use last 100 for indicators
+        df_ta = self.add_indicators(df.iloc[-100:])
         
-        # Features
-        X = df_ta[self.feature_cols].iloc[-1:]  # Latest row
+        X = df_ta[self.feature_cols].iloc[-1:]
         
-        # Scale
         X_scaled = self.scalers[symbol].transform(X)
         
-        # Predict
         pred = self.models[symbol].predict(X_scaled)[0]
         
         mapping = {0: "HOLD", 1: "SELL", 2: "BUY"}
         return mapping.get(pred, "HOLD")
     
     def add_indicators(self, data: pd.DataFrame) -> pd.DataFrame:
-        """Add technical indicators without TA-Lib"""
         df = data.copy()
         
-        # Ensure we have required columns
         if 'close' not in df.columns.str.lower():
-            # Try to find close column
             for col in df.columns:
                 if 'close' in col.lower():
                     df['Close'] = df[col]
                     break
         
-        # Ensure Close column exists
         if 'Close' not in df.columns:
             logger.warning("No Close column found for indicators")
             return df
         
-        # RSI (Relative Strength Index)
         def calculate_rsi(prices, period=14):
             delta = prices.diff()
             gain = (delta.where(delta > 0, 0)).rolling(window=period).mean()
@@ -1198,19 +1090,16 @@ class MLPredictor:
         for length in [5, 10, 15]:
             df[f"rsi_{length}"] = calculate_rsi(df["Close"], length)
         
-        # Rate of Change (ROC)
         def calculate_roc(prices, period=10):
             return (prices / prices.shift(period) - 1) * 100
         
         df["roc_10"] = calculate_roc(df["Close"], 10)
         
-        # Momentum
         def calculate_mom(prices, period=10):
             return prices - prices.shift(period)
         
         df["mom_10"] = calculate_mom(df["Close"], 10)
         
-        # Stochastic RSI (simplified)
         def calculate_stoch_rsi(prices, period=14):
             rsi = calculate_rsi(prices, period)
             lowest = rsi.rolling(window=period).min()
@@ -1220,26 +1109,6 @@ class MLPredictor:
         df["stochrsi_k"] = calculate_stoch_rsi(df["Close"], 14)
         df["stochrsi_d"] = df["stochrsi_k"].rolling(window=3).mean()
         
-        # CCI (Commodity Channel Index)
-        def calculate_cci(high, low, close, period=20):
-            tp = (high + low + close) / 3
-            sma_tp = tp.rolling(window=period).mean()
-            mad = tp.rolling(window=period).apply(lambda x: np.mean(np.abs(x - np.mean(x))))
-            return (tp - sma_tp) / (0.015 * mad)
-        
-        if 'High' in df.columns and 'Low' in df.columns:
-            df["cci_20"] = calculate_cci(df["High"], df["Low"], df["Close"], 20)
-        
-        # Williams %R
-        def calculate_williams_r(high, low, close, period=14):
-            highest_high = high.rolling(window=period).max()
-            lowest_low = low.rolling(window=period).min()
-            return ((highest_high - close) / (highest_high - lowest_low)) * -100
-        
-        if 'High' in df.columns and 'Low' in df.columns:
-            df["wr_14"] = calculate_williams_r(df["High"], df["Low"], df["Close"], 14)
-        
-        # MACD
         def calculate_macd(prices, fast=12, slow=26, signal=9):
             ema_fast = prices.ewm(span=fast).mean()
             ema_slow = prices.ewm(span=slow).mean()
@@ -1253,26 +1122,14 @@ class MLPredictor:
         df["macd_signal"] = signal_line
         df["macd_histogram"] = histogram
         
-        # Simple Moving Averages
         for length in [5, 10, 20, 50, 200]:
             if len(df) >= length:
                 df[f"sma_{length}"] = df["Close"].rolling(window=length).mean()
         
-        # Exponential Moving Averages
         for length in [5, 10, 20, 50]:
             if len(df) >= length:
                 df[f"ema_{length}"] = df["Close"].ewm(span=length).mean()
         
-        # Volume Weighted Moving Average
-        def calculate_vwma(close, volume, period=20):
-            vw = (close * volume).rolling(window=period).sum()
-            v = volume.rolling(window=period).sum()
-            return vw / v
-        
-        if 'Volume' in df.columns:
-            df["vwma_20"] = calculate_vwma(df["Close"], df["Volume"], 20)
-        
-        # Bollinger Bands
         def calculate_bollinger_bands(prices, period=20, std_dev=2):
             sma = prices.rolling(window=period).mean()
             std = prices.rolling(window=period).std()
@@ -1287,109 +1144,14 @@ class MLPredictor:
         df["bb_width"] = (bb_upper - bb_lower) / bb_middle
         df["bb_position"] = (df["Close"] - bb_lower) / (bb_upper - bb_lower)
         
-        # Average True Range (ATR)
-        def calculate_atr(high, low, close, period=14):
-            tr1 = high - low
-            tr2 = abs(high - close.shift())
-            tr3 = abs(low - close.shift())
-            tr = pd.concat([tr1, tr2, tr3], axis=1).max(axis=1)
-            return tr.rolling(window=period).mean()
-        
-        if 'High' in df.columns and 'Low' in df.columns:
-            df["atr_14"] = calculate_atr(df["High"], df["Low"], df["Close"], 14)
-        
-        # Keltner Channels
-        def calculate_keltner_channels(high, low, close, period=20, atr_mult=2):
-            middle = close.ewm(span=period).mean()
-            atr = calculate_atr(high, low, close, period)
-            upper = middle + (atr * atr_mult)
-            lower = middle - (atr * atr_mult)
-            return upper, middle, lower
-        
-        if 'High' in df.columns and 'Low' in df.columns:
-            kc_upper, kc_middle, kc_lower = calculate_keltner_channels(
-                df["High"], df["Low"], df["Close"], 20, 2
-            )
-            df["kc_upper"] = kc_upper
-            df["kc_middle"] = kc_middle
-            df["kc_lower"] = kc_lower
-        
-        # On-Balance Volume (OBV)
-        def calculate_obv(close, volume):
-            obv = pd.Series(0, index=close.index)
-            for i in range(1, len(close)):
-                if close.iloc[i] > close.iloc[i-1]:
-                    obv.iloc[i] = obv.iloc[i-1] + volume.iloc[i]
-                elif close.iloc[i] < close.iloc[i-1]:
-                    obv.iloc[i] = obv.iloc[i-1] - volume.iloc[i]
-                else:
-                    obv.iloc[i] = obv.iloc[i-1]
-            return obv
-        
-        if 'Volume' in df.columns:
-            df["obv"] = calculate_obv(df["Close"], df["Volume"])
-        
-        # Accumulation/Distribution Line
-        def calculate_ad_line(high, low, close, volume):
-            clv = ((close - low) - (high - close)) / (high - low)
-            clv = clv.replace([np.inf, -np.inf], 0)
-            return (clv * volume).cumsum()
-        
-        if 'High' in df.columns and 'Low' in df.columns and 'Volume' in df.columns:
-            df["ad_line"] = calculate_ad_line(df["High"], df["Low"], df["Close"], df["Volume"])
-        
-        # Elder's Force Index
-        def calculate_efi(close, volume, period=13):
-            force = (close - close.shift(1)) * volume
-            return force.ewm(span=period).mean()
-        
-        if 'Volume' in df.columns:
-            df["efi"] = calculate_efi(df["Close"], df["Volume"], 13)
-        
-        # Negative Volume Index (NVI)
-        def calculate_nvi(close, volume):
-            pct_change = close.pct_change()
-            nvi = pd.Series(1000, index=close.index)  # Start with 1000
-            for i in range(1, len(close)):
-                if volume.iloc[i] < volume.iloc[i-1]:
-                    nvi.iloc[i] = nvi.iloc[i-1] * (1 + pct_change.iloc[i])
-                else:
-                    nvi.iloc[i] = nvi.iloc[i-1]
-            return nvi
-        
-        if 'Volume' in df.columns:
-            df["nvi"] = calculate_nvi(df["Close"], df["Volume"])
-        
-        # Positive Volume Index (PVI)
-        def calculate_pvi(close, volume):
-            pct_change = close.pct_change()
-            pvi = pd.Series(1000, index=close.index)  # Start with 1000
-            for i in range(1, len(close)):
-                if volume.iloc[i] > volume.iloc[i-1]:
-                    pvi.iloc[i] = pvi.iloc[i-1] * (1 + pct_change.iloc[i])
-                else:
-                    pvi.iloc[i] = pvi.iloc[i-1]
-            return pvi
-        
-        if 'Volume' in df.columns:
-            df["pvi"] = calculate_pvi(df["Close"], df["Volume"])
-        
-        # Price velocity (rate of change of price)
         df["price_velocity_5"] = df["Close"].pct_change(5)
         df["price_velocity_10"] = df["Close"].pct_change(10)
         df["price_velocity_20"] = df["Close"].pct_change(20)
         
-        # Volume ratio
         if 'Volume' in df.columns:
             df["volume_ratio_5"] = df["Volume"] / df["Volume"].rolling(window=5).mean()
             df["volume_ratio_10"] = df["Volume"] / df["Volume"].rolling(window=10).mean()
         
-        # Price position within recent range
-        if 'High' in df.columns and 'Low' in df.columns:
-            df["price_position"] = (df["Close"] - df["Low"].rolling(window=20).min()) / \
-                                   (df["High"].rolling(window=20).max() - df["Low"].rolling(window=20).min())
-        
-        # Volatility indicators
         df["volatility_5"] = df["Close"].rolling(window=5).std() / df["Close"].rolling(window=5).mean()
         df["volatility_10"] = df["Close"].rolling(window=10).std() / df["Close"].rolling(window=10).mean()
         df["volatility_20"] = df["Close"].rolling(window=20).std() / df["Close"].rolling(window=20).mean()
@@ -1397,7 +1159,6 @@ class MLPredictor:
         return df
     
     def generate_label(self, data: pd.DataFrame, lookahead: int = 5, thresh: float = 0.01, col: str = "Close") -> pd.Series:
-        """Generate labels for ML training"""
         if col not in data.columns:
             col = 'Close' if 'Close' in data.columns else data.columns[0]
         
@@ -1421,8 +1182,6 @@ class MLPredictor:
 # ENHANCED TRADING ENGINE
 # ==========================================
 class EnhancedTradingEngine:
-    """Enhanced trading engine with risk management and backtesting"""
-    
     def __init__(self):
         self.positions = {}
         self.order_history = []
@@ -1438,7 +1197,6 @@ class EnhancedTradingEngine:
         self.ml_predictor = MLPredictor()
         
     async def calculate_trading_signal(self, analysis: Dict, df: pd.DataFrame) -> Dict:
-        """Calculate comprehensive trading signal with ML integration"""
         try:
             if not analysis or not analysis.get('indicators'):
                 return self._default_signal()
@@ -1449,11 +1207,9 @@ class EnhancedTradingEngine:
             patterns = analysis.get('patterns', [])
             current_price = analysis['current_price']
             
-            # Initialize scoring
             score = 50
             reasons = []
             
-            # Trend scoring (40% weight)
             trend_direction = trend.get('direction', 'SIDEWAYS')
             trend_strength = trend.get('strength', 0)
             
@@ -1464,7 +1220,6 @@ class EnhancedTradingEngine:
                 score -= trend_strength * 0.4
                 reasons.append(f"Trend: {trend_direction} (Strength: {trend_strength})")
             
-            # Signal scoring (30% weight)
             overall_signal = signals.get('overall', 'NEUTRAL')
             signal_confidence = signals.get('confidence', 50)
             
@@ -1475,7 +1230,6 @@ class EnhancedTradingEngine:
                 score -= signal_confidence * 0.3
                 reasons.append(f"Signal: {overall_signal} (Confidence: {signal_confidence}%)")
             
-            # Pattern scoring (20% weight)
             pattern_score = 0
             for pattern in patterns:
                 if pattern['signal'] == 'BULLISH':
@@ -1487,7 +1241,6 @@ class EnhancedTradingEngine:
             
             score += pattern_score * 0.2
             
-            # ML scoring (10% weight)
             ml_signal = await self.ml_predictor.predict(analysis['symbol'], df)
             if ml_signal == "BUY":
                 score += 10
@@ -1498,13 +1251,11 @@ class EnhancedTradingEngine:
             else:
                 reasons.append("ML Signal: HOLD")
             
-            # Normalize score
             score = max(0, min(100, score))
             
-            # Calculate risk parameters
             atr = indicators.get('atr', current_price * 0.01)
             stop_loss_distance = max(atr * 1.5, current_price * Config.TRADING['stop_loss_pct'])
-            take_profit_distance = stop_loss_distance * 2  # 2:1 risk-reward
+            take_profit_distance = stop_loss_distance * 2
             
             if score >= 70:
                 signal_type = "STRONG_BUY"
@@ -1532,7 +1283,6 @@ class EnhancedTradingEngine:
                 take_profit = None
                 position_size = 0
             
-            # Calculate confidence
             confidence = abs(score - 50) * 2
             
             result = {
@@ -1545,7 +1295,7 @@ class EnhancedTradingEngine:
                 "position_size": round(position_size, 6),
                 "risk_reward": 2.0 if stop_loss and take_profit else 0,
                 "atr": round(atr, 4),
-                "reasons": reasons[:5],  # Top 5 reasons
+                "reasons": reasons[:5],
                 "timestamp": datetime.now(timezone.utc).isoformat(),
                 "analysis_summary": {
                     "trend": trend_direction,
@@ -1563,7 +1313,6 @@ class EnhancedTradingEngine:
             return self._default_signal()
     
     def _default_signal(self) -> Dict:
-        """Default signal when analysis fails"""
         return {
             "signal": "HOLD",
             "confidence": 0,
@@ -1583,14 +1332,12 @@ class EnhancedTradingEngine:
                                order_type: str = "MARKET", price: Optional[float] = None,
                                stop_loss: Optional[float] = None, 
                                take_profit: Optional[float] = None) -> Dict:
-        """Execute simulated trade order"""
         try:
             order_id = f"SIM_{int(time.time() * 1000)}_{symbol}"
             
-            # Calculate order values
             execution_price = price or self._get_current_simulated_price(symbol)
             if not execution_price:
-                execution_price = 50000  # Default for simulation
+                execution_price = 50000
             
             order_value = quantity * execution_price
             
@@ -1605,12 +1352,11 @@ class EnhancedTradingEngine:
                 "take_profit": take_profit,
                 "value": round(order_value, 2),
                 "status": "FILLED",
-                "fee": order_value * 0.001,  # 0.1% fee
+                "fee": order_value * 0.001,
                 "timestamp": datetime.now(timezone.utc).isoformat(),
                 "simulated": True
             }
             
-            # Update position
             if side == "BUY":
                 if symbol not in self.positions:
                     self.positions[symbol] = {
@@ -1624,7 +1370,6 @@ class EnhancedTradingEngine:
                     }
                 else:
                     pos = self.positions[symbol]
-                    # Average entry price
                     total_qty = pos["quantity"] + quantity
                     pos["entry_price"] = (
                         (pos["entry_price"] * pos["quantity"]) + 
@@ -1639,19 +1384,16 @@ class EnhancedTradingEngine:
                 if symbol in self.positions:
                     pos = self.positions[symbol]
                     if quantity >= pos["quantity"]:
-                        # Close position
                         profit_loss = (execution_price - pos["entry_price"]) * pos["quantity"]
                         self._record_trade(symbol, profit_loss)
                         del self.positions[symbol]
                     else:
-                        # Partial close
                         profit_loss = (execution_price - pos["entry_price"]) * quantity
                         self._record_trade(symbol, profit_loss)
                         pos["quantity"] -= quantity
             
             self.order_history.append(order)
             
-            # Update performance metrics
             self._update_performance_metrics()
             
             logger.info(f"Simulated order executed: {order_id}")
@@ -1667,18 +1409,14 @@ class EnhancedTradingEngine:
             }
     
     def _get_current_simulated_price(self, symbol: str) -> Optional[float]:
-        """Get simulated current price (in real app, would fetch from data manager)"""
-        # This is a placeholder - in real implementation, fetch from data manager
         price_map = {
             "BTCUSDT": 50000,
             "ETHUSDT": 3000,
             "BNBUSDT": 500,
-            # Add more symbols as needed
         }
         return price_map.get(symbol.upper())
     
     def _record_trade(self, symbol: str, pnl: float):
-        """Record trade for performance tracking"""
         trade = {
             "trade_id": f"TRADE_{int(time.time() * 1000)}",
             "symbol": symbol,
@@ -1689,7 +1427,6 @@ class EnhancedTradingEngine:
         
         self.trade_history.append(trade)
         
-        # Update performance
         self.performance['total_trades'] += 1
         if pnl > 0:
             self.performance['winning_trades'] += 1
@@ -1698,17 +1435,14 @@ class EnhancedTradingEngine:
         
         self.performance['total_profit'] += pnl
         
-        # Update max drawdown (simplified)
         if pnl < self.performance['max_drawdown']:
             self.performance['max_drawdown'] = pnl
     
     def _update_performance_metrics(self):
-        """Update performance metrics"""
         if self.performance['total_trades'] > 0:
             win_rate = (self.performance['winning_trades'] / 
                        self.performance['total_trades'] * 100)
             
-            # Calculate Sharpe ratio (simplified)
             if len(self.trade_history) >= 2:
                 returns = [t['pnl'] for t in self.trade_history[-20:]]
                 if returns:
@@ -1724,7 +1458,6 @@ class EnhancedTradingEngine:
             )
     
     def get_performance_report(self) -> Dict:
-        """Get performance report"""
         return {
             **self.performance,
             "current_positions": len(self.positions),
@@ -1736,8 +1469,6 @@ class EnhancedTradingEngine:
 # WEBSOCKET ENDPOINT FOR REAL-TIME DATA
 # ==========================================
 class ConnectionManager:
-    """Manage WebSocket connections for real-time data"""
-    
     def __init__(self):
         self.active_connections: List[WebSocket] = []
         self.subscriptions: Dict[str, set] = defaultdict(set)
@@ -1748,12 +1479,10 @@ class ConnectionManager:
     
     def disconnect(self, websocket: WebSocket):
         self.active_connections.remove(websocket)
-        # Remove subscriptions
         for symbol in list(self.subscriptions.keys()):
             self.subscriptions[symbol].discard(websocket)
     
     async def broadcast(self, data: Dict):
-        """Broadcast data to all connected clients"""
         disconnected = []
         for connection in self.active_connections:
             try:
@@ -1765,7 +1494,6 @@ class ConnectionManager:
             self.disconnect(connection)
     
     async def send_to_subscribers(self, symbol: str, data: Dict):
-        """Send data to subscribers of specific symbol"""
         if symbol in self.subscriptions:
             disconnected = []
             for connection in self.subscriptions[symbol]:
@@ -1788,7 +1516,7 @@ START_TIME = time.time()
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     global data_manager, trading_engine
-    # Startup
+    
     logger.info("=" * 80)
     logger.info("🚀 ADVANCED TRADING PLATFORM - INITIALIZING")
     logger.info("=" * 80)
@@ -1810,19 +1538,15 @@ async def lifespan(app: FastAPI):
     
     yield
     
-    # Shutdown
     logger.info("🛑 Shutting down Trading Platform...")
     await data_manager.close()
     logger.info("✅ Clean shutdown complete")
 
 async def _background_data_updater():
-    """Background task to update market data periodically"""
     while True:
         try:
-            # Update market overview every 10 seconds
             market_data = await data_manager.get_market_overview()
             
-            # Broadcast to WebSocket clients
             await ws_manager.broadcast({
                 "type": "market_update",
                 "data": market_data,
@@ -1835,28 +1559,24 @@ async def _background_data_updater():
             await asyncio.sleep(30)
             
 async def _background_analysis_updater():
-    """Background task to update analysis for major symbols"""
     major_symbols = Config.SYMBOLS['major']
     
     while True:
         try:
-            for symbol in major_symbols[:3]:  # Only first 3 symbols
+            for symbol in major_symbols[:3]:
                 candles = await data_manager.fetch_binance_klines(symbol, "1h", 100)
                 if candles and len(candles) >= 50:
-                    # Perform analysis
                     analysis = AdvancedTechnicalAnalysis.calculate_all_indicators(candles, symbol, "1h")
                     
                     if analysis:
                         df = pd.DataFrame(candles)
-                        # Get trading signal
                         signal = await trading_engine.calculate_trading_signal(analysis, df)
                         
-                        # Log the signal
                         logger.info(f"Signal for {symbol}: {signal['signal']} with {signal['confidence']}% confidence")
                     
-                await asyncio.sleep(2)  # Small delay between symbols
+                await asyncio.sleep(2)
             
-            await asyncio.sleep(60)  # Wait 1 minute before next update
+            await asyncio.sleep(60)
             
         except Exception as e:
             logger.error(f"Background analysis updater error: {e}")
@@ -1872,7 +1592,6 @@ app = FastAPI(
     lifespan=lifespan
 )
 
-# CORS middleware
 app.add_middleware(
     CORSMiddleware,
     allow_origins=["*"],
@@ -1889,19 +1608,16 @@ async def websocket_endpoint(websocket: WebSocket):
     await ws_manager.connect(websocket)
     
     try:
-        # Send initial data
         await websocket.send_json({
             "type": "connected",
             "message": "Connected to real-time data feed",
             "timestamp": datetime.now(timezone.utc).isoformat()
         })
         
-        # Handle messages
         while True:
             try:
                 data = await websocket.receive_json()
                 
-                # Handle subscriptions
                 if data.get("type") == "subscribe":
                     symbol = data.get("symbol")
                     if symbol:
@@ -1941,21 +1657,17 @@ async def websocket_endpoint(websocket: WebSocket):
 # ==========================================
 # API ENDPOINTS
 # ==========================================
-@app.get("/", response_class=HTMLResponse)
+@app.get("/")
 async def root():
-    """Root endpoint redirects to dashboard"""
     return RedirectResponse(url="/dashboard")
 
 @app.get("/api/health")
 async def health():
-    """Comprehensive health check"""
     try:
-        # Check data sources
         binance_status = "healthy"
         coingecko_status = "healthy"
         ws_status = "healthy"
         
-        # Test Binance API
         try:
             ticker = await data_manager.get_realtime_ticker("BTCUSDT")
             if not ticker:
@@ -1963,7 +1675,6 @@ async def health():
         except Exception:
             binance_status = "unhealthy"
         
-        # Test CoinGecko API
         try:
             cg_data = await data_manager.fetch_coingecko_data("bitcoin")
             if not cg_data:
@@ -1971,12 +1682,10 @@ async def health():
         except Exception:
             coingecko_status = "unhealthy"
         
-        # Check WebSocket connections
         ws_connections = len(data_manager.ws_manager.price_data)
         if ws_connections < 5:
             ws_status = "degraded"
         
-        # System metrics
         cpu_percent = psutil.cpu_percent()
         memory = psutil.virtual_memory()
         
@@ -2016,9 +1725,7 @@ async def health():
 
 @app.get("/api/ticker/{symbol}")
 async def get_ticker(symbol: str, detailed: bool = False):
-    """Get real-time ticker data with validation"""
     try:
-        # Get Binance data
         binance_ticker = await data_manager.get_realtime_ticker(symbol)
         if not binance_ticker:
             raise HTTPException(status_code=404, detail="Symbol not found on Binance")
@@ -2039,7 +1746,6 @@ async def get_ticker(symbol: str, detailed: bool = False):
         }
         
         if detailed:
-            # Get CoinGecko data
             cg_data = await data_manager.fetch_coingecko_data(symbol=symbol)
             if cg_data:
                 result.update({
@@ -2055,7 +1761,6 @@ async def get_ticker(symbol: str, detailed: bool = False):
                     "coingecko_last_updated": cg_data.get("last_updated")
                 })
             
-            # Get order book
             orderbook = await data_manager.get_order_book(symbol, limit=10)
             if orderbook:
                 result["orderbook"] = {
@@ -2078,8 +1783,7 @@ async def get_klines(
     interval: TimeFrame = TimeFrame.H1,
     limit: int = 100,
     validate: bool = True
-        ):
-    """Get OHLCV data with validation"""
+):
     try:
         if limit > 1000:
             raise HTTPException(status_code=400, detail="Limit cannot exceed 1000")
@@ -2087,38 +1791,8 @@ async def get_klines(
         candles = await data_manager.fetch_binance_klines(symbol, interval.value, limit)
         
         if not candles:
-            # Fallback to CoinGecko
-            cg_id = await data_manager._symbol_to_coingecko_id(symbol)
-            if cg_id:
-                cg_url = f"{Config.COINGECKO_BASE_URL}/coins/{cg_id}/ohlc?vs_currency=usd&days={limit}"
-                
-             async with data_manager.session.get(cg_url) as response:
-                    if response.status == 200:
-                        data = await response.json()
-                        candles = []
-                        for i, d in enumerate(data):
-                            candle = {
-                                "timestamp": d[0],
-                                "open": d[1],
-                                "high": d[2],
-                                "low": d[3],
-                                "close": d[4],
-                                "volume": 0,  # CoinGecko volume yok, 0 koy
-                                "close_time": d[0] + 3600*1000,  # Tahmini
-                                "quote_volume": 0,
-                                "trades": 0,
-                                "taker_buy_base": 0,
-                                "taker_buy_quote": 0,
-                                "index": i,
-                                "valid": True,
-                                "source": "coingecko"
-                            }
-                            candles.append(candle)
-        
-        if not candles:
             raise HTTPException(status_code=404, detail="No data available")
         
-        # Filter valid candles if validation requested
         if validate:
             valid_candles = [c for c in candles if c.get('valid', True)]
             if len(valid_candles) < limit * 0.5:
@@ -2126,7 +1800,6 @@ async def get_klines(
         else:
             valid_candles = candles
         
-        # Calculate statistics
         if valid_candles:
             closes = [c["close"] for c in valid_candles]
             volumes = [c["volume"] for c in valid_candles]
@@ -2166,9 +1839,7 @@ async def get_klines(
 
 @app.post("/api/analyze")
 async def analyze(req: AnalyzeRequest):
-    """Advanced technical analysis endpoint"""
     try:
-        # Fetch data
         candles = await data_manager.fetch_binance_klines(
             req.symbol, req.timeframe.value, 
             Config.TA_CONFIG['min_candles']
@@ -2177,7 +1848,6 @@ async def analyze(req: AnalyzeRequest):
         if not candles or len(candles) < 50:
             raise HTTPException(status_code=400, detail="Insufficient data for analysis")
         
-        # Perform analysis
         analysis = AdvancedTechnicalAnalysis.calculate_all_indicators(
             candles, req.symbol, req.timeframe.value
         )
@@ -2185,7 +1855,6 @@ async def analyze(req: AnalyzeRequest):
         if not analysis:
             raise HTTPException(status_code=500, detail="Analysis failed")
         
-        # Add additional metrics
         closes = [c["close"] for c in candles[-50:]]
         analysis["additional_metrics"] = {
             "volatility": float(np.std(closes) / np.mean(closes) * 100) if len(closes) > 1 else 0,
@@ -2214,9 +1883,7 @@ async def get_signal(
     timeframe: TimeFrame = TimeFrame.H1,
     include_analysis: bool = True
 ):
-    """Get trading signal with analysis"""
     try:
-        # Fetch data and analyze
         candles = await data_manager.fetch_binance_klines(
             symbol, timeframe.value, Config.TA_CONFIG['min_candles']
         )
@@ -2231,7 +1898,6 @@ async def get_signal(
         if not analysis:
             raise HTTPException(status_code=500, detail="Analysis failed")
         
-        # Calculate signal
         df = pd.DataFrame(candles)
         signal = await trading_engine.calculate_trading_signal(analysis, df)
         
@@ -2267,24 +1933,21 @@ async def get_signal(
 
 @app.get("/api/market")
 async def market_overview(
-    category: str = "all",  # major, mid, minor, all
-    sort_by: str = "volume",  # volume, change, price
+    category: str = "all",
+    sort_by: str = "volume",
     limit: int = 20
 ):
-    """Get market overview"""
     try:
         market_data = await data_manager.get_market_overview()
         
         if not market_data:
             raise HTTPException(status_code=500, detail="Market data unavailable")
         
-        # Filter by category
         if category != "all":
             if category in Config.SYMBOLS:
                 category_symbols = set(Config.SYMBOLS[category])
                 market_data = [d for d in market_data if d['symbol'] in category_symbols]
         
-        # Sort data
         if sort_by == "volume":
             market_data.sort(key=lambda x: x.get('quote_volume_24h', 0), reverse=True)
         elif sort_by == "change":
@@ -2292,15 +1955,12 @@ async def market_overview(
         elif sort_by == "price":
             market_data.sort(key=lambda x: x.get('price', 0), reverse=True)
         
-        # Apply limit
         market_data = market_data[:limit]
         
-        # Calculate market statistics
         if market_data:
             total_volume = sum(d.get('quote_volume_24h', 0) for d in market_data)
             avg_change = sum(d.get('change_24h', 0) for d in market_data) / len(market_data)
             
-            # Count bullish vs bearish
             bullish = len([d for d in market_data if d.get('change_24h', 0) > 0])
             bearish = len([d for d in market_data if d.get('change_24h', 0) < 0])
             
@@ -2341,7 +2001,6 @@ async def get_orderbook(
     limit: int = 20,
     detailed: bool = False
 ):
-    """Get order book data"""
     try:
         orderbook = await data_manager.get_order_book(symbol, limit)
         
@@ -2357,7 +2016,6 @@ async def get_orderbook(
         }
         
         if detailed:
-            # Calculate order book metrics
             if orderbook["bids"] and orderbook["asks"]:
                 best_bid = orderbook["bids"][0][0]
                 best_ask = orderbook["asks"][0][0]
@@ -2365,7 +2023,6 @@ async def get_orderbook(
                 spread = best_ask - best_bid
                 spread_percentage = (spread / mid_price) * 100 if mid_price > 0 else 0
                 
-                # Calculate bid/ask volume
                 bid_volume = sum(qty for _, qty in orderbook["bids"])
                 ask_volume = sum(qty for _, qty in orderbook["asks"])
                 volume_imbalance = (bid_volume - ask_volume) / (bid_volume + ask_volume) if (bid_volume + ask_volume) > 0 else 0
@@ -2392,7 +2049,6 @@ async def get_orderbook(
 
 @app.get("/api/performance")
 async def get_performance():
-    """Get trading performance"""
     try:
         return trading_engine.get_performance_report()
     except Exception as e:
@@ -2401,13 +2057,10 @@ async def get_performance():
 
 @app.post("/api/trade/simulate")
 async def simulate_trade(req: TradeRequest):
-    """Simulate a trade"""
     try:
-        # Validate trade
         if req.order_type == OrderType.LIMIT and not req.price:
             raise HTTPException(status_code=400, detail="Price required for limit orders")
         
-        # Execute simulated order
         order = trading_engine.execute_simulated_order(
             symbol=req.symbol,
             side=req.side.value,
@@ -2427,648 +2080,119 @@ async def simulate_trade(req: TradeRequest):
         raise HTTPException(status_code=500, detail=str(e))
 
 # ==========================================
-# ENHANCED WEB DASHBOARD
+# DASHBOARD
 # ==========================================
 @app.get("/dashboard", response_class=HTMLResponse)
 async def dashboard():
-    """Enhanced trading dashboard with TradingView widget"""
     html_content = """
     <!DOCTYPE html>
     <html lang="en">
     <head>
         <meta charset="UTF-8">
         <meta name="viewport" content="width=device-width, initial-scale=1.0">
-        <title>Advanced Trading Platform - Real-time Dashboard</title>
+        <title>Advanced Trading Platform</title>
         <script src="https://s3.tradingview.com/tv.js"></script>
-        <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css" rel="stylesheet">
         <style>
-            :root {
-                --primary: #3b82f6;
-                --secondary: #10b981;
-                --danger: #ef4444;
-                --warning: #f59e0b;
-                --dark: #0f172a;
-                --darker: #020617;
-                --light: #f8fafc;
-                --gray: #64748b;
-                --success-bg: rgba(34, 197, 94, 0.1);
-                --danger-bg: rgba(239, 68, 68, 0.1);
-                --warning-bg: rgba(245, 158, 11, 0.1);
-            }
-            
-            * {
-                margin: 0;
-                padding: 0;
-                box-sizing: border-box;
-            }
-            
             body {
-                font-family: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif;
-                background: var(--darker);
-                color: var(--light);
-                min-height: 100vh;
-                overflow-x: hidden;
-            }
-            
-            .container {
-                max-width: 1600px;
-                margin: 0 auto;
+                margin: 0;
                 padding: 20px;
+                background: #0f172a;
+                color: #f8fafc;
+                font-family: Arial, sans-serif;
             }
-            
-            /* Header */
+            .container {
+                max-width: 1400px;
+                margin: 0 auto;
+            }
             .header {
                 display: flex;
                 justify-content: space-between;
                 align-items: center;
-                margin-bottom: 30px;
+                margin-bottom: 20px;
                 padding: 20px;
                 background: rgba(15, 23, 42, 0.8);
-                backdrop-filter: blur(10px);
                 border-radius: 16px;
                 border: 1px solid rgba(255, 255, 255, 0.1);
-                box-shadow: 0 20px 40px rgba(0, 0, 0, 0.3);
             }
-            
-            .logo {
-                display: flex;
-                align-items: center;
-                gap: 12px;
-            }
-            
-            .logo-icon {
-                font-size: 32px;
-                background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
-                -webkit-background-clip: text;
-                -webkit-text-fill-color: transparent;
-            }
-            
-            .logo-text {
-                font-size: 24px;
-                font-weight: 800;
-                background: linear-gradient(135deg, #3b82f6, #8b5cf6);
-                -webkit-background-clip: text;
-                -webkit-text-fill-color: transparent;
-            }
-            
-            .status-badge {
-                display: flex;
-                align-items: center;
-                gap: 8px;
-                padding: 10px 20px;
-                background: rgba(34, 197, 94, 0.2);
-                border: 1px solid #22c55e;
-                border-radius: 50px;
-                font-size: 14px;
-                font-weight: 600;
-            }
-            
-            .status-dot {
-                width: 8px;
-                height: 8px;
-                background: #22c55e;
-                border-radius: 50%;
-                animation: pulse 2s infinite;
-            }
-            
-            @keyframes pulse {
-                0%, 100% { opacity: 1; }
-                50% { opacity: 0.5; }
-            }
-            
-            /* Controls */
             .controls {
-                display: grid;
-                grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
-                gap: 15px;
-                margin-bottom: 30px;
-            }
-            
-            .control-group {
                 display: flex;
                 gap: 10px;
-                align-items: center;
+                margin-bottom: 20px;
             }
-            
-            .control-label {
-                color: var(--gray);
-                font-size: 14px;
-                font-weight: 500;
-            }
-            
-            select, input, button {
-                padding: 12px 16px;
-                border-radius: 10px;
+            .controls input, .controls select, .controls button {
+                padding: 10px;
+                border-radius: 8px;
                 border: 1px solid rgba(255, 255, 255, 0.1);
                 background: rgba(15, 23, 42, 0.8);
-                color: var(--light);
-                font-size: 14px;
-                transition: all 0.3s;
+                color: white;
             }
-            
-            select:focus, input:focus {
-                outline: none;
-                border-color: var(--primary);
-                box-shadow: 0 0 0 3px rgba(59, 130, 246, 0.2);
-            }
-            
-            button {
-                background: var(--primary);
+            .controls button {
+                background: #3b82f6;
                 border: none;
                 cursor: pointer;
-                font-weight: 600;
-                display: flex;
-                align-items: center;
-                gap: 8px;
-                justify-content: center;
             }
-            
-            button:hover {
-                background: #2563eb;
-                transform: translateY(-2px);
-                box-shadow: 0 10px 20px rgba(59, 130, 246, 0.3);
-            }
-            
-            button:active {
-                transform: translateY(0);
-            }
-            
-            .btn-danger {
-                background: var(--danger);
-            }
-            
-            .btn-danger:hover {
-                background: #dc2626;
-                box-shadow: 0 10px 20px rgba(239, 68, 68, 0.3);
-            }
-            
-            .btn-success {
-                background: var(--secondary);
-            }
-            
-            .btn-success:hover {
-                background: #0d966e;
-                box-shadow: 0 10px 20px rgba(16, 185, 129, 0.3);
-            }
-            
-            /* Main Grid */
             .main-grid {
                 display: grid;
                 grid-template-columns: 1fr 400px;
                 gap: 20px;
                 margin-bottom: 20px;
             }
-            
-            @media (max-width: 1200px) {
-                .main-grid {
-                    grid-template-columns: 1fr;
-                }
-            }
-            
-            /* Card Styles */
             .card {
                 background: rgba(15, 23, 42, 0.8);
-                backdrop-filter: blur(10px);
                 border-radius: 16px;
-                padding: 24px;
+                padding: 20px;
                 border: 1px solid rgba(255, 255, 255, 0.1);
-                box-shadow: 0 20px 40px rgba(0, 0, 0, 0.3);
-                transition: transform 0.3s, box-shadow 0.3s;
             }
-            
-            .card:hover {
-                transform: translateY(-5px);
-                box-shadow: 0 30px 60px rgba(0, 0, 0, 0.4);
-            }
-            
-            .card-header {
-                display: flex;
-                justify-content: space-between;
-                align-items: center;
-                margin-bottom: 20px;
-            }
-            
-            .card-title {
-                font-size: 18px;
-                font-weight: 700;
-                color: var(--light);
-                display: flex;
-                align-items: center;
-                gap: 10px;
-            }
-            
-            .card-title i {
-                color: var(--primary);
-            }
-            
-            /* Chart Container */
             .chart-container {
                 height: 500px;
                 border-radius: 12px;
                 overflow: hidden;
-                position: relative;
             }
-            
-            /* Signal Card */
-            .signal-card {
-                margin-bottom: 20px;
-            }
-            
-            .signal-indicator {
-                padding: 25px;
-                border-radius: 12px;
-                text-align: center;
-                transition: all 0.3s;
-            }
-            
-            .signal-indicator.buy {
-                background: var(--success-bg);
-                border: 2px solid #22c55e;
-            }
-            
-            .signal-indicator.sell {
-                background: var(--danger-bg);
-                border: 2px solid #ef4444;
-            }
-            
-            .signal-indicator.hold {
-                background: var(--warning-bg);
-                border: 2px solid #f59e0b;
-            }
-            
-            .signal-type {
-                font-size: 32px;
-                font-weight: 800;
-                margin-bottom: 10px;
-            }
-            
-            .signal-confidence {
-                font-size: 48px;
-                font-weight: 900;
-                margin-bottom: 10px;
-            }
-            
-            .signal-price {
-                font-size: 24px;
-                color: var(--gray);
-                margin-bottom: 20px;
-            }
-            
-            .signal-meta {
-                display: grid;
-                grid-template-columns: repeat(2, 1fr);
-                gap: 10px;
-                margin-top: 15px;
-            }
-            
-            .meta-item {
-                background: rgba(255, 255, 255, 0.05);
-                padding: 12px;
-                border-radius: 8px;
-            }
-            
-            .meta-label {
-                font-size: 12px;
-                color: var(--gray);
-                margin-bottom: 4px;
-            }
-            
-            .meta-value {
-                font-size: 14px;
-                font-weight: 600;
-            }
-            
-            /* Indicators Grid */
-            .indicators-grid {
-                display: grid;
-                grid-template-columns: repeat(auto-fill, minmax(150px, 1fr));
-                gap: 12px;
-                margin-top: 20px;
-            }
-            
-            .indicator-item {
-                background: rgba(255, 255, 255, 0.05);
-                padding: 15px;
-                border-radius: 10px;
-                transition: all 0.3s;
-            }
-            
-            .indicator-item:hover {
-                background: rgba(255, 255, 255, 0.1);
-                transform: translateY(-2px);
-            }
-            
-            .indicator-name {
-                font-size: 12px;
-                color: var(--gray);
-                margin-bottom: 6px;
-            }
-            
-            .indicator-value {
-                font-size: 18px;
-                font-weight: 700;
-                font-family: 'Courier New', monospace;
-            }
-            
-            .indicator-value.positive {
-                color: #22c55e;
-            }
-            
-            .indicator-value.negative {
-                color: #ef4444;
-            }
-            
-            .indicator-value.neutral {
-                color: #f59e0b;
-            }
-            
-            /* Market Table */
-            .market-table-container {
-                overflow-x: auto;
-            }
-            
-            .market-table {
-                width: 100%;
-                border-collapse: collapse;
-                margin-top: 10px;
-            }
-            
-            .market-table th {
-                padding: 15px;
-                text-align: left;
-                font-size: 12px;
-                font-weight: 600;
-                text-transform: uppercase;
-                letter-spacing: 0.5px;
-                color: var(--gray);
-                border-bottom: 2px solid rgba(255, 255, 255, 0.1);
-            }
-            
-            .market-table td {
-                padding: 15px;
-                border-bottom: 1px solid rgba(255, 255, 255, 0.05);
-                transition: background 0.3s;
-            }
-            
-            .market-table tr:hover td {
-                background: rgba(255, 255, 255, 0.05);
-            }
-            
-            .symbol-cell {
-                display: flex;
-                align-items: center;
-                gap: 10px;
-            }
-            
-            .symbol-icon {
-                width: 32px;
-                height: 32px;
-                border-radius: 50%;
-                background: linear-gradient(135deg, #3b82f6, #8b5cf6);
-                display: flex;
-                align-items: center;
-                justify-content: center;
-                font-weight: 700;
-            }
-            
-            .price-change {
-                font-weight: 600;
-            }
-            
-            .price-change.positive {
-                color: #22c55e;
-            }
-            
-            .price-change.negative {
-                color: #ef4444;
-            }
-            
-            /* Performance Stats */
-            .stats-grid {
-                display: grid;
-                grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
-                gap: 15px;
-                margin-top: 20px;
-            }
-            
-            .stat-card {
-                background: rgba(255, 255, 255, 0.05);
-                padding: 20px;
-                border-radius: 12px;
-                text-align: center;
-            }
-            
-            .stat-value {
-                font-size: 28px;
-                font-weight: 800;
-                margin-bottom: 5px;
-            }
-            
-            .stat-label {
-                font-size: 12px;
-                color: var(--gray);
-                text-transform: uppercase;
-                letter-spacing: 0.5px;
-            }
-            
-            /* Footer */
-            .footer {
-                text-align: center;
-                padding: 20px;
-                margin-top: 40px;
-                color: var(--gray);
-                font-size: 14px;
-                border-top: 1px solid rgba(255, 255, 255, 0.1);
-            }
-            
-            /* Real-time Badge */
-            .realtime-badge {
-                display: inline-flex;
-                align-items: center;
-                gap: 6px;
-                padding: 6px 12px;
-                background: rgba(59, 130, 246, 0.2);
-                border: 1px solid var(--primary);
-                border-radius: 20px;
-                font-size: 12px;
-                font-weight: 600;
-            }
-            
-            /* Loading Spinner */
-            .spinner {
-                width: 40px;
-                height: 40px;
-                border: 3px solid rgba(255, 255, 255, 0.1);
-                border-top: 3px solid var(--primary);
-                border-radius: 50%;
-                animation: spin 1s linear infinite;
-                margin: 20px auto;
-            }
-            
-            @keyframes spin {
-                0% { transform: rotate(0deg); }
-                100% { transform: rotate(360deg); }
-            }
-            
-            /* Responsive */
-            @media (max-width: 768px) {
-                .container {
-                    padding: 10px;
-                }
-                
-                .header {
-                    flex-direction: column;
-                    gap: 15px;
-                    text-align: center;
-                }
-                
-                .controls {
-                    grid-template-columns: 1fr;
-                }
-                
+            @media (max-width: 1200px) {
                 .main-grid {
                     grid-template-columns: 1fr;
-                }
-                
-                .signal-meta {
-                    grid-template-columns: 1fr;
-                }
-                
-                .indicators-grid {
-                    grid-template-columns: repeat(2, 1fr);
                 }
             }
         </style>
     </head>
     <body>
         <div class="container">
-            <!-- Header -->
             <div class="header">
-                <div class="logo">
-                    <div class="logo-icon">📊</div>
-                    <div class="logo-text">Advanced Trading Platform</div>
-                </div>
-                <div class="status-badge">
-                    <div class="status-dot"></div>
-                    <span>Real-time Data Active</span>
-                    <span class="realtime-badge">
-                        <i class="fas fa-bolt"></i>
-                        Live
-                    </span>
+                <h1>Advanced Trading Platform</h1>
+                <div style="padding: 10px 20px; background: rgba(34, 197, 94, 0.2); border-radius: 50px;">
+                    <span style="background: #22c55e; width: 8px; height: 8px; border-radius: 50%; display: inline-block; margin-right: 8px;"></span>
+                    Real-time Data Active
                 </div>
             </div>
             
-            <!-- Controls -->
             <div class="controls">
-                <div class="control-group">
-                    <label class="control-label">Symbol</label>
-                    <input type="text" id="symbol" value="BINANCE:BTCUSDT" placeholder="BINANCE:BTCUSDT">
-                </div>
-                <div class="control-group">
-                    <label class="control-label">Timeframe</label>
-                    <select id="timeframe">
-                        <option value="1">1m</option>
-                        <option value="5">5m</option>
-                        <option value="15">15m</option>
-                        <option value="60" selected>1h</option>
-                        <option value="240">4h</option>
-                        <option value="1D">1d</option>
-                    </select>
-                </div>
-                <button onclick="updateChart()"><i class="fas fa-sync"></i> Update Chart</button>
-                <button onclick="analyze()"><i class="fas fa-chart-line"></i> Analyze</button>
-                <button onclick="getSignal()"><i class="fas fa-signal"></i> Get Signal</button>
+                <input type="text" id="symbol" value="BINANCE:BTCUSDT" placeholder="Symbol">
+                <select id="timeframe">
+                    <option value="1">1m</option>
+                    <option value="5">5m</option>
+                    <option value="15">15m</option>
+                    <option value="60" selected>1h</option>
+                    <option value="240">4h</option>
+                    <option value="1D">1d</option>
+                </select>
+                <button onclick="updateChart()">Update Chart</button>
+                <button onclick="getSignal()">Get Signal</button>
             </div>
             
-            <!-- Main Grid -->
             <div class="main-grid">
-                <!-- Chart Card -->
                 <div class="card">
-                    <div class="card-header">
-                        <div class="card-title">
-                            <i class="fas fa-chart-candlestick"></i>
-                            Interactive Chart
-                        </div>
-                        <span class="realtime-badge">
-                            <i class="fas fa-sync fa-spin"></i>
-                            Real-time
-                        </span>
-                    </div>
+                    <h3>Interactive Chart</h3>
                     <div id="chartContainer" class="chart-container"></div>
                 </div>
                 
-                <!-- Signal Card -->
-                <div class="card signal-card">
-                    <div class="card-header">
-                        <div class="card-title">
-                            <i class="fas fa-signal"></i>
-                            Trading Signal
-                        </div>
-                        <button onclick="getSignal()" class="btn-success">
-                            <i class="fas fa-sync"></i>
-                            Refresh
-                        </button>
+                <div class="card">
+                    <h3>Trading Signal</h3>
+                    <div id="signalIndicator" style="padding: 20px; border-radius: 12px; text-align: center; background: rgba(245, 158, 11, 0.1); border: 2px solid #f59e0b;">
+                        <div style="font-size: 32px; font-weight: bold;">HOLD</div>
+                        <div style="font-size: 48px; font-weight: 900;">50%</div>
+                        <div style="font-size: 24px; color: #64748b;">Current Price: $--</div>
                     </div>
-                    <div id="signalIndicator" class="signal-indicator hold">
-                        <div class="signal-type">HOLD</div>
-                        <div class="signal-confidence">50%</div>
-                        <div class="signal-price">Current Price: $--</div>
-                        <div class="signal-meta">
-                            <div class="meta-item">
-                                <div class="meta-label">Stop Loss</div>
-                                <div class="meta-value">$--</div>
-                            </div>
-                            <div class="meta-item">
-                                <div class="meta-label">Take Profit</div>
-                                <div class="meta-value">$--</div>
-                            </div>
-                            <div class="meta-item">
-                                <div class="meta-label">Risk/Reward</div>
-                                <div class="meta-value">2.0</div>
-                            </div>
-                            <div class="meta-item">
-                                <div class="meta-label">Position Size</div>
-                                <div class="meta-value">0.001</div>
-                            </div>
-                        </div>
-                    </div>
-                    <div id="signalReasons" class="indicators-grid"></div>
                 </div>
-            </div>
-            
-            <!-- Market Overview Card -->
-            <div class="card">
-                <div class="card-header">
-                    <div class="card-title">
-                        <i class="fas fa-market-alt"></i>
-                        Market Overview
-                    </div>
-                    <span class="realtime-badge">
-                        <i class="fas fa-sync fa-spin"></i>
-                        Real-time
-                    </span>
-                </div>
-                <div class="market-table-container">
-                    <table class="market-table">
-                        <thead>
-                            <tr>
-                                <th>Symbol</th>
-                                <th>Price</th>
-                                <th>24h Change</th>
-                                <th>Volume</th>
-                                <th>High/Low</th>
-                            </tr>
-                        </thead>
-                        <tbody id="marketTableBody">
-                            <!-- Data will be populated here -->
-                        </tbody>
-                    </table>
-                </div>
-            </div>
-            
-            <!-- Footer -->
-            <div class="footer">
-                © 2026 Advanced Trading Platform. All rights reserved.
             </div>
         </div>
         
@@ -3091,7 +2215,7 @@ async def dashboard():
                     "interval": interval,
                     "timezone": "Etc/UTC",
                     "theme": "dark",
-                    "style": "1",  // 1 = mum grafik
+                    "style": "1",
                     "locale": "en",
                     "toolbar_bg": "#f1f3f6",
                     "enable_publishing": false,
@@ -3101,35 +2225,12 @@ async def dashboard():
                         "RSI@tv-basicstudies",
                         "MACD@tv-basicstudies",
                         "BollingerBands@tv-basicstudies",
-                        "Stochastic@tv-basicstudies",
                         "Volume@tv-basicstudies"
                     ],
                     "show_popup_button": true,
                     "hide_side_toolbar": false,
-                    "withdateranges": true,
-                    "details": true,
-                    "hotlist": true,
-                    "calendar": true,
-                    "support_host": "https://www.tradingview.com"
+                    "withdateranges": true
                 });
-            }
-            
-            async function analyze() {
-                const symbol = document.getElementById('symbol').value.trim();
-                const timeframe = document.getElementById('timeframe').value;
-                
-                try {
-                    const response = await fetch(`/api/analyze`, {
-                        method: 'POST',
-                        headers: {'Content-Type': 'application/json'},
-                        body: JSON.stringify({symbol, timeframe: timeframe === '1D' ? '1d' : timeframe + 'm'})
-                    });
-                    const data = await response.json();
-                    alert(`Analysis complete for ${symbol}`);
-                    // You can display the analysis data here
-                } catch (e) {
-                    alert('Error performing analysis');
-                }
             }
             
             async function getSignal() {
@@ -3137,86 +2238,30 @@ async def dashboard():
                 const timeframe = document.getElementById('timeframe').value;
                 
                 try {
-                    const response = await fetch(`/api/signal/${symbol}?timeframe=${timeframe === '1D' ? '1d' : timeframe + 'm'}`);
+                    const response = await fetch(`/api/signal/${symbol.split(':')[1]}?timeframe=${timeframe === '1D' ? '1d' : timeframe + 'm'}`);
                     const data = await response.json();
                     
-                    // Update signal indicator
                     const indicator = document.getElementById('signalIndicator');
-                    indicator.className = 'signal-indicator';
-                    if (data.signal.includes('BUY')) {
-                        indicator.classList.add('buy');
-                    } else if (data.signal.includes('SELL')) {
-                        indicator.classList.add('sell');
-                    } else {
-                        indicator.classList.add('hold');
-                    }
+                    indicator.style.background = data.signal.includes('BUY') ? 'rgba(34, 197, 94, 0.1)' : 
+                                                data.signal.includes('SELL') ? 'rgba(239, 68, 68, 0.1)' : 
+                                                'rgba(245, 158, 11, 0.1)';
+                    indicator.style.borderColor = data.signal.includes('BUY') ? '#22c55e' : 
+                                                 data.signal.includes('SELL') ? '#ef4444' : 
+                                                 '#f59e0b';
                     
-                    indicator.querySelector('.signal-type').textContent = data.signal;
-                    indicator.querySelector('.signal-confidence').textContent = `${data.confidence}%`;
-                    indicator.querySelector('.signal-price').textContent = `Current Price: $${data.price}`;
+                    indicator.querySelector('div:nth-child(1)').textContent = data.signal;
+                    indicator.querySelector('div:nth-child(2)').textContent = data.confidence + '%';
+                    indicator.querySelector('div:nth-child(3)').textContent = 'Current Price: $' + data.price;
                     
-                    // Update meta
-                    const metaItems = indicator.querySelectorAll('.meta-value');
-                    metaItems[0].textContent = data.risk_management.stop_loss ? `$${data.risk_management.stop_loss}` : '--';
-                    metaItems[1].textContent = data.risk_management.take_profit ? `$${data.risk_management.take_profit}` : '--';
-                    metaItems[2].textContent = data.risk_management.risk_reward;
-                    metaItems[3].textContent = data.position_size;
-                    
-                    // Update reasons (as indicators)
-                    const reasonsGrid = document.getElementById('signalReasons');
-                    reasonsGrid.innerHTML = '';
-                    data.reasons.forEach(reason => {
-                        const item = document.createElement('div');
-                        item.className = 'indicator-item';
-                        item.innerHTML = `
-                            <div class="indicator-name">${reason.split(':')[0]}</div>
-                            <div class="indicator-value">${reason.split(':')[1]}</div>
-                        `;
-                        reasonsGrid.appendChild(item);
-                    });
                 } catch (e) {
                     alert('Error getting signal');
                 }
             }
             
-            async function updateMarketOverview() {
-                try {
-                    const response = await fetch('/api/market');
-                    const data = await response.json();
-                    
-                    const tableBody = document.getElementById('marketTableBody');
-                    tableBody.innerHTML = '';
-                    
-                    data.market_data.forEach(item => {
-                        const tr = document.createElement('tr');
-                        tr.innerHTML = `
-                            <td class="symbol-cell">
-                                <div class="symbol-icon">${item.symbol.slice(0,3)}</div>
-                                ${item.symbol}
-                            </td>
-                            <td>$${item.price.toFixed(2)}</td>
-                            <td class="price-change ${item.change_24h > 0 ? 'positive' : 'negative'}">
-                                ${item.change_24h.toFixed(2)}%
-                            </td>
-                            <td>$${item.volume_24h.toLocaleString()}</td>
-                            <td>$${item.high_24h.toFixed(2)} / $${item.low_24h.toFixed(2)}</td>
-                        `;
-                        tableBody.appendChild(tr);
-                    });
-                } catch (e) {
-                    console.error('Error updating market overview', e);
-                }
-            }
-            
-            // Initial load
             window.onload = () => {
                 updateChart();
                 getSignal();
-                updateMarketOverview();
             };
-            
-            // Periodic market update
-            setInterval(updateMarketOverview, 10000);
         </script>
     </body>
     </html>
@@ -3228,12 +2273,27 @@ async def dashboard():
 # ==========================================
 @app.exception_handler(HTTPException)
 async def http_exception_handler(request, exc):
-    return JSONResponse(status_code=exc.status_code, content={"error": exc.detail, "timestamp": datetime.now(timezone.utc).isoformat(), "path": request.url.path})
+    return JSONResponse(
+        status_code=exc.status_code,
+        content={
+            "error": exc.detail,
+            "timestamp": datetime.now(timezone.utc).isoformat(),
+            "path": request.url.path
+        }
+    )
 
 @app.exception_handler(Exception)
 async def global_exception_handler(request, exc):
     logger.error(f"Global exception: {exc}", exc_info=True)
-    return JSONResponse(status_code=500, content={"error": "Internal server error", "detail": str(exc), "timestamp": datetime.now(timezone.utc).isoformat(), "path": request.url.path})
+    return JSONResponse(
+        status_code=500,
+        content={
+            "error": "Internal server error",
+            "detail": str(exc),
+            "timestamp": datetime.now(timezone.utc).isoformat(),
+            "path": request.url.path
+        }
+    )
 
 # ==========================================
 # MAIN ENTRY POINT
@@ -3257,5 +2317,3 @@ if __name__ == "__main__":
         log_level="info",
         access_log=True
     )
-
-# Teşekkürler! Bu kusursuz platform sizin için hazırlandı. Başarılar!
