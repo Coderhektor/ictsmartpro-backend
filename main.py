@@ -1329,32 +1329,77 @@ async def get_signal(symbol: str, request: Request, timeframe: str = Query("1D",
         return {"success": False, "error": str(e)}
 
 @app.get("/api/analysis/{symbol}")
-async def get_technical_analysis(symbol: str, request: Request, timeframe: str = Query("1D"), limit: int = Query(100, ge=10, le=500)):
-    """Get comprehensive technical analysis"""
+async def get_technical_analysis(
+    symbol: str,
+    request: Request,
+    timeframe: str = Query("1D", enum=["1m", "5m", "15m", "30m", "1h", "4h", "1D", "1W", "1M"]),
+    limit: int = Query(100, ge=50, le=500)
+):
+    """
+    Get comprehensive technical analysis for a symbol
+    """
     try:
-        ticker = request.app.state.ticker
+        ticker: RealTimeTicker = request.app.state.ticker
         ta = TechnicalAnalysis()
-        
-        # Fetch OHLCV data
-        ohlcv = await ticker.fetch_ohlcv(symbol, timeframe, limit)
-        
-        if len(ohlcv) < 20:
-            return {"success": False, "error": "Insufficient data for analysis"}
-        
-        # Calculate analysis
-        analysis = ta.calculate_all_indicators(ohlcv, symbol, timeframe)
-        
+
+        # OHLCV verisini çek
+        ohlcv_data = await ticker.fetch_ohlcv(symbol, timeframe, limit)
+
+        if not ohlcv_data or len(ohlcv_data) < 50:
+            return JSONResponse(
+                status_code=400,
+                content={
+                    "success": False,
+                    "error": "Yetersiz OHLCV verisi",
+                    "symbol": symbol,
+                    "timeframe": timeframe
+                }
+            )
+
+        # Teknik analiz hesapla
+        analysis = ta.calculate_all_indicators(
+            ohlcv_data=ohlcv_data,
+            symbol=symbol.upper(),
+            timeframe=timeframe
+        )
+
+        if not analysis:
+            return JSONResponse(
+                status_code=500,
+                content={
+                    "success": False,
+                    "error": "Teknik analiz hesaplanamadı",
+                    "symbol": symbol
+                }
+            )
+
+        # Gerçek zamanlı fiyat (varsa)
+        symbol_info = await ticker.get_symbol_info(symbol)
+        if symbol_info:
+            analysis["current_price"] = symbol_info.get(
+                "price", analysis["current_price"]
+            )
+
         return {
             "success": True,
-            "timestamp": datetime.now(timezone.utc).isoformat(),
-            "symbol": symbol,
+            "symbol": symbol.upper(),
             "timeframe": timeframe,
-            "candle_count": len(ohlcv),
-            "analysis": analysis
+            "candles": len(ohlcv_data),
+            "analysis": analysis,
+            "timestamp": datetime.now(timezone.utc).isoformat()
         }
+
     except Exception as e:
-        logger.error(f"Technical analysis error: {e}")
-        return {"success": False, "error": str(e)}
+        logger.exception("Technical analysis error")
+        return JSONResponse(
+            status_code=500,
+            content={
+                "success": False,
+                "error": str(e),
+                "symbol": symbol
+            }
+        )
+
 
 @app.get("/health")
 async def health():
