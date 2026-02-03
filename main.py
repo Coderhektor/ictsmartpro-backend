@@ -957,10 +957,10 @@ class AdvancedTechnicalAnalysis:
             indicators['macd_signal'] = signal_line
             indicators['macd_histogram'] = histogram
             
+            # DÜZELTİLMİŞ (3 parametreli):
             stoch_k, stoch_d = AdvancedTechnicalAnalysis.stochastic(
-                highs, lows, closes,
-                *Config.TA_CONFIG['indicators']['stochastic']
-            )
+                highs, lows, closes
+                    )
             indicators['stochastic_k'] = stoch_k
             indicators['stochastic_d'] = stoch_d
             
