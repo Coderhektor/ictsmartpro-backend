@@ -3256,86 +3256,101 @@ async def dashboard():
             
             // Load TradingView-like chart
           
-            async function loadChart() {
-    const symbol = document.getElementById('symbol').value;
+           // Global değişkenler (başlangıçta null)
+let chart = null;
+let candlestickSeries = null;
+let volumeSeries = null;
+
+async function loadChart() {
+    const symbol = document.getElementById('symbol').value.trim().toUpperCase();
     const timeframe = document.getElementById('timeframe').value;
     
+    if (!symbol) {
+        alert('Lütfen sembol girin (ör: BTCUSDT)');
+        return;
+    }
+
     try {
         // Loading göster
-        document.getElementById('chartContainer').innerHTML = '<div class="spinner"></div>';
-        
+        const container = document.getElementById('chartContainer');
+        container.innerHTML = '<div class="spinner"></div>';
+
         const response = await fetch(`/api/klines/${symbol}?interval=${timeframe}&limit=200`);
+        if (!response.ok) {
+            throw new Error(`API hatası: ${response.status} - ${response.statusText}`);
+        }
+        
         const data = await response.json();
         
-        if (!data.candles || data.candles.length === 0) {
-            document.getElementById('chartContainer').innerHTML = 
-                '<div style="text-align:center; padding:100px; color:#64748b;">Veri yok</div>';
+        if (!data.candles || !Array.isArray(data.candles) || data.candles.length === 0) {
+            container.innerHTML = '<div style="text-align:center; padding:120px; color:#64748b;">Veri bulunamadı</div>';
             return;
         }
-        
+
+        // Veriyi hazırla (timestamp saniyeye çevrilmeli)
         const chartData = data.candles.map(c => ({
-            time: Math.floor(c.timestamp / 1000),   // saniye cinsinden UNIX timestamp
-            open:  c.open,
-            high:  c.high,
-            low:   c.low,
-            close: c.close
+            time: Math.floor(c.timestamp / 1000),  // LightweightCharts saniye bekler
+            open: parseFloat(c.open),
+            high: parseFloat(c.high),
+            low: parseFloat(c.low),
+            close: parseFloat(c.close)
         }));
-        
-        // Volume için ayrı veri
+
         const volumeData = data.candles.map(c => ({
             time: Math.floor(c.timestamp / 1000),
-            value: c.volume,
-            color: c.close >= c.open ? 'rgba(0, 150, 136, 0.4)' : 'rgba(239, 83, 80, 0.4)'
+            value: parseFloat(c.volume),
+            color: parseFloat(c.close) >= parseFloat(c.open) 
+                ? 'rgba(0, 150, 136, 0.35)' 
+                : 'rgba(239, 83, 80, 0.35)'
         }));
-        
-        // Chart yoksa oluştur
-        if (!chart) {
-            const container = document.getElementById('chartContainer');
-            
+
+        // Chart yoksa oluştur (veya yeniden boyutlandır)
+        if (!chart || !container.contains(chart._container)) {
+            // Eski chart varsa temizle
+            if (chart) {
+                chart.remove();
+                chart = null;
+            }
+
             chart = LightweightCharts.createChart(container, {
                 width: container.clientWidth,
-                height: container.clientHeight || 500,
-                layout: {
-                    background: { type: 'solid', color: 'transparent' },
-                    textColor: '#d1d5db',
-                },
-                grid: {
-                    vertLines: { color: 'rgba(255,255,255,0.05)' },
-                    horzLines: { color: 'rgba(255,255,255,0.05)' },
-                },
-                rightPriceScale: { borderColor: 'rgba(197, 203, 206, 0.2)' },
-                timeScale: { borderColor: 'rgba(197, 203, 206, 0.2)', timeVisible: true, secondsVisible: false },
-                crosshair: { mode: LightweightCharts.CrosshairMode.Normal },
+                height: 500,  // veya container.clientHeight
+                layout: { background: { type: 'solid', color: '#0f172a' }, textColor: '#e2e8f0' },
+                grid: { vertLines: { color: 'rgba(255,255,255,0.06)' }, horzLines: { color: 'rgba(255,255,255,0.06)' } },
+                rightPriceScale: { borderColor: 'rgba(197,203,206,0.3)' },
+                timeScale: { borderColor: 'rgba(197,203,206,0.3)', timeVisible: true, secondsVisible: false },
+                crosshair: { mode: LightweightCharts.CrosshairMode.Normal }
             });
-            
+
             candlestickSeries = chart.addCandlestickSeries({
-                upColor: '#26a69a',
-                downColor: '#ef5350',
+                upColor: '#22c55e',
+                downColor: '#ef4444',
                 borderVisible: false,
-                wickUpColor: '#26a69a',
-                wickDownColor: '#ef5350',
+                wickUpColor: '#22c55e',
+                wickDownColor: '#ef4444'
             });
-            
+
             volumeSeries = chart.addHistogramSeries({
-                color: '#26a69a',
+                color: '#3b82f6',
                 priceFormat: { type: 'volume' },
                 priceScaleId: '',
-                scaleMargins: { top: 0.8, bottom: 0 },
+                scaleMargins: { top: 0.75, bottom: 0 }
             });
         }
-        
-        // Veriyi güncelle
+
+        // Veriyi her zaman güncelle (seriler artık null olamaz)
         candlestickSeries.setData(chartData);
         volumeSeries.setData(volumeData);
-        
+
         // Grafiği otomatik sığdır
         chart.timeScale().fitContent();
-        
+
     } catch (err) {
-        console.error('Chart yüklenemedi:', err);
-        document.getElementById('chartContainer').innerHTML = 
-            `<div style="color:#ef4444; text-align:center; padding:100px;">
-                Hata: ${err.message || 'Bilinmeyen hata'}
+        console.error('Chart yükleme hatası:', err);
+        container.innerHTML = `
+            <div style="color:#ef4444; text-align:center; padding:120px; font-size:1.1rem;">
+                Hata: ${err.message || 'Bilinmeyen hata'}<br>
+                <small>Lütfen konsolu kontrol edin (F12 → Console)</small>
             </div>`;
     }
 }
@@ -3554,68 +3569,57 @@ async def dashboard():
             }
             
             // Connect to WebSocket
-            function connectWebSocket() {
-                if (ws && ws.readyState === WebSocket.OPEN) {
-                    alert('Already connected to WebSocket');
-                    return;
-                }
-                
-                const wsBtn = document.getElementById('wsBtn');
-                wsBtn.innerHTML = '<i class="fas fa-sync-alt fa-spin"></i> Connecting...';
-                wsBtn.disabled = true;
-                
-                const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
-                const host = window.location.host;
-                ws = new WebSocket(`${protocol}//${host}/ws/realtime`);
-                
-                ws.onopen = function() {
-                    console.log('WebSocket connected');
-                    wsBtn.innerHTML = '<i class="fas fa-plug"></i> Connected';
-                    wsBtn.className = 'btn-success';
-                    wsBtn.disabled = false;
-                    
-                    // Subscribe to market updates
-                    ws.send(JSON.stringify({
-                        type: 'subscribe',
-                        symbol: 'MARKET'
-                    }));
-                };
-                
-                ws.onmessage = function(event) {
-                    const data = JSON.parse(event.data);
-                    
-                    switch (data.type) {
-                        case 'market_update':
-                            updateMarketTableRealTime(data.data);
-                            break;
-                        case 'analysis_update':
-                            if (data.symbol === document.getElementById('symbol').value) {
-                                displaySignal(data.signal);
-                                if (data.analysis) {
-                                    displayIndicators(data.analysis.indicators);
-                                }
-                            }
-                            break;
-                    }
-                };
-                
-                ws.onerror = function(error) {
-                    console.error('WebSocket error:', error);
-                    wsBtn.innerHTML = '<i class="fas fa-exclamation-triangle"></i> Error';
-                    wsBtn.className = 'btn-danger';
-                    wsBtn.disabled = false;
-                };
-                
-                ws.onclose = function() {
-                    console.log('WebSocket disconnected');
-                    wsBtn.innerHTML = '<i class="fas fa-plug"></i> Connect WS';
-                    wsBtn.className = '';
-                    wsBtn.disabled = false;
-                    
-                    // Try to reconnect after 5 seconds
-                    setTimeout(connectWebSocket, 5000);
-                };
+          function connectWebSocket() {
+    if (ws && (ws.readyState === WebSocket.OPEN || ws.readyState === WebSocket.CONNECTING)) {
+        console.log('Zaten bağlı veya bağlanıyor');
+        return;
+    }
+
+    const wsBtn = document.getElementById('wsBtn');
+    wsBtn.innerHTML = '<i class="fas fa-sync-alt fa-spin"></i> Bağlanıyor...';
+    wsBtn.disabled = true;
+
+    const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
+    ws = new WebSocket(`${protocol}//${window.location.host}/ws/realtime`);
+
+    ws.onopen = () => {
+        console.log('WebSocket BAĞLANDI');
+        wsBtn.innerHTML = '<i class="fas fa-plug"></i> Bağlı';
+        wsBtn.className = 'btn-success';
+        wsBtn.disabled = false;
+
+        // Otomatik subscribe (örnek)
+        ws.send(JSON.stringify({ type: 'subscribe', symbol: document.getElementById('symbol').value || 'BTCUSDT' }));
+    };
+
+    ws.onmessage = (event) => {
+        try {
+            const data = JSON.parse(event.data);
+            console.log('WS veri:', data);
+            // Burada gelen veriyi dashboard'a yansıtabilirsin
+            if (data.type === 'market_update') {
+                updateMarketTableRealTime(data.data);
             }
+        } catch (e) {
+            console.error('WS mesaj parse hatası:', e);
+        }
+    };
+
+    ws.onerror = (err) => {
+        console.error('WebSocket HATA:', err);
+        wsBtn.innerHTML = '<i class="fas fa-exclamation-triangle"></i> Hata';
+        wsBtn.className = 'btn-danger';
+        wsBtn.disabled = false;
+    };
+
+    ws.onclose = () => {
+        console.log('WebSocket kapandı → 5 sn sonra tekrar deniyor');
+        wsBtn.innerHTML = '<i class="fas fa-plug"></i> Yeniden Bağlan';
+        wsBtn.className = '';
+        wsBtn.disabled = false;
+        setTimeout(connectWebSocket, 5000);
+    };
+}
             
             // Update market table with real-time data
             function updateMarketTableRealTime(marketData) {
