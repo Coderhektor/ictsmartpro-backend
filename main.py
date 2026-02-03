@@ -1662,6 +1662,7 @@ async def root():
     return RedirectResponse(url="/dashboard")
 
 @app.get("/api/health")
+@app.get("/healthz")
 async def health():
     try:
         binance_status = "healthy"
