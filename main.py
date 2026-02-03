@@ -149,38 +149,102 @@ class RealTimeDataManager:
             asyncio.create_task(self._ws_trade_stream(symbol))
         logger.info(f"✅ WebSocket streams started for {len(Config.DEFAULT_SYMBOLS)} symbols")
     
-    async def _ws_ticker_stream(self, symbol: str):
-        """WebSocket stream for ticker data"""
-        url = f"{Config.BINANCE_WS}/{symbol.lower()}@ticker"
+   async def _ws_ticker_stream(self, symbol: str):
+        """
+        Binance @ticker WebSocket stream'ini sürekli ve güvenilir şekilde yönetir.
         
+        Özellikler:
+        - Otomatik reconnect (üstel geri çekilme ile)
+        - Ping/pong keep-alive desteği
+        - Bağlantı kapandığında veya hata olduğunda loglama
+        - Çok uzun süre çalışmaya uygun yapı
+        """
+        symbol_lower = symbol.lower()
+        stream_name = f"{symbol_lower}@ticker"
+        url = f"{Config.BINANCE_WS}/{stream_name}"
+
+        reconnect_delay = 1          # ilk bekleme süresi (saniye)
+        max_reconnect_delay = 60     # maksimum bekleme süresi
+        ping_interval = 20           # saniyede bir ping gönder
+        ping_timeout = 10            # ping cevabı gelmezse bağlantıyı kopar
+
         while True:
+            ws = None
             try:
-                async with websockets.connect(url) as ws:
-                    logger.info(f"🔌 Connected to ticker stream: {symbol}")
+                # Bağlantı parametreleri ile daha güvenli bağlan
+                async with websockets.connect(
+                    url,
+                    ping_interval=ping_interval,
+                    ping_timeout=ping_timeout,
+                    close_timeout=10,
+                    max_size=2**20,           # 1MB mesaj sınırı (genelde yeterli)
+                    extra_headers={"User-Agent": "CryptoTradingPlatform/1.0"}
+                ) as websocket:
                     
-                    async for message in ws:
-                        data = json.loads(message)
-                        
-                        self.price_cache[symbol] = {
-                            'symbol': symbol,
-                            'price': float(data['c']),
-                            'bid': float(data['b']),
-                            'ask': float(data['a']),
-                            'high_24h': float(data['h']),
-                            'low_24h': float(data['l']),
-                            'volume_24h': float(data['v']),
-                            'quote_volume_24h': float(data['q']),
-                            'price_change_24h': float(data['p']),
-                            'price_change_pct_24h': float(data['P']),
-                            'trades_count': int(data['n']),
-                            'timestamp': datetime.utcnow().isoformat(),
-                            'source': 'binance_ws'
-                        }
-                        self.last_update[f"{symbol}_ticker"] = time.time()
-                        
+                    ws = websocket
+                    logger.info(f"🔗 {symbol} ticker stream'e bağlandı → {stream_name}")
+
+                    async for message in websocket:
+                        try:
+                            data = json.loads(message)
+                            
+                            # Binance ticker mesaj formatını kontrol et
+                            if 'c' not in data or data.get('e') != '24hrTicker':
+                                logger.warning(f"{symbol} beklenmeyen mesaj formatı: {message[:100]}...")
+                                continue
+
+                            # Cache'e yaz
+                            self.price_cache[symbol] = {
+                                'symbol': symbol,
+                                'price': float(data['c']),
+                                'bid': float(data.get('b', 0)),
+                                'ask': float(data.get('a', 0)),
+                                'high_24h': float(data['h']),
+                                'low_24h': float(data['l']),
+                                'volume_24h': float(data['v']),
+                                'quote_volume_24h': float(data['q']),
+                                'price_change_24h': float(data['p']),
+                                'price_change_pct_24h': float(data['P']),
+                                'trades_count': int(data['n']),
+                                'weighted_avg_price': float(data.get('w', 0)),  # bonus alan
+                                'timestamp': datetime.utcnow().isoformat(),
+                                'source': 'binance_ws',
+                                'event_time': int(data.get('E', 0))  # Binance event zamanı
+                            }
+                            
+                            self.last_update[f"{symbol}_ticker"] = time.time()
+                            
+                            # Çok sık log yazmamak için debug seviyesinde tutabilirsin
+                            # logger.debug(f"{symbol} güncellendi: {self.price_cache[symbol]['price']}")
+
+                        except json.JSONDecodeError:
+                            logger.error(f"{symbol} geçersiz JSON alındı: {message[:200]}...")
+                        except (KeyError, ValueError) as e:
+                            logger.error(f"{symbol} ticker verisinde eksik/yanlış alan: {e}")
+
+            except (ConnectionClosed, InvalidStatus, InvalidMessage) as e:
+                logger.warning(f"{symbol} ticker bağlantısı kapandı: {type(e).__name__} → {e}")
+
             except Exception as e:
-                logger.error(f"❌ Ticker stream error for {symbol}: {e}")
-                await asyncio.sleep(5)
+                logger.error(f"{symbol} ticker stream kritik hata: {type(e).__name__} → {e}", exc_info=True)
+
+            finally:
+                # Bağlantı kapandığında temizlik
+                if ws is not None:
+                    try:
+                        await ws.close()
+                    except:
+                        pass
+
+                # Üstel geri çekilme (exponential backoff)
+                await asyncio.sleep(reconnect_delay)
+                reconnect_delay = min(reconnect_delay * 2, max_reconnect_delay)
+                logger.info(f"{symbol} ticker yeniden bağlanmayı deneyecek ({reconnect_delay}s sonra)")
+
+                # Çok uzun süre bağlanamıyorsa sıfırlama (opsiyonel güvenlik)
+                if reconnect_delay >= max_reconnect_delay:
+                    logger.warning(f"{symbol} çok uzun süredir bağlanamıyor → sıfırlama deneniyor")
+                    reconnect_delay = 1
     
     async def _ws_trade_stream(self, symbol: str):
         """WebSocket stream for trade data"""
@@ -2393,35 +2457,48 @@ async def dashboard():
     </div>
     
     <script>
-        // Initialize TradingView Widget
-        function initTradingView(symbol = 'BTCUSDT') {
-            document.getElementById('tradingview-chart').innerHTML = '';
-            new TradingView.widget({
-                width: '100%',
-                height: '600',
-                symbol: `BINANCE:${symbol}`,
-                interval: document.getElementById('timeframe').value,
-                timezone: 'Etc/UTC',
-                theme: 'dark',
-                style: '1',
-                locale: 'en',
-                toolbar_bg: '#131829',
-                enable_publishing: false,
-                hide_side_toolbar: false,
-                allow_symbol_change: true,
-                container_id: 'tradingview-chart',
-                studies: [
-                    'RSI@tv-basicstudies',
-                    'MACD@tv-basicstudies',
-                    'BB@tv-basicstudies',
-                    'Volume@tv-basicstudies',
-                    'IchimokuCloud@tv-basicstudies'
-                ],
-                disabled_features: ['header_widget'],
-                enabled_features: ['study_templates']
-            });
-        }
-        
+      // Initialize TradingView Advanced Chart (2026 uyumlu)
+function initTradingView(symbol = 'BTCUSDT') {
+    const container = document.getElementById('tradingview-chart');
+    if (!container) {
+        console.error("Chart container bulunamadı!");
+        return;
+    }
+
+    // Eski içeriği temizle (gerekli değil ama güvenli)
+    container.innerHTML = '';
+
+    // Yeni embed script dinamik olarak oluşturuluyor
+    const script = document.createElement('script');
+    script.type = 'text/javascript';
+    script.async = true;
+    script.innerHTML = JSON.stringify({
+        "autosize": true,
+        "symbol": `BINANCE:${symbol}`,
+        "interval": document.getElementById('timeframe').value || "60",  // fallback 1h
+        "timezone": "Etc/UTC",
+        "theme": "dark",
+        "style": "1",
+        "locale": "en",
+        "toolbar_bg": "#131829",
+        "enable_publishing": false,
+        "hide_side_toolbar": false,
+        "allow_symbol_change": true,
+        "studies": [
+            "RSI@tv-basicstudies",
+            "MACD@tv-basicstudies",
+            "BB@tv-basicstudies",
+            "Volume@tv-basicstudies",
+            "IchimokuCloud@tv-basicstudies"
+        ],
+        "disabled_features": ["header_widget"],
+        "enabled_features": ["study_templates"],
+        "container_id": "tradingview-chart"
+    });
+
+    container.appendChild(script);
+    console.log(`TradingView Advanced Chart yüklendi: ${symbol}`);
+}
         // Analyze Symbol
         async function analyzeSymbol() {
             const symbol = document.getElementById('symbol').value;
