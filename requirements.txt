@@ -16,3 +16,4 @@ redis>=5.0.1
 # Pydantic
 pydantic>=2.5.0
 psutil==5.9.8
+xgboost>=2.0.0
