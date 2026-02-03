@@ -2078,7 +2078,7 @@ async def get_klines(
     interval: TimeFrame = TimeFrame.H1,
     limit: int = 100,
     validate: bool = True
-):
+        ):
     """Get OHLCV data with validation"""
     try:
         if limit > 1000:
