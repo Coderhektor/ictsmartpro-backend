@@ -1448,55 +1448,68 @@ async def dashboard():
         }
         
         // Analyze Symbol
-        async function analyzeSymbol() {
-            const symbolInput = document.getElementById('symbolInput').value;
-            const assetType = document.getElementById('assetType').value;
-            
-            // Extract symbol
-            let symbol = symbolInput;
-            if (symbolInput.includes(':')) {
-                symbol = symbolInput.split(':')[1];
-            }
-            
-            // For crypto, convert to CoinGecko ID
-            if (assetType === 'crypto') {
-                symbol = symbol.toLowerCase().replace('usdt', '').replace('usd', '');
-                
-                const symbolMap = {
-                    'btc': 'bitcoin',
-                    'eth': 'ethereum',
-                    'bnb': 'binancecoin',
-                    'xrp': 'ripple',
-                    'ada': 'cardano',
-                    'sol': 'solana',
-                    'dot': 'polkadot',
-                    'doge': 'dogecoin',
-                    'avax': 'avalanche-2',
-                    'matic': 'polygon'
-                };
-                
-                symbol = symbolMap[symbol] || symbol;
-            }
-            
-            try {
-                 // GÜNCEL:
-                const baseUrl = window.location.origin;
-                const response = await fetch(`${baseUrl}/api/analyze/${symbol}?asset_type=${assetType}&days=30`);
-                const data = await response.json();
-                
-                if (data.error) {
-                    alert(data.error);
-                    return;
-                }
-                
-                updateUI(data.analysis);
-                initTradingView();
-                
-            } catch (error) {
-                console.error('Analysis error:', error);
-                alert('Error analyzing symbol');
-            }
+      // Analyze Symbol - GÜNCELLENMİŞ VERSİYON
+async function analyzeSymbol() {
+    const symbolInput = document.getElementById('symbolInput').value;
+    const assetType = document.getElementById('assetType').value;
+    
+    // Extract clean symbol
+    let symbol = symbolInput;
+    if (symbolInput.includes(':')) {
+        symbol = symbolInput.split(':')[1];
+    }
+    
+    // Uppercase for API
+    symbol = symbol.toUpperCase();
+    
+    // Remove USDT/USD suffix for crypto
+    if (assetType === 'crypto') {
+        symbol = symbol.replace('USDT', '').replace('USD', '');
+        
+        // Map to CoinGecko IDs
+        const symbolToCoinGecko = {
+            'BTC': 'bitcoin',
+            'ETH': 'ethereum', 
+            'BNB': 'binancecoin',
+            'XRP': 'ripple',
+            'ADA': 'cardano',
+            'SOL': 'solana',
+            'DOT': 'polkadot',
+            'DOGE': 'dogecoin',
+            'AVAX': 'avalanche-2',
+            'MATIC': 'polygon'
+        };
+        
+        // Use mapping or fallback to lowercase
+        symbol = symbolToCoinGecko[symbol] || symbol.toLowerCase();
+    }
+    
+    // Build API URL
+    const apiUrl = `/api/analyze/${symbol}?asset_type=${assetType}&days=30`;
+    console.log('API URL:', apiUrl);  // Debug için
+    
+    try {
+        const response = await fetch(apiUrl);
+        
+        if (!response.ok) {
+            throw new Error(`API error: ${response.status}`);
         }
+        
+        const data = await response.json();
+        
+        if (data.error) {
+            alert(data.error);
+            return;
+        }
+        
+        updateUI(data.analysis);
+        updateChart(symbolInput);  // TradingView chart'ı güncelle
+        
+    } catch (error) {
+        console.error('Analysis error:', error);
+        alert(`Error analyzing symbol: ${error.message}`);
+    }
+}
         
         // Update UI
         function updateUI(analysis) {
