@@ -1402,14 +1402,13 @@ async def dashboard():
             100% { transform: rotate(360deg); }
         }
         
-     .tradingview-widget {
-        width: 100%;
-        height: 60vh;           /* Ekran yüksekliğinin %60'ı – çok güzel responsive olur */
-        min-height: 400px;      /* Çok küçülmesin */
-        max-height: 800px;      /* Çok büyümesin */
-        border-radius: 8px;
-        overflow: hidden;
+        .tradingview-widget {
+            width: 100%;
+            height: 500px;
+            border-radius: 8px;
+            overflow: hidden;
         }
+        
         #tradingview_chart {
             width: 100%;
             height: 100%;
@@ -1857,4 +1856,4 @@ if __name__ == "__main__":
         host="0.0.0.0",
         port=port,
         log_level="info"
-    )
+    ) 
