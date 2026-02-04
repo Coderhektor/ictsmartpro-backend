@@ -460,7 +460,7 @@ async def get_levels(symbol: str):
     nearest_resistance = min([r - current_price for r in resistances]) if resistances else None
     
     # Analiz
-    if nearest_support and nearest_support < current_price * 0.01:  % 1'den az
+    if nearest_support and nearest_support < current_price * 0.01: #  % 1'den az
         analysis = "ALIM BÖLGESİ"
         signal = "BUY"
     elif nearest_resistance and nearest_resistance < current_price * 0.01:  % 1'den az
