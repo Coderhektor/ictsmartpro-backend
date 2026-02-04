@@ -1479,7 +1479,9 @@ async def dashboard():
             }
             
             try {
-                const response = await fetch(`/api/analyze/${symbol}?asset_type=${assetType}&days=30`);
+                 // GÜNCEL:
+                const baseUrl = window.location.origin;
+                const response = await fetch(`${baseUrl}/api/analyze/${symbol}?asset_type=${assetType}&days=30`);
                 const data = await response.json();
                 
                 if (data.error) {
