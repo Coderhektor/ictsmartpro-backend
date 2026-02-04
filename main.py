@@ -1391,13 +1391,24 @@ async def dashboard():
             100% { transform: rotate(360deg); }
         }
         
-        .tradingview-widget {
-            width: 100%;
-            height: 800px;
-            border-radius: 8px;
-            overflow: hidden;
-        }
-        
+      .tradingview-widget {
+    width: 100%;
+    height: 60vh;              /* Ekranın %60'ı – mobil ve masaüstünde güzel durur */
+    min-height: 450px;         /* Küçük ekranlarda çok küçülmesin */
+    max-height: 900px;         /* Çok büyük olmasın */
+    border-radius: 8px;
+    overflow: hidden;
+    background: #0a0e27;       /* Arka plan TradingView yüklenirken boş kalmasın */
+    box-shadow: 0 4px 15px rgba(0,0,0,0.3);  /* Hafif gölge – şık durur */
+}
+
+/* Ekstra: Mobil için küçültme */
+@media (max-width: 768px) {
+    .tradingview-widget {
+        height: 50vh;          /* Mobilde daha az yer kaplasın */
+        min-height: 350px;
+    }
+}
         #tradingview_chart {
             width: 100%;
             height: 100%;
