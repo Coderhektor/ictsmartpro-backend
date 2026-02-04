@@ -1463,10 +1463,16 @@ async def dashboard():
             </h2>
             <div class="input-row">
                 <input type="text" id="symbolInput" placeholder="Enter symbol (e.g., BTCUSDT, ETHUSDT)" value="BTCUSDT">
-                <select id="intervalSelect">
-                    <option value="1h">1 Hour</option>
-                    <option value="4h">4 Hours</option>
-                    <option value="1d">1 Day</option>
+              <select id="intervalSelect">
+                <option value="5m">5 Minutes</option>
+                <option value="15m">15 Minutes</option>
+                <option value="30m">30 Minutes</option>
+                <option value="1h" selected>1 Hour</option>     <!-- varsayılan olarak 1h seçili -->
+                <option value="4h">4 Hours</option>
+                <option value="1d">1 Day</option>
+                <option value="1w">1 Week</option>
+                <option value="1M">1 Month</option>
+                <option value="1y">1 Year</option>
                 </select>
                 <button onclick="analyze()" id="analyzeBtn">
                     <i class="fas fa-search"></i> Analyze
@@ -1585,18 +1591,74 @@ async def dashboard():
             analyze();
         }
         
-        async function analyze() {
-            const symbol = document.getElementById('symbolInput').value.trim();
-            const interval = document.getElementById('intervalSelect').value;
-            const btn = document.getElementById('analyzeBtn');
-            
-            if (!symbol) {
-                alert('Please enter a symbol');
-                return;
-            }
-            
-            btn.disabled = true;
-            btn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Analyzing...';
+     // Sayfa yüklendiğinde bir kere event listener ekle (en altta veya DOMContentLoaded içinde)
+document.addEventListener('DOMContentLoaded', function() {
+    // Interval değiştiğinde otomatik analiz yap
+    document.getElementById('intervalSelect').addEventListener('change', function() {
+        analyze();  // Zaman dilimi değişince otomatik çalıştır
+    });
+
+    // İlk yüklemede varsayılan analiz (isteğe bağlı)
+    // analyze();
+});
+
+// Analyze fonksiyonu – temiz ve düzenli
+async function analyze() {
+    const symbol = document.getElementById('symbolInput').value.trim();
+    const interval = document.getElementById('intervalSelect').value;
+    const btn = document.getElementById('analyzeBtn');
+    
+    if (!symbol) {
+        alert('Please enter a symbol');
+        return;
+    }
+    
+    // Butonu kilitle ve loading göster
+    btn.disabled = true;
+    btn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Analyzing...';
+    
+    // Loading ekranlarını göster
+    document.getElementById('symbolDisplay').textContent = symbol.toUpperCase();
+    document.getElementById('signalContainer').innerHTML = '<div class="loading"><div class="spinner"></div><div>Analyzing ' + symbol + '...</div></div>';
+    document.getElementById('indicatorsContainer').innerHTML = '<div class="loading"><div class="spinner"></div></div>';
+    document.getElementById('patternsContainer').innerHTML = '<div class="loading"><div class="spinner"></div></div>';
+    document.getElementById('ictContainer').innerHTML = '<div class="loading"><div class="spinner"></div></div>';
+    
+    // Grafiği güncelle (zaman dilimiyle birlikte)
+    initTradingView(symbol, interval);
+    
+    try {
+        const response = await fetch(`/api/analyze/${encodeURIComponent(symbol)}?interval=${interval}`);
+        if (!response.ok) {
+            throw new Error(`HTTP error! status: ${response.status}`);
+        }
+        
+        const data = await response.json();
+        
+        if (!data.success) {
+            throw new Error(data.detail || 'Analysis failed');
+        }
+        
+        // Sonuçları ekrana yaz
+        renderSignal(data);
+        renderIndicators(data);
+        renderPatterns(data);
+        renderICT(data);
+        
+    } catch (error) {
+        console.error('Analysis error:', error);
+        document.getElementById('signalContainer').innerHTML = `
+            <div style="text-align: center; padding: 2rem; color: var(--danger);">
+                <i class="fas fa-exclamation-triangle" style="font-size: 2rem;"></i>
+                <div style="margin-top: 1rem;">Analysis failed: ${error.message}</div>
+            </div>
+        `;
+    } finally {
+        // Butonu tekrar aktif et
+        btn.disabled = false;
+        btn.innerHTML = '<i class="fas fa-search"></i> Analyze';
+    }
+}
             
             document.getElementById('symbolDisplay').textContent = symbol.toUpperCase();
             document.getElementById('signalContainer').innerHTML = '<div class="loading"><div class="spinner"></div><div>Analyzing ' + symbol + '...</div></div>';
