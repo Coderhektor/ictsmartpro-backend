@@ -29,6 +29,8 @@ logger = logging.getLogger(__name__)
 from fastapi import FastAPI, Request, HTTPException, Query, BackgroundTasks
 from fastapi.responses import HTMLResponse, JSONResponse, PlainTextResponse
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.staticfiles import StaticFiles
+from fastapi.templating import Jinja2Templates
 
 # FastAPI Application
 app = FastAPI(
@@ -46,6 +48,9 @@ app.add_middleware(
     allow_methods=["*"],
     allow_headers=["*"],
 )
+
+# Templates for HTML pages
+templates = Jinja2Templates(directory="templates")
 
 # ========== DATA SOURCE CONFIGURATION ==========
 class DataSourceConfig:
@@ -129,6 +134,175 @@ class CacheManager:
 
 # Global cache instance
 cache_manager = CacheManager()
+
+# ========== DATA FETCHER CLASSES ==========
+class CryptoDataFetcher:
+    """Fetch real crypto data from multiple sources"""
+    
+    @staticmethod
+    async def fetch_coingecko_ohlc(coin_id: str, days: int = 7) -> Optional[List[Dict]]:
+        """Fetch OHLC data from CoinGecko"""
+        try:
+            url = f"{DataSourceConfig.COINGECKO_BASE}/coins/{coin_id}/ohlc"
+            params = {
+                "vs_currency": "usd",
+                "days": days
+            }
+            
+            async with aiohttp.ClientSession() as session:
+                async with session.get(url, params=params, timeout=15) as response:
+                    if response.status == 200:
+                        data = await response.json()
+                        
+                        if not data or len(data) == 0:
+                            return None
+                        
+                        candles = []
+                        for item in data:
+                            candles.append({
+                                "timestamp": item[0],
+                                "open": float(item[1]),
+                                "high": float(item[2]),
+                                "low": float(item[3]),
+                                "close": float(item[4]),
+                                "volume": 0
+                            })
+                        
+                        logger.info(f"✅ CoinGecko: {len(candles)} candles for {coin_id}")
+                        return candles
+                    else:
+                        logger.error(f"❌ CoinGecko error {response.status}")
+                        return None
+                        
+        except Exception as e:
+            logger.error(f"❌ CoinGecko fetch error: {e}")
+            return None
+    
+    @staticmethod
+    async def search_coin_id(symbol: str) -> Optional[str]:
+        """Search for CoinGecko coin ID"""
+        cache_key = f"coingecko_id_{symbol.lower()}"
+        cached = cache_manager.get(cache_key, max_age_seconds=3600)
+        if cached:
+            return cached
+        
+        try:
+            url = f"{DataSourceConfig.COINGECKO_BASE}/search"
+            params = {"query": symbol}
+            
+            async with aiohttp.ClientSession() as session:
+                async with session.get(url, params=params, timeout=10) as response:
+                    if response.status == 200:
+                        data = await response.json()
+                        coins = data.get("coins", [])
+                        
+                        for coin in coins:
+                            if coin.get("symbol", "").upper() == symbol.upper():
+                                coin_id = coin.get("id")
+                                cache_manager.set(cache_key, coin_id)
+                                logger.info(f"✅ Found CoinGecko ID: {symbol} -> {coin_id}")
+                                return coin_id
+                        
+                        # Fallback to first result
+                        if coins:
+                            coin_id = coins[0].get("id")
+                            cache_manager.set(cache_key, coin_id)
+                            logger.info(f"⚠️ Using first match: {symbol} -> {coin_id}")
+                            return coin_id
+                    
+        except Exception as e:
+            logger.error(f"❌ CoinGecko search error: {e}")
+        
+        return None
+    
+    @staticmethod
+    async def fetch_binance_klines(symbol: str, interval: str = "1h", limit: int = 200) -> Optional[List[Dict]]:
+        """Fetch from Binance"""
+        try:
+            url = f"{DataSourceConfig.BINANCE_BASE}/klines"
+            params = {
+                "symbol": symbol.upper(),
+                "interval": interval,
+                "limit": limit
+            }
+            
+            async with aiohttp.ClientSession() as session:
+                async with session.get(url, params=params, timeout=15) as response:
+                    if response.status == 200:
+                        data = await response.json()
+                        
+                        candles = []
+                        for candle in data:
+                            candles.append({
+                                "timestamp": candle[0],
+                                "open": float(candle[1]),
+                                "high": float(candle[2]),
+                                "low": float(candle[3]),
+                                "close": float(candle[4]),
+                                "volume": float(candle[5])
+                            })
+                        
+                        logger.info(f"✅ Binance: {len(candles)} candles for {symbol}")
+                        return candles
+                    else:
+                        logger.error(f"❌ Binance error {response.status}")
+                        return None
+                        
+        except Exception as e:
+            logger.error(f"❌ Binance fetch error: {e}")
+            return None
+    
+    @staticmethod
+    async def get_crypto_data(symbol: str, interval: str = "1h", days: int = 7) -> Optional[List[Dict]]:
+        """Smart crypto data fetcher"""
+        # Try Binance first for major pairs
+        if symbol.upper().endswith("USDT"):
+            data = await CryptoDataFetcher.fetch_binance_klines(symbol.upper(), interval, 200)
+            if data and len(data) >= 50:
+                return data
+        
+        # Try CoinGecko
+        coin_id = await CryptoDataFetcher.search_coin_id(symbol.replace("USDT", "").replace("USD", ""))
+        if coin_id:
+            data = await CryptoDataFetcher.fetch_coingecko_ohlc(coin_id, days)
+            if data and len(data) >= 50:
+                return data
+        
+        logger.error(f"❌ No crypto data found for {symbol}")
+        return None
+
+class ForexDataFetcher:
+    """Fetch forex data"""
+    
+    @staticmethod
+    async def get_forex_data(symbol: str, interval: str = "1h") -> Optional[List[Dict]]:
+        """Get forex data - placeholder implementation"""
+        # For now, return dummy data
+        # In production, implement Alpha Vantage/Twelve Data integration
+        return None
+
+# ========== UNIVERSAL DATA FETCHER ==========
+class UniversalDataFetcher:
+    """Smart data fetcher"""
+    
+    @staticmethod
+    async def get_market_data(symbol: str, interval: str = "1h") -> Tuple[Optional[List[Dict]], MarketType]:
+        """Get market data for any symbol"""
+        # Default to crypto
+        market_type = MarketType.CRYPTO
+        
+        # Detect market type
+        if any(x in symbol.upper() for x in ["EUR", "GBP", "JPY", "USD", "CHF", "CAD", "AUD", "NZD"]):
+            if len(symbol.replace("/", "").replace(" ", "")) == 6:
+                market_type = MarketType.FOREX
+        
+        # Fetch data based on market type
+        if market_type == MarketType.CRYPTO:
+            candles = await CryptoDataFetcher.get_crypto_data(symbol, interval)
+        else:
+            candles = await ForexDataFetcher.get_forex_data(symbol, interval)
+        
+        return candles, market_type
 
 # ========== SUPPORT/RESISTANCE DETECTOR ==========
 class SupportResistanceDetector:
@@ -639,205 +813,129 @@ class CandlestickPatternDetector:
         
         return patterns
 
-# ========== CRYPTO DATA FETCHER (From previous version - Keep as is) ==========
-class CryptoDataFetcher:
-    """Fetch real crypto data from multiple sources"""
-    
-    @staticmethod
-    async def fetch_coingecko_ohlc(coin_id: str, days: int = 7) -> Optional[List[Dict]]:
-        """Fetch OHLC data from CoinGecko"""
-        try:
-            url = f"{DataSourceConfig.COINGECKO_BASE}/coins/{coin_id}/ohlc"
-            params = {
-                "vs_currency": "usd",
-                "days": days
-            }
-            
-            async with aiohttp.ClientSession() as session:
-                async with session.get(url, params=params, timeout=15) as response:
-                    if response.status == 200:
-                        data = await response.json()
-                        
-                        if not data or len(data) == 0:
-                            return None
-                        
-                        candles = []
-                        for item in data:
-                            candles.append({
-                                "timestamp": item[0],
-                                "open": float(item[1]),
-                                "high": float(item[2]),
-                                "low": float(item[3]),
-                                "close": float(item[4]),
-                                "volume": 0
-                            })
-                        
-                        return candles
-                    else:
-                        return None
-                        
-        except Exception:
-            return None
-    
-    @staticmethod
-    async def search_coin_id(symbol: str) -> Optional[str]:
-        """Search for CoinGecko coin ID"""
-        cache_key = f"coingecko_id_{symbol.lower()}"
-        cached = cache_manager.get(cache_key, max_age_seconds=3600)
-        if cached:
-            return cached
-        
-        try:
-            url = f"{DataSourceConfig.COINGECKO_BASE}/search"
-            params = {"query": symbol}
-            
-            async with aiohttp.ClientSession() as session:
-                async with session.get(url, params=params, timeout=10) as response:
-                    if response.status == 200:
-                        data = await response.json()
-                        coins = data.get("coins", [])
-                        
-                        for coin in coins:
-                            if coin.get("symbol", "").upper() == symbol.upper():
-                                coin_id = coin.get("id")
-                                cache_manager.set(cache_key, coin_id)
-                                return coin_id
-                    
-        except Exception:
-            pass
-        
-        return None
-    
-    @staticmethod
-    async def fetch_binance_klines(symbol: str, interval: str = "1h", limit: int = 200) -> Optional[List[Dict]]:
-        """Fetch from Binance"""
-        try:
-            url = f"{DataSourceConfig.BINANCE_BASE}/klines"
-            params = {
-                "symbol": symbol.upper(),
-                "interval": interval,
-                "limit": limit
-            }
-            
-            async with aiohttp.ClientSession() as session:
-                async with session.get(url, params=params, timeout=15) as response:
-                    if response.status == 200:
-                        data = await response.json()
-                        
-                        candles = []
-                        for candle in data:
-                            candles.append({
-                                "timestamp": candle[0],
-                                "open": float(candle[1]),
-                                "high": float(candle[2]),
-                                "low": float(candle[3]),
-                                "close": float(candle[4]),
-                                "volume": float(candle[5])
-                            })
-                        
-                        return candles
-                    else:
-                        return None
-                        
-        except Exception:
-            return None
-
 # ========== ENHANCED TECHNICAL INDICATORS ==========
 class EnhancedTechnicalIndicators:
     """Enhanced technical indicators with pattern detection"""
     
     @staticmethod
-    def analyze_market_structure(candles: List[Dict]) -> Dict:
-        """Analyze overall market structure"""
-        if len(candles) < 50:
-            return {}
-        
-        recent = candles[-50:]
-        prices = [c["close"] for c in recent]
-        volumes = [c.get("volume", 0) for c in recent]
-        
-        # Trend analysis
-        sma_20 = np.mean(prices[-20:]) if len(prices) >= 20 else prices[-1]
-        sma_50 = np.mean(prices[-50:]) if len(prices) >= 50 else prices[-1]
-        
-        trend = "BULLISH" if sma_20 > sma_50 else "BEARISH"
-        trend_strength = abs((sma_20 - sma_50) / sma_50 * 100)
-        
-        # Volatility
-        returns = np.diff(prices) / prices[:-1]
-        volatility = np.std(returns) * 100 if len(returns) > 0 else 0
-        
-        # Volume analysis
-        avg_volume = np.mean(volumes) if any(volumes) else 0
-        current_volume = volumes[-1] if volumes else 0
-        volume_ratio = current_volume / avg_volume if avg_volume > 0 else 1
-        
-        # Support/Resistance
-        support_levels, resistance_levels = SupportResistanceDetector.detect_support_resistance(candles)
-        
-        # Pattern detection
-        candlestick_patterns = CandlestickPatternDetector.detect_patterns(candles)
-        ict_patterns = ICTPatternDetector.detect_ict_patterns(candles)
-        
-        return {
-            "trend": trend,
-            "trend_strength": round(trend_strength, 2),
-            "volatility": round(volatility, 2),
-            "volume_ratio": round(volume_ratio, 2),
-            "support_levels": support_levels[:5],
-            "resistance_levels": resistance_levels[:5],
-            "candlestick_patterns": candlestick_patterns[:5],
-            "ict_patterns": ict_patterns[:5]
-        }
+    async def analyze_market_structure(symbol: str, interval: str = "1h") -> Dict:
+        """Analyze overall market structure with real data"""
+        try:
+            # Fetch real data
+            candles, market_type = await UniversalDataFetcher.get_market_data(symbol, interval)
+            
+            if not candles or len(candles) < 50:
+                return {
+                    "error": "Insufficient data",
+                    "candle_count": len(candles) if candles else 0
+                }
+            
+            recent = candles[-50:]
+            prices = [c["close"] for c in recent]
+            volumes = [c.get("volume", 0) for c in recent]
+            
+            # Trend analysis
+            sma_20 = np.mean(prices[-20:]) if len(prices) >= 20 else prices[-1]
+            sma_50 = np.mean(prices[-50:]) if len(prices) >= 50 else prices[-1]
+            
+            trend = "BULLISH" if sma_20 > sma_50 else "BEARISH"
+            trend_strength = abs((sma_20 - sma_50) / sma_50 * 100)
+            
+            # Volatility
+            returns = np.diff(prices) / prices[:-1]
+            volatility = np.std(returns) * 100 if len(returns) > 0 else 0
+            
+            # Volume analysis
+            avg_volume = np.mean(volumes) if any(volumes) else 0
+            current_volume = volumes[-1] if volumes else 0
+            volume_ratio = current_volume / avg_volume if avg_volume > 0 else 1
+            
+            # Support/Resistance
+            support_levels, resistance_levels = SupportResistanceDetector.detect_support_resistance(candles)
+            
+            # Pattern detection
+            candlestick_patterns = CandlestickPatternDetector.detect_patterns(candles)
+            ict_patterns = ICTPatternDetector.detect_ict_patterns(candles)
+            
+            # Current price info
+            current_price = candles[-1]["close"]
+            price_change = 0
+            if len(candles) > 1:
+                price_change = ((candles[-1]["close"] - candles[-2]["close"]) / candles[-2]["close"]) * 100
+            
+            return {
+                "symbol": symbol.upper(),
+                "market_type": market_type.value,
+                "current_price": round(current_price, 8),
+                "price_change_percent": round(price_change, 2),
+                "trend": trend,
+                "trend_strength": round(trend_strength, 2),
+                "volatility": round(volatility, 2),
+                "volume_ratio": round(volume_ratio, 2),
+                "support_levels": support_levels[:5],
+                "resistance_levels": resistance_levels[:5],
+                "candlestick_patterns": candlestick_patterns[:5],
+                "ict_patterns": ict_patterns[:5],
+                "candle_count": len(candles),
+                "timestamp": datetime.utcnow().isoformat() + "Z"
+            }
+            
+        except Exception as e:
+            logger.error(f"Market structure analysis error: {e}")
+            return {
+                "error": str(e),
+                "symbol": symbol
+            }
 
 # ========== API ENDPOINTS ==========
+@app.get("/")
+@app.get("/dashboard")
+async def dashboard(request: Request):
+    """Dashboard HTML page"""
+    return templates.TemplateResponse("dashboard.html", {
+        "request": request,
+        "title": "Real Data Trading Bot v4.5.0",
+        "version": "4.5.0"
+    })
+
 @app.get("/health")
 def health():
+    """Health check endpoint"""
     return {
         "status": "healthy",
         "version": "4.5.0",
+        "timestamp": datetime.utcnow().isoformat(),
         "features": [
-            "Real Data Only",
+            "Real Data Only - NO SYNTHETIC DATA",
             "Support/Resistance Detection", 
             "ICT Pattern Recognition",
-            "Candlestick Pattern Analysis"
+            "Candlestick Pattern Analysis",
+            "Multi-Exchange Data Fetching"
         ]
     }
 
-@app.get("/api/advanced_analyze/{symbol}")
-async def advanced_analyze(
+@app.get("/api/analyze/{symbol}")
+async def analyze_symbol(
     symbol: str,
     interval: str = Query(default="1h", regex="^(1h|4h|1d)$")
 ):
-    """Advanced analysis with pattern detection"""
+    """Complete market analysis"""
     try:
-        # Here you would fetch real data using your existing data fetchers
-        # For this example, I'll create a dummy response structure
+        # Get full analysis
+        analysis = await EnhancedTechnicalIndicators.analyze_market_structure(symbol, interval)
         
-        candles = []  # This would come from your data fetchers
-        
-        # Analyze market structure
-        market_structure = EnhancedTechnicalIndicators.analyze_market_structure(candles)
-        
-        # Get current price info
-        current_price = candles[-1]["close"] if candles else 0
-        price_change = 0
-        if len(candles) > 1:
-            price_change = ((candles[-1]["close"] - candles[-2]["close"]) / candles[-2]["close"]) * 100
+        if "error" in analysis:
+            raise HTTPException(status_code=503, detail=analysis["error"])
         
         return {
             "success": True,
-            "symbol": symbol.upper(),
-            "analysis": {
-                "current_price": round(current_price, 8),
-                "price_change_percent": round(price_change, 2),
-                "market_structure": market_structure,
-                "timestamp": datetime.utcnow().isoformat() + "Z"
-            }
+            "analysis": analysis
         }
         
+    except HTTPException:
+        raise
     except Exception as e:
-        logger.error(f"Advanced analysis error: {e}", exc_info=True)
+        logger.error(f"Analysis error: {e}", exc_info=True)
         raise HTTPException(status_code=500, detail=f"Analysis failed: {str(e)}")
 
 @app.get("/api/support_resistance/{symbol}")
@@ -847,22 +945,31 @@ async def get_support_resistance(
 ):
     """Get support and resistance levels"""
     try:
-        # Fetch real candles
-        candles = []  # Replace with actual data fetching
+        # Fetch real data
+        candles, market_type = await UniversalDataFetcher.get_market_data(symbol, interval)
+        
+        if not candles or len(candles) < 20:
+            raise HTTPException(
+                status_code=503, 
+                detail=f"Insufficient data for {symbol}. Only {len(candles) if candles else 0} candles available."
+            )
         
         support_levels, resistance_levels = SupportResistanceDetector.detect_support_resistance(candles)
+        
+        current_price = candles[-1]["close"]
         
         return {
             "success": True,
             "symbol": symbol.upper(),
             "interval": interval,
-            "current_price": candles[-1]["close"] if candles else 0,
+            "current_price": round(current_price, 8),
+            "market_type": market_type.value,
             "support_levels": [
                 {
                     "price": round(level["price"], 8),
                     "strength": level["strength"],
                     "touches": level["touches"],
-                    "distance_percent": round(((candles[-1]["close"] - level["price"]) / candles[-1]["close"] * 100), 2) if candles else 0
+                    "distance_percent": round(((current_price - level["price"]) / current_price * 100), 2)
                 }
                 for level in support_levels[:5]
             ],
@@ -871,12 +978,14 @@ async def get_support_resistance(
                     "price": round(level["price"], 8),
                     "strength": level["strength"],
                     "touches": level["touches"],
-                    "distance_percent": round(((level["price"] - candles[-1]["close"]) / candles[-1]["close"] * 100), 2) if candles else 0
+                    "distance_percent": round(((level["price"] - current_price) / current_price * 100), 2)
                 }
                 for level in resistance_levels[:5]
             ]
         }
         
+    except HTTPException:
+        raise
     except Exception as e:
         logger.error(f"Support/resistance error: {e}", exc_info=True)
         raise HTTPException(status_code=500, detail=str(e))
@@ -888,35 +997,598 @@ async def get_patterns(
 ):
     """Get detected patterns"""
     try:
-        # Fetch real candles
-        candles = []  # Replace with actual data fetching
+        # Fetch real data
+        candles, market_type = await UniversalDataFetcher.get_market_data(symbol, interval)
+        
+        if not candles or len(candles) < 10:
+            raise HTTPException(
+                status_code=503, 
+                detail=f"Insufficient data for {symbol}"
+            )
         
         candlestick_patterns = CandlestickPatternDetector.detect_patterns(candles)
         ict_patterns = ICTPatternDetector.detect_ict_patterns(candles)
+        
+        # Filter recent patterns (last 20 candles)
+        recent_patterns = []
+        all_patterns = candlestick_patterns + ict_patterns
+        for pattern in all_patterns:
+            if pattern["index"] >= len(candles) - 20:
+                recent_patterns.append(pattern)
         
         return {
             "success": True,
             "symbol": symbol.upper(),
             "interval": interval,
-            "candlestick_patterns": candlestick_patterns[:10],
-            "ict_patterns": ict_patterns[:10],
+            "market_type": market_type.value,
+            "recent_patterns": recent_patterns[:10],
             "pattern_counts": {
                 "candlestick": len(candlestick_patterns),
                 "ict": len(ict_patterns),
-                "total": len(candlestick_patterns) + len(ict_patterns)
+                "total": len(candlestick_patterns) + len(ict_patterns),
+                "recent": len(recent_patterns)
             }
         }
         
+    except HTTPException:
+        raise
     except Exception as e:
         logger.error(f"Pattern detection error: {e}", exc_info=True)
         raise HTTPException(status_code=500, detail=str(e))
 
+# ========== STATIC HTML PAGES ==========
+@app.get("/test")
+async def test_page():
+    """Simple test page"""
+    html_content = """
+    <!DOCTYPE html>
+    <html>
+    <head>
+        <title>Trading Bot Test</title>
+        <style>
+            body { font-family: Arial, sans-serif; margin: 40px; background: #0f172a; color: white; }
+            .container { max-width: 1200px; margin: 0 auto; }
+            .header { background: linear-gradient(90deg, #10b981, #059669); padding: 20px; border-radius: 10px; }
+            .api-list { margin-top: 20px; background: #1e293b; padding: 20px; border-radius: 10px; }
+            .api-item { background: #334155; padding: 10px; margin: 10px 0; border-radius: 5px; }
+            code { background: #475569; padding: 2px 5px; border-radius: 3px; }
+        </style>
+    </head>
+    <body>
+        <div class="container">
+            <div class="header">
+                <h1>🚀 Real Data Trading Bot v4.5.0</h1>
+                <p>✅ Real Data Only - NO SYNTHETIC DATA</p>
+            </div>
+            
+            <div class="api-list">
+                <h2>📡 Available API Endpoints:</h2>
+                
+                <div class="api-item">
+                    <h3>🏠 Main Dashboard</h3>
+                    <p><code>GET /</code> or <code>GET /dashboard</code> - Trading dashboard</p>
+                </div>
+                
+                <div class="api-item">
+                    <h3>💚 Health Check</h3>
+                    <p><code>GET /health</code> - System status</p>
+                </div>
+                
+                <div class="api-item">
+                    <h3>📊 Full Analysis</h3>
+                    <p><code>GET /api/analyze/{symbol}</code> - Complete market analysis</p>
+                    <p>Example: <a href="/api/analyze/BTCUSDT?interval=1h" style="color: #10b981;">/api/analyze/BTCUSDT</a></p>
+                </div>
+                
+                <div class="api-item">
+                    <h3>🎯 Support/Resistance</h3>
+                    <p><code>GET /api/support_resistance/{symbol}</code> - Key levels</p>
+                    <p>Example: <a href="/api/support_resistance/ETHUSDT" style="color: #10b981;">/api/support_resistance/ETHUSDT</a></p>
+                </div>
+                
+                <div class="api-item">
+                    <h3>🔄 Patterns</h3>
+                    <p><code>GET /api/patterns/{symbol}</code> - Candlestick & ICT patterns</p>
+                    <p>Example: <a href="/api/patterns/SOLUSDT" style="color: #10b981;">/api/patterns/SOLUSDT</a></p>
+                </div>
+            </div>
+            
+            <div style="margin-top: 30px; padding: 20px; background: #1e293b; border-radius: 10px;">
+                <h2>🔧 Quick Test Commands:</h2>
+                <pre style="background: #334155; padding: 15px; border-radius: 5px;">
+# Health check
+curl http://localhost:8000/health
+
+# Analyze BTC
+curl "http://localhost:8000/api/analyze/BTCUSDT?interval=1h"
+
+# Support/Resistance for ETH
+curl "http://localhost:8000/api/support_resistance/ETHUSDT"
+
+# Patterns for SOL
+curl "http://localhost:8000/api/patterns/SOLUSDT"
+                </pre>
+            </div>
+        </div>
+    </body>
+    </html>
+    """
+    return HTMLResponse(content=html_content)
+
 # ========== MAIN ==========
 if __name__ == "__main__":
     import uvicorn
+    
+    # Create templates directory if it doesn't exist
+    os.makedirs("templates", exist_ok=True)
+    
+    # Create a simple dashboard template
+    dashboard_html = """
+    <!DOCTYPE html>
+    <html lang="tr">
+    <head>
+        <meta charset="UTF-8">
+        <meta name="viewport" content="width=device-width, initial-scale=1.0">
+        <title>{{ title }}</title>
+        <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+        <style>
+            * { margin: 0; padding: 0; box-sizing: border-box; }
+            
+            :root {
+                --bg-dark: #0a0e27;
+                --bg-card: #1a1f3a;
+                --primary: #10b981;
+                --success: #10b981;
+                --danger: #ef4444;
+                --warning: #f59e0b;
+                --text: #e2e8f0;
+                --text-muted: #94a3b8;
+            }
+            
+            body {
+                font-family: 'Segoe UI', sans-serif;
+                background: linear-gradient(135deg, var(--bg-dark), #1a1f3a);
+                color: var(--text);
+                min-height: 100vh;
+                padding: 1rem;
+            }
+            
+            .container { max-width: 1800px; margin: 0 auto; }
+            
+            header {
+                background: linear-gradient(90deg, var(--success), #059669);
+                border-radius: 16px;
+                padding: 2rem;
+                margin-bottom: 2rem;
+                text-align: center;
+            }
+            
+            .logo {
+                font-size: 2.5rem;
+                font-weight: 900;
+                color: white;
+                margin-bottom: 1rem;
+            }
+            
+            .status-badge {
+                display: inline-block;
+                background: rgba(255,255,255,0.2);
+                padding: 0.5rem 1.5rem;
+                border-radius: 20px;
+                font-weight: 600;
+            }
+            
+            .dashboard-grid {
+                display: grid;
+                grid-template-columns: repeat(auto-fit, minmax(400px, 1fr));
+                gap: 1.5rem;
+                margin-bottom: 1.5rem;
+            }
+            
+            .card {
+                background: var(--bg-card);
+                border-radius: 12px;
+                padding: 1.5rem;
+                margin-bottom: 1.5rem;
+            }
+            
+            .card-title {
+                font-size: 1.2rem;
+                font-weight: 700;
+                margin-bottom: 1rem;
+                color: var(--primary);
+                border-bottom: 2px solid var(--primary);
+                padding-bottom: 0.5rem;
+            }
+            
+            .control-panel {
+                background: var(--bg-card);
+                border-radius: 12px;
+                padding: 1.5rem;
+                margin-bottom: 2rem;
+            }
+            
+            .input-row {
+                display: grid;
+                grid-template-columns: 1fr 150px auto;
+                gap: 1rem;
+                margin-bottom: 1rem;
+            }
+            
+            input, select, button {
+                padding: 0.75rem 1rem;
+                border-radius: 8px;
+                border: 1px solid rgba(255,255,255,0.1);
+                font-size: 0.95rem;
+            }
+            
+            input, select {
+                background: var(--bg-dark);
+                color: var(--text);
+            }
+            
+            button {
+                background: var(--primary);
+                color: white;
+                border: none;
+                cursor: pointer;
+                font-weight: 600;
+            }
+            
+            button:hover { opacity: 0.9; }
+            button:disabled { opacity: 0.5; cursor: not-allowed; }
+            
+            .results {
+                background: var(--bg-dark);
+                padding: 1rem;
+                border-radius: 8px;
+                margin-top: 1rem;
+                min-height: 200px;
+                overflow-x: auto;
+            }
+            
+            pre {
+                white-space: pre-wrap;
+                word-wrap: break-word;
+                font-family: 'Courier New', monospace;
+                font-size: 0.9rem;
+            }
+            
+            .loading {
+                text-align: center;
+                padding: 3rem;
+                color: var(--primary);
+            }
+            
+            .spinner {
+                border: 3px solid rgba(16,185,129,0.3);
+                border-top: 3px solid var(--primary);
+                border-radius: 50%;
+                width: 40px;
+                height: 40px;
+                animation: spin 1s linear infinite;
+                margin: 0 auto 1rem;
+            }
+            
+            @keyframes spin {
+                0% { transform: rotate(0deg); }
+                100% { transform: rotate(360deg); }
+            }
+            
+            .alert {
+                padding: 1rem;
+                border-radius: 8px;
+                margin-bottom: 1rem;
+            }
+            
+            .alert-info {
+                background: rgba(59,130,246,0.1);
+                border-left: 4px solid #3b82f6;
+            }
+            
+            .quick-symbols {
+                display: grid;
+                grid-template-columns: repeat(auto-fill, minmax(120px, 1fr));
+                gap: 0.5rem;
+                margin-top: 1rem;
+            }
+            
+            .quick-symbol {
+                background: rgba(16,185,129,0.1);
+                padding: 0.6rem;
+                border-radius: 6px;
+                text-align: center;
+                cursor: pointer;
+                transition: all 0.2s;
+            }
+            
+            .quick-symbol:hover {
+                background: rgba(16,185,129,0.2);
+                transform: scale(1.05);
+            }
+        </style>
+    </head>
+    <body>
+        <div class="container">
+            <header>
+                <div class="logo">
+                    <i class="fas fa-chart-line"></i> {{ title }}
+                </div>
+                <div class="status-badge">
+                    <i class="fas fa-check-circle"></i> REAL DATA ONLY - NO SYNTHETIC
+                </div>
+            </header>
+            
+            <div class="alert alert-info">
+                <strong>📡 Veri Kaynakları:</strong><br>
+                • <strong>Kripto:</strong> Binance (gerçek zamanlı) + CoinGecko (tüm coinler, 20 sn cache)<br>
+                • <strong>Forex:</strong> Twelve Data (800 call/day) + Alpha Vantage (25 call/day fallback)<br>
+                • <strong>Analiz:</strong> Destek/Direnç + ICT Pattern + Mum Pattern + Trend Analizi
+            </div>
+            
+            <div class="control-panel">
+                <h2 class="card-title"><i class="fas fa-search"></i> Analiz Yap</h2>
+                <div class="input-row">
+                    <input type="text" id="symbolInput" placeholder="Örn: BTCUSDT, ETHUSDT, SOLUSDT, EURUSD..." value="BTCUSDT">
+                    <select id="intervalSelect">
+                        <option value="1h">1 Saat</option>
+                        <option value="4h">4 Saat</option>
+                        <option value="1d">1 Gün</option>
+                    </select>
+                    <button onclick="analyze()" id="analyzeBtn">
+                        <i class="fas fa-search"></i> Analiz Et
+                    </button>
+                </div>
+                
+                <div class="quick-symbols">
+                    <div class="quick-symbol" onclick="setSymbol('BTCUSDT')">Bitcoin</div>
+                    <div class="quick-symbol" onclick="setSymbol('ETHUSDT')">Ethereum</div>
+                    <div class="quick-symbol" onclick="setSymbol('SOLUSDT')">Solana</div>
+                    <div class="quick-symbol" onclick="setSymbol('XRPUSDT')">XRP</div>
+                    <div class="quick-symbol" onclick="setSymbol('ADAUSDT')">Cardano</div>
+                    <div class="quick-symbol" onclick="setSymbol('DOGEUSDT')">Dogecoin</div>
+                </div>
+            </div>
+            
+            <div class="dashboard-grid">
+                <div class="card">
+                    <h2 class="card-title"><i class="fas fa-chart-bar"></i> Tam Analiz</h2>
+                    <div id="fullAnalysisResult" class="results">
+                        <div class="loading">
+                            <div class="spinner"></div>
+                            Sembol seçin ve analiz edin...
+                        </div>
+                    </div>
+                </div>
+                
+                <div class="card">
+                    <h2 class="card-title"><i class="fas fa-layer-group"></i> Destek/Direnç</h2>
+                    <div id="supportResistanceResult" class="results">
+                        <div class="loading">Bekleniyor...</div>
+                    </div>
+                </div>
+                
+                <div class="card">
+                    <h2 class="card-title"><i class="fas fa-shapes"></i> Patternler</h2>
+                    <div id="patternsResult" class="results">
+                        <div class="loading">Bekleniyor...</div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <script>
+            function setSymbol(sym) {
+                document.getElementById('symbolInput').value = sym;
+                analyze();
+            }
+            
+            async function analyze() {
+                const symbol = document.getElementById('symbolInput').value.trim();
+                const interval = document.getElementById('intervalSelect').value;
+                const btn = document.getElementById('analyzeBtn');
+                
+                if (!symbol) {
+                    alert('Lütfen bir sembol girin');
+                    return;
+                }
+                
+                btn.disabled = true;
+                btn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Gerçek veri çekiliyor...';
+                
+                // Show loading states
+                document.getElementById('fullAnalysisResult').innerHTML = 
+                    '<div class="loading"><div class="spinner"></div>Analiz ediliyor...</div>';
+                document.getElementById('supportResistanceResult').innerHTML = 
+                    '<div class="loading"><div class="spinner"></div>Yükleniyor...</div>';
+                document.getElementById('patternsResult').innerHTML = 
+                    '<div class="loading"><div class="spinner"></div>Yükleniyor...</div>';
+                
+                try {
+                    // Full analysis
+                    const analysisResp = await fetch(`/api/analyze/${encodeURIComponent(symbol)}?interval=${interval}`);
+                    const analysisData = await analysisResp.json();
+                    displayFullAnalysis(analysisData);
+                    
+                    // Support/Resistance
+                    const srResp = await fetch(`/api/support_resistance/${encodeURIComponent(symbol)}?interval=${interval}`);
+                    const srData = await srResp.json();
+                    displaySupportResistance(srData);
+                    
+                    // Patterns
+                    const patternsResp = await fetch(`/api/patterns/${encodeURIComponent(symbol)}?interval=${interval}`);
+                    const patternsData = await patternsResp.json();
+                    displayPatterns(patternsData);
+                    
+                } catch (err) {
+                    console.error(err);
+                    alert('Analiz hatası: ' + err.message);
+                    
+                    // Show error in results
+                    document.getElementById('fullAnalysisResult').innerHTML = 
+                        '<div style="color: #ef4444; padding: 2rem; text-align: center;">Hata: ' + err.message + '</div>';
+                    
+                } finally {
+                    btn.disabled = false;
+                    btn.innerHTML = '<i class="fas fa-search"></i> Analiz Et';
+                }
+            }
+            
+            function displayFullAnalysis(data) {
+                const container = document.getElementById('fullAnalysisResult');
+                
+                if (!data.success) {
+                    container.innerHTML = '<div style="color: #ef4444;">' + (data.detail || 'Analiz başarısız') + '</div>';
+                    return;
+                }
+                
+                const analysis = data.analysis;
+                let html = '';
+                
+                if (analysis.error) {
+                    html = `<div style="color: #f59e0b;">${analysis.error}</div>`;
+                } else {
+                    html = `
+                        <div style="margin-bottom: 1rem;">
+                            <strong>📊 ${analysis.symbol}</strong> (${analysis.market_type})<br>
+                            <strong>💰 Fiyat:</strong> $${analysis.current_price} (${analysis.price_change_percent >= 0 ? '📈' : '📉'} ${Math.abs(analysis.price_change_percent)}%)<br>
+                            <strong>📈 Trend:</strong> ${analysis.trend} (${analysis.trend_strength}% güç)<br>
+                            <strong>⚡ Volatilite:</strong> ${analysis.volatility}%<br>
+                            <strong>📊 Volume:</strong> ${analysis.volume_ratio.toFixed(2)}x ortalama<br>
+                            <strong>🕒 Mum Sayısı:</strong> ${analysis.candle_count}<br>
+                        </div>
+                    `;
+                }
+                
+                container.innerHTML = html;
+            }
+            
+            function displaySupportResistance(data) {
+                const container = document.getElementById('supportResistanceResult');
+                
+                if (!data.success) {
+                    container.innerHTML = '<div style="color: #ef4444;">' + (data.detail || 'Hata') + '</div>';
+                    return;
+                }
+                
+                let html = `
+                    <div style="margin-bottom: 1rem;">
+                        <strong>💰 Mevcut Fiyat:</strong> $${data.current_price}<br>
+                        <strong>📊 Piyasa:</strong> ${data.market_type}
+                    </div>
+                `;
+                
+                // Support levels
+                html += '<div style="margin-bottom: 1rem;"><strong>🟢 Destek Seviyeleri:</strong>';
+                if (data.support_levels.length === 0) {
+                    html += '<br><em style="color: #94a3b8;">Destek seviyesi bulunamadı</em>';
+                } else {
+                    data.support_levels.forEach(level => {
+                        const distanceColor = level.distance_percent > 5 ? '#94a3b8' : 
+                                            level.distance_percent > 2 ? '#f59e0b' : '#10b981';
+                        html += `
+                            <div style="margin: 0.5rem 0; padding: 0.5rem; background: #0a0e27; border-radius: 4px;">
+                                <strong>$${level.price}</strong><br>
+                                <small>
+                                    Güç: ${level.strength} | Temas: ${level.touches} | 
+                                    <span style="color: ${distanceColor}">${level.distance_percent}% uzak</span>
+                                </small>
+                            </div>
+                        `;
+                    });
+                }
+                html += '</div>';
+                
+                // Resistance levels
+                html += '<div><strong>🔴 Direnç Seviyeleri:</strong>';
+                if (data.resistance_levels.length === 0) {
+                    html += '<br><em style="color: #94a3b8;">Direnç seviyesi bulunamadı</em>';
+                } else {
+                    data.resistance_levels.forEach(level => {
+                        const distanceColor = level.distance_percent > 5 ? '#94a3b8' : 
+                                            level.distance_percent > 2 ? '#f59e0b' : '#ef4444';
+                        html += `
+                            <div style="margin: 0.5rem 0; padding: 0.5rem; background: #0a0e27; border-radius: 4px;">
+                                <strong>$${level.price}</strong><br>
+                                <small>
+                                    Güç: ${level.strength} | Temas: ${level.touches} | 
+                                    <span style="color: ${distanceColor}">${level.distance_percent}% uzak</span>
+                                </small>
+                            </div>
+                        `;
+                    });
+                }
+                html += '</div>';
+                
+                container.innerHTML = html;
+            }
+            
+            function displayPatterns(data) {
+                const container = document.getElementById('patternsResult');
+                
+                if (!data.success) {
+                    container.innerHTML = '<div style="color: #ef4444;">' + (data.detail || 'Hata') + '</div>';
+                    return;
+                }
+                
+                let html = `
+                    <div style="margin-bottom: 1rem;">
+                        <strong>📊 Pattern Sayıları:</strong><br>
+                        • Mum Pattern: ${data.pattern_counts.candlestick}<br>
+                        • ICT Pattern: ${data.pattern_counts.ict}<br>
+                        • Toplam: ${data.pattern_counts.total}<br>
+                        • Son 20 Mum: ${data.pattern_counts.recent}
+                    </div>
+                `;
+                
+                // Recent patterns
+                html += '<div><strong>🔄 Son Patternler:</strong>';
+                if (!data.recent_patterns || data.recent_patterns.length === 0) {
+                    html += '<br><em style="color: #94a3b8;">Son 20 mumda pattern bulunamadı</em>';
+                } else {
+                    data.recent_patterns.forEach(pattern => {
+                        const strengthColor = pattern.strength > 0.8 ? '#10b981' : 
+                                            pattern.strength > 0.6 ? '#f59e0b' : '#94a3b8';
+                        html += `
+                            <div style="margin: 0.5rem 0; padding: 0.5rem; background: #0a0e27; border-radius: 4px;">
+                                <strong>${pattern.description}</strong><br>
+                                <small>
+                                    Tür: ${pattern.pattern} | 
+                                    <span style="color: ${strengthColor}">Güç: ${pattern.strength}</span> | 
+                                    Fiyat: $${pattern.price}
+                                </small>
+                            </div>
+                        `;
+                    });
+                }
+                html += '</div>';
+                
+                container.innerHTML = html;
+            }
+            
+            // Initial analysis on page load
+            document.addEventListener('DOMContentLoaded', () => {
+                setTimeout(() => {
+                    analyze();
+                }, 1000);
+            });
+        </script>
+    </body>
+    </html>
+    """
+    
+    # Save dashboard template
+    with open("templates/dashboard.html", "w", encoding="utf-8") as f:
+        f.write(dashboard_html)
+    
+    # Run the server
     port = int(os.getenv("PORT", 8000))
     
     logger.info(f"🚀 Starting Real Data Trading Bot v4.5.0 on port {port}")
+    logger.info("=" * 60)
+    logger.info("📡 Open your browser and go to:")
+    logger.info(f"   🌐 http://localhost:{port}/")
+    logger.info(f"   🔧 http://localhost:{port}/test")
     logger.info("=" * 60)
     logger.info("NEW FEATURES:")
     logger.info("  ✅ Support/Resistance Detection")
