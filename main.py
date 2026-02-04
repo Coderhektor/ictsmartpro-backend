@@ -1415,7 +1415,7 @@ async def dashboard():
         
         // WebSocket Connection
         function connectWebSocket() {
-            ws = new WebSocket(`ws://${window.location.host}/ws`);
+            ws = new WebSocket(`wss://${window.location.host}/ws`);
             
             ws.onmessage = (event) => {
                 const data = JSON.parse(event.data);
