@@ -1,2720 +1,2484 @@
-#!/usr/bin/env python3
-"""
-🚀 CRYPTOTRADER ULTRA v7.0 - WORLD'S MOST ADVANCED TRADING PLATFORM
-═══════════════════════════════════════════════════════════════════════
-✨ Features:
-   • Dual Data Sources: Binance + CoinGecko (Automatic Fallback)
-   • Real-time WebSocket Streaming (15+ Symbols)
-   • 25+ Technical Indicators (RSI, MACD, Bollinger, Stochastic, ATR, OBV, VWAP)
-   • Advanced Candlestick Pattern Recognition (20+ Patterns)
-   • Support & Resistance Detection with Clustering
-   • Fibonacci Retracement & Extension Levels
-   • Machine Learning Predictions (XGBoost)
-   • AI-Powered Trading Signals with Confidence Scoring
-   • Risk Management (Stop-Loss, Take-Profit, Position Sizing)
-   • TradingView Integration with Multi-Timeframe
-   • Modern, Vibrant Dashboard with Real-time Updates
-═══════════════════════════════════════════════════════════════════════
-"""
+🚀 CryptoTrader Pro v6.0 - Advanced Trading Platform
+📊 Coingecko Real-time Ticker + TradingView Integration + Full Technical Analysis
 import os
-import sys
-import time
-import json
-import asyncio
-import hashlib
 import logging
-from datetime import datetime, timedelta, timezone
-from typing import Dict, List, Optional, Any, Tuple, Set
-from enum import Enum
-from contextlib import asynccontextmanager
-from collections import defaultdict, deque
-from dataclasses import dataclass, asdict
-from pydantic import BaseModel, Field, validator
-
-import numpy as np
+from datetime import datetime, timezone, timedelta
+from typing import Dict, List, Optional, Any, Tuple
+import asyncio
+import json
+import aiohttp
 import pandas as pd
+import numpy as np
+from dataclasses import dataclass, asdict
+from enum import Enum
 from scipy.signal import argrelextrema
 from scipy.stats import linregress
 
-import aiohttp
-import websockets
-from fastapi import FastAPI, HTTPException, WebSocket, WebSocketDisconnect, Request, Query
+Configure logging
+logging.basicConfig(
+level=logging.INFO,
+format='%(asctime)s - %(name)s - %(levelname)s - %(message)s'
+)
+logger = logging.getLogger(name)
+
+from fastapi import FastAPI, HTTPException, Query, Request, Depends, Form
 from fastapi.responses import HTMLResponse, JSONResponse, RedirectResponse
-from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
+from fastapi.middleware.cors import CORSMiddleware
+from contextlib import asynccontextmanager
+import uuid
 
-# ==========================================
-# ENHANCED CONFIGURATION
-# ==========================================
+====================================================================================
+SUBSCRIPTION TIERS
+====================================================================================
+class SubscriptionTier(Enum):
+FREE = "free"
+BASIC = "basic"
+PRO = "pro"
+ENTERPRISE = "enterprise"
 
-class Config:
-    """Global configuration settings"""
+TIER_FEATURES = {
+SubscriptionTier.FREE: {
+"name": "Free",
+"price": 0,
+"max_symbols": 3,
+"features": ["Basic charts", "5 indicators", "Community support"]
+},
+SubscriptionTier.BASIC: {
+"name": "Basic",
+"price": 9.99,
+"max_symbols": 10,
+"features": ["Advanced charts", "15 indicators", "Real-time data", "Email support"]
+},
+SubscriptionTier.PRO: {
+"name": "Pro",
+"price": 29.99,
+"max_symbols": 50,
+"features": ["All indicators", "AI signals", "Fibonacci tools", "Pattern detection", "Priority support"]
+},
+SubscriptionTier.ENTERPRISE: {
+"name": "Enterprise",
+"price": 99.99,
+"max_symbols": 999,
+"features": ["Everything + API", "Custom indicators", "White-label", "24/7 support"]
+}
+}
+
+====================================================================================
+COINGECKO REAL-TIME TICKER PROVIDER
+====================================================================================
+class CoinGeckoTicker:
+"""Real-time cryptocurrency ticker with streaming updates"""
+
+text
+BASE_URL = "https://api.coingecko.com/api/v3"
+
+# Popular cryptocurrencies and forex pairs
+DEFAULT_SYMBOLS = [
+    "bitcoin", "ethereum", "binancecoin", "ripple", "cardano",
+    "solana", "polkadot", "dogecoin", "avalanche-2", "chainlink",
+    "polygon", "uniswap", "litecoin", "bitcoin-cash", "stellar",
+    # Forex pairs (simulated for Coingecko)
+    "usd", "eur", "gbp", "jpy"
+]
+
+# TradingView symbol mappings
+TRADINGVIEW_SYMBOLS = {
+    "bitcoin": "BINANCE:BTCUSDT",
+    "ethereum": "BINANCE:ETHUSDT",
+    "binancecoin": "BINANCE:BNBUSDT",
+    "ripple": "BINANCE:XRPUSDT",
+    "cardano": "BINANCE:ADAUSDT",
+    "solana": "BINANCE:SOLUSDT",
+    "polkadot": "BINANCE:DOTUSDT",
+    "dogecoin": "BINANCE:DOGEUSDT",
+    "avalanche-2": "BINANCE:AVAXUSDT",
+    "chainlink": "BINANCE:LINKUSDT",
+    "polygon": "BINANCE:MATICUSDT",
+    "uniswap": "BINANCE:UNIUSDT",
+    "litecoin": "BINANCE:LTCUSDT",
+    "bitcoin-cash": "BINANCE:BCHUSDT",
+    "stellar": "BINANCE:XLMUSDT",
+    # Forex mappings
+    "usd": "FX:USDUSD",
+    "eur": "FX:EURUSD",
+    "gbp": "FX:GBPUSD",
+    "jpy": "FX:JPYUSD",
+    # Metals
+    "gold": "FX:XAUUSD",
+    "silver": "FX:XAGUSD",
+    # Indices
+    "sp500": "AMEX:SPY",
+    "nasdaq": "NASDAQ:QQQ",
+    "dowjones": "DOW:DJI",
+}
+
+def __init__(self):
+    self.session: Optional[aiohttp.ClientSession] = None
+    self.price_cache = {}
+    self.last_update = datetime.now(timezone.utc)
+    self.ticker_data = []
+    self.subscribers = set()
+    self.historical_cache = {}
     
-    # Binance Configuration
-    BINANCE_BASE_URL = "https://api.binance.com"
-    BINANCE_WS_URL = "wss://stream.binance.com:9443"
+async def initialize(self):
+    """Initialize aiohttp session"""
+    if not self.session:
+        self.session = aiohttp.ClientSession()
+        logger.info("✅ CoinGecko Ticker initialized")
+
+async def close(self):
+    """Close aiohttp session"""
+    if self.session:
+        await self.session.close()
+        logger.info("🔌 CoinGecko Ticker closed")
+
+async def fetch_ticker_data(self, symbols: List[str] = None) -> List[Dict]:
+    """Fetch real-time ticker data"""
+    if not symbols:
+        symbols = self.DEFAULT_SYMBOLS
     
-    # CoinGecko Configuration
-    COINGECKO_BASE_URL = "https://api.coingecko.com/api/v3"
-    
-    # Cache Configuration (seconds)
-    CACHE_TTL = {
-        'ticker': 2,
-        'klines': 60,
-        'market': 30,
-        'analysis': 10,
-        'signal': 5,
-        'orderbook': 3,
-        'coingecko': 300
-    }
-    
-    # Rate Limiting
-    RATE_LIMITS = {
-        'binance': {'requests': 1200, 'per_minute': 60},
-        'coingecko': {'requests': 100, 'per_minute': 60}
-    }
-    
-    # Trading Parameters
-    TRADING = {
-        'default_quantity': 0.001,
-        'stop_loss_pct': 0.02,
-        'take_profit_pct': 0.04,
-        'max_position_size': 0.01,
-        'risk_per_trade': 0.01,
-        'max_drawdown_pct': 0.10
-    }
-    
-    # WebSocket Configuration
-    WS_CONFIG = {
-        'reconnect_delay': 5,
-        'max_reconnect_attempts': 10,
-        'ping_interval': 30,
-        'ping_timeout': 10,
-        'max_queue_size': 1000
-    }
-    
-    # Symbols Configuration
-    SYMBOLS = {
-        'major': ["BTCUSDT", "ETHUSDT", "BNBUSDT", "XRPUSDT", "ADAUSDT", 
-                  "SOLUSDT", "DOTUSDT", "DOGEUSDT", "AVAXUSDT", "LINKUSDT"],
-        'mid': ["MATICUSDT", "UNIUSDT", "LTCUSDT", "ATOMUSDT", "ETCUSDT",
-                "XLMUSDT", "TRXUSDT", "ALGOUSDT", "VETUSDT", "THETAUSDT"],
-        'forex': ["EURUSD", "GBPUSD", "USDJPY", "AUDUSD", "USDCAD"]
-    }
-    
-    # Timeframes
-    TIMEFRAMES = {
-        '1m': '1m', '5m': '5m', '15m': '15m', '30m': '30m',
-        '1h': '1h', '4h': '4h', '1d': '1d', '1w': '1w', '1M': '1M'
-    }
-    
-    # Technical Analysis
-    TA_CONFIG = {
-        'min_candles': 100,
-        'indicators': {
-            'sma': [5, 10, 20, 50, 100, 200],
-            'ema': [9, 12, 26, 50],
-            'rsi': 14,
-            'macd': [12, 26, 9],
-            'bb': 20,
-            'stochastic': [14, 3, 3],
-            'atr': 14,
-            'obv': True,
-            'vwap': True
+    try:
+        url = f"{self.BASE_URL}/simple/price"
+        params = {
+            "ids": ",".join(symbols),
+            "vs_currencies": "usd",
+            "include_24hr_vol": "true",
+            "include_24hr_change": "true",
+            "include_market_cap": "true",
+            "include_last_updated_at": "true",
+            "precision": "full"
         }
-    }
-    
-    # ML Configuration
-    ML_CONFIG = {
-        'retrain_interval': 3600,
-        'min_data_points': 200,
-        'lookback_periods': 100,
-        'lookahead': 5,
-        'threshold': 0.01
-    }
-
-
-# ==========================================
-# ENHANCED LOGGING SETUP
-# ==========================================
-
-logging.basicConfig(
-    level=logging.INFO,
-    format='%(asctime)s.%(msecs)03d - %(name)s - %(levelname)s - %(message)s',
-    datefmt='%Y-%m-%d %H:%M:%S',
-    handlers=[
-        logging.StreamHandler(),
-        logging.FileHandler('trading_platform.log', encoding='utf-8')
-    ]
-)
-
-logger = logging.getLogger(__name__)
-ws_logger = logging.getLogger('websocket')
-data_logger = logging.getLogger('data')
-analysis_logger = logging.getLogger('analysis')
-ml_logger = logging.getLogger('ml')
-
-
-# ==========================================
-# ENUMERATIONS
-# ==========================================
-
-class TimeFrame(str, Enum):
-    M1 = "1m"
-    M5 = "5m"
-    M15 = "15m"
-    M30 = "30m"
-    H1 = "1h"
-    H4 = "4h"
-    D1 = "1d"
-    W1 = "1w"
-    MTH1 = "1M"
-
-class TradeSide(str, Enum):
-    BUY = "BUY"
-    SELL = "SELL"
-
-class OrderType(str, Enum):
-    MARKET = "MARKET"
-    LIMIT = "LIMIT"
-
-class SignalType(str, Enum):
-    STRONG_BUY = "STRONG_BUY"
-    BUY = "BUY"
-    NEUTRAL = "NEUTRAL"
-    SELL = "SELL"
-    STRONG_SELL = "STRONG_SELL"
-
-
-# ==========================================
-# PYDANTIC MODELS
-# ==========================================
-
-class AnalyzeRequest(BaseModel):
-    symbol: str = Field("BTCUSDT", pattern="^[A-Z0-9]{3,10}(USDT|USD|EUR|GBP|JPY)?$")
-    timeframe: TimeFrame = TimeFrame.H1
-    indicators: List[str] = Field(default=["RSI", "MACD", "BB", "SMA", "EMA"])
-    
-    @validator('symbol')
-    def validate_symbol(cls, v):
-        return v.upper()
-
-class TradeRequest(BaseModel):
-    symbol: str = Field("BTCUSDT", pattern="^[A-Z0-9]{3,10}USDT$")
-    side: TradeSide
-    quantity: float = Field(0.001, gt=0, le=1000)
-    order_type: OrderType = OrderType.MARKET
-    price: Optional[float] = Field(None, gt=0)
-    stop_loss: Optional[float] = Field(None, gt=0)
-    take_profit: Optional[float] = Field(None, gt=0)
-    
-    @validator('symbol')
-    def validate_symbol(cls, v):
-        return v.upper()
-
-
-# ==========================================
-# CANDLESTICK PATTERN RECOGNITION
-# ==========================================
-
-class CandlestickPatterns:
-    """Advanced candlestick pattern recognition engine"""
-    
-    @staticmethod
-    def detect_patterns(df: pd.DataFrame) -> List[Dict]:
-        """Detect 20+ candlestick patterns"""
-        patterns = []
         
-        if len(df) < 3:
-            return patterns
-        
-        # Convert to numpy arrays for performance
-        opens = df['open'].values
-        highs = df['high'].values
-        lows = df['low'].values
-        closes = df['close'].values
-        volumes = df['volume'].values if 'volume' in df.columns else None
-        
-        # 1. Bullish Engulfing
-        for i in range(1, len(df)):
-            if closes[i] > opens[i] and closes[i-1] < opens[i-1]:
-                if closes[i] > opens[i-1] and opens[i] < closes[i-1]:
-                    body_size = abs(closes[i] - opens[i])
-                    prev_body = abs(closes[i-1] - opens[i-1])
-                    if body_size > prev_body * 1.5:
-                        patterns.append({
-                            "name": "Bullish Engulfing",
-                            "signal": "BULLISH",
-                            "confidence": 75,
-                            "candle_index": i,
-                            "description": "Strong reversal pattern after downtrend"
-                        })
-        
-        # 2. Bearish Engulfing
-        for i in range(1, len(df)):
-            if closes[i] < opens[i] and closes[i-1] > opens[i-1]:
-                if closes[i] < opens[i-1] and opens[i] > closes[i-1]:
-                    body_size = abs(closes[i] - opens[i])
-                    prev_body = abs(closes[i-1] - opens[i-1])
-                    if body_size > prev_body * 1.5:
-                        patterns.append({
-                            "name": "Bearish Engulfing",
-                            "signal": "BEARISH",
-                            "confidence": 75,
-                            "candle_index": i,
-                            "description": "Strong reversal pattern after uptrend"
-                        })
-        
-        # 3. Hammer
-        for i in range(len(df)):
-            body = abs(closes[i] - opens[i])
-            lower_shadow = opens[i] - lows[i] if closes[i] > opens[i] else closes[i] - lows[i]
-            upper_shadow = highs[i] - closes[i] if closes[i] > opens[i] else highs[i] - opens[i]
-            
-            if lower_shadow > body * 2 and upper_shadow < body * 0.5:
-                patterns.append({
-                    "name": "Hammer",
-                    "signal": "BULLISH",
-                    "confidence": 70,
-                    "candle_index": i,
-                    "description": "Potential reversal at support level"
-                })
-        
-        # 4. Shooting Star
-        for i in range(len(df)):
-            body = abs(closes[i] - opens[i])
-            lower_shadow = opens[i] - lows[i] if closes[i] > opens[i] else closes[i] - lows[i]
-            upper_shadow = highs[i] - closes[i] if closes[i] > opens[i] else highs[i] - opens[i]
-            
-            if upper_shadow > body * 2 and lower_shadow < body * 0.5:
-                patterns.append({
-                    "name": "Shooting Star",
-                    "signal": "BEARISH",
-                    "confidence": 70,
-                    "candle_index": i,
-                    "description": "Potential reversal at resistance level"
-                })
-        
-        # 5. Doji
-        for i in range(len(df)):
-            body = abs(closes[i] - opens[i])
-            range_total = highs[i] - lows[i]
-            
-            if range_total > 0 and body / range_total < 0.1:
-                patterns.append({
-                    "name": "Doji",
-                    "signal": "NEUTRAL",
-                    "confidence": 60,
-                    "candle_index": i,
-                    "description": "Indecision, potential reversal"
-                })
-        
-        # 6. Morning Star
-        for i in range(2, len(df)):
-            if (closes[i-2] < opens[i-2] and  # First candle bearish
-                abs(closes[i-1] - opens[i-1]) < abs(closes[i-2] - opens[i-2]) * 0.3 and  # Small body
-                closes[i] > opens[i] and  # Third candle bullish
-                closes[i] > ((opens[i-2] + closes[i-2]) / 2)):  # Close above midpoint
-                patterns.append({
-                    "name": "Morning Star",
-                    "signal": "BULLISH",
-                    "confidence": 80,
-                    "candle_index": i,
-                    "description": "Strong bullish reversal pattern"
-                })
-        
-        # 7. Evening Star
-        for i in range(2, len(df)):
-            if (closes[i-2] > opens[i-2] and  # First candle bullish
-                abs(closes[i-1] - opens[i-1]) < abs(closes[i-2] - opens[i-2]) * 0.3 and  # Small body
-                closes[i] < opens[i] and  # Third candle bearish
-                closes[i] < ((opens[i-2] + closes[i-2]) / 2)):  # Close below midpoint
-                patterns.append({
-                    "name": "Evening Star",
-                    "signal": "BEARISH",
-                    "confidence": 80,
-                    "candle_index": i,
-                    "description": "Strong bearish reversal pattern"
-                })
-        
-        # 8. Three White Soldiers
-        for i in range(2, len(df)):
-            if (closes[i] > opens[i] and closes[i-1] > opens[i-1] and closes[i-2] > opens[i-2] and
-                closes[i] > closes[i-1] and closes[i-1] > closes[i-2]):
-                patterns.append({
-                    "name": "Three White Soldiers",
-                    "signal": "BULLISH",
-                    "confidence": 85,
-                    "candle_index": i,
-                    "description": "Strong bullish continuation"
-                })
-        
-        # 9. Three Black Crows
-        for i in range(2, len(df)):
-            if (closes[i] < opens[i] and closes[i-1] < opens[i-1] and closes[i-2] < opens[i-2] and
-                closes[i] < closes[i-1] and closes[i-1] < closes[i-2]):
-                patterns.append({
-                    "name": "Three Black Crows",
-                    "signal": "BEARISH",
-                    "confidence": 85,
-                    "candle_index": i,
-                    "description": "Strong bearish continuation"
-                })
-        
-        # 10. Harami
-        for i in range(1, len(df)):
-            prev_body = abs(closes[i-1] - opens[i-1])
-            curr_body = abs(closes[i] - opens[i])
-            
-            if prev_body > curr_body * 2:
-                if closes[i-1] > opens[i-1] and closes[i] < opens[i]:  # Bullish Harami
-                    if opens[i] < closes[i-1] and closes[i] > opens[i-1]:
-                        patterns.append({
-                            "name": "Bullish Harami",
-                            "signal": "BULLISH",
-                            "confidence": 65,
-                            "candle_index": i,
-                            "description": "Potential bullish reversal"
-                        })
-                elif closes[i-1] < opens[i-1] and closes[i] > opens[i]:  # Bearish Harami
-                    if opens[i] > closes[i-1] and closes[i] < opens[i-1]:
-                        patterns.append({
-                            "name": "Bearish Harami",
-                            "signal": "BEARISH",
-                            "confidence": 65,
-                            "candle_index": i,
-                            "description": "Potential bearish reversal"
-                        })
-        
-        # 11-20. Additional patterns can be added here
-        # ... (Piercing Line, Dark Cloud Cover, Rising Three Methods, etc.)
-        
-        # Sort by confidence and return top 10
-        patterns.sort(key=lambda x: x['confidence'], reverse=True)
-        return patterns[:10]
-
-
-# ==========================================
-# ADVANCED WEB SOCKET MANAGER
-# ==========================================
-
-class AdvancedWebSocketManager:
-    """Real-time WebSocket data streaming manager"""
-    
-    def __init__(self):
-        self.connections: Dict[str, Any] = {}
-        self.price_data: Dict[str, Dict] = {}
-        self.kline_data: Dict[str, Dict] = {}
-        self.ticker_data: List[Dict] = []
-        self.orderbook_data: Dict[str, Dict] = {}
-        self.market_data: Dict[str, Dict] = {}
-        self._connection_status: Dict[str, str] = {}
-        self._subscriptions: defaultdict = defaultdict(set)
-        self._last_update: Dict[str, float] = {}
-        self._data_queues: defaultdict = defaultdict(lambda: deque(maxlen=Config.WS_CONFIG['max_queue_size']))
-        self._running: bool = True
-    
-    async def _validate_ws_data(self, data: Dict, data_type: str) -> bool:
-        """Validate WebSocket data integrity"""
-        try:
-            if data_type == 'ticker':
-                required_fields = ['s', 'c', 'P', 'h', 'l', 'v', 'q']
-                return all(field in data for field in required_fields)
-            elif data_type == 'kline':
-                required_fields = ['t', 'o', 'h', 'l', 'c', 'v', 'x']
-                return 'k' in data and all(field in data['k'] for field in required_fields)
-            elif data_type == 'depth':
-                required_fields = ['bids', 'asks', 'u']
-                return all(field in data for field in required_fields)
-            return False
-        except Exception as e:
-            ws_logger.error(f"Data validation error: {e}")
-            return False
-    
-    async def connect_multi_stream(self, streams: List[str], stream_type: str = 'ticker'):
-        """Connect to Binance multi-stream WebSocket"""
-        stream_url = f"{Config.BINANCE_WS_URL}/stream?streams={'/'.join(streams)}"
-        connection_id = hashlib.md5(stream_url.encode()).hexdigest()[:8]
-        reconnect_attempts = 0
-        
-        while self._running and reconnect_attempts < Config.WS_CONFIG['max_reconnect_attempts']:
-            try:
-                async with websockets.connect(
-                    stream_url,
-                    ping_interval=Config.WS_CONFIG['ping_interval'],
-                    ping_timeout=Config.WS_CONFIG['ping_timeout']
-                ) as websocket:
-                    self._connection_status[connection_id] = 'connected'
-                    ws_logger.info(f"✅ WebSocket connected: {stream_type} ({len(streams)} streams)")
-                    reconnect_attempts = 0
+        async with self.session.get(url, params=params, timeout=10) as response:
+            if response.status == 200:
+                data = await response.json()
+                
+                ticker_list = []
+                for coin_id, coin_data in data.items():
+                    symbol = coin_id.upper()
+                    price = coin_data.get("usd", 0)
+                    change = coin_data.get("usd_24h_change", 0)
                     
-                    async for message in websocket:
-                        try:
-                            data = json.loads(message)
-                            if 'data' in data:
-                                data = data['data']
-                            
-                            if stream_type == 'ticker' and await self._validate_ws_data(data, 'ticker'):
-                                await self._process_ticker_data(data)
-                            elif stream_type == 'kline' and await self._validate_ws_data(data, 'kline'):
-                                await self._process_kline_data(data)
-                            elif stream_type == 'depth' and await self._validate_ws_data(data, 'depth'):
-                                await self._process_depth_data(data)
-                        
-                        except json.JSONDecodeError as e:
-                            ws_logger.error(f"JSON decode error: {e}")
-                        except Exception as e:
-                            ws_logger.error(f"Message processing error: {e}")
-            
-            except websockets.exceptions.ConnectionClosed as e:
-                self._connection_status[connection_id] = 'disconnected'
-                reconnect_attempts += 1
-                delay = Config.WS_CONFIG['reconnect_delay'] * reconnect_attempts
-                ws_logger.warning(f"⚠️ Connection closed, reconnecting in {delay}s... (Attempt {reconnect_attempts})")
-                await asyncio.sleep(delay)
-            
-            except Exception as e:
-                ws_logger.error(f"❌ WebSocket error: {e}")
-                await asyncio.sleep(Config.WS_CONFIG['reconnect_delay'])
+                    ticker_list.append({
+                        "id": coin_id,
+                        "symbol": symbol,
+                        "price": price,
+                        "change_24h": change,
+                        "change_24h_pct": round(change, 2),
+                        "volume_24h": coin_data.get("usd_24h_vol", 0),
+                        "market_cap": coin_data.get("usd_market_cap", 0),
+                        "last_updated": datetime.fromtimestamp(
+                            coin_data.get("last_updated_at", 0),
+                            tz=timezone.utc
+                        ).isoformat(),
+                        "tradingview_symbol": self.TRADINGVIEW_SYMBOLS.get(coin_id, f"BINANCE:{symbol}USDT"),
+                        "type": "crypto"
+                    })
+                
+                # Sort by market cap
+                ticker_list.sort(key=lambda x: x["market_cap"], reverse=True)
+                self.ticker_data = ticker_list
+                self.last_update = datetime.now(timezone.utc)
+                
+                logger.info(f"📊 Ticker updated with {len(ticker_list)} symbols")
+                return ticker_list
+            else:
+                logger.error(f"CoinGecko API error: {response.status}")
+                return []
+    except Exception as e:
+        logger.error(f"Error fetching ticker data: {e}")
+        return []
+
+async def get_symbol_info(self, symbol: str) -> Optional[Dict]:
+    """Get information for a specific symbol"""
+    # Check cache first
+    if symbol in self.price_cache:
+        cached_data, timestamp = self.price_cache[symbol]
+        if (datetime.now(timezone.utc) - timestamp).total_seconds() < 30:
+            return cached_data
     
-    async def _process_ticker_data(self, data: Dict):
-        """Process ticker data"""
-        symbol = data['s']
-        current_time = datetime.now(timezone.utc)
-        
-        self.price_data[symbol] = {
-            'symbol': symbol,
-            'price': float(data['c']),
-            'change_24h': float(data['P']),
-            'change_amount': float(data['p']),
-            'high_24h': float(data['h']),
-            'low_24h': float(data['l']),
-            'volume': float(data['v']),
-            'quote_volume': float(data['q']),
-            'open_price': float(data['o']),
-            'prev_close': float(data['c']) - float(data['p']),
-            'weighted_avg_price': float(data['w']),
-            'last_update_id': data.get('u', 0),
-            'timestamp': current_time.isoformat(),
-            'source': 'binance_ws',
-            'validated': True
+    try:
+        # Try to fetch from Coingecko
+        url = f"{self.BASE_URL}/simple/price"
+        params = {
+            "ids": symbol.lower(),
+            "vs_currencies": "usd",
+            "include_24hr_vol": "true",
+            "include_24hr_change": "true",
+            "include_market_cap": "true",
+            "include_last_updated_at": "true"
         }
         
-        self.market_data[symbol] = self.price_data[symbol]
+        async with self.session.get(url, params=params, timeout=10) as response:
+            if response.status == 200:
+                data = await response.json()
+                
+                if symbol.lower() in data:
+                    coin_data = data[symbol.lower()]
+                    info = {
+                        "symbol": symbol.upper(),
+                        "id": symbol.lower(),
+                        "price": coin_data.get("usd", 0),
+                        "change_24h": coin_data.get("usd_24h_change", 0),
+                        "volume_24h": coin_data.get("usd_24h_vol", 0),
+                        "market_cap": coin_data.get("usd_market_cap", 0),
+                        "tradingview_symbol": self.TRADINGVIEW_SYMBOLS.get(symbol.lower(), f"BINANCE:{symbol.upper()}USDT"),
+                        "type": "crypto",
+                        "available": True
+                    }
+                    
+                    # Update cache
+                    self.price_cache[symbol] = (info, datetime.now(timezone.utc))
+                    return info
         
-        if symbol not in self._data_queues:
-            self._data_queues[symbol] = deque(maxlen=Config.WS_CONFIG['max_queue_size'])
+        # If not found in Coingecko, create a simulated entry
+        simulated_price = np.random.uniform(10, 1000)
+        simulated_change = np.random.uniform(-5, 5)
         
-        self._data_queues[symbol].append(self.price_data[symbol])
-        self._last_update[symbol] = current_time.timestamp()
-    
-    async def _process_kline_data(self, data: Dict):
-        """Process kline (candlestick) data"""
-        kline = data['k']
-        symbol = kline['s']
-        interval = kline['i']
-        
-        candle_data = {
-            'symbol': symbol,
-            'interval': interval,
-            'open_time': datetime.fromtimestamp(kline['t'] / 1000, tz=timezone.utc),
-            'open': float(kline['o']),
-            'high': float(kline['h']),
-            'low': float(kline['l']),
-            'close': float(kline['c']),
-            'volume': float(kline['v']),
-            'close_time': datetime.fromtimestamp(kline['T'] / 1000, tz=timezone.utc),
-            'quote_volume': float(kline['q']),
-            'trades': kline['n'],
-            'taker_buy_base': float(kline['V']),
-            'taker_buy_quote': float(kline['Q']),
-            'is_closed': kline['x'],
-            'timestamp': datetime.now(timezone.utc).isoformat()
+        info = {
+            "symbol": symbol.upper(),
+            "id": symbol.lower(),
+            "price": simulated_price,
+            "change_24h": simulated_change,
+            "volume_24h": simulated_price * np.random.uniform(1000, 10000),
+            "market_cap": simulated_price * np.random.uniform(1000000, 10000000),
+            "tradingview_symbol": f"BINANCE:{symbol.upper()}USDT",
+            "type": "forex" if len(symbol) == 6 else "crypto",
+            "available": False,
+            "simulated": True
         }
         
-        key = f"{symbol}_{interval}"
-        self.kline_data[key] = candle_data
-    
-    async def _process_depth_data(self, data: Dict):
-        """Process order book depth data"""
-        symbol = data['s'].lower()
+        self.price_cache[symbol] = (info, datetime.now(timezone.utc))
+        return info
         
-        self.orderbook_data[symbol] = {
-            'last_update_id': data['u'],
-            'bids': [[float(price), float(qty)] for price, qty in data['b'][:20]],
-            'asks': [[float(price), float(qty)] for price, qty in data['a'][:20]],
-            'timestamp': datetime.now(timezone.utc).isoformat()
-        }
+    except Exception as e:
+        logger.error(f"Error fetching symbol info: {e}")
+        return None
+
+async def fetch_ohlcv(self, symbol: str, timeframe: str = "1D", limit: int = 100) -> List[Dict]:
+    """Fetch OHLCV data for a symbol"""
+    cache_key = f"{symbol}_{timeframe}_{limit}"
     
-    async def get_historical_prices(self, symbol: str, limit: int = 100) -> List[Dict]:
-        """Get historical price data from queue"""
-        if symbol in self._data_queues:
-            return list(self._data_queues[symbol])[-limit:]
+    # Check cache
+    if cache_key in self.historical_cache:
+        cached_data, timestamp = self.historical_cache[cache_key]
+        if (datetime.now(timezone.utc) - timestamp).total_seconds() < 300:  # 5 minutes
+            return cached_data
+    
+    try:
+        # Calculate days based on timeframe
+        days_map = {
+            "1m": 1/1440, "5m": 5/1440, "15m": 15/1440, "30m": 30/1440,
+            "1h": 1/24, "4h": 4/24, "1D": 1, "1W": 7, "1M": 30
+        }
+        
+        days = days_map.get(timeframe, 30)
+        max_days = min(days * limit, 365)  # Max 1 year
+        
+        url = f"{self.BASE_URL}/coins/{symbol.lower()}/ohlc"
+        params = {
+            "vs_currency": "usd",
+            "days": str(int(max_days))
+        }
+        
+        async with self.session.get(url, params=params, timeout=15) as response:
+            if response.status == 200:
+                data = await response.json()
+                
+                candles = []
+                for item in data:
+                    candles.append({
+                        "timestamp": item[0] // 1000,  # Convert ms to seconds
+                        "open": item[1],
+                        "high": item[2],
+                        "low": item[3],
+                        "close": item[4],
+                        "volume": 0  # Coingecko doesn't provide volume in OHLC
+                    })
+                
+                # Resample based on timeframe
+                resampled = self._resample_candles(candles, timeframe)
+                
+                # Cache the data
+                self.historical_cache[cache_key] = (resampled, datetime.now(timezone.utc))
+                
+                return resampled[:limit]
+            else:
+                logger.warning(f"Could not fetch OHLCV for {symbol}, using simulated data")
+                return self._generate_simulated_ohlcv(symbol, timeframe, limit)
+    except Exception as e:
+        logger.error(f"Error fetching OHLCV: {e}")
+        return self._generate_simulated_ohlcv(symbol, timeframe, limit)
+
+def _resample_candles(self, candles: List[Dict], timeframe: str) -> List[Dict]:
+    """Resample candles to different timeframe"""
+    if not candles:
         return []
     
-    async def get_realtime_price(self, symbol: str) -> Optional[Dict]:
-        """Get real-time price from WebSocket"""
-        if symbol in self.price_data:
-            data = self.price_data[symbol]
-            if time.time() - self._last_update.get(symbol, 0) < 5:
-                return data
-        return None
-    
-    async def update_ticker_list(self):
-        """Update ticker list with real-time data"""
-        ticker_list = []
-        for symbol, data in self.price_data.items():
-            if data.get('validated', False):
-                ticker_list.append({
-                    'symbol': symbol,
-                    'price': data['price'],
-                    'change_24h': data['change_24h'],
-                    'volume_24h': data['volume'],
-                    'quote_volume_24h': data['quote_volume'],
-                    'high_24h': data['high_24h'],
-                    'low_24h': data['low_24h'],
-                    'last_updated': data['timestamp'],
-                    'validity_score': 1.0
-                })
-        
-        # Sort by quote volume (market cap proxy)
-        ticker_list.sort(key=lambda x: x['quote_volume_24h'], reverse=True)
-        self.ticker_data = ticker_list[:50]  # Keep top 50
-    
-    async def start_all_streams(self):
-        """Start all WebSocket streams"""
-        all_symbols = Config.SYMBOLS['major'] + Config.SYMBOLS['mid']
-        
-        # Group symbols for ticker streams (max 10 per connection)
-        stream_groups = [all_symbols[i:i+10] for i in range(0, len(all_symbols), 10)]
-        
-        for group in stream_groups:
-            streams = [f"{symbol.lower()}@ticker" for symbol in group]
-            asyncio.create_task(self.connect_multi_stream(streams, 'ticker'))
-        
-        # Start kline streams for major symbols
-        for symbol in Config.SYMBOLS['major'][:5]:
-            for interval in ['1m', '5m', '15m', '1h', '4h']:
-                stream = f"{symbol.lower()}@kline_{interval}"
-                asyncio.create_task(self.connect_multi_stream([stream], 'kline'))
-        
-        # Start depth streams for top 3 symbols
-        for symbol in Config.SYMBOLS['major'][:3]:
-            streams = [
-                f"{symbol.lower()}@depth20@100ms",
-                f"{symbol.lower()}@aggTrade"
-            ]
-            asyncio.create_task(self.connect_multi_stream(streams, 'depth'))
-        
-        # Start periodic updates
-        asyncio.create_task(self._periodic_updates())
-        
-        ws_logger.info(f"✅ Started WebSocket streams for {len(all_symbols)} symbols")
-    
-    async def _periodic_updates(self):
-        """Periodic maintenance tasks"""
-        while self._running:
-            try:
-                await self.update_ticker_list()
-                
-                # Clean old data
-                current_time = time.time()
-                old_symbols = []
-                for symbol, last_update in self._last_update.items():
-                    if current_time - last_update > 300:  # 5 minutes
-                        old_symbols.append(symbol)
-                
-                for symbol in old_symbols:
-                    if symbol in self.price_data:
-                        del self.price_data[symbol]
-                
-                await asyncio.sleep(10)
-            
-            except Exception as e:
-                ws_logger.error(f"Periodic update error: {e}")
-                await asyncio.sleep(10)
-    
-    async def stop(self):
-        """Stop WebSocket manager"""
-        self._running = False
-        ws_logger.info("WebSocket manager stopped")
+    # For now, return as-is (Coingecko provides daily data)
+    # In production, you would implement proper resampling
+    return candles
 
+def _generate_simulated_ohlcv(self, symbol: str, timeframe: str, limit: int) -> List[Dict]:
+    """Generate simulated OHLCV data for symbols not in Coingecko"""
+    candles = []
+    base_price = np.random.uniform(10, 1000)
+    current_time = datetime.now(timezone.utc).timestamp()
+    
+    # Time interval in seconds
+    interval_map = {
+        "1m": 60, "5m": 300, "15m": 900, "30m": 1800,
+        "1h": 3600, "4h": 14400, "1D": 86400, "1W": 604800, "1M": 2592000
+    }
+    interval = interval_map.get(timeframe, 86400)
+    
+    for i in range(limit):
+        timestamp = current_time - (limit - i - 1) * interval
+        
+        # Generate random walk price
+        if i == 0:
+            price = base_price
+        else:
+            change = np.random.normal(0, 0.02)  # 2% daily volatility
+            price = candles[-1]["close"] * (1 + change)
+        
+        # Generate OHLC
+        open_price = price
+        high_price = price * (1 + abs(np.random.normal(0, 0.01)))
+        low_price = price * (1 - abs(np.random.normal(0, 0.01)))
+        close_price = price * (1 + np.random.normal(0, 0.005))
+        
+        candles.append({
+            "timestamp": timestamp,
+            "open": open_price,
+            "high": high_price,
+            "low": low_price,
+            "close": close_price,
+            "volume": np.random.uniform(1000, 10000)
+        })
+    
+    return candles
 
-# ==========================================
-# ENHANCED DATA MANAGER
-# ==========================================
-
-class EnhancedDataManager:
-    """Unified data manager with Binance + CoinGecko fallback"""
-    
-    def __init__(self):
-        self.session: Optional[aiohttp.ClientSession] = None
-        self.cache: Dict[str, Tuple[Any, float]] = {}
-        self.rate_limiters: Dict[str, Dict] = {}
-        self.ws_manager = AdvancedWebSocketManager()
-        self._init_time = time.time()
-        self._stats = {
-            'requests': defaultdict(int),
-            'errors': defaultdict(int),
-            'cache_hits': 0,
-            'cache_misses': 0,
-            'fallbacks': 0
-        }
-    
-    async def initialize(self):
-        """Initialize data manager"""
-        self.session = aiohttp.ClientSession(
-            timeout=aiohttp.ClientTimeout(total=30),
-            connector=aiohttp.TCPConnector(limit=100, ttl_dns_cache=300)
-        )
-        
-        # Initialize rate limiters
-        for service in ['binance', 'coingecko']:
-            self.rate_limiters[service] = {
-                'last_request': 0,
-                'request_count': 0,
-                'window_start': time.time()
-            }
-        
-        # Start WebSocket streams
-        await self.ws_manager.start_all_streams()
-        
-        data_logger.info("✅ Enhanced Data Manager initialized")
-    
-    async def _get_cache_key(self, prefix: str, params: Dict) -> str:
-        """Generate cache key"""
-        param_str = json.dumps(params, sort_keys=True)
-        return f"{prefix}:{hashlib.md5(param_str.encode()).hexdigest()}"
-    
-    async def _get_cached(self, cache_key: str, ttl: int) -> Optional[Any]:
-        """Get data from cache"""
-        if cache_key in self.cache:
-            data, timestamp = self.cache[cache_key]
-            if time.time() - timestamp < ttl:
-                self._stats['cache_hits'] += 1
-                return data
-            else:
-                del self.cache[cache_key]
-        
-        self._stats['cache_misses'] += 1
-        return None
-    
-    async def _set_cached(self, cache_key: str, data: Any):
-        """Set data in cache"""
-        self.cache[cache_key] = (data, time.time())
-    
-    async def _rate_limit(self, service: str):
-        """Rate limiting implementation"""
-        limiter = self.rate_limiters[service]
-        current_time = time.time()
-        
-        # Reset window if minute passed
-        if current_time - limiter['window_start'] > 60:
-            limiter['window_start'] = current_time
-            limiter['request_count'] = 0
-        
-        max_requests = Config.RATE_LIMITS[service]['requests']
-        
-        # Wait if limit reached
-        if limiter['request_count'] >= max_requests:
-            wait_time = 60 - (current_time - limiter['window_start'])
-            if wait_time > 0:
-                data_logger.debug(f"Rate limiting {service}, waiting {wait_time:.2f}s")
-                await asyncio.sleep(wait_time)
-                limiter['window_start'] = current_time
-                limiter['request_count'] = 0
-        
-        # Ensure minimum delay between requests
-        min_delay = 60 / max_requests
-        time_since_last = current_time - limiter['last_request']
-        if time_since_last < min_delay:
-            await asyncio.sleep(min_delay - time_since_last)
-        
-        limiter['last_request'] = time.time()
-        limiter['request_count'] += 1
-        self._stats['requests'][service] += 1
-    
-    async def fetch_binance_klines(self, symbol: str, interval: str, limit: int = 500) -> List[Dict]:
-        """Fetch klines from Binance with WebSocket fallback"""
-        try:
-            # Check cache first
-            cache_key = await self._get_cache_key(
-                f"binance:klines:{symbol}:{interval}",
-                {'limit': limit}
-            )
-            
-            cached = await self._get_cached(cache_key, Config.CACHE_TTL['klines'])
-            if cached:
-                return cached
-            
-            # Try WebSocket data first
-            ws_data = await self._get_ws_klines(symbol, interval, limit)
-            if ws_data and len(ws_data) >= limit * 0.8:
-                data_logger.debug(f"Using WebSocket data for {symbol} {interval}")
-                await self._set_cached(cache_key, ws_data)
-                return ws_data
-            
-            # Fallback to REST API
-            await self._rate_limit('binance')
-            
-            url = f"{Config.BINANCE_BASE_URL}/api/v3/klines"
-            params = {
-                "symbol": symbol.upper(),
-                "interval": interval,
-                "limit": min(limit, 1000)
-            }
-            
-            async with self.session.get(url, params=params) as response:
-                if response.status == 200:
-                    data = await response.json()
-                    
-                    if not isinstance(data, list) or len(data) == 0:
-                        raise ValueError("Invalid data format")
-                    
-                    candles = []
-                    for i, k in enumerate(data):
-                        try:
-                            candle = {
-                                "timestamp": k[0],
-                                "open": float(k[1]),
-                                "high": float(k[2]),
-                                "low": float(k[3]),
-                                "close": float(k[4]),
-                                "volume": float(k[5]),
-                                "close_time": k[6],
-                                "quote_volume": float(k[7]),
-                                "trades": k[8],
-                                "taker_buy_base": float(k[9]),
-                                "taker_buy_quote": float(k[10]),
-                                "ignore": k[11],
-                                "index": i,
-                                "valid": True,
-                                "source": "binance_api"
-                            }
-                            
-                            # Validate candle data
-                            if not (candle['high'] >= candle['low'] >= 0 and
-                                   candle['high'] >= candle['close'] >= candle['low'] and
-                                   candle['high'] >= candle['open'] >= candle['low']):
-                                candle['valid'] = False
-                                data_logger.warning(f"Invalid candle data for {symbol} at index {i}")
-                            
-                            candles.append(candle)
-                        
-                        except (ValueError, IndexError) as e:
-                            data_logger.error(f"Error parsing candle {i}: {e}")
-                            continue
-                    
-                    # Filter valid candles
-                    valid_candles = [c for c in candles if c['valid']]
-                    
-                    if len(valid_candles) < limit * 0.5:
-                        raise ValueError(f"Insufficient valid data: {len(valid_candles)}/{len(data)}")
-                    
-                    await self._set_cached(cache_key, valid_candles)
-                    data_logger.info(f"✅ Fetched {len(valid_candles)} candles for {symbol} {interval}")
-                    
-                    return valid_candles
-                
-                else:
-                    error_text = await response.text()
-                    data_logger.error(f"Binance API error {response.status}: {error_text}")
-                    
-                    # Try CoinGecko as last resort
-                    return await self._get_ws_klines(symbol, interval, limit)
-        
-        except Exception as e:
-            self._stats['errors']['binance_klines'] += 1
-            data_logger.error(f"Error fetching Binance klines for {symbol}: {e}")
-            
-            # Final fallback to WebSocket
-            return await self._get_ws_klines(symbol, interval, limit)
-    
-    async def _get_ws_klines(self, symbol: str, interval: str, limit: int) -> List[Dict]:
-        """Get klines from WebSocket cache"""
-        try:
-            key = f"{symbol}_{interval}"
-            if key in self.ws_manager.kline_data:
-                ws_candle = self.ws_manager.kline_data[key]
-                candles = [ws_candle]
-                return candles
-            
-            return []
-        
-        except Exception as e:
-            data_logger.error(f"Error getting WS klines: {e}")
-            return []
-    
-    async def fetch_coingecko_data(self, coin_id: str = None, symbol: str = None) -> Optional[Dict]:
-        """Fetch data from CoinGecko as fallback"""
-        try:
-            if not coin_id and symbol:
-                coin_id = await self._symbol_to_coingecko_id(symbol)
-            
-            if not coin_id:
-                return None
-            
-            # Check cache
-            cache_key = await self._get_cache_key(f"coingecko:{coin_id}", {})
-            cached = await self._get_cached(cache_key, Config.CACHE_TTL['coingecko'])
-            if cached:
-                return cached
-            
-            await self._rate_limit('coingecko')
-            
-            url = f"{Config.COINGECKO_BASE_URL}/coins/{coin_id}"
-            params = {
-                "localization": "false",
-                "tickers": "false",
-                "market_data": "true",
-                "community_data": "false",
-                "developer_data": "false",
-                "sparkline": "true"
-            }
-            
-            async with self.session.get(url, params=params) as response:
-                if response.status == 200:
-                    data = await response.json()
-                    
-                    result = {
-                        "id": data["id"],
-                        "symbol": data["symbol"].upper(),
-                        "name": data["name"],
-                        "current_price": data["market_data"]["current_price"]["usd"],
-                        "market_cap": data["market_data"]["market_cap"]["usd"],
-                        "market_cap_rank": data["market_data"]["market_cap_rank"],
-                        "total_volume": data["market_data"]["total_volume"]["usd"],
-                        "high_24h": data["market_data"]["high_24h"]["usd"],
-                        "low_24h": data["market_data"]["low_24h"]["usd"],
-                        "price_change_24h": data["market_data"]["price_change_24h"]["usd"],
-                        "price_change_percentage_24h": data["market_data"]["price_change_percentage_24h"],
-                        "price_change_percentage_7d": data["market_data"]["price_change_percentage_7d_in_currency"]["usd"],
-                        "price_change_percentage_30d": data["market_data"]["price_change_percentage_30d_in_currency"]["usd"],
-                        "price_change_percentage_1y": data["market_data"]["price_change_percentage_1y_in_currency"]["usd"],
-                        "ath": data["market_data"]["ath"]["usd"],
-                        "ath_change_percentage": data["market_data"]["ath_change_percentage"]["usd"],
-                        "ath_date": data["market_data"]["ath_date"]["usd"],
-                        "atl": data["market_data"]["atl"]["usd"],
-                        "atl_change_percentage": data["market_data"]["atl_change_percentage"]["usd"],
-                        "atl_date": data["market_data"]["atl_date"]["usd"],
-                        "last_updated": data["market_data"]["last_updated"],
-                        "sparkline_7d": data["market_data"]["sparkline_7d"]["price"] if data["market_data"]["sparkline_7d"] else [],
-                        "validated": True,
-                        "source": "coingecko"
-                    }
-                    
-                    await self._set_cached(cache_key, result)
-                    return result
-                
-                else:
-                    data_logger.warning(f"CoinGecko API error: {response.status}")
-                    return None
-        
-        except Exception as e:
-            self._stats['errors']['coingecko'] += 1
-            data_logger.error(f"Error fetching CoinGecko data: {e}")
-            return None
-    
-    async def _symbol_to_coingecko_id(self, symbol: str) -> Optional[str]:
-        """Map symbol to CoinGecko ID"""
-        symbol_map = {
-            'BTC': 'bitcoin', 'ETH': 'ethereum', 'BNB': 'binancecoin',
-            'XRP': 'ripple', 'ADA': 'cardano', 'SOL': 'solana',
-            'DOT': 'polkadot', 'DOGE': 'dogecoin', 'AVAX': 'avalanche-2',
-            'MATIC': 'polygon', 'LINK': 'chainlink', 'UNI': 'uniswap',
-            'LTC': 'litecoin', 'ATOM': 'cosmos', 'ETC': 'ethereum-classic',
-            'BCH': 'bitcoin-cash', 'XLM': 'stellar', 'TRX': 'tron'
-        }
-        
-        clean_symbol = symbol.upper().replace('USDT', '').replace('USD', '')
-        return symbol_map.get(clean_symbol, clean_symbol.lower())
-    
-    async def get_realtime_ticker(self, symbol: str) -> Optional[Dict]:
-        """Get real-time ticker with fallback"""
-        try:
-            symbol_upper = symbol.upper()
-            
-            # Try WebSocket first
-            ws_price = await self.ws_manager.get_realtime_price(symbol_upper)
-            if ws_price:
-                return ws_price
-            
-            # Check cache
-            cache_key = await self._get_cache_key(f"binance:ticker:{symbol}", {})
-            cached = await self._get_cached(cache_key, Config.CACHE_TTL['ticker'])
-            if cached:
-                return cached
-            
-            # Fallback to REST API
-            await self._rate_limit('binance')
-            
-            url = f"{Config.BINANCE_BASE_URL}/api/v3/ticker/24hr"
-            params = {"symbol": symbol_upper}
-            
-            async with self.session.get(url, params=params) as response:
-                if response.status == 200:
-                    data = await response.json()
-                    
-                    result = {
-                        "symbol": data["symbol"],
-                        "price": float(data["lastPrice"]),
-                        "price_change": float(data["priceChange"]),
-                        "price_change_percent": float(data["priceChangePercent"]),
-                        "volume": float(data["volume"]),
-                        "quote_volume": float(data["quoteVolume"]),
-                        "high_price": float(data["highPrice"]),
-                        "low_price": float(data["lowPrice"]),
-                        "open_price": float(data["openPrice"]),
-                        "prev_close": float(data["prevClosePrice"]),
-                        "weighted_avg_price": float(data["weightedAvgPrice"]),
-                        "timestamp": datetime.now(timezone.utc).isoformat(),
-                        "source": "binance_api",
-                        "validated": True
-                    }
-                    
-                    await self._set_cached(cache_key, result)
-                    return result
-                
-                else:
-                    # Try CoinGecko as last resort
-                    cg_data = await self.fetch_coingecko_data(symbol=symbol)
-                    if cg_data:
-                        self._stats['fallbacks'] += 1
-                        return {
-                            "symbol": symbol,
-                            "price": cg_data["current_price"],
-                            "price_change_percent": cg_data["price_change_percentage_24h"],
-                            "volume": cg_data["total_volume"],
-                            "high_price": cg_data["high_24h"],
-                            "low_price": cg_data["low_24h"],
-                            "timestamp": cg_data["last_updated"],
-                            "source": "coingecko_fallback",
-                            "validated": True
-                        }
-                    
-                    return None
-        
-        except Exception as e:
-            self._stats['errors']['ticker'] += 1
-            data_logger.error(f"Error fetching ticker for {symbol}: {e}")
-            return None
-    
-    async def get_market_overview(self) -> List[Dict]:
-        """Get market overview with real-time data"""
-        try:
-            cache_key = "market:overview:all"
-            cached = await self._get_cached(cache_key, Config.CACHE_TTL['market'])
-            if cached:
-                return cached
-            
-            # Use WebSocket data if available
-            if self.ws_manager.ticker_data:
-                result = self.ws_manager.ticker_data[:20]
-            else:
-                result = []
-            
-            # Fetch additional data if needed
-            symbols = Config.SYMBOLS['major'] + Config.SYMBOLS['mid'][:5]
-            for symbol in symbols:
-                ticker = await self.get_realtime_ticker(symbol)
-                if ticker:
-                    result.append({
-                        'symbol': symbol,
-                        'price': ticker['price'],
-                        'change_24h': ticker.get('price_change_percent', 0),
-                        'volume_24h': ticker.get('volume', 0),
-                        'quote_volume_24h': ticker.get('quote_volume', 0),
-                        'high_24h': ticker.get('high_price', 0),
-                        'low_24h': ticker.get('low_price', 0),
-                        'last_updated': ticker.get('timestamp'),
-                        'validity_score': 0.9 if ticker.get('source') == 'binance_api' else 1.0
-                    })
-            
-            await self._set_cached(cache_key, result)
-            return result
-        
-        except Exception as e:
-            data_logger.error(f"Error getting market overview: {e}")
-            return []
-    
-    async def get_order_book(self, symbol: str, limit: int = 20) -> Optional[Dict]:
-        """Get order book data"""
-        try:
-            symbol_lower = symbol.lower()
-            
-            # Try WebSocket first
-            if symbol_lower in self.ws_manager.orderbook_data:
-                return self.ws_manager.orderbook_data[symbol_lower]
-            
-            # Check cache
-            cache_key = await self._get_cache_key(f"orderbook:{symbol}", {'limit': limit})
-            cached = await self._get_cached(cache_key, Config.CACHE_TTL['orderbook'])
-            if cached:
-                return cached
-            
-            # Fallback to REST API
-            await self._rate_limit('binance')
-            
-            url = f"{Config.BINANCE_BASE_URL}/api/v3/depth"
-            params = {
-                "symbol": symbol.upper(),
-                "limit": min(limit, 100)
-            }
-            
-            async with self.session.get(url, params=params) as response:
-                if response.status == 200:
-                    data = await response.json()
-                    
-                    result = {
-                        "symbol": symbol.upper(),
-                        "bids": [[float(price), float(qty)] for price, qty in data["bids"][:limit]],
-                        "asks": [[float(price), float(qty)] for price, qty in data["asks"][:limit]],
-                        "last_update_id": data["lastUpdateId"],
-                        "timestamp": datetime.now(timezone.utc).isoformat(),
-                        "source": "binance_api"
-                    }
-                    
-                    await self._set_cached(cache_key, result)
-                    return result
-                
-                else:
-                    return None
-        
-        except Exception as e:
-            self._stats['errors']['orderbook'] += 1
-            data_logger.error(f"Error fetching order book for {symbol}: {e}")
-            return None
-    
-    async def close(self):
-        """Close data manager"""
-        if self.session:
-            await self.session.close()
-        
-        await self.ws_manager.stop()
-        data_logger.info("✅ Data Manager closed")
-
-
-# ==========================================
-# ADVANCED TECHNICAL ANALYSIS ENGINE
-# ==========================================
-
-class AdvancedTechnicalAnalysis:
-    """Comprehensive technical analysis with 25+ indicators"""
-    
-    @staticmethod
-    def calculate_all_indicators(candles: List[Dict], symbol: str, timeframe: str) -> Dict:
-        """Calculate all technical indicators"""
-        try:
-            if not candles or len(candles) < 20:
-                return None
-            
-            # Convert to DataFrame
-            df = pd.DataFrame(candles)
-            
-            # Ensure correct column names
-            required_cols = ['open', 'high', 'low', 'close', 'volume']
-            df.columns = df.columns.str.lower()
-            
-            col_mapping = {
-                'open': 'open', 'high': 'high', 'low': 'low',
-                'close': 'close', 'volume': 'volume'
-            }
-            
-            for req in required_cols:
-                if req not in df.columns:
-                    for col in df.columns:
-                        if req in col:
-                            col_mapping[req] = col
-                            break
-            
-            # Get current price and calculate 24h change
-            current_price = float(df[col_mapping['close']].iloc[-1])
-            price_24h_ago = float(df[col_mapping['close']].iloc[-24]) if len(df) > 24 else current_price
-            change_24h = ((current_price - price_24h_ago) / price_24h_ago * 100) if price_24h_ago > 0 else 0
-            
-            # Extract price series
-            closes = df[col_mapping['close']].astype(float)
-            highs = df[col_mapping['high']].astype(float)
-            lows = df[col_mapping['low']].astype(float)
-            opens = df[col_mapping['open']].astype(float)
-            volumes = df[col_mapping['volume']].astype(float) if 'volume' in col_mapping else None
-            
-            # ==========================================
-            # MOVING AVERAGES
-            # ==========================================
-            sma_5 = closes.rolling(window=5).mean().iloc[-1]
-            sma_10 = closes.rolling(window=10).mean().iloc[-1]
-            sma_20 = closes.rolling(window=20).mean().iloc[-1]
-            sma_50 = closes.rolling(window=50).mean().iloc[-1]
-            sma_100 = closes.rolling(window=100).mean().iloc[-1] if len(df) >= 100 else None
-            sma_200 = closes.rolling(window=200).mean().iloc[-1] if len(df) >= 200 else None
-            
-            ema_9 = closes.ewm(span=9).mean().iloc[-1]
-            ema_12 = closes.ewm(span=12).mean().iloc[-1]
-            ema_26 = closes.ewm(span=26).mean().iloc[-1]
-            ema_50 = closes.ewm(span=50).mean().iloc[-1]
-            
-            # ==========================================
-            # RSI (Relative Strength Index)
-            # ==========================================
-            delta = closes.diff()
-            gain = (delta.where(delta > 0, 0)).rolling(window=14).mean()
-            loss = (-delta.where(delta < 0, 0)).rolling(window=14).mean()
-            rs = gain / loss
-            rsi = 100 - (100 / (1 + rs))
-            current_rsi = rsi.iloc[-1] if not rsi.empty else 50
-            
-            # ==========================================
-            # MACD (Moving Average Convergence Divergence)
-            # ==========================================
-            ema_12_series = closes.ewm(span=12).mean()
-            ema_26_series = closes.ewm(span=26).mean()
-            macd_line = ema_12_series - ema_26_series
-            signal_line = macd_line.ewm(span=9).mean()
-            macd_histogram = macd_line - signal_line
-            
-            # ==========================================
-            # BOLLINGER BANDS
-            # ==========================================
-            bb_window = 20
-            bb_std = 2
-            bb_middle = closes.rolling(window=bb_window).mean()
-            bb_std_dev = closes.rolling(window=bb_window).std()
-            bb_upper = bb_middle + (bb_std_dev * bb_std)
-            bb_lower = bb_middle - (bb_std_dev * bb_std)
-            bb_width = ((bb_upper - bb_lower) / bb_middle) if not bb_middle.empty else pd.Series([0])
-            
-            # ==========================================
-            # STOCHASTIC OSCILLATOR
-            # ==========================================
-            stoch_k_period = 14
-            stoch_d_period = 3
-            stoch_k = ((closes - lows.rolling(window=stoch_k_period).min()) / 
-                      (highs.rolling(window=stoch_k_period).max() - lows.rolling(window=stoch_k_period).min())) * 100
-            stoch_d = stoch_k.rolling(window=stoch_d_period).mean()
-            
-            # ==========================================
-            # AVERAGE TRUE RANGE (ATR)
-            # ==========================================
-            high_low = highs - lows
-            high_close = np.abs(highs - closes.shift())
-            low_close = np.abs(lows - closes.shift())
-            ranges = pd.concat([high_low, high_close, low_close], axis=1)
-            true_range = np.max(ranges, axis=1)
-            atr = true_range.rolling(window=14).mean()
-            
-            # ==========================================
-            # ON-BALANCE VOLUME (OBV)
-            # ==========================================
-            if volumes is not None:
-                obv = (np.sign(closes.diff()) * volumes).fillna(0).cumsum()
-            else:
-                obv = pd.Series([0])
-            
-            # ==========================================
-            # VWAP (Volume Weighted Average Price)
-            # ==========================================
-            if volumes is not None:
-                typical_price = (highs + lows + closes) / 3
-                cumulative_tp_volume = (typical_price * volumes).cumsum()
-                cumulative_volume = volumes.cumsum()
-                vwap = cumulative_tp_volume / cumulative_volume
-            else:
-                vwap = pd.Series([current_price])
-            
-            # ==========================================
-            # SUPPORT & RESISTANCE
-            # ==========================================
-            recent_highs = highs.rolling(window=20).max().iloc[-1]
-            recent_lows = lows.rolling(window=20).min().iloc[-1]
-            
-            # Advanced S&R detection using local extrema
-            sr_levels = AdvancedTechnicalAnalysis._detect_support_resistance(highs, lows, closes)
-            
-            # ==========================================
-            # VOLATILITY
-            # ==========================================
-            volatility_10 = closes.pct_change().rolling(window=10).std().iloc[-1] * np.sqrt(252) * 100
-            volatility_20 = closes.pct_change().rolling(window=20).std().iloc[-1] * np.sqrt(252) * 100
-            
-            # ==========================================
-            # VOLUME ANALYSIS
-            # ==========================================
-            if volumes is not None:
-                volume_sma = volumes.rolling(window=20).mean().iloc[-1]
-                current_volume = volumes.iloc[-1]
-                volume_ratio = current_volume / volume_sma if volume_sma > 0 else 1
-                volume_change = ((current_volume - volumes.iloc[-2]) / volumes.iloc[-2] * 100) if len(volumes) > 1 else 0
-            else:
-                volume_ratio = 1
-                volume_change = 0
-            
-            # ==========================================
-            # MOMENTUM INDICATORS
-            # ==========================================
-            momentum = closes - closes.shift(10)
-            roc = ((closes - closes.shift(10)) / closes.shift(10)) * 100  # Rate of Change
-            
-            # ==========================================
-            # TREND ANALYSIS
-            # ==========================================
-            trend_score = 0
-            
-            # Moving average alignment
-            if sma_20 > sma_50:
-                trend_score += 1
-            if current_price > sma_20:
-                trend_score += 1
-            if current_price > sma_50:
-                trend_score += 1
-            
-            # Additional trend confirmation
-            if sma_50 and sma_50 > sma_200 if sma_200 else False:
-                trend_score += 1
-            if ema_12 > ema_26:
-                trend_score += 1
-            
-            trend_map = {
-                0: "STRONG_BEARISH",
-                1: "BEARISH",
-                2: "WEAK_BEARISH",
-                3: "NEUTRAL",
-                4: "WEAK_BULLISH",
-                5: "BULLISH",
-                6: "STRONG_BULLISH"
-            }
-            
-            trend_direction = trend_map.get(trend_score, "NEUTRAL")
-            
-            # ==========================================
-            # SIGNAL GENERATION
-            # ==========================================
-            signals = {}
-            signal_score = 0
-            
-            # RSI signals
-            if current_rsi < 30:
-                signals['rsi'] = "OVERSOLD"
-                signal_score += 15
-            elif current_rsi > 70:
-                signals['rsi'] = "OVERBOUGHT"
-                signal_score -= 15
-            elif current_rsi < 45:
-                signals['rsi'] = "NEUTRAL_BULLISH"
-                signal_score += 5
-            elif current_rsi > 55:
-                signals['rsi'] = "NEUTRAL_BEARISH"
-                signal_score -= 5
-            else:
-                signals['rsi'] = "NEUTRAL"
-            
-            # MACD signals
-            macd_value = macd_line.iloc[-1] if not macd_line.empty else 0
-            signal_value = signal_line.iloc[-1] if not signal_line.empty else 0
-            hist_value = macd_histogram.iloc[-1] if not macd_histogram.empty else 0
-            
-            if macd_value > signal_value and hist_value > 0:
-                signals['macd'] = "BULLISH"
-                signal_score += 12
-            elif macd_value < signal_value and hist_value < 0:
-                signals['macd'] = "BEARISH"
-                signal_score -= 12
-            else:
-                signals['macd'] = "NEUTRAL"
-            
-            # Moving Average signals
-            if current_price > sma_20:
-                signal_score += 5
-            if current_price > sma_50:
-                signal_score += 8
-            if sma_20 > sma_50:
-                signal_score += 7
-            
-            # Bollinger Band signals
-            if current_price < bb_lower.iloc[-1] if not bb_lower.empty else current_price:
-                signals['bb'] = "OVERSOLD"
-                signal_score += 10
-            elif current_price > bb_upper.iloc[-1] if not bb_upper.empty else current_price:
-                signals['bb'] = "OVERBOUGHT"
-                signal_score -= 10
-            else:
-                signals['bb'] = "NEUTRAL"
-            
-            # Volume signals
-            if volume_ratio > 1.5:
-                signals['volume'] = "HIGH_VOLUME"
-                signal_score += 5
-            elif volume_ratio < 0.5:
-                signals['volume'] = "LOW_VOLUME"
-                signal_score -= 3
-            else:
-                signals['volume'] = "NORMAL"
-            
-            # Normalize score
-            signal_score = max(-50, min(50, signal_score))
-            
-            # Determine overall signal
-            if signal_score >= 25:
-                overall_signal = "STRONG_BUY"
-                confidence = min(95, 50 + signal_score)
-            elif signal_score >= 10:
-                overall_signal = "BUY"
-                confidence = 50 + signal_score
-            elif signal_score <= -25:
-                overall_signal = "STRONG_SELL"
-                confidence = min(95, 50 - signal_score)
-            elif signal_score <= -10:
-                overall_signal = "SELL"
-                confidence = 50 - signal_score
-            else:
-                overall_signal = "NEUTRAL"
-                confidence = 50
-            
-            # ==========================================
-            # CANDLESTICK PATTERNS
-            # ==========================================
-            patterns = CandlestickPatterns.detect_patterns(df)
-            
-            # ==========================================
-            # FIBONACCI LEVELS
-            # ==========================================
-            period_high = max(highs[-50:]) if len(highs) >= 50 else highs.iloc[-1]
-            period_low = min(lows[-50:]) if len(lows) >= 50 else lows.iloc[-1]
-            fibonacci = AdvancedTechnicalAnalysis._calculate_fibonacci_retracement(period_high, period_low)
-            
-            # ==========================================
-            # RETURN COMPREHENSIVE ANALYSIS
-            # ==========================================
-            return {
-                "symbol": symbol,
-                "timeframe": timeframe,
-                "current_price": round(current_price, 4),
-                "change_24h": round(change_24h, 2),
-                
-                # Moving Averages
-                "moving_averages": {
-                    "SMA_5": round(sma_5, 4),
-                    "SMA_10": round(sma_10, 4),
-                    "SMA_20": round(sma_20, 4),
-                    "SMA_50": round(sma_50, 4),
-                    "SMA_100": round(sma_100, 4) if sma_100 else None,
-                    "SMA_200": round(sma_200, 4) if sma_200 else None,
-                    "EMA_9": round(ema_9, 4),
-                    "EMA_12": round(ema_12, 4),
-                    "EMA_26": round(ema_26, 4),
-                    "EMA_50": round(ema_50, 4)
-                },
-                
-                # Momentum Indicators
-                "momentum": {
-                    "RSI": round(current_rsi, 2),
-                    "MACD": round(macd_value, 4),
-                    "MACD_Signal": round(signal_value, 4),
-                    "MACD_Histogram": round(hist_value, 4),
-                    "Stochastic_K": round(stoch_k.iloc[-1], 2) if not stoch_k.empty else 50,
-                    "Stochastic_D": round(stoch_d.iloc[-1], 2) if not stoch_d.empty else 50,
-                    "ROC": round(roc.iloc[-1], 2) if not roc.empty else 0,
-                    "Momentum": round(momentum.iloc[-1], 4) if not momentum.empty else 0
-                },
-                
-                # Volatility Indicators
-                "volatility": {
-                    "BB_Upper": round(bb_upper.iloc[-1], 4) if not bb_upper.empty else 0,
-                    "BB_Middle": round(bb_middle.iloc[-1], 4) if not bb_middle.empty else 0,
-                    "BB_Lower": round(bb_lower.iloc[-1], 4) if not bb_lower.empty else 0,
-                    "BB_Width": round(bb_width.iloc[-1], 4) if not bb_width.empty else 0,
-                    "ATR": round(atr.iloc[-1], 4) if not atr.empty else 0,
-                    "Volatility_10": round(volatility_10, 2),
-                    "Volatility_20": round(volatility_20, 2)
-                },
-                
-                # Volume Indicators
-                "volume": {
-                    "OBV": round(obv.iloc[-1], 2) if not obv.empty else 0,
-                    "VWAP": round(vwap.iloc[-1], 4) if not vwap.empty else current_price,
-                    "Volume_Ratio": round(volume_ratio, 2),
-                    "Volume_Change": round(volume_change, 2),
-                    "Current_Volume": round(current_volume, 2) if volumes is not None else 0
-                },
-                
-                # Support & Resistance
-                "support_resistance": sr_levels,
-                
-                # Fibonacci Levels
-                "fibonacci": fibonacci,
-                
-                # Trend Analysis
-                "trend": {
-                    "direction": trend_direction,
-                    "strength": trend_score,
-                    "score": trend_score,
-                    "description": f"Price above {sum([current_price > ma for ma in [sma_20, sma_50] if ma])}/2 key MAs"
-                },
-                
-                # Signals
-                "signals": {
-                    **signals,
-                    "overall": overall_signal,
-                    "confidence": round(confidence, 1),
-                    "score": signal_score
-                },
-                
-                # Candlestick Patterns
-                "patterns": patterns,
-                
-                # Additional Metrics
-                "additional_metrics": {
-                    "price_range_24h": round(highs.iloc[-24:].max() - lows.iloc[-24:].min(), 4) if len(highs) >= 24 else 0,
-                    "average_volume_20": round(volume_sma, 2) if volumes is not None else 0,
-                    "price_to_vwap_ratio": round(current_price / vwap.iloc[-1], 4) if not vwap.empty else 1
-                },
-                
-                "timestamp": datetime.now(timezone.utc).isoformat(),
-                "data_points": len(df),
-                "data_quality": {
-                    "completeness": round((len([c for c in candles if c.get('valid', True)]) / len(candles)) * 100, 2),
-                    "source": candles[0].get('source', 'unknown') if candles else 'unknown'
-                }
-            }
-        
-        except Exception as e:
-            logger.error(f"Technical analysis error for {symbol}: {e}")
-            import traceback
-            traceback.print_exc()
-            return None
-    
-    @staticmethod
-    def _detect_support_resistance(highs: pd.Series, lows: pd.Series, closes: pd.Series, order: int = 5) -> Dict:
-        """Detect support and resistance levels using local extrema"""
-        if len(closes) < order * 2:
-            return {"support": [], "resistance": []}
-        
-        # Find local maxima (resistance)
-        resistance_idx = argrelextrema(np.array(highs), np.greater, order=order)[0]
-        resistance_levels = [float(highs[i]) for i in resistance_idx]
-        
-        # Find local minima (support)
-        support_idx = argrelextrema(np.array(lows), np.less, order=order)[0]
-        support_levels = [float(lows[i]) for i in support_idx]
-        
-        # Cluster similar levels
-        def cluster_levels(levels, threshold=0.02):
-            if not levels:
-                return []
-            
-            clustered = []
-            sorted_levels = sorted(levels)
-            current_cluster = [sorted_levels[0]]
-            
-            for level in sorted_levels[1:]:
-                if abs(level - current_cluster[-1]) / current_cluster[-1] < threshold:
-                    current_cluster.append(level)
-                else:
-                    clustered.append(np.mean(current_cluster))
-                    current_cluster = [level]
-            
-            clustered.append(np.mean(current_cluster))
-            return clustered
-        
-        return {
-            "support": cluster_levels(support_levels)[-5:],  # Last 5 support levels
-            "resistance": cluster_levels(resistance_levels)[-5:]  # Last 5 resistance levels
-        }
-    
-    @staticmethod
-    def _calculate_fibonacci_retracement(high: float, low: float) -> Dict:
-        """Calculate Fibonacci retracement and extension levels"""
-        diff = high - low
-        
-        return {
-            # Retracement levels
-            "0.0": round(high, 4),
-            "0.236": round(high - 0.236 * diff, 4),
-            "0.382": round(high - 0.382 * diff, 4),
-            "0.5": round(high - 0.5 * diff, 4),
-            "0.618": round(high - 0.618 * diff, 4),
-            "0.786": round(high - 0.786 * diff, 4),
-            "1.0": round(low, 4),
-            
-            # Extension levels
-            "1.272": round(low - 0.272 * diff, 4),
-            "1.618": round(low - 0.618 * diff, 4),
-            "2.0": round(low - 1.0 * diff, 4),
-            "2.618": round(low - 1.618 * diff, 4),
-            "3.0": round(low - 2.0 * diff, 4),
-            "4.236": round(low - 3.236 * diff, 4)
-        }
-
-
-# ==========================================
-# MACHINE LEARNING PREDICTOR
-# ==========================================
-
-try:
-    from sklearn.model_selection import train_test_split
-    from sklearn.preprocessing import StandardScaler
-    from xgboost import XGBClassifier
-    
-    class MLPredictor:
-        """Machine Learning predictor using XGBoost"""
-        
-        def __init__(self):
-            self.models: Dict[str, XGBClassifier] = {}
-            self.scalers: Dict[str, StandardScaler] = {}
-            self.last_train_time: Dict[str, float] = {}
-            self.feature_cols: Optional[List[str]] = None
-        
-        async def train(self, symbol: str, df: pd.DataFrame):
-            """Train ML model for symbol"""
-            if len(df) < Config.ML_CONFIG['min_data_points']:
-                ml_logger.warning(f"Insufficient data for {symbol}: {len(df)} < {Config.ML_CONFIG['min_data_points']}")
-                return
-            
-            try:
-                df_ta = self._add_indicators(df.copy())
-                lookahead = Config.ML_CONFIG['lookahead']
-                thresh = Config.ML_CONFIG['threshold']
-                
-                # Generate labels
-                labels = self._generate_label(df_ta, lookahead, thresh)
-                df_ta['label'] = labels
-                df_ta.dropna(inplace=True)
-                
-                # Select features
-                feature_cols = [c for c in df_ta.columns if c not in ["open", "high", "low", "close", "volume", "label", "timestamp"]]
-                self.feature_cols = feature_cols
-                
-                if len(feature_cols) == 0:
-                    ml_logger.warning(f"No features for {symbol}")
-                    return
-                
-                X = df_ta[feature_cols]
-                y = df_ta['label']
-                
-                if len(X) < 100:
-                    ml_logger.warning(f"Insufficient training data for {symbol}: {len(X)}")
-                    return
-                
-                # Split and scale
-                X_train, X_test, y_train, y_test = train_test_split(X, y, test_size=0.2, random_state=42, stratify=y if len(y.unique()) > 1 else None)
-                
-                scaler = StandardScaler().fit(X_train)
-                X_train_scaled = scaler.transform(X_train)
-                X_test_scaled = scaler.transform(X_test)
-                
-                # Train XGBoost model
-                model = XGBClassifier(
-                    n_estimators=300,
-                    max_depth=6,
-                    learning_rate=0.05,
-                    subsample=0.9,
-                    colsample_bytree=0.8,
-                    objective='multi:softprob',
-                    num_class=3,
-                    n_jobs=-1,
-                    eval_metric='mlogloss',
-                    random_state=42,
-                    verbosity=0
-                )
-                
-                model.fit(X_train_scaled, y_train)
-                
-                # Store model
-                self.models[symbol] = model
-                self.scalers[symbol] = scaler
-                self.last_train_time[symbol] = time.time()
-                
-                ml_logger.info(f"✅ Trained ML model for {symbol} with {len(X)} samples")
-            
-            except Exception as e:
-                ml_logger.error(f"ML training error for {symbol}: {e}")
-        
-        async def predict(self, symbol: str, df: pd.DataFrame) -> str:
-            """Predict signal using ML model"""
-            try:
-                # Retrain if needed
-                if symbol not in self.models or time.time() - self.last_train_time.get(symbol, 0) > Config.ML_CONFIG['retrain_interval']:
-                    await self.train(symbol, df)
-                
-                if symbol not in self.models:
-                    return "HOLD"
-                
-                # Prepare data
-                df_ta = self._add_indicators(df.iloc[-100:].copy())
-                
-                if self.feature_cols is None or len(self.feature_cols) == 0:
-                    return "HOLD"
-                
-                X = df_ta[self.feature_cols].iloc[-1:]
-                X_scaled = self.scalers[symbol].transform(X)
-                
-                # Predict
-                pred = self.models[symbol].predict(X_scaled)[0]
-                mapping = {0: "HOLD", 1: "SELL", 2: "BUY"}
-                
-                return mapping.get(pred, "HOLD")
-            
-            except Exception as e:
-                ml_logger.error(f"ML prediction error for {symbol}: {e}")
-                return "HOLD"
-        
-        def _add_indicators(self, data: pd.DataFrame) -> pd.DataFrame:
-            """Add technical indicators to dataframe"""
-            df = data.copy()
-            
-            # Ensure Close column exists
-            if 'close' not in df.columns.str.lower():
-                for col in df.columns:
-                    if 'close' in col.lower():
-                        df['Close'] = df[col]
-                        break
-            
-            if 'Close' not in df.columns:
-                ml_logger.warning("No Close column found")
-                return df
-            
-            # RSI
-            def calculate_rsi(prices, period=14):
-                delta = prices.diff()
-                gain = (delta.where(delta > 0, 0)).rolling(window=period).mean()
-                loss = (-delta.where(delta < 0, 0)).rolling(window=period).mean()
-                rs = gain / loss
-                return 100 - (100 / (1 + rs))
-            
-            for length in [5, 10, 15]:
-                df[f"rsi_{length}"] = calculate_rsi(df["Close"], length)
-            
-            # Rate of Change
-            def calculate_roc(prices, period=10):
-                return (prices / prices.shift(period) - 1) * 100
-            
-            df["roc_10"] = calculate_roc(df["Close"], 10)
-            
-            # Momentum
-            def calculate_mom(prices, period=10):
-                return prices - prices.shift(period)
-            
-            df["mom_10"] = calculate_mom(df["Close"], 10)
-            
-            # Stochastic RSI
-            def calculate_stoch_rsi(prices, period=14):
-                rsi = calculate_rsi(prices, period)
-                lowest = rsi.rolling(window=period).min()
-                highest = rsi.rolling(window=period).max()
-                return ((rsi - lowest) / (highest - lowest)) * 100
-            
-            df["stochrsi_k"] = calculate_stoch_rsi(df["Close"], 14)
-            df["stochrsi_d"] = df["stochrsi_k"].rolling(window=3).mean()
-            
-            # MACD
-            def calculate_macd(prices, fast=12, slow=26, signal=9):
-                ema_fast = prices.ewm(span=fast).mean()
-                ema_slow = prices.ewm(span=slow).mean()
-                macd_line = ema_fast - ema_slow
-                signal_line = macd_line.ewm(span=signal).mean()
-                histogram = macd_line - signal_line
-                return macd_line, signal_line, histogram
-            
-            macd_line, signal_line, histogram = calculate_macd(df["Close"], 12, 26, 9)
-            df["macd_line"] = macd_line
-            df["macd_signal"] = signal_line
-            df["macd_histogram"] = histogram
-            
-            # Moving Averages
-            for length in [5, 10, 20, 50, 200]:
-                if len(df) >= length:
-                    df[f"sma_{length}"] = df["Close"].rolling(window=length).mean()
-            
-            for length in [5, 10, 20, 50]:
-                if len(df) >= length:
-                    df[f"ema_{length}"] = df["Close"].ewm(span=length).mean()
-            
-            # Bollinger Bands
-            def calculate_bollinger_bands(prices, period=20, std_dev=2):
-                sma = prices.rolling(window=period).mean()
-                std = prices.rolling(window=period).std()
-                upper = sma + (std * std_dev)
-                lower = sma - (std * std_dev)
-                return upper, sma, lower
-            
-            bb_upper, bb_middle, bb_lower = calculate_bollinger_bands(df["Close"], 20, 2)
-            df["bb_upper"] = bb_upper
-            df["bb_middle"] = bb_middle
-            df["bb_lower"] = bb_lower
-            df["bb_width"] = (bb_upper - bb_lower) / bb_middle
-            df["bb_position"] = (df["Close"] - bb_lower) / (bb_upper - bb_lower)
-            
-            # Price Velocity
-            df["price_velocity_5"] = df["Close"].pct_change(5)
-            df["price_velocity_10"] = df["Close"].pct_change(10)
-            df["price_velocity_20"] = df["Close"].pct_change(20)
-            
-            # Volume indicators (if available)
-            if 'Volume' in df.columns or 'volume' in df.columns:
-                vol_col = 'Volume' if 'Volume' in df.columns else 'volume'
-                df["volume_ratio_5"] = df[vol_col] / df[vol_col].rolling(window=5).mean()
-                df["volume_ratio_10"] = df[vol_col] / df[vol_col].rolling(window=10).mean()
-            
-            # Volatility
-            df["volatility_5"] = df["Close"].rolling(window=5).std() / df["Close"].rolling(window=5).mean()
-            df["volatility_10"] = df["Close"].rolling(window=10).std() / df["Close"].rolling(window=10).mean()
-            df["volatility_20"] = df["Close"].rolling(window=20).std() / df["Close"].rolling(window=20).mean()
-            
-            return df
-        
-        def _generate_label(self, data: pd.DataFrame, lookahead: int = 5, thresh: float = 0.01, col: str = "Close") -> pd.Series:
-            """Generate labels for ML training"""
-            if col not in data.columns:
-                col = 'Close' if 'Close' in data.columns else data.columns[0]
-            
-            future_mean = (
-                data[col]
-                .shift(-lookahead)
-                .rolling(window=lookahead, min_periods=lookahead)
-                .mean()
-            )
-            
-            pct_change = (future_mean - data[col]) / data[col]
-            
-            labels = np.select(
-                [pct_change >= thresh, pct_change <= -thresh],
-                [2, 1],  # 2=BUY, 1=SELL, 0=HOLD
-                default=0
-            )
-            
-            return pd.Series(labels, index=data.index)
-    
-except ImportError as e:
-    logger.warning(f"ML libraries not available: {e}")
-    logger.warning("Running without ML predictions")
-    
-    class MLPredictor:
-        """Dummy ML predictor when libraries not available"""
-        
-        async def predict(self, symbol: str, df: pd.DataFrame) -> str:
-            return "HOLD"
-        
-        async def train(self, symbol: str, df: pd.DataFrame):
-            pass
-
-
-# ==========================================
-# ENHANCED TRADING ENGINE
-# ==========================================
-
-class EnhancedTradingEngine:
-    """Advanced trading engine with risk management"""
-    
-    def __init__(self):
-        self.positions: Dict[str, Dict] = {}
-        self.order_history: List[Dict] = []
-        self.trade_history: List[Dict] = []
-        self.performance = {
-            'total_trades': 0,
-            'winning_trades': 0,
-            'losing_trades': 0,
-            'total_profit': 0,
-            'max_drawdown': 0,
-            'sharpe_ratio': 0,
-            'win_rate': 0,
-            'avg_profit_per_trade': 0
-        }
-        self.ml_predictor = MLPredictor()
-    
-    async def calculate_trading_signal(self, analysis: Dict, df: pd.DataFrame) -> Dict:
-        """Calculate comprehensive trading signal"""
-        try:
-            if not analysis or not analysis.get('moving_averages'):
-                return self._default_signal()
-            
-            # Extract analysis components
-            indicators = analysis.get('momentum', {})
-            ma = analysis.get('moving_averages', {})
-            trend = analysis.get('trend', {})
-            patterns = analysis.get('patterns', [])
-            sr_levels = analysis.get('support_resistance', {})
-            current_price = analysis['current_price']
-            
-            # Calculate signal score (0-100)
-            score = 50  # Neutral starting point
-            
-            # Trend scoring (max ±20)
-            trend_direction = trend.get('direction', 'NEUTRAL')
-            trend_strength = trend.get('strength', 0)
-            
-            if trend_direction in ['STRONG_BULLISH', 'BULLISH', 'WEAK_BULLISH']:
-                score += trend_strength * 2
-            elif trend_direction in ['STRONG_BEARISH', 'BEARISH', 'WEAK_BEARISH']:
-                score -= trend_strength * 2
-            
-            # Overall signal scoring (max ±30)
-            overall_signal = analysis.get('signals', {}).get('overall', 'NEUTRAL')
-            signal_confidence = analysis.get('signals', {}).get('confidence', 50)
-            
-            if overall_signal in ['STRONG_BUY', 'BUY']:
-                score += signal_confidence * 0.3
-            elif overall_signal in ['STRONG_SELL', 'SELL']:
-                score -= signal_confidence * 0.3
-            
-            # Pattern scoring (max ±20)
-            pattern_score = 0
-            for pattern in patterns:
-                if pattern['signal'] == 'BULLISH':
-                    pattern_score += pattern['confidence'] * 0.1
-                elif pattern['signal'] == 'BEARISH':
-                    pattern_score -= pattern['confidence'] * 0.1
-            
-            score += pattern_score
-            
-            # ML prediction scoring (±10)
-            ml_signal = await self.ml_predictor.predict(analysis['symbol'], df)
-            if ml_signal == "BUY":
-                score += 10
-            elif ml_signal == "SELL":
-                score -= 10
-            
-            # Support/Resistance scoring (±10)
-            if sr_levels.get('support') and current_price <= sr_levels['support'][-1] * 1.01:
-                score += 8  # Near support
-            if sr_levels.get('resistance') and current_price >= sr_levels['resistance'][-1] * 0.99:
-                score -= 8  # Near resistance
-            
-            # Normalize score
-            score = max(0, min(100, score))
-            
-            # Calculate risk parameters
-            atr = analysis.get('volatility', {}).get('ATR', current_price * 0.01)
-            stop_loss_distance = max(atr * 1.5, current_price * Config.TRADING['stop_loss_pct'])
-            take_profit_distance = stop_loss_distance * 2
-            
-            # Determine signal type and position size
-            if score >= 75:
-                signal_type = "STRONG_BUY"
-                stop_loss = current_price - stop_loss_distance
-                take_profit = current_price + take_profit_distance
-                position_size = Config.TRADING['max_position_size'] * (score / 100)
-            elif score >= 60:
-                signal_type = "BUY"
-                stop_loss = current_price - stop_loss_distance
-                take_profit = current_price + take_profit_distance
-                position_size = Config.TRADING['max_position_size'] * (score / 100) * 0.7
-            elif score <= 25:
-                signal_type = "STRONG_SELL"
-                stop_loss = current_price + stop_loss_distance
-                take_profit = current_price - take_profit_distance
-                position_size = Config.TRADING['max_position_size'] * ((100 - score) / 100)
-            elif score <= 40:
-                signal_type = "SELL"
-                stop_loss = current_price + stop_loss_distance
-                take_profit = current_price - take_profit_distance
-                position_size = Config.TRADING['max_position_size'] * ((100 - score) / 100) * 0.7
-            else:
-                signal_type = "NEUTRAL"
-                stop_loss = None
-                take_profit = None
-                position_size = 0
-            
-            # Calculate confidence and risk/reward
-            confidence = abs(score - 50) * 2
-            risk_reward = 2.0 if stop_loss and take_profit else 0
-            
-            # Generate reasons
-            reasons = [
-                f"Trend: {trend_direction} (Strength: {trend_strength}/6)",
-                f"Signal Confidence: {signal_confidence}%",
-                f"Pattern Count: {len(patterns)}",
-                f"ML Prediction: {ml_signal}",
-                f"ATR: {atr:.4f}"
-            ]
-            
-            result = {
-                "signal": signal_type,
-                "confidence": round(confidence, 1),
-                "score": round(score, 1),
-                "price": round(current_price, 4),
-                "stop_loss": round(stop_loss, 4) if stop_loss else None,
-                "take_profit": round(take_profit, 4) if take_profit else None,
-                "position_size": round(position_size, 6),
-                "risk_reward": risk_reward,
-                "atr": round(atr, 4),
-                "reasons": reasons,
-                "timestamp": datetime.now(timezone.utc).isoformat(),
-                "analysis_summary": {
-                    "trend": trend_direction,
-                    "signal_strength": signal_confidence,
-                    "pattern_count": len(patterns),
-                    "ml_signal": ml_signal,
-                    "support_levels": sr_levels.get('support', []),
-                    "resistance_levels": sr_levels.get('resistance', [])
-                }
-            }
-            
-            logger.info(f"Generated signal: {signal_type} with {confidence}% confidence (Score: {score}/100)")
-            return result
-        
-        except Exception as e:
-            logger.error(f"Error calculating trading signal: {e}")
-            import traceback
-            traceback.print_exc()
-            return self._default_signal()
-    
-    def _default_signal(self) -> Dict:
-        """Return default neutral signal"""
-        return {
-            "signal": "NEUTRAL",
-            "confidence": 0,
-            "score": 50,
-            "price": 0,
-            "stop_loss": None,
-            "take_profit": None,
-            "position_size": 0,
-            "risk_reward": 0,
-            "atr": 0,
-            "reasons": ["Insufficient data for analysis"],
-            "timestamp": datetime.now(timezone.utc).isoformat(),
-            "analysis_summary": {}
-        }
-
-
-# ==========================================
-# FASTAPI APPLICATION SETUP
-# ==========================================
-
-# Global instances
-data_manager: Optional[EnhancedDataManager] = None
-trading_engine: Optional[EnhancedTradingEngine] = None
-START_TIME = time.time()
-
-
-@asynccontextmanager
-async def lifespan(app: FastAPI):
-    """Application lifespan manager"""
-    global data_manager, trading_engine
-    
-    logger.info("=" * 80)
-    logger.info("🚀 CRYPTOTRADER ULTRA v7.0 - INITIALIZING")
-    logger.info("=" * 80)
-    
-    # Initialize components
-    data_manager = EnhancedDataManager()
-    trading_engine = EnhancedTradingEngine()
-    
-    await data_manager.initialize()
-    
-    # Start background tasks
-    asyncio.create_task(_background_data_updater())
-    asyncio.create_task(_background_analysis_updater())
-    
-    logger.info("✅ All systems operational")
-    logger.info("📊 Data Manager: Ready with Binance + CoinGecko")
-    logger.info("🤖 Trading Engine: Ready with ML predictions")
-    logger.info("🔌 Real-time WebSocket: Active (15+ symbols)")
-    logger.info("📈 Technical Analysis: 25+ indicators + patterns")
-    logger.info("🎯 Support/Resistance: Advanced detection")
-    logger.info("📐 Fibonacci Tools: Full retracement & extensions")
-    logger.info("=" * 80)
-    
-    yield
-    
-    # Cleanup
-    logger.info("🛑 Shutting down CRYPTOTRADER ULTRA...")
-    if data_manager:
-        await data_manager.close()
-    logger.info("✅ Clean shutdown complete")
-
-
-# Create FastAPI app
-app = FastAPI(
-    title="CRYPTOTRADER ULTRA v7.0",
-    version="7.0.0",
-    description="World's most advanced cryptocurrency trading platform",
-    lifespan=lifespan
-)
-
-# CORS middleware
-app.add_middleware(
-    CORSMiddleware,
-    allow_origins=["*"],
-    allow_credentials=True,
-    allow_methods=["*"],
-    allow_headers=["*"],
-)
-
-
-# ==========================================
-# BACKGROUND TASKS
-# ==========================================
-
-async def _background_data_updater():
-    """Background task for periodic data updates"""
+async def start_ticker_stream(self):
+    """Start streaming ticker updates"""
     while True:
         try:
-            market_data = await data_manager.get_market_overview()
-            logger.info(f"Updated market data: {len(market_data)} symbols")
-            await asyncio.sleep(10)
+            await self.fetch_ticker_data()
+            await asyncio.sleep(10)  # Update every 10 seconds
         except Exception as e:
-            logger.error(f"Background data updater error: {e}")
+            logger.error(f"Ticker stream error: {e}")
             await asyncio.sleep(30)
+====================================================================================
+ADVANCED TECHNICAL ANALYSIS ENGINE
+====================================================================================
+class TechnicalAnalysis:
+"""Comprehensive technical analysis with 20+ indicators"""
 
-
-async def _background_analysis_updater():
-    """Background task for periodic analysis updates"""
-    major_symbols = Config.SYMBOLS['major']
+text
+@staticmethod
+def calculate_all_indicators(ohlcv_data: List[Dict], symbol: str, timeframe: str) -> Dict:
+    """Calculate all technical indicators for given OHLCV data"""
+    if len(ohlcv_data) < 50:
+        return {}
     
-    while True:
-        try:
-            for symbol in major_symbols[:3]:  # Analyze top 3 symbols
-                candles = await data_manager.fetch_binance_klines(symbol, "1h", 100)
-                if candles and len(candles) >= 50:
-                    analysis = AdvancedTechnicalAnalysis.calculate_all_indicators(candles, symbol, "1h")
-                    if analysis:
-                        df = pd.DataFrame(candles)
-                        signal = await trading_engine.calculate_trading_signal(analysis, df)
-                        logger.info(f"📊 {symbol}: {signal['signal']} ({signal['confidence']}% confidence)")
-                await asyncio.sleep(2)
-            
-            await asyncio.sleep(60)
-        
-        except Exception as e:
-            logger.error(f"Background analysis updater error: {e}")
-            await asyncio.sleep(60)
-
-
-# ==========================================
-# HEALTH CHECK ENDPOINT
-# ==========================================
-
-@app.get("/health")
-async def health_check():
-    """Health check endpoint"""
+    # Extract data
+    closes = [c["close"] for c in ohlcv_data]
+    opens = [c["open"] for c in ohlcv_data]
+    highs = [c["high"] for c in ohlcv_data]
+    lows = [c["low"] for c in ohlcv_data]
+    volumes = [c.get("volume", 0) for c in ohlcv_data]
+    
+    current_price = closes[-1]
+    
+    # Moving Averages
+    sma_10 = TechnicalAnalysis.calculate_sma(closes, 10)
+    sma_20 = TechnicalAnalysis.calculate_sma(closes, 20)
+    sma_50 = TechnicalAnalysis.calculate_sma(closes, 50)
+    sma_200 = TechnicalAnalysis.calculate_sma(closes, 200)
+    
+    ema_12 = TechnicalAnalysis.calculate_ema(closes, 12)
+    ema_26 = TechnicalAnalysis.calculate_ema(closes, 26)
+    
+    # Momentum Indicators
+    rsi = TechnicalAnalysis.calculate_rsi(closes, 14)
+    macd_line, signal_line, histogram = TechnicalAnalysis.calculate_macd(closes)
+    stoch_k, stoch_d = TechnicalAnalysis.calculate_stochastic(highs, lows, closes)
+    
+    # Volatility Indicators
+    bb_upper, bb_middle, bb_lower = TechnicalAnalysis.calculate_bollinger_bands(closes)
+    atr = TechnicalAnalysis.calculate_atr(highs, lows, closes)
+    
+    # Volume Indicators
+    obv = TechnicalAnalysis.calculate_obv(closes, volumes)
+    volume_sma = TechnicalAnalysis.calculate_sma(volumes, 20) if volumes[0] > 0 else []
+    
+    # Support & Resistance
+    sr_levels = TechnicalAnalysis.detect_support_resistance(highs, lows, closes)
+    
+    # Fibonacci
+    period_high = max(highs[-50:])
+    period_low = min(lows[-50:])
+    fibonacci = TechnicalAnalysis.calculate_fibonacci_retracement(period_high, period_low)
+    
+    # Chart Patterns
+    patterns = TechnicalAnalysis.detect_chart_patterns(highs, lows, closes)
+    
+    # Trend Analysis
+    trend = TechnicalAnalysis.analyze_trend(closes, sma_20, sma_50, sma_200)
+    
     return {
-        "status": "healthy",
-        "version": "7.0.0",
-        "timestamp": datetime.now(timezone.utc).isoformat(),
-        "uptime": int(time.time() - START_TIME),
-        "services": {
-            "data_manager": "operational",
-            "trading_engine": "operational",
-            "websocket": "operational",
-            "technical_analysis": "operational",
-            "ml_predictor": "operational"
-        }
+        "symbol": symbol,
+        "timeframe": timeframe,
+        "current_price": current_price,
+        "moving_averages": {
+            "SMA_10": sma_10[-1] if sma_10[-1] else 0,
+            "SMA_20": sma_20[-1] if sma_20[-1] else 0,
+            "SMA_50": sma_50[-1] if sma_50[-1] else 0,
+            "SMA_200": sma_200[-1] if sma_200[-1] else 0,
+            "EMA_12": ema_12[-1] if ema_12[-1] else 0,
+            "EMA_26": ema_26[-1] if ema_26[-1] else 0,
+        },
+        "momentum": {
+            "RSI": rsi[-1] if rsi[-1] else 50,
+            "MACD": macd_line[-1] if macd_line[-1] else 0,
+            "MACD_Signal": signal_line[-1] if signal_line[-1] else 0,
+            "MACD_Histogram": histogram[-1] if histogram[-1] else 0,
+            "Stochastic_K": stoch_k[-1] if stoch_k[-1] else 50,
+            "Stochastic_D": stoch_d[-1] if stoch_d[-1] else 50,
+        },
+        "volatility": {
+            "BB_Upper": bb_upper[-1] if bb_upper[-1] else 0,
+            "BB_Middle": bb_middle[-1] if bb_middle[-1] else 0,
+            "BB_Lower": bb_lower[-1] if bb_lower[-1] else 0,
+            "ATR": atr[-1] if atr[-1] else 0,
+            "BB_Width": ((bb_upper[-1] - bb_lower[-1]) / bb_middle[-1]) if bb_middle[-1] else 0,
+        },
+        "volume": {
+            "OBV": obv[-1] if obv else 0,
+            "Volume_SMA": volume_sma[-1] if volume_sma and volume_sma[-1] else 0,
+            "Volume_Ratio": volumes[-1] / volume_sma[-1] if volume_sma and volume_sma[-1] else 1,
+        },
+        "support_resistance": sr_levels,
+        "fibonacci": fibonacci,
+        "patterns": patterns,
+        "trend": trend,
+        "timestamp": datetime.now(timezone.utc).isoformat()
     }
 
-
-# ==========================================
-# API ENDPOINTS
-# ==========================================
-
-@app.get("/")
-async def root():
-    """Root endpoint - redirect to dashboard"""
-    return RedirectResponse(url="/dashboard")
-
-
-@app.get("/api/ticker/{symbol}")
-async def get_ticker(symbol: str, detailed: bool = False):
-    """Get ticker data for symbol"""
-    try:
-        ticker = await data_manager.get_realtime_ticker(symbol)
-        if not ticker:
-            raise HTTPException(status_code=404, detail="Symbol not found")
-        
-        result = {
-            "symbol": symbol,
-            "price": ticker["price"],
-            "price_change_24h": ticker.get("price_change_percent", 0),
-            "volume_24h": ticker.get("volume", 0),
-            "high_24h": ticker.get("high_price", 0),
-            "low_24h": ticker.get("low_price", 0),
-            "timestamp": ticker.get("timestamp"),
-            "source": ticker.get("source", "unknown")
-        }
-        
-        if detailed:
-            # Add CoinGecko data
-            cg_data = await data_manager.fetch_coingecko_data(symbol=symbol)
-            if cg_data:
-                result.update({
-                    "market_cap": cg_data.get("market_cap", 0),
-                    "market_cap_rank": cg_data.get("market_cap_rank"),
-                    "ath": cg_data.get("ath", 0),
-                    "atl": cg_data.get("atl", 0),
-                    "price_change_7d": cg_data.get("price_change_percentage_7d", 0)
-                })
-        
-        return result
+@staticmethod
+def calculate_sma(data: List[float], period: int) -> List[float]:
+    """Simple Moving Average"""
+    if len(data) < period:
+        return [None] * len(data)
     
-    except HTTPException:
-        raise
-    except Exception as e:
-        logger.error(f"Error fetching ticker for {symbol}: {e}")
-        raise HTTPException(status_code=500, detail=str(e))
-
-
-@app.get("/api/analysis/{symbol}")
-async def get_analysis(
-    symbol: str,
-    timeframe: TimeFrame = TimeFrame.H1,
-    include_patterns: bool = True
-):
-    """Get comprehensive technical analysis"""
-    try:
-        candles = await data_manager.fetch_binance_klines(symbol, timeframe.value, 100)
-        
-        if not candles or len(candles) < 50:
-            raise HTTPException(status_code=400, detail="Insufficient data for analysis")
-        
-        analysis = AdvancedTechnicalAnalysis.calculate_all_indicators(candles, symbol, timeframe.value)
-        
-        if not analysis:
-            raise HTTPException(status_code=500, detail="Analysis failed")
-        
-        # Add additional metrics
-        closes = [c["close"] for c in candles[-50:]]
-        analysis["additional_metrics"] = {
-            "volatility": float(np.std(closes) / np.mean(closes) * 100) if len(closes) > 1 else 0,
-            "momentum": ((closes[-1] - closes[0]) / closes[0] * 100) if closes[0] != 0 else 0
-        }
-        
-        return analysis
-    
-    except HTTPException:
-        raise
-    except Exception as e:
-        logger.error(f"Analysis error for {symbol}: {e}")
-        raise HTTPException(status_code=500, detail=str(e))
-
-
-@app.get("/api/signal/{symbol}")
-async def get_signal(
-    symbol: str,
-    timeframe: TimeFrame = TimeFrame.H1
-):
-    """Get AI trading signal"""
-    try:
-        candles = await data_manager.fetch_binance_klines(symbol, timeframe.value, 100)
-        
-        if not candles or len(candles) < 50:
-            raise HTTPException(status_code=400, detail="Insufficient data")
-        
-        analysis = AdvancedTechnicalAnalysis.calculate_all_indicators(candles, symbol, timeframe.value)
-        
-        if not analysis:
-            raise HTTPException(status_code=500, detail="Analysis failed")
-        
-        df = pd.DataFrame(candles)
-        signal = await trading_engine.calculate_trading_signal(analysis, df)
-        
-        return {
-            "symbol": symbol,
-            "timeframe": timeframe.value,
-            "signal": signal,
-            "analysis": analysis,
-            "timestamp": datetime.now(timezone.utc).isoformat()
-        }
-    
-    except HTTPException:
-        raise
-    except Exception as e:
-        logger.error(f"Signal error for {symbol}: {e}")
-        raise HTTPException(status_code=500, detail=str(e))
-
-
-@app.get("/api/market")
-async def market_overview():
-    """Get market overview"""
-    try:
-        market_data = await data_manager.get_market_overview()
-        
-        if market_data:
-            total_volume = sum(d.get('quote_volume_24h', 0) for d in market_data)
-            avg_change = sum(d.get('change_24h', 0) for d in market_data) / len(market_data)
-            bullish = len([d for d in market_data if d.get('change_24h', 0) > 0])
-            bearish = len([d for d in market_data if d.get('change_24h', 0) < 0])
-            
-            stats = {
-                "total_symbols": len(market_data),
-                "total_volume_24h": total_volume,
-                "average_change_24h": avg_change,
-                "market_sentiment": {
-                    "bullish": bullish,
-                    "bearish": bearish,
-                    "neutral": len(market_data) - bullish - bearish
-                }
-            }
+    sma = []
+    for i in range(len(data)):
+        if i < period - 1:
+            sma.append(None)
         else:
-            stats = {}
-        
-        return {
-            "market_data": market_data,
-            "statistics": stats,
-            "timestamp": datetime.now(timezone.utc).isoformat()
-        }
+            sma.append(np.mean(data[i - period + 1:i + 1]))
+    return sma
+
+@staticmethod
+def calculate_ema(data: List[float], period: int) -> List[float]:
+    """Exponential Moving Average"""
+    if len(data) < period:
+        return [None] * len(data)
     
-    except Exception as e:
-        logger.error(f"Market overview error: {e}")
-        raise HTTPException(status_code=500, detail=str(e))
+    ema = [None] * (period - 1)
+    ema.append(np.mean(data[:period]))
+    
+    multiplier = 2 / (period + 1)
+    for i in range(period, len(data)):
+        ema.append((data[i] - ema[-1]) * multiplier + ema[-1])
+    
+    return ema
 
+@staticmethod
+def calculate_rsi(data: List[float], period: int = 14) -> List[float]:
+    """Relative Strength Index"""
+    if len(data) < period + 1:
+        return [50] * len(data)
+    
+    deltas = np.diff(data)
+    seed = deltas[:period]
+    up = seed[seed >= 0].sum() / period
+    down = -seed[seed < 0].sum() / period
+    
+    rs = up / down if down != 0 else 0
+    rsi = [None] * period
+    rsi.append(100 - 100 / (1 + rs))
+    
+    for i in range(period, len(deltas)):
+        delta = deltas[i]
+        if delta > 0:
+            upval = delta
+            downval = 0
+        else:
+            upval = 0
+            downval = -delta
+        
+        up = (up * (period - 1) + upval) / period
+        down = (down * (period - 1) + downval) / period
+        
+        rs = up / down if down != 0 else 0
+        rsi.append(100 - 100 / (1 + rs))
+    
+    return rsi
 
-# ==========================================
-# DASHBOARD
-# ==========================================
+@staticmethod
+def calculate_macd(data: List[float], fast: int = 12, slow: int = 26, signal: int = 9) -> Tuple[List, List, List]:
+    """MACD (Moving Average Convergence Divergence)"""
+    ema_fast = TechnicalAnalysis.calculate_ema(data, fast)
+    ema_slow = TechnicalAnalysis.calculate_ema(data, slow)
+    
+    macd_line = []
+    for i in range(len(data)):
+        if ema_fast[i] is not None and ema_slow[i] is not None:
+            macd_line.append(ema_fast[i] - ema_slow[i])
+        else:
+            macd_line.append(None)
+    
+    # Signal line
+    valid_macd = [x for x in macd_line if x is not None]
+    signal_line = TechnicalAnalysis.calculate_ema(valid_macd, signal)
+    
+    # Align signal line
+    signal_aligned = [None] * (len(macd_line) - len(signal_line)) + signal_line
+    
+    # Histogram
+    histogram = []
+    for i in range(len(macd_line)):
+        if macd_line[i] is not None and signal_aligned[i] is not None:
+            histogram.append(macd_line[i] - signal_aligned[i])
+        else:
+            histogram.append(None)
+    
+    return macd_line, signal_aligned, histogram
 
-@app.get("/dashboard", response_class=HTMLResponse)
-async def dashboard():
-    """Main dashboard"""
-    html_content = """
-    <!DOCTYPE html>
-    <html lang="en">
-    <head>
-        <meta charset="UTF-8">
-        <meta name="viewport" content="width=device-width, initial-scale=1.0">
-        <title>CRYPTOTRADER ULTRA v7.0</title>
-        <script src="https://s3.tradingview.com/tv.js"></script>
-        <style>
-            * {
-                margin: 0;
-                padding: 0;
-                box-sizing: border-box;
-            }
+@staticmethod
+def calculate_bollinger_bands(data: List[float], period: int = 20, std_dev: int = 2) -> Tuple[List, List, List]:
+    """Bollinger Bands"""
+    sma = TechnicalAnalysis.calculate_sma(data, period)
+    
+    upper = []
+    lower = []
+    
+    for i in range(len(data)):
+        if i < period - 1:
+            upper.append(None)
+            lower.append(None)
+        else:
+            std = np.std(data[i - period + 1:i + 1])
+            upper.append(sma[i] + std_dev * std)
+            lower.append(sma[i] - std_dev * std)
+    
+    return upper, sma, lower
+
+@staticmethod
+def calculate_stochastic(highs: List[float], lows: List[float], closes: List[float], period: int = 14) -> Tuple[List, List]:
+    """Stochastic Oscillator"""
+    k_values = []
+    
+    for i in range(len(closes)):
+        if i < period - 1:
+            k_values.append(None)
+        else:
+            highest = max(highs[i - period + 1:i + 1])
+            lowest = min(lows[i - period + 1:i + 1])
             
-            body {
-                font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
-                background: linear-gradient(135deg, #0f172a 0%, #1e293b 100%);
-                color: #f8fafc;
-                padding: 20px;
-            }
+            if highest - lowest != 0:
+                k = ((closes[i] - lowest) / (highest - lowest)) * 100
+            else:
+                k = 50
             
-            .container {
-                max-width: 1600px;
-                margin: 0 auto;
-            }
+            k_values.append(k)
+    
+    # %D (3-period SMA of %K)
+    d_values = TechnicalAnalysis.calculate_sma([x for x in k_values if x is not None], 3)
+    d_aligned = [None] * (len(k_values) - len(d_values)) + d_values
+    
+    return k_values, d_aligned
+
+@staticmethod
+def calculate_atr(highs: List[float], lows: List[float], closes: List[float], period: int = 14) -> List[float]:
+    """Average True Range (volatility indicator)"""
+    if len(closes) < 2:
+        return [0] * len(closes)
+    
+    tr_values = [highs[0] - lows[0]]
+    
+    for i in range(1, len(closes)):
+        hl = highs[i] - lows[i]
+        hc = abs(highs[i] - closes[i - 1])
+        lc = abs(lows[i] - closes[i - 1])
+        tr_values.append(max(hl, hc, lc))
+    
+    atr = TechnicalAnalysis.calculate_sma(tr_values, period)
+    return atr
+
+@staticmethod
+def calculate_obv(closes: List[float], volumes: List[float]) -> List[float]:
+    """On-Balance Volume"""
+    if len(closes) < 2:
+        return [0]
+    
+    obv = [volumes[0]]
+    for i in range(1, len(closes)):
+        if closes[i] > closes[i - 1]:
+            obv.append(obv[-1] + volumes[i])
+        elif closes[i] < closes[i - 1]:
+            obv.append(obv[-1] - volumes[i])
+        else:
+            obv.append(obv[-1])
+    
+    return obv
+
+@staticmethod
+def detect_support_resistance(highs: List[float], lows: List[float], closes: List[float], order: int = 5) -> Dict:
+    """Detect support and resistance levels using local extrema"""
+    if len(closes) < order * 2:
+        return {"support": [], "resistance": []}
+    
+    # Find local maxima (resistance)
+    resistance_idx = argrelextrema(np.array(highs), np.greater, order=order)[0]
+    resistance_levels = [highs[i] for i in resistance_idx]
+    
+    # Find local minima (support)
+    support_idx = argrelextrema(np.array(lows), np.less, order=order)[0]
+    support_levels = [lows[i] for i in support_idx]
+    
+    # Cluster similar levels
+    def cluster_levels(levels, threshold=0.02):
+        if not levels:
+            return []
+        
+        clustered = []
+        sorted_levels = sorted(levels)
+        current_cluster = [sorted_levels[0]]
+        
+        for level in sorted_levels[1:]:
+            if abs(level - current_cluster[-1]) / current_cluster[-1] < threshold:
+                current_cluster.append(level)
+            else:
+                clustered.append(np.mean(current_cluster))
+                current_cluster = [level]
+        
+        clustered.append(np.mean(current_cluster))
+        return clustered
+    
+    return {
+        "support": cluster_levels(support_levels)[-3:],  # Last 3 support levels
+        "resistance": cluster_levels(resistance_levels)[-3:]  # Last 3 resistance levels
+    }
+
+@staticmethod
+def calculate_fibonacci_retracement(high: float, low: float) -> Dict:
+    """Calculate Fibonacci retracement levels"""
+    diff = high - low
+    
+    return {
+        "0.0": round(high, 4),
+        "0.236": round(high - 0.236 * diff, 4),
+        "0.382": round(high - 0.382 * diff, 4),
+        "0.5": round(high - 0.5 * diff, 4),
+        "0.618": round(high - 0.618 * diff, 4),
+        "0.786": round(high - 0.786 * diff, 4),
+        "1.0": round(low, 4),
+        # Extensions
+        "1.272": round(low - 0.272 * diff, 4),
+        "1.618": round(low - 0.618 * diff, 4),
+        "2.0": round(low - 1.0 * diff, 4),
+        "2.618": round(low - 1.618 * diff, 4)
+    }
+
+@staticmethod
+def detect_chart_patterns(highs: List[float], lows: List[float], closes: List[float]) -> List[Dict]:
+    """Detect chart patterns: Head & Shoulders, Double Top/Bottom, Triangles"""
+    patterns = []
+    
+    if len(closes) < 50:
+        return patterns
+    
+    # Recent data for pattern detection
+    recent_highs = highs[-50:]
+    recent_lows = lows[-50:]
+    recent_closes = closes[-50:]
+    
+    # 1. Head and Shoulders Pattern
+    peaks = argrelextrema(np.array(recent_highs), np.greater, order=3)[0]
+    if len(peaks) >= 3:
+        # Check for 3 consecutive peaks where middle is highest
+        for i in range(len(peaks) - 2):
+            left = recent_highs[peaks[i]]
+            head = recent_highs[peaks[i + 1]]
+            right = recent_highs[peaks[i + 2]]
             
-            .header {
-                display: flex;
-                justify-content: space-between;
-                align-items: center;
-                margin-bottom: 30px;
-                padding: 20px;
-                background: rgba(15, 23, 42, 0.9);
-                border-radius: 16px;
-                border: 1px solid rgba(255, 255, 255, 0.1);
-            }
+            # Head should be higher than shoulders
+            if head > left and head > right and abs(left - right) / left < 0.05:
+                patterns.append({
+                    "type": "Head and Shoulders",
+                    "signal": "BEARISH",
+                    "confidence": 75,
+                    "description": "Classic reversal pattern detected"
+                })
+                break
+    
+    # 2. Double Top Pattern
+    if len(peaks) >= 2:
+        for i in range(len(peaks) - 1):
+            peak1 = recent_highs[peaks[i]]
+            peak2 = recent_highs[peaks[i + 1]]
             
-            .logo {
-                font-size: 32px;
-                font-weight: bold;
-                background: linear-gradient(135deg, #00d4ff, #ff3366);
-                -webkit-background-clip: text;
-                -webkit-text-fill-color: transparent;
-            }
+            # Two similar peaks
+            if abs(peak1 - peak2) / peak1 < 0.03:
+                patterns.append({
+                    "type": "Double Top",
+                    "signal": "BEARISH",
+                    "confidence": 70,
+                    "description": "Resistance level tested twice"
+                })
+                break
+    
+    # 3. Double Bottom Pattern
+    troughs = argrelextrema(np.array(recent_lows), np.less, order=3)[0]
+    if len(troughs) >= 2:
+        for i in range(len(troughs) - 1):
+            trough1 = recent_lows[troughs[i]]
+            trough2 = recent_lows[troughs[i + 1]]
             
-            .controls {
-                display: flex;
-                gap: 15px;
-                margin-bottom: 20px;
-            }
+            # Two similar troughs
+            if abs(trough1 - trough2) / trough1 < 0.03:
+                patterns.append({
+                    "type": "Double Bottom",
+                    "signal": "BULLISH",
+                    "confidence": 70,
+                    "description": "Support level tested twice"
+                })
+                break
+    
+    # 4. Ascending Triangle
+    if len(recent_closes) >= 20:
+        recent_trend = linregress(range(20), recent_lows[-20:])
+        if recent_trend.slope > 0:  # Rising lows
+            resistance_level = max(recent_highs[-20:])
+            touches = sum(1 for h in recent_highs[-20:] if abs(h - resistance_level) / resistance_level < 0.01)
             
-            .controls input,
-            .controls select,
-            .controls button {
-                padding: 12px 20px;
-                border-radius: 8px;
-                border: 1px solid rgba(255, 255, 255, 0.1);
-                background: rgba(30, 41, 59, 0.8);
-                color: white;
-                font-size: 14px;
-            }
+            if touches >= 2:
+                patterns.append({
+                    "type": "Ascending Triangle",
+                    "signal": "BULLISH",
+                    "confidence": 65,
+                    "description": "Bullish continuation pattern"
+                })
+    
+    # 5. Descending Triangle
+    if len(recent_closes) >= 20:
+        recent_trend = linregress(range(20), recent_highs[-20:])
+        if recent_trend.slope < 0:  # Falling highs
+            support_level = min(recent_lows[-20:])
+            touches = sum(1 for l in recent_lows[-20:] if abs(l - support_level) / support_level < 0.01)
             
-            .controls button {
-                background: linear-gradient(135deg, #00d4ff, #00a8cc);
-                border: none;
-                cursor: pointer;
-                font-weight: bold;
-                transition: transform 0.2s;
-            }
+            if touches >= 2:
+                patterns.append({
+                    "type": "Descending Triangle",
+                    "signal": "BEARISH",
+                    "confidence": 65,
+                    "description": "Bearish continuation pattern"
+                })
+    
+    # 6. Bullish Flag
+    if len(recent_closes) >= 25:
+        # Check for sharp rise followed by consolidation
+        first_half = recent_closes[:15]
+        second_half = recent_closes[15:]
+        
+        if len(first_half) >= 2 and len(second_half) >= 2:
+            first_trend = linregress(range(len(first_half)), first_half)
+            second_trend = linregress(range(len(second_half)), second_half)
             
-            .controls button:hover {
-                transform: translateY(-2px);
-            }
-            
-            .main-grid {
-                display: grid;
-                grid-template-columns: 2fr 1fr;
-                gap: 20px;
-                margin-bottom: 20px;
-            }
-            
-            .card {
-                background: rgba(15, 23, 42, 0.9);
-                border-radius: 16px;
-                padding: 20px;
-                border: 1px solid rgba(255, 255, 255, 0.1);
-            }
-            
-            .card h3 {
-                margin-bottom: 15px;
-                color: #00d4ff;
-            }
-            
-            .chart-container {
-                height: 500px;
-                border-radius: 12px;
-                overflow: hidden;
-            }
-            
-            .signal-indicator {
-                padding: 30px;
-                border-radius: 16px;
-                text-align: center;
-                background: rgba(245, 158, 11, 0.1);
-                border: 3px solid #f59e0b;
-                transition: all 0.3s;
-            }
-            
-            .signal-indicator.strong-buy {
-                background: rgba(34, 197, 94, 0.15);
-                border-color: #22c55e;
-            }
-            
-            .signal-indicator.buy {
-                background: rgba(34, 197, 94, 0.1);
-                border-color: #22c55e;
-            }
-            
-            .signal-indicator.strong-sell {
-                background: rgba(239, 68, 68, 0.15);
-                border-color: #ef4444;
-            }
-            
-            .signal-indicator.sell {
-                background: rgba(239, 68, 68, 0.1);
-                border-color: #ef4444;
-            }
-            
-            .signal-type {
-                font-size: 36px;
-                font-weight: bold;
-                margin-bottom: 10px;
-            }
-            
-            .signal-confidence {
-                font-size: 48px;
-                font-weight: 900;
-                margin: 10px 0;
-            }
-            
-            .signal-price {
-                font-size: 24px;
-                color: #94a3b8;
-            }
-            
-            .reasons {
-                margin-top: 20px;
-                text-align: left;
-            }
-            
-            .reason {
-                padding: 8px;
-                margin: 5px 0;
-                background: rgba(0, 0, 0, 0.2);
-                border-radius: 6px;
-                font-size: 12px;
-            }
-            
-            @media (max-width: 1200px) {
-                .main-grid {
-                    grid-template-columns: 1fr;
-                }
-            }
-        </style>
-    </head>
-    <body>
-        <div class="container">
-            <div class="header">
-                <div class="logo">🚀 CRYPTOTRADER ULTRA v7.0</div>
-                <div style="padding: 10px 20px; background: rgba(34, 197, 94, 0.2); border-radius: 50px;">
-                    <span style="background: #22c55e; width: 10px; height: 10px; border-radius: 50%; display: inline-block; margin-right: 10px;"></span>
-                    Real-time Data Active
+            if first_trend.slope > 0 and abs(second_trend.slope) < 0.01:
+                patterns.append({
+                    "type": "Bullish Flag",
+                    "signal": "BULLISH",
+                    "confidence": 60,
+                    "description": "Bullish continuation pattern"
+                })
+    
+    return patterns
+
+@staticmethod
+def analyze_trend(closes: List[float], sma_20: List[float], sma_50: List[float], sma_200: List[float]) -> Dict:
+    """Analyze market trend"""
+    if len(closes) < 50:
+        return {"direction": "NEUTRAL", "strength": 0, "description": "Insufficient data"}
+    
+    current_price = closes[-1]
+    
+    # Check moving averages alignment
+    ma_alignment = 0
+    
+    if sma_20[-1] and sma_50[-1]:
+        if sma_20[-1] > sma_50[-1]:
+            ma_alignment += 1
+    
+    if sma_50[-1] and sma_200[-1]:
+        if sma_50[-1] > sma_200[-1]:
+            ma_alignment += 1
+    
+    if sma_20[-1] and sma_200[-1]:
+        if sma_20[-1] > sma_200[-1]:
+            ma_alignment += 1
+    
+    # Price position relative to MAs
+    price_position = 0
+    if sma_20[-1] and current_price > sma_20[-1]:
+        price_position += 1
+    if sma_50[-1] and current_price > sma_50[-1]:
+        price_position += 1
+    if sma_200[-1] and current_price > sma_200[-1]:
+        price_position += 1
+    
+    # Trend score
+    trend_score = ma_alignment + price_position
+    
+    if trend_score >= 5:
+        direction = "STRONG_BULLISH"
+        strength = 90
+    elif trend_score >= 4:
+        direction = "BULLISH"
+        strength = 70
+    elif trend_score >= 3:
+        direction = "SLIGHTLY_BULLISH"
+        strength = 60
+    elif trend_score <= 1:
+        direction = "STRONG_BEARISH"
+        strength = 90
+    elif trend_score <= 2:
+        direction = "BEARISH"
+        strength = 70
+    else:
+        direction = "NEUTRAL"
+        strength = 50
+    
+    return {
+        "direction": direction,
+        "strength": strength,
+        "score": trend_score,
+        "description": f"Price above {price_position}/3 MAs, {ma_alignment}/3 MAs aligned"
+    }
+====================================================================================
+AI SIGNAL ENGINE
+====================================================================================
+@dataclass
+class TradingSignal:
+symbol: str
+timeframe: str
+signal: str # STRONG_BUY, BUY, NEUTRAL, SELL, STRONG_SELL
+confidence: float
+price: float
+targets: List[float]
+stop_loss: float
+risk_reward: float
+indicators: Dict
+patterns: List[Dict]
+fibonacci: Dict
+support_resistance: Dict
+trend: Dict
+timestamp: str
+
+class AISignalEngine:
+"""Advanced AI-powered signal generation"""
+
+text
+def __init__(self, ticker: CoinGeckoTicker):
+    self.ticker = ticker
+    self.ta = TechnicalAnalysis()
+
+async def generate_signal(self, symbol: str, timeframe: str = "1D") -> TradingSignal:
+    """Generate trading signal for a symbol and timeframe"""
+    
+    # Fetch OHLCV data
+    ohlcv_data = await self.ticker.fetch_ohlcv(symbol, timeframe, 100)
+    
+    if len(ohlcv_data) < 30:
+        return self._neutral_signal(symbol, timeframe)
+    
+    # Get symbol info
+    symbol_info = await self.ticker.get_symbol_info(symbol)
+    
+    # Calculate all indicators
+    analysis = self.ta.calculate_all_indicators(ohlcv_data, symbol, timeframe)
+    
+    if not analysis:
+        return self._neutral_signal(symbol, timeframe)
+    
+    # Generate signal based on analysis
+    signal_result = self._generate_signal_from_analysis(analysis, symbol_info)
+    
+    return signal_result
+
+def _generate_signal_from_analysis(self, analysis: Dict, symbol_info: Optional[Dict]) -> TradingSignal:
+    """Generate trading signal from technical analysis"""
+    
+    current_price = analysis["current_price"]
+    indicators = analysis["momentum"]
+    ma = analysis["moving_averages"]
+    trend = analysis["trend"]
+    
+    # Calculate signal score
+    score = 50  # Neutral starting point
+    
+    # RSI scoring
+    rsi = indicators["RSI"]
+    if rsi < 30:
+        score += 15  # Oversold
+    elif rsi > 70:
+        score -= 15  # Overbought
+    elif rsi < 45:
+        score += 5
+    elif rsi > 55:
+        score -= 5
+    
+    # MACD scoring
+    macd = indicators["MACD"]
+    macd_signal = indicators["MACD_Signal"]
+    if macd > macd_signal:
+        score += 12
+    else:
+        score -= 12
+    
+    # Moving Average scoring
+    price_above_sma20 = current_price > ma["SMA_20"]
+    price_above_sma50 = current_price > ma["SMA_50"]
+    sma20_above_sma50 = ma["SMA_20"] > ma["SMA_50"]
+    
+    if price_above_sma20:
+        score += 5
+    if price_above_sma50:
+        score += 8
+    if sma20_above_sma50:
+        score += 7
+    
+    # Bollinger Bands scoring
+    bb_upper = analysis["volatility"]["BB_Upper"]
+    bb_lower = analysis["volatility"]["BB_Lower"]
+    
+    if current_price < bb_lower:
+        score += 10  # Oversold
+    elif current_price > bb_upper:
+        score -= 10  # Overbought
+    
+    # Trend scoring
+    if trend["direction"] == "STRONG_BULLISH":
+        score += 20
+    elif trend["direction"] == "BULLISH":
+        score += 10
+    elif trend["direction"] == "STRONG_BEARISH":
+        score -= 20
+    elif trend["direction"] == "BEARISH":
+        score -= 10
+    
+    # Pattern scoring
+    for pattern in analysis["patterns"]:
+        if pattern["signal"] == "BULLISH":
+            score += pattern["confidence"] / 10
+        elif pattern["signal"] == "BEARISH":
+            score -= pattern["confidence"] / 10
+    
+    # Normalize score
+    score = max(0, min(100, score))
+    
+    # Determine signal type
+    if score >= 80:
+        signal_type = "STRONG_BUY"
+        confidence = min(95, score)
+    elif score >= 60:
+        signal_type = "BUY"
+        confidence = score
+    elif score <= 20:
+        signal_type = "STRONG_SELL"
+        confidence = min(95, 100 - score)
+    elif score <= 40:
+        signal_type = "SELL"
+        confidence = 100 - score
+    else:
+        signal_type = "NEUTRAL"
+        confidence = 50
+    
+    # Calculate targets and stop loss
+    atr_value = analysis["volatility"]["ATR"] or current_price * 0.02
+    
+    if signal_type in ["STRONG_BUY", "BUY"]:
+        targets = [
+            round(current_price * 1.02, 4),
+            round(current_price * 1.04, 4),
+            round(current_price * 1.06, 4),
+            round(current_price * 1.08, 4)
+        ]
+        stop_loss = round(current_price * 0.98, 4)
+    elif signal_type in ["STRONG_SELL", "SELL"]:
+        targets = [
+            round(current_price * 0.98, 4),
+            round(current_price * 0.96, 4),
+            round(current_price * 0.94, 4),
+            round(current_price * 0.92, 4)
+        ]
+        stop_loss = round(current_price * 1.02, 4)
+    else:
+        targets = [current_price]
+        stop_loss = current_price
+    
+    # Risk/Reward ratio
+    risk = abs(current_price - stop_loss)
+    reward = abs(targets[0] - current_price)
+    risk_reward = round(reward / risk, 2) if risk > 0 else 0
+    
+    return TradingSignal(
+        symbol=analysis["symbol"].upper(),
+        timeframe=analysis["timeframe"],
+        signal=signal_type,
+        confidence=round(confidence, 1),
+        price=current_price,
+        targets=targets,
+        stop_loss=stop_loss,
+        risk_reward=risk_reward,
+        indicators={
+            "RSI": round(indicators["RSI"], 2),
+            "MACD": round(macd, 4),
+            "Stochastic_K": round(indicators["Stochastic_K"], 2),
+            "Stochastic_D": round(indicators["Stochastic_D"], 2),
+            "ATR": round(atr_value, 4),
+            "BB_Width": round(analysis["volatility"]["BB_Width"], 4),
+            "Volume_Ratio": round(analysis["volume"]["Volume_Ratio"], 2)
+        },
+        patterns=analysis["patterns"],
+        fibonacci=analysis["fibonacci"],
+        support_resistance=analysis["support_resistance"],
+        trend=analysis["trend"],
+        timestamp=analysis["timestamp"]
+    )
+
+def _neutral_signal(self, symbol: str, timeframe: str) -> TradingSignal:
+    return TradingSignal(
+        symbol=symbol.upper(),
+        timeframe=timeframe,
+        signal="NEUTRAL",
+        confidence=50,
+        price=0,
+        targets=[0],
+        stop_loss=0,
+        risk_reward=0,
+        indicators={},
+        patterns=[],
+        fibonacci={},
+        support_resistance={"support": [], "resistance": []},
+        trend={"direction": "NEUTRAL", "strength": 0, "description": "Insufficient data"},
+        timestamp=datetime.now(timezone.utc).isoformat()
+    )
+====================================================================================
+FASTAPI APPLICATION
+====================================================================================
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+"""Application lifespan handler"""
+logger.info("🚀 CryptoTrader Pro v6.0 Starting...")
+
+text
+# Initialize CoinGecko Ticker
+ticker = CoinGeckoTicker()
+await ticker.initialize()
+
+# Initialize AI Engine
+ai_engine = AISignalEngine(ticker)
+
+# Start ticker stream in background
+ticker_task = asyncio.create_task(ticker.start_ticker_stream())
+
+# Store in app state
+app.state.ticker = ticker
+app.state.ai_engine = ai_engine
+app.state.ticker_task = ticker_task
+
+logger.info("✅ All systems operational")
+logger.info("📊 CoinGecko Ticker: Streaming")
+logger.info("🤖 AI Signal Engine: Ready")
+logger.info("📈 Technical Analysis: 20+ Indicators")
+logger.info("🎯 Support/Resistance Detection: Active")
+logger.info("📐 Fibonacci Tools: Enabled")
+logger.info("=" * 70)
+
+yield
+
+# Cleanup
+ticker_task.cancel()
+await ticker.close()
+logger.info("🛑 CryptoTrader Pro Shutting Down")
+app = FastAPI(
+title="CryptoTrader Pro v6.0",
+version="6.0.0",
+docs_url="/docs",
+redoc_url="/redoc",
+lifespan=lifespan
+)
+
+app.add_middleware(
+CORSMiddleware,
+allow_origins=[""],
+allow_credentials=True,
+allow_methods=[""],
+allow_headers=["*"],
+)
+
+Templates directory
+templates = Jinja2Templates(directory="templates")
+
+====================================================================================
+HTML TEMPLATES
+====================================================================================
+def generate_dashboard_html(tier: SubscriptionTier = SubscriptionTier.PRO) -> str:
+"""Generate modern, vibrant dashboard with ticker"""
+
+text
+tier_info = TIER_FEATURES[tier]
+
+return f"""<!DOCTYPE html>
+<html lang="en"> <head> <meta charset="UTF-8"> <meta name="viewport" content="width=device-width, initial-scale=1.0"> <title>CryptoTrader Pro v6.0 - Advanced Trading Platform</title> <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800;900&family=JetBrains+Mono:wght@400;600&display=swap" rel="stylesheet"> <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css"> <style> :root {{ --bg-dark: #0a0e27; --bg-card: #141b3d; --bg-card-hover: #1a2247; --accent-primary: #00d4ff; --accent-secondary: #ff3366; --accent-success: #00ff88; --accent-warning: #ffd600; --accent-danger: #ff3366; --text-primary: #ffffff; --text-secondary: #8b92b6; --border: #2a3356; }}
+text
+    * {{
+        margin: 0;
+        padding: 0;
+        box-sizing: border-box;
+    }}
+    
+    body {{
+        font-family: 'Inter', sans-serif;
+        background: linear-gradient(135deg, #0a0e27 0%, #1a1f4d 100%);
+        color: var(--text-primary);
+        min-height: 100vh;
+        overflow-x: hidden;
+    }}
+    
+    .container {{
+        max-width: 1800px;
+        margin: 0 auto;
+        padding: 20px;
+    }}
+    
+    /* Ticker Container */
+    .ticker-container {{
+        background: var(--bg-card);
+        border-bottom: 1px solid var(--border);
+        overflow: hidden;
+        height: 60px;
+        position: relative;
+        margin-bottom: 30px;
+        border-radius: 12px;
+    }}
+    
+    .ticker-wrapper {{
+        display: flex;
+        animation: ticker 120s linear infinite;
+        white-space: nowrap;
+        padding: 18px 0;
+    }}
+    
+    .ticker-item {{
+        display: flex;
+        align-items: center;
+        padding: 0 30px;
+        border-right: 1px solid var(--border);
+        cursor: pointer;
+        transition: all 0.3s ease;
+    }}
+    
+    .ticker-item:hover {{
+        background: rgba(0, 212, 255, 0.1);
+    }}
+    
+    .ticker-symbol {{
+        font-weight: 700;
+        font-size: 16px;
+        margin-right: 12px;
+        min-width: 70px;
+    }}
+    
+    .ticker-price {{
+        font-family: 'JetBrains Mono', monospace;
+        font-weight: 600;
+        font-size: 16px;
+        margin-right: 12px;
+        min-width: 110px;
+    }}
+    
+    .ticker-change {{
+        font-family: 'JetBrains Mono', monospace;
+        font-weight: 600;
+        font-size: 14px;
+        padding: 4px 10px;
+        border-radius: 6px;
+        min-width: 80px;
+        text-align: center;
+    }}
+    
+    .positive {{
+        background: rgba(0, 255, 136, 0.15);
+        color: var(--accent-success);
+    }}
+    
+    .negative {{
+        background: rgba(255, 51, 102, 0.15);
+        color: var(--accent-danger);
+    }}
+    
+    @keyframes ticker {{
+        0% {{ transform: translateX(0); }}
+        100% {{ transform: translateX(-50%); }}
+    }}
+    
+    /* Header */
+    .header {{
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        padding: 20px 0;
+        margin-bottom: 30px;
+    }}
+    
+    .logo {{
+        font-size: 32px;
+        font-weight: 900;
+        background: linear-gradient(135deg, var(--accent-primary), var(--accent-secondary));
+        -webkit-background-clip: text;
+        -webkit-text-fill-color: transparent;
+        letter-spacing: -1px;
+    }}
+    
+    .tier-badge {{
+        padding: 10px 25px;
+        background: linear-gradient(135deg, #ff3366, #ff6b9d);
+        border-radius: 25px;
+        font-weight: 700;
+        font-size: 14px;
+        text-transform: uppercase;
+        letter-spacing: 1px;
+        box-shadow: 0 4px 20px rgba(255, 51, 102, 0.4);
+    }}
+    
+    /* Controls */
+    .controls {{
+        display: grid;
+        grid-template-columns: 2fr 1fr 1fr;
+        gap: 20px;
+        margin-bottom: 30px;
+    }}
+    
+    .search-box {{
+        background: var(--bg-card);
+        border: 2px solid var(--border);
+        border-radius: 12px;
+        padding: 0 20px;
+        display: flex;
+        align-items: center;
+    }}
+    
+    .search-box i {{
+        color: var(--text-secondary);
+        margin-right: 12px;
+        font-size: 18px;
+    }}
+    
+    .search-box input {{
+        background: transparent;
+        border: none;
+        color: var(--text-primary);
+        font-size: 16px;
+        padding: 18px 0;
+        width: 100%;
+        outline: none;
+    }}
+    
+    .select-box {{
+        background: var(--bg-card);
+        border: 2px solid var(--border);
+        border-radius: 12px;
+        padding: 0 20px;
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        cursor: pointer;
+        position: relative;
+    }}
+    
+    .select-box select {{
+        background: transparent;
+        border: none;
+        color: var(--text-primary);
+        font-size: 16px;
+        padding: 18px 0;
+        width: 100%;
+        outline: none;
+        appearance: none;
+        cursor: pointer;
+    }}
+    
+    .select-box i {{
+        color: var(--accent-primary);
+        font-size: 14px;
+    }}
+    
+    .btn-analyze {{
+        background: linear-gradient(135deg, var(--accent-primary), #00a8cc);
+        border: none;
+        border-radius: 12px;
+        color: white;
+        font-size: 16px;
+        font-weight: 700;
+        padding: 0 30px;
+        cursor: pointer;
+        transition: all 0.3s ease;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        gap: 10px;
+    }}
+    
+    .btn-analyze:hover {{
+        transform: translateY(-2px);
+        box-shadow: 0 8px 30px rgba(0, 212, 255, 0.4);
+    }}
+    
+    /* Main Grid */
+    .main-grid {{
+        display: grid;
+        grid-template-columns: 2fr 1fr;
+        gap: 20px;
+        margin-bottom: 20px;
+    }}
+    
+    /* Chart Container */
+    .chart-container {{
+        background: var(--bg-card);
+        border: 2px solid var(--border);
+        border-radius: 16px;
+        overflow: hidden;
+    }}
+    
+    .chart-header {{
+        padding: 20px;
+        border-bottom: 1px solid var(--border);
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+    }}
+    
+    .chart-title {{
+        font-size: 20px;
+        font-weight: 700;
+        display: flex;
+        align-items: center;
+        gap: 10px;
+    }}
+    
+    .chart-title i {{
+        color: var(--accent-primary);
+    }}
+    
+    .chart-controls {{
+        display: flex;
+        gap: 10px;
+    }}
+    
+    .timeframe-btn {{
+        background: var(--bg-dark);
+        border: 1px solid var(--border);
+        border-radius: 8px;
+        padding: 8px 16px;
+        color: var(--text-secondary);
+        font-size: 14px;
+        font-weight: 600;
+        cursor: pointer;
+        transition: all 0.3s ease;
+    }}
+    
+    .timeframe-btn.active {{
+        background: var(--accent-primary);
+        color: white;
+        border-color: var(--accent-primary);
+    }}
+    
+    .btn-expand {{
+        background: linear-gradient(135deg, var(--accent-secondary), #ff6b9d);
+        border: none;
+        border-radius: 8px;
+        color: white;
+        font-size: 14px;
+        font-weight: 600;
+        padding: 8px 20px;
+        cursor: pointer;
+        display: flex;
+        align-items: center;
+        gap: 8px;
+        transition: all 0.3s ease;
+    }}
+    
+    .btn-expand:hover {{
+        transform: translateY(-2px);
+        box-shadow: 0 5px 20px rgba(255, 51, 102, 0.4);
+    }}
+    
+    .chart-wrapper {{
+        height: 550px;
+        padding: 20px;
+    }}
+    
+    /* Signal Panel */
+    .signal-panel {{
+        background: var(--bg-card);
+        border: 2px solid var(--border);
+        border-radius: 16px;
+        overflow: hidden;
+    }}
+    
+    .signal-header {{
+        padding: 20px;
+        border-bottom: 1px solid var(--border);
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+    }}
+    
+    .signal-title {{
+        font-size: 20px;
+        font-weight: 700;
+        display: flex;
+        align-items: center;
+        gap: 10px;
+    }}
+    
+    .ai-badge {{
+        background: linear-gradient(135deg, #ff3366, #ff6b9d);
+        padding: 6px 12px;
+        border-radius: 12px;
+        font-size: 12px;
+        font-weight: 700;
+    }}
+    
+    .signal-content {{
+        padding: 30px 20px;
+        text-align: center;
+    }}
+    
+    .signal-type {{
+        font-size: 36px;
+        font-weight: 900;
+        margin-bottom: 10px;
+    }}
+    
+    .signal-buy {{
+        color: var(--accent-success);
+    }}
+    
+    .signal-sell {{
+        color: var(--accent-danger);
+    }}
+    
+    .signal-neutral {{
+        color: var(--accent-warning);
+    }}
+    
+    .signal-price {{
+        font-size: 48px;
+        font-weight: 900;
+        font-family: 'JetBrains Mono', monospace;
+        margin: 20px 0;
+    }}
+    
+    /* Analysis Grid */
+    .analysis-grid {{
+        display: grid;
+        grid-template-columns: repeat(2, 1fr);
+        gap: 20px;
+        margin-top: 30px;
+    }}
+    
+    .analysis-card {{
+        background: var(--bg-card);
+        border: 1px solid var(--border);
+        border-radius: 16px;
+        padding: 20px;
+    }}
+    
+    .card-title {{
+        color: var(--text-secondary);
+        font-size: 14px;
+        font-weight: 600;
+        text-transform: uppercase;
+        letter-spacing: 1px;
+        margin-bottom: 15px;
+        display: flex;
+        align-items: center;
+        gap: 10px;
+    }}
+    
+    .indicator-grid {{
+        display: grid;
+        grid-template-columns: repeat(2, 1fr);
+        gap: 15px;
+    }}
+    
+    .indicator-item {{
+        background: var(--bg-dark);
+        border-radius: 12px;
+        padding: 15px;
+    }}
+    
+    .indicator-label {{
+        color: var(--text-secondary);
+        font-size: 12px;
+        font-weight: 600;
+        margin-bottom: 5px;
+    }}
+    
+    .indicator-value {{
+        font-size: 20px;
+        font-weight: 700;
+        font-family: 'JetBrains Mono', monospace;
+    }}
+    
+    /* Patterns */
+    .patterns-list {{
+        margin-top: 10px;
+    }}
+    
+    .pattern-item {{
+        background: var(--bg-dark);
+        border-radius: 12px;
+        padding: 15px;
+        margin-bottom: 10px;
+        border-left: 4px solid var(--accent-success);
+    }}
+    
+    .pattern-item.bearish {{
+        border-left-color: var(--accent-danger);
+    }}
+    
+    .pattern-name {{
+        font-weight: 700;
+        font-size: 16px;
+        margin-bottom: 5px;
+    }}
+    
+    .pattern-desc {{
+        color: var(--text-secondary);
+        font-size: 13px;
+    }}
+    
+    /* Fibonacci Levels */
+    .fibo-grid {{
+        display: grid;
+        grid-template-columns: repeat(2, 1fr);
+        gap: 10px;
+        margin-top: 10px;
+    }}
+    
+    .fibo-level {{
+        background: var(--bg-dark);
+        border-radius: 8px;
+        padding: 12px;
+        text-align: center;
+    }}
+    
+    .fibo-ratio {{
+        color: var(--text-secondary);
+        font-size: 11px;
+        margin-bottom: 5px;
+    }}
+    
+    .fibo-price {{
+        color: var(--accent-primary);
+        font-weight: 700;
+        font-family: 'JetBrains Mono', monospace;
+    }}
+    
+    /* Market Table */
+    .market-table {{
+        background: var(--bg-card);
+        border: 2px solid var(--border);
+        border-radius: 16px;
+        padding: 20px;
+        margin-top: 20px;
+    }}
+    
+    table {{
+        width: 100%;
+        border-collapse: collapse;
+    }}
+    
+    th {{
+        color: var(--text-secondary);
+        font-size: 12px;
+        font-weight: 600;
+        text-transform: uppercase;
+        padding: 15px;
+        text-align: left;
+        border-bottom: 2px solid var(--border);
+    }}
+    
+    td {{
+        padding: 15px;
+        border-bottom: 1px solid var(--border);
+    }}
+    
+    tr:hover {{
+        background: var(--bg-card-hover);
+    }}
+    
+    .coin-cell {{
+        font-weight: 700;
+        font-size: 14px;
+        cursor: pointer;
+    }}
+    
+    .coin-cell:hover {{
+        color: var(--accent-primary);
+    }}
+    
+    /* Modal */
+    .modal {{
+        display: none;
+        position: fixed;
+        top: 0;
+        left: 0;
+        width: 100%;
+        height: 100%;
+        background: rgba(0, 0, 0, 0.95);
+        z-index: 10000;
+        padding: 20px;
+    }}
+    
+    .modal.active {{
+        display: flex;
+        align-items: center;
+        justify-content: center;
+    }}
+    
+    .modal-content {{
+        background: var(--bg-card);
+        border-radius: 20px;
+        width: 95%;
+        height: 90%;
+        padding: 20px;
+        position: relative;
+    }}
+    
+    .modal-header {{
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        padding-bottom: 20px;
+        border-bottom: 1px solid var(--border);
+        margin-bottom: 20px;
+    }}
+    
+    .modal-close {{
+        background: var(--accent-danger);
+        border: none;
+        width: 40px;
+        height: 40px;
+        border-radius: 50%;
+        color: white;
+        font-size: 24px;
+        cursor: pointer;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+    }}
+    
+    /* Loading */
+    .loading {{
+        text-align: center;
+        padding: 40px;
+    }}
+    
+    .spinner {{
+        border: 4px solid var(--border);
+        border-top: 4px solid var(--accent-primary);
+        border-radius: 50%;
+        width: 50px;
+        height: 50px;
+        animation: spin 1s linear infinite;
+        margin: 0 auto 20px;
+    }}
+    
+    @keyframes spin {{
+        0% {{ transform: rotate(0deg); }}
+        100% {{ transform: rotate(360deg); }}
+    }}
+</style>
+</head> <body> <div class="container"> <!-- Ticker Bar --> <div class="ticker-container"> <div class="ticker-wrapper" id="tickerWrapper"> <!-- Ticker items will be populated by JavaScript --> </div> </div>
+text
+    <!-- Header -->
+    <div class="header">
+        <div class="logo">
+            <i class="fas fa-bolt"></i> CryptoTrader Pro v6.0
+        </div>
+        <div class="tier-badge">
+            <i class="fas fa-crown"></i> {tier_info['name']} Tier
+        </div>
+    </div>
+    
+    <!-- Controls -->
+    <div class="controls">
+        <div class="search-box">
+            <i class="fas fa-search"></i>
+            <input type="text" id="symbolSearch" placeholder="Search symbol (BTC, ETH, EURUSD, etc.)" autocomplete="off">
+        </div>
+        
+        <div class="select-box">
+            <select id="timeframeSelect">
+                <option value="1m">1 Minute</option>
+                <option value="5m">5 Minutes</option>
+                <option value="15m">15 Minutes</option>
+                <option value="30m">30 Minutes</option>
+                <option value="1h">1 Hour</option>
+                <option value="4h">4 Hours</option>
+                <option value="1D" selected>1 Day</option>
+                <option value="1W">1 Week</option>
+                <option value="1M">1 Month</option>
+            </select>
+            <i class="fas fa-chevron-down"></i>
+        </div>
+        
+        <button class="btn-analyze" id="analyzeBtn">
+            <i class="fas fa-brain"></i> Analyze Symbol
+        </button>
+    </div>
+    
+    <!-- Main Grid -->
+    <div class="main-grid">
+        <!-- Chart Section -->
+        <div class="chart-container">
+            <div class="chart-header">
+                <div class="chart-title">
+                    <i class="fas fa-chart-line"></i>
+                    <span id="chartSymbol">BTC/USD</span> - 
+                    <span id="chartTimeframe">1D</span>
                 </div>
-            </div>
-            
-            <div class="controls">
-                <input type="text" id="symbol" value="BINANCE:BTCUSDT" placeholder="Symbol (e.g., BINANCE:BTCUSDT)">
-                <select id="timeframe">
-                    <option value="1">1m</option>
-                    <option value="5">5m</option>
-                    <option value="15">15m</option>
-                    <option value="60" selected>1h</option>
-                    <option value="240">4h</option>
-                    <option value="1D">1d</option>
-                </select>
-                <button onclick="updateChart()">📊 Update Chart</button>
-                <button onclick="getSignal()">🤖 Get AI Signal</button>
-                <button onclick="getAnalysis()">📈 Technical Analysis</button>
-            </div>
-            
-            <div class="main-grid">
-                <div class="card">
-                    <h3>Interactive TradingView Chart</h3>
-                    <div id="chartContainer" class="chart-container"></div>
-                </div>
-                
-                <div class="card">
-                    <h3>🤖 AI Trading Signal</h3>
-                    <div id="signalIndicator" class="signal-indicator">
-                        <div class="signal-type">HOLD</div>
-                        <div class="signal-confidence">50%</div>
-                        <div class="signal-price">Price: $--</div>
-                        <div class="reasons">
-                            <div class="reason">Waiting for analysis...</div>
-                        </div>
+                <div class="chart-controls">
+                    <div class="timeframe-buttons">
+                        <button class="timeframe-btn active" data-tf="1D">1D</button>
+                        <button class="timeframe-btn" data-tf="4h">4H</button>
+                        <button class="timeframe-btn" data-tf="1h">1H</button>
+                        <button class="timeframe-btn" data-tf="15m">15M</button>
                     </div>
+                    <button class="btn-expand" id="expandChartBtn">
+                        <i class="fas fa-expand"></i> Expand
+                    </button>
                 </div>
             </div>
+            <div class="chart-wrapper">
+                <div id="tradingview_chart" style="height: 100%;"></div>
+            </div>
+        </div>
+        
+        <!-- Signal Panel -->
+        <div class="signal-panel">
+            <div class="signal-header">
+                <div class="signal-title">
+                    <i class="fas fa-robot"></i> AI Signal
+                </div>
+                <div class="ai-badge">AI v3.0</div>
+            </div>
             
-            <div class="card">
-                <h3>📊 Technical Analysis Details</h3>
-                <div id="analysisDetails" style="padding: 20px;">
-                    <p>Click "Technical Analysis" button to view detailed indicators</p>
+            <div class="signal-content" id="signalContent">
+                <div class="loading">
+                    <div class="spinner"></div>
+                    <p>Waiting for symbol analysis...</p>
+                </div>
+            </div>
+        </div>
+    </div>
+    
+    <!-- Analysis Grid -->
+    <div class="analysis-grid">
+        <!-- Technical Indicators -->
+        <div class="analysis-card">
+            <div class="card-title">
+                <i class="fas fa-chart-bar"></i> Technical Indicators
+            </div>
+            <div class="indicator-grid" id="indicatorsGrid">
+                <!-- Indicators will be populated by JavaScript -->
+            </div>
+        </div>
+        
+        <!-- Chart Patterns -->
+        <div class="analysis-card">
+            <div class="card-title">
+                <i class="fas fa-shapes"></i> Chart Patterns
+            </div>
+            <div class="patterns-list" id="patternsList">
+                <div style="color: var(--text-secondary); text-align: center; padding: 20px;">
+                    No patterns detected
                 </div>
             </div>
         </div>
         
-        <script>
-            let widget = null;
+        <!-- Fibonacci Levels -->
+        <div class="analysis-card">
+            <div class="card-title">
+                <i class="fas fa-ruler-combined"></i> Fibonacci Levels
+            </div>
+            <div class="fibo-grid" id="fiboGrid">
+                <!-- Fibonacci levels will be populated by JavaScript -->
+            </div>
+        </div>
+        
+        <!-- Support & Resistance -->
+        <div class="analysis-card">
+            <div class="card-title">
+                <i class="fas fa-bullseye"></i> Support & Resistance
+            </div>
+            <div class="sr-grid" style="margin-top: 10px;">
+                <div style="margin-bottom: 15px;">
+                    <div style="color: var(--accent-danger); font-size: 12px; font-weight: 600; margin-bottom: 10px;">RESISTANCE</div>
+                    <div id="resistanceLevels" style="color: var(--text-secondary);">
+                        No levels detected
+                    </div>
+                </div>
+                <div>
+                    <div style="color: var(--accent-success); font-size: 12px; font-weight: 600; margin-bottom: 10px;">SUPPORT</div>
+                    <div id="supportLevels" style="color: var(--text-secondary);">
+                        No levels detected
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+    
+    <!-- Market Overview Table -->
+    <div class="market-table">
+        <div class="card-title" style="margin-bottom: 20px;">
+            <i class="fas fa-globe"></i> Market Overview
+        </div>
+        <table>
+            <thead>
+                <tr>
+                    <th>Symbol</th>
+                    <th>Price</th>
+                    <th>24h Change</th>
+                    <th>Volume</th>
+                    <th>Market Cap</th>
+                    <th>Action</th>
+                </tr>
+            </thead>
+            <tbody id="marketTableBody">
+                <tr><td colspan="6" style="text-align: center; padding: 40px;">Loading market data...</td></tr>
+            </tbody>
+        </table>
+    </div>
+</div>
+
+<!-- Expanded Chart Modal -->
+<div class="modal" id="chartModal">
+    <div class="modal-content">
+        <div class="modal-header">
+            <h2 style="font-size: 24px; font-weight: 700;">
+                <i class="fas fa-chart-line"></i>
+                <span id="modalSymbol">BTC/USD</span> - Full Screen Chart
+            </h2>
+            <button class="modal-close" id="closeModalBtn">
+                <i class="fas fa-times"></i>
+            </button>
+        </div>
+        <div id="tradingview_expanded" style="height: calc(100% - 80px);"></div>
+    </div>
+</div>
+
+<!-- TradingView Widget Script -->
+<script src="https://s3.tradingview.com/tv.js"></script>
+
+<script>
+    // Global variables
+    let currentSymbol = 'bitcoin';
+    let currentTimeframe = '1D';
+    let chartWidget = null;
+    let expandedWidget = null;
+    let tickerData = [];
+    
+    // TradingView symbol mapping
+    const tradingViewSymbols = {{
+        'bitcoin': 'BINANCE:BTCUSDT',
+        'ethereum': 'BINANCE:ETHUSDT',
+        'binancecoin': 'BINANCE:BNBUSDT',
+        'ripple': 'BINANCE:XRPUSDT',
+        'cardano': 'BINANCE:ADAUSDT',
+        'solana': 'BINANCE:SOLUSDT',
+        'polkadot': 'BINANCE:DOTUSDT',
+        'dogecoin': 'BINANCE:DOGEUSDT',
+        'avalanche-2': 'BINANCE:AVAXUSDT',
+        'chainlink': 'BINANCE:LINKUSDT',
+        'polygon': 'BINANCE:MATICUSDT',
+        'uniswap': 'BINANCE:UNIUSDT',
+        'litecoin': 'BINANCE:LTCUSDT',
+        'bitcoin-cash': 'BINANCE:BCHUSDT',
+        'stellar': 'BINANCE:XLMUSDT',
+        'usd': 'FX:USDUSD',
+        'eur': 'FX:EURUSD',
+        'gbp': 'FX:GBPUSD',
+        'jpy': 'FX:JPYUSD',
+        'gold': 'FX:XAUUSD',
+        'silver': 'FX:XAGUSD',
+        'sp500': 'AMEX:SPY',
+        'nasdaq': 'NASDAQ:QQQ',
+        'dowjones': 'DOW:DJI'
+    }};
+    
+    // Initialize TradingView chart
+    function initChart(containerId, symbol, timeframe) {{
+        const symbolKey = tradingViewSymbols[symbol] || `BINANCE:${{symbol.toUpperCase()}}USDT`;
+        
+        const widget = new TradingView.widget({{
+            "width": "100%",
+            "height": containerId === 'tradingview_chart' ? 500 : "100%",
+            "symbol": symbolKey,
+            "interval": getInterval(timeframe),
+            "timezone": "Etc/UTC",
+            "theme": "dark",
+            "style": "1",
+            "locale": "en",
+            "toolbar_bg": "#0a0e27",
+            "enable_publishing": false,
+            "hide_side_toolbar": false,
+            "allow_symbol_change": true,
+            "container_id": containerId,
+            "studies": [
+                "RSI@tv-basicstudies",
+                "MACD@tv-basicstudies",
+                "StochasticRSI@tv-basicstudies",
+                "BB@tv-basicstudies",
+                "Volume@tv-basicstudies",
+                "EMA@tv-basicstudies"
+            ],
+            "overrides": {{
+                "paneProperties.background": "#0a0e27",
+                "paneProperties.vertGridProperties.color": "#1a2247",
+                "paneProperties.horzGridProperties.color": "#1a2247",
+                "symbolWatermarkProperties.transparency": 90,
+                "scalesProperties.textColor" : "#8b92b6"
+            }},
+            "disabled_features": ["header_widget", "left_toolbar"],
+            "enabled_features": ["study_templates"]
+        }});
+        
+        return widget;
+    }}
+    
+    function getInterval(timeframe) {{
+        const intervals = {{
+            '1m': '1', '5m': '5', '15m': '15', '30m': '30',
+            '1h': '60', '4h': '240', '1D': 'D', '1W': 'W', '1M': 'M'
+        }};
+        return intervals[timeframe] || 'D';
+    }}
+    
+    // Fetch ticker data
+    async function fetchTickerData() {{
+        try {{
+            const response = await fetch('/api/ticker');
+            const data = await response.json();
             
-            function updateChart() {
-                const symbol = document.getElementById('symbol').value.trim();
-                const interval = document.getElementById('timeframe').value;
-                
-                if (widget) {
-                    widget.remove();
-                }
-                
-                widget = new TradingView.widget({
-                    container_id: "chartContainer",
-                    width: "100%",
-                    height: "100%",
-                    symbol: symbol || "BINANCE:BTCUSDT",
-                    interval: interval,
-                    timezone: "Etc/UTC",
-                    theme: "dark",
-                    style: "1",
-                    locale: "en",
-                    toolbar_bg: "#1e293b",
-                    enable_publishing: false,
-                    allow_symbol_change: true,
-                    studies: [
-                        "MASimple@tv-basicstudies",
-                        "RSI@tv-basicstudies",
-                        "MACD@tv-basicstudies",
-                        "BollingerBands@tv-basicstudies",
-                        "Volume@tv-basicstudies",
-                        "StochasticRSI@tv-basicstudies"
-                    ],
-                    overrides: {
-                        "paneProperties.background": "#0f172a",
-                        "paneProperties.vertGridProperties.color": "#1e293b",
-                        "paneProperties.horzGridProperties.color": "#1e293b",
-                        "scalesProperties.textColor": "#94a3b8"
-                    },
-                    drawings_access: { type: 'black', tools: [ { name: "Regression Trend" } ] },
-                    disabled_features: ["header_symbol_search", "header_compare"],
-                    enabled_features: ["study_templates"]
-                });
-            }
+            if (data.success && data.ticker) {{
+                tickerData = data.ticker;
+                updateTickerBar();
+                updateMarketTable();
+            }}
+        }} catch (error) {{
+            console.error('Error fetching ticker data:', error);
+        }}
+    }}
+    
+    // Update ticker bar
+    function updateTickerBar() {{
+        const wrapper = document.getElementById('tickerWrapper');
+        wrapper.innerHTML = '';
+        
+        // Create two copies for seamless looping
+        const items = [...tickerData, ...tickerData];
+        
+        items.forEach(item => {{
+            const tickerItem = document.createElement('div');
+            tickerItem.className = 'ticker-item';
+            tickerItem.dataset.symbol = item.id;
             
-            async function getSignal() {
-                const symbol = document.getElementById('symbol').value.trim();
-                const timeframe = document.getElementById('timeframe').value;
-                
-                try {
-                    const response = await fetch(`/api/signal/${symbol.split(':')[1]}?timeframe=${timeframe === '1D' ? '1d' : timeframe + 'm'}`);
-                    const data = await response.json();
-                    
-                    const signal = data.signal;
-                    const indicator = document.getElementById('signalIndicator');
-                    
-                    // Update styling based on signal
-                    indicator.className = 'signal-indicator';
-                    if (signal.signal.includes('STRONG_BUY')) {
-                        indicator.classList.add('strong-buy');
-                    } else if (signal.signal.includes('BUY')) {
-                        indicator.classList.add('buy');
-                    } else if (signal.signal.includes('STRONG_SELL')) {
-                        indicator.classList.add('strong-sell');
-                    } else if (signal.signal.includes('SELL')) {
-                        indicator.classList.add('sell');
-                    }
-                    
-                    // Update content
-                    indicator.querySelector('.signal-type').textContent = signal.signal;
-                    indicator.querySelector('.signal-confidence').textContent = signal.confidence + '%';
-                    indicator.querySelector('.signal-price').textContent = 'Price: $' + signal.price;
-                    
-                    // Update reasons
-                    const reasonsDiv = indicator.querySelector('.reasons');
-                    reasonsDiv.innerHTML = signal.reasons.map(r => 
-                        `<div class="reason">${r}</div>`
-                    ).join('');
-                    
-                } catch (e) {
-                    alert('Error getting signal: ' + e.message);
-                }
-            }
+            const changeClass = item.change_24h >= 0 ? 'positive' : 'negative';
+            const changeSign = item.change_24h >= 0 ? '+' : '';
             
-            async function getAnalysis() {
-                const symbol = document.getElementById('symbol').value.trim();
-                const timeframe = document.getElementById('timeframe').value;
-                
-                try {
-                    const response = await fetch(`/api/analysis/${symbol.split(':')[1]}?timeframe=${timeframe === '1D' ? '1d' : timeframe + 'm'}`);
-                    const analysis = await response.json();
-                    
-                    const detailsDiv = document.getElementById('analysisDetails');
-                    
-                    // Display key indicators
-                    detailsDiv.innerHTML = `
-                        <div style="display: grid; grid-template-columns: repeat(3, 1fr); gap: 15px;">
-                            <div style="background: rgba(0, 212, 255, 0.1); padding: 15px; border-radius: 8px;">
-                                <div style="color: #94a3b8; font-size: 12px;">RSI</div>
-                                <div style="font-size: 24px; font-weight: bold; color: #00d4ff;">${analysis.momentum.RSI.toFixed(2)}</div>
-                            </div>
-                            <div style="background: rgba(0, 212, 255, 0.1); padding: 15px; border-radius: 8px;">
-                                <div style="color: #94a3b8; font-size: 12px;">MACD</div>
-                                <div style="font-size: 24px; font-weight: bold; color: #00d4ff;">${analysis.momentum.MACD.toFixed(4)}</div>
-                            </div>
-                            <div style="background: rgba(0, 212, 255, 0.1); padding: 15px; border-radius: 8px;">
-                                <div style="color: #94a3b8; font-size: 12px;">ATR</div>
-                                <div style="font-size: 24px; font-weight: bold; color: #00d4ff;">${analysis.volatility.ATR.toFixed(4)}</div>
-                            </div>
-                            <div style="background: rgba(59, 130, 246, 0.1); padding: 15px; border-radius: 8px;">
-                                <div style="color: #94a3b8; font-size: 12px;">Current Price</div>
-                                <div style="font-size: 24px; font-weight: bold; color: #3b82f6;">$${analysis.current_price.toFixed(2)}</div>
-                            </div>
-                            <div style="background: rgba(59, 130, 246, 0.1); padding: 15px; border-radius: 8px;">
-                                <div style="color: #94a3b8; font-size: 12px;">24h Change</div>
-                                <div style="font-size: 24px; font-weight: bold; color: #3b82f6;">${analysis.change_24h.toFixed(2)}%</div>
-                            </div>
-                            <div style="background: rgba(59, 130, 246, 0.1); padding: 15px; border-radius: 8px;">
-                                <div style="color: #94a3b8; font-size: 12px;">Trend</div>
-                                <div style="font-size: 24px; font-weight: bold; color: #3b82f6;">${analysis.trend.direction}</div>
-                            </div>
-                        </div>
-                        
-                        <div style="margin-top: 20px;">
-                            <h4 style="color: #00d4ff; margin-bottom: 10px;">🎯 Support & Resistance</h4>
-                            <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 10px;">
-                                <div>
-                                    <div style="color: #94a3b8; font-size: 12px; margin-bottom: 5px;">Support Levels</div>
-                                    ${analysis.support_resistance.support.map(l => 
-                                        `<div style="color: #22c55e; font-family: monospace;">$${l.toFixed(2)}</div>`
-                                    ).join('')}
-                                </div>
-                                <div>
-                                    <div style="color: #94a3b8; font-size: 12px; margin-bottom: 5px;">Resistance Levels</div>
-                                    ${analysis.support_resistance.resistance.map(l => 
-                                        `<div style="color: #ef4444; font-family: monospace;">$${l.toFixed(2)}</div>`
-                                    ).join('')}
-                                </div>
-                            </div>
-                        </div>
-                        
-                        <div style="margin-top: 20px;">
-                            <h4 style="color: #00d4ff; margin-bottom: 10px;">🕯️ Detected Patterns (${analysis.patterns.length})</h4>
-                            ${analysis.patterns.length > 0 ? 
-                                analysis.patterns.map(p => 
-                                    `<div style="background: rgba(255, 255, 255, 0.05); padding: 10px; margin: 5px 0; border-radius: 6px;">
-                                        <strong>${p.name}</strong> - ${p.signal} (${p.confidence}%)
-                                        <div style="color: #94a3b8; font-size: 12px;">${p.description}</div>
-                                    </div>`
-                                ).join('') : 
-                                '<div style="color: #94a3b8;">No significant patterns detected</div>'
-                            }
-                        </div>
-                    `;
-                    
-                } catch (e) {
-                    alert('Error getting analysis: ' + e.message);
-                }
-            }
+            tickerItem.innerHTML = `
+                <div class="ticker-symbol">${{item.symbol}}</div>
+                <div class="ticker-price">$${{item.price.toFixed(4)}}</div>
+                <div class="ticker-change ${{changeClass}}">
+                    ${{changeSign}}${{item.change_24h.toFixed(2)}}%
+                </div>
+            `;
             
-            // Initialize on load
-            window.onload = () => {
+            tickerItem.addEventListener('click', () => {{
+                currentSymbol = item.id;
+                document.getElementById('symbolSearch').value = item.symbol;
                 updateChart();
-                getSignal();
-            };
-        </script>
-    </body>
-    </html>
-    """
+                fetchSignal();
+            }});
+            
+            wrapper.appendChild(tickerItem);
+        }});
+    }}
     
-    return HTMLResponse(content=html_content)
+    // Update market table
+    function updateMarketTable() {{
+        const tbody = document.getElementById('marketTableBody');
+        tbody.innerHTML = '';
+        
+        tickerData.slice(0, 15).forEach(item => {{
+            const row = document.createElement('tr');
+            const changeClass = item.change_24h >= 0 ? 'positive' : 'negative';
+            const changeSign = item.change_24h >= 0 ? '+' : '';
+            
+            row.innerHTML = `
+                <td class="coin-cell" data-symbol="${{item.id}}">
+                    <i class="fas fa-coins" style="margin-right: 8px; color: var(--accent-warning);"></i>
+                    ${{item.symbol}}
+                </td>
+                <td>$${{item.price.toFixed(4)}}</td>
+                <td class="${{changeClass}}">${{changeSign}}${{item.change_24h.toFixed(2)}}%</td>
+                <td>$$${{(item.volume_24h / 1e6).toFixed(2)}}M</td>
+                <td>$$${{(item.market_cap / 1e9).toFixed(2)}}B</td>
+                <td>
+                    <button class="timeframe-btn" style="padding: 5px 10px; font-size: 12px;" data-symbol="${{item.id}}">
+                        <i class="fas fa-chart-line"></i> Analyze
+                    </button>
+                </td>
+            `;
+            
+            // Add click handler to coin cell
+            row.querySelector('.coin-cell').addEventListener('click', () => {{
+                currentSymbol = item.id;
+                document.getElementById('symbolSearch').value = item.symbol;
+                updateChart();
+                fetchSignal();
+            }});
+            
+            // Add click handler to analyze button
+            row.querySelector('button').addEventListener('click', () => {{
+                currentSymbol = item.id;
+                document.getElementById('symbolSearch').value = item.symbol;
+                updateChart();
+                fetchSignal();
+            }});
+            
+            tbody.appendChild(row);
+        }});
+    }}
+    
+    // Update chart
+    function updateChart() {{
+        if (chartWidget) {{
+            chartWidget.remove();
+        }}
+        
+        chartWidget = initChart('tradingview_chart', currentSymbol, currentTimeframe);
+        document.getElementById('chartSymbol').textContent = currentSymbol.toUpperCase();
+        document.getElementById('chartTimeframe').textContent = currentTimeframe;
+        document.getElementById('modalSymbol').textContent = currentSymbol.toUpperCase();
+    }}
+    
+    // Fetch AI signal
+    async function fetchSignal() {{
+        try {{
+            const signalContent = document.getElementById('signalContent');
+            signalContent.innerHTML = `
+                <div class="loading">
+                    <div class="spinner"></div>
+                    <p>Analyzing ${{currentSymbol.toUpperCase()}}...</p>
+                </div>
+            `;
+            
+            const response = await fetch(`/api/signal/${{currentSymbol}}?timeframe=${{currentTimeframe}}`);
+            const data = await response.json();
+            
+            if (data.success && data.signal) {{
+                displaySignal(data.signal);
+            }} else {{
+                signalContent.innerHTML = `
+                    <div style="color: var(--accent-danger); text-align: center; padding: 40px;">
+                        <i class="fas fa-exclamation-triangle" style="font-size: 48px; margin-bottom: 20px;"></i>
+                        <p>Error loading signal</p>
+                    </div>
+                `;
+            }}
+        }} catch (error) {{
+            console.error('Error fetching signal:', error);
+        }}
+    }}
+    
+    // Display signal
+    function displaySignal(signal) {{
+        const signalContent = document.getElementById('signalContent');
+        const signalClass = signal.signal.includes('BUY') ? 'signal-buy' : 
+                           signal.signal.includes('SELL') ? 'signal-sell' : 'signal-neutral';
+        
+        // Format price with appropriate decimals
+        const priceFormat = signal.price >= 1000 ? '0,0.00' : 
+                           signal.price >= 100 ? '0,0.000' : 
+                           signal.price >= 10 ? '0,0.0000' : '0,0.00000';
+        
+        signalContent.innerHTML = `
+            <div class="signal-type ${{signalClass}}">${{signal.signal}}</div>
+            <div style="color: var(--text-secondary); font-size: 14px; margin-top: 5px;">
+                Confidence: <span style="color: var(--accent-primary); font-weight: 700;">${{signal.confidence}}%</span>
+            </div>
+            
+            <div class="signal-price">$${{signal.price.toFixed(signal.price >= 100 ? 2 : 4)}}</div>
+            
+            <div style="margin-top: 20px;">
+                <div style="font-size: 12px; color: var(--text-secondary); margin-bottom: 8px; text-transform: uppercase; letter-spacing: 1px;">
+                    Targets
+                </div>
+                <div style="display: grid; grid-template-columns: repeat(2, 1fr); gap: 10px; margin-bottom: 20px;">
+                    ${{signal.targets.slice(0, 4).map((t, i) => `
+                        <div style="background: var(--bg-dark); padding: 10px; border-radius: 8px; text-align: center;">
+                            <div style="font-size: 10px; color: var(--text-secondary);">T${{i+1}}</div>
+                            <div style="font-family: 'JetBrains Mono', monospace; font-weight: 700; color: var(--accent-success);">
+                                $${{t.toFixed(signal.price >= 100 ? 2 : 4)}}
+                            </div>
+                        </div>
+                    `).join('')}}
+                </div>
+                
+                <div style="display: grid; grid-template-columns: repeat(2, 1fr); gap: 10px;">
+                    <div style="background: var(--bg-dark); padding: 12px; border-radius: 8px;">
+                        <div style="font-size: 10px; color: var(--text-secondary);">Stop Loss</div>
+                        <div style="font-family: 'JetBrains Mono', monospace; font-weight: 700; color: var(--accent-danger);">
+                            $${{signal.stop_loss.toFixed(signal.price >= 100 ? 2 : 4)}}
+                        </div>
+                    </div>
+                    <div style="background: var(--bg-dark); padding: 12px; border-radius: 8px;">
+                        <div style="font-size: 10px; color: var(--text-secondary);">Risk/Reward</div>
+                        <div style="font-family: 'JetBrains Mono', monospace; font-weight: 700; color: var{{signal.risk_reward >= 1 ? '--accent-success' : '--accent-warning'}};">
+                            ${{signal.risk_reward.toFixed(2)}}x
+                        </div>
+                    </div>
+                </div>
+            </div>
+        `;
+        
+        // Update indicators
+        updateIndicators(signal.indicators);
+        
+        // Update patterns
+        updatePatterns(signal.patterns);
+        
+        // Update Fibonacci
+        updateFibonacci(signal.fibonacci);
+        
+        // Update Support/Resistance
+        updateSupportResistance(signal.support_resistance);
+    }}
+    
+    // Update indicators
+    function updateIndicators(indicators) {{
+        const grid = document.getElementById('indicatorsGrid');
+        
+        if (!indicators || Object.keys(indicators).length === 0) {{
+            grid.innerHTML = '<div style="color: var(--text-secondary); text-align: center; padding: 20px;">No indicators available</div>';
+            return;
+        }}
+        
+        const items = Object.entries(indicators).slice(0, 8);
+        grid.innerHTML = items.map(([key, value]) => `
+            <div class="indicator-item">
+                <div class="indicator-label">${{key}}</div>
+                <div class="indicator-value">${{typeof value === 'number' ? value.toFixed(4) : value}}</div>
+            </div>
+        `).join('');
+    }}
+    
+    // Update patterns
+    function updatePatterns(patterns) {{
+        const list = document.getElementById('patternsList');
+        
+        if (!patterns || patterns.length === 0) {{
+            list.innerHTML = '<div style="color: var(--text-secondary); text-align: center; padding: 20px;">No patterns detected</div>';
+            return;
+        }}
+        
+        list.innerHTML = patterns.map(pattern => `
+            <div class="pattern-item ${{pattern.signal === 'BEARISH' ? 'bearish' : ''}}">
+                <div class="pattern-name">${{pattern.type}}</div>
+                <div class="pattern-desc">
+                    ${{pattern.description}} • Confidence: <span style="color: var(--accent-primary); font-weight: 700;">${{pattern.confidence}}%</span>
+                </div>
+            </div>
+        `).join('');
+    }}
+    
+    // Update Fibonacci levels
+    function updateFibonacci(fibonacci) {{
+        const grid = document.getElementById('fiboGrid');
+        
+        if (!fibonacci || Object.keys(fibonacci).length === 0) {{
+            grid.innerHTML = '<div style="color: var(--text-secondary); text-align: center; padding: 20px; grid-column: 1 / -1;">No Fibonacci levels</div>';
+            return;
+        }}
+        
+        const importantLevels = ['0.0', '0.236', '0.382', '0.5', '0.618', '0.786', '1.0', '1.618'];
+        
+        grid.innerHTML = importantLevels.map(level => `
+            <div class="fibo-level">
+                <div class="fibo-ratio">${{level}}</div>
+                <div class="fibo-price">$${{fibonacci[level]?.toFixed(4) || 'N/A'}}</div>
+            </div>
+        `).join('');
+    }}
+    
+    // Update support and resistance
+    function updateSupportResistance(sr) {{
+        const resistanceDiv = document.getElementById('resistanceLevels');
+        const supportDiv = document.getElementById('supportLevels');
+        
+        if (sr.resistance && sr.resistance.length > 0) {{
+            resistanceDiv.innerHTML = sr.resistance.map(level => `
+                <div style="background: rgba(255, 51, 102, 0.1); padding: 8px 12px; border-radius: 6px; margin-bottom: 5px; font-family: 'JetBrains Mono', monospace; font-weight: 600;">
+                    $${{level.toFixed(4)}}
+                </div>
+            `).join('');
+        }} else {{
+            resistanceDiv.innerHTML = '<div style="color: var(--text-secondary);">No resistance levels</div>';
+        }}
+        
+        if (sr.support && sr.support.length > 0) {{
+            supportDiv.innerHTML = sr.support.map(level => `
+                <div style="background: rgba(0, 255, 136, 0.1); padding: 8px 12px; border-radius: 6px; margin-bottom: 5px; font-family: 'JetBrains Mono', monospace; font-weight: 600;">
+                    $${{level.toFixed(4)}}
+                </div>
+            `).join('');
+        }} else {{
+            supportDiv.innerHTML = '<div style="color: var(--text-secondary);">No support levels</div>';
+        }}
+    }}
+    
+    // Event Listeners
+    document.getElementById('symbolSearch').addEventListener('keypress', (e) => {{
+        if (e.key === 'Enter') {{
+            const symbol = e.target.value.toLowerCase();
+            if (symbol) {{
+                currentSymbol = symbol;
+                updateChart();
+                fetchSignal();
+            }}
+        }}
+    }});
+    
+    document.getElementById('timeframeSelect').addEventListener('change', (e) => {{
+        currentTimeframe = e.target.value;
+        updateChart();
+        fetchSignal();
+        
+        // Update timeframe buttons
+        document.querySelectorAll('.timeframe-btn').forEach(btn => {{
+            btn.classList.remove('active');
+            if (btn.dataset.tf === currentTimeframe) {{
+                btn.classList.add('active');
+            }}
+        }});
+    }});
+    
+    document.getElementById('analyzeBtn').addEventListener('click', () => {{
+        const symbol = document.getElementById('symbolSearch').value.toLowerCase();
+        if (symbol) {{
+            currentSymbol = symbol;
+            updateChart();
+            fetchSignal();
+        }}
+    }});
+    
+    document.getElementById('expandChartBtn').addEventListener('click', () => {{
+        document.getElementById('chartModal').classList.add('active');
+        if (!expandedWidget) {{
+            expandedWidget = initChart('tradingview_expanded', currentSymbol, currentTimeframe);
+        }}
+    }});
+    
+    document.getElementById('closeModalBtn').addEventListener('click', () => {{
+        document.getElementById('chartModal').classList.remove('active');
+    }});
+    
+    // Timeframe buttons
+    document.querySelectorAll('.timeframe-btn').forEach(btn => {{
+        btn.addEventListener('click', () => {{
+            currentTimeframe = btn.dataset.tf;
+            document.getElementById('timeframeSelect').value = currentTimeframe;
+            updateChart();
+            fetchSignal();
+            
+            document.querySelectorAll('.timeframe-btn').forEach(b => b.classList.remove('active'));
+            btn.classList.add('active');
+        }});
+    }});
+    
+    // Initialize
+    window.addEventListener('load', () => {{
+        updateChart();
+        fetchTickerData();
+        fetchSignal();
+        
+        // Refresh ticker every 10 seconds
+        setInterval(fetchTickerData, 10000);
+    }});
+</script>
+</body> </html> """
+====================================================================================
+API ENDPOINTS
+====================================================================================
+@app.get("/", response_class=HTMLResponse)
+async def dashboard(request: Request):
+"""Main dashboard"""
+html = generate_dashboard_html(SubscriptionTier.PRO)
+return HTMLResponse(html)
 
+@app.get("/api/ticker")
+async def get_ticker(request: Request):
+"""Get ticker data"""
+try:
+ticker = request.app.state.ticker
 
-# ==========================================
-# ERROR HANDLERS
-# ==========================================
+text
+    # Fetch ticker data if not recently updated
+    if not ticker.ticker_data or (datetime.now(timezone.utc) - ticker.last_update).total_seconds() > 10:
+        await ticker.fetch_ticker_data()
+    
+    return {
+        "success": True,
+        "timestamp": datetime.now(timezone.utc).isoformat(),
+        "ticker": ticker.ticker_data,
+        "count": len(ticker.ticker_data)
+    }
+except Exception as e:
+    logger.error(f"Ticker error: {e}")
+    return {"success": False, "error": str(e)}
+@app.get("/api/symbol/{symbol}")
+async def get_symbol_info(symbol: str, request: Request):
+"""Get symbol information"""
+try:
+ticker = request.app.state.ticker
 
-@app.exception_handler(HTTPException)
-async def http_exception_handler(request, exc):
-    return JSONResponse(
-        status_code=exc.status_code,
-        content={
-            "error": exc.detail,
+text
+    info = await ticker.get_symbol_info(symbol)
+    
+    if info:
+        return {
+            "success": True,
             "timestamp": datetime.now(timezone.utc).isoformat(),
-            "path": request.url.path
+            "symbol": info
         }
-    )
+    else:
+        return {"success": False, "error": "Symbol not found"}
+except Exception as e:
+    logger.error(f"Symbol info error: {e}")
+    return {"success": False, "error": str(e)}
+@app.get("/api/signal/{symbol}")
+async def get_signal(symbol: str, request: Request, timeframe: str = Query("1D", enum=["1m", "5m", "15m", "30m", "1h", "4h", "1D", "1W", "1M"])):
+"""Get AI trading signal for a symbol"""
+try:
+ai_engine = request.app.state.ai_engine
 
-
-@app.exception_handler(Exception)
-async def global_exception_handler(request, exc):
-    logger.error(f"Global exception: {exc}", exc_info=True)
-    return JSONResponse(
-        status_code=500,
-        content={
-            "error": "Internal server error",
-            "detail": str(exc),
-            "timestamp": datetime.now(timezone.utc).isoformat(),
-            "path": request.url.path
-        }
-    )
-
-
-# ==========================================
-# MAIN ENTRY POINT
-# ==========================================
-
-if __name__ == "__main__":
-    import uvicorn
+text
+    # Generate signal
+    signal = await ai_engine.generate_signal(symbol, timeframe)
     
-    port = int(os.getenv("PORT", 8000))
-    host = os.getenv("HOST", "0.0.0.0")
+    return {
+        "success": True,
+        "timestamp": datetime.now(timezone.utc).isoformat(),
+        "symbol": symbol,
+        "timeframe": timeframe,
+        "signal": asdict(signal)
+    }
+except Exception as e:
+    logger.error(f"Signal generation error: {e}")
+    return {"success": False, "error": str(e)}
+@app.get("/api/analysis/{symbol}")
+async def get_technical_analysis(symbol: str, request: Request, timeframe: str = Query("1D"), limit: int = Query(100, ge=10, le=500)):
+"""Get comprehensive technical analysis"""
+try:
+ticker = request.app.state.ticker
+ta = TechnicalAnalysis()
+
+text
+    # Fetch OHLCV data
+    ohlcv = await ticker.fetch_ohlcv(symbol, timeframe, limit)
     
-    logger.info("=" * 80)
-    logger.info("🚀 CRYPTOTRADER ULTRA v7.0 - STARTING")
-    logger.info("=" * 80)
-    logger.info(f"🌐 Server: http://{host}:{port}")
-    logger.info("✨ Features:")
-    logger.info("   • Dual Data Sources: Binance + CoinGecko")
-    logger.info("   • Real-time WebSocket Streaming")
-    logger.info("   • 25+ Technical Indicators")
-    logger.info("   • Advanced Candlestick Pattern Recognition")
-    logger.info("   • Support & Resistance Detection")
-    logger.info("   • Fibonacci Retracement & Extensions")
-    logger.info("   • Machine Learning Predictions (XGBoost)")
-    logger.info("   • AI-Powered Trading Signals")
-    logger.info("   • TradingView Integration")
-    logger.info("=" * 80)
+    if len(ohlcv) < 20:
+        return {"success": False, "error": "Insufficient data for analysis"}
     
-    uvicorn.run(
-        app,
-        host=host,
-        port=port,
-        log_level="info",
-        access_log=True
-    )
+    # Calculate analysis
+    analysis = ta.calculate_all_indicators(ohlcv, symbol, timeframe)
+    
+    return {
+        "success": True,
+        "timestamp": datetime.now(timezone.utc).isoformat(),
+        "symbol": symbol,
+        "timeframe": timeframe,
+        "candle_count": len(ohlcv),
+        "analysis": analysis
+    }
+except Exception as e:
+    logger.error(f"Technical analysis error: {e}")
+    return {"success": False, "error": str(e)}
+@app.get("/health")
+async def health():
+"""Health check"""
+return {
+"status": "healthy",
+"version": "6.0.0",
+"timestamp": datetime.now(timezone.utc).isoformat(),
+"services": {
+"coingecko_ticker": "operational",
+"ai_engine": "operational",
+"technical_analysis": "operational",
+"signal_generation": "operational"
+}
+}
+
+====================================================================================
+STARTUP
+====================================================================================
+if name == "main":
+import uvicorn
+
+text
+port = int(os.getenv("PORT", 8000))
+
+logger.info("=" * 70)
+logger.info("🚀 CRYPTOTRADER PRO v6.0 - ADVANCED TRADING PLATFORM")
+logger.info("=" * 70)
+logger.info(f"🌐 Server: http://0.0.0.0:{port}")
+logger.info("📊 Features:")
+logger.info("   • Real-time CoinGecko ticker with streaming updates")
+logger.info("   • TradingView integration with click-to-expand charts")
+logger.info("   • 20+ Technical indicators (RSI, MACD, Bollinger Bands, etc.)")
+logger.info("   • Fibonacci retracement & extension levels")
+logger.info("   • Support & Resistance detection")
+logger.info("   • Chart pattern recognition (Head & Shoulders, Triangles, etc.)")
+logger.info("   • AI-powered trading signals with risk/reward analysis")
+logger.info("   • Multi-timeframe analysis (1m to 1M)")
+logger.info("   • Support for Crypto, Forex, and Indices")
+logger.info("=" * 70)
+
+uvicorn.run(
+    app,
+    host="0.0.0.0",
+    port=port,
+    log_level="info"
+)
+ 
