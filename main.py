@@ -1611,7 +1611,7 @@ async function analyzeSymbol() {
 if __name__ == "__main__":
     import uvicorn
     
-    port = int(os.getenv("PORT", 8000))
+    port = int(os.getenv("PORT", 8080))
     
     print("=" * 90)
     print("🔥 QUANTUM TRADER PRO v9.0 - THE ULTIMATE TRADING INTELLIGENCE 🔥")
