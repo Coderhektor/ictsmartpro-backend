@@ -1,21 +1,37 @@
-# Core Packages
-fastapi>=0.104.1
-uvicorn>=0.24.0
-aiohttp>=3.9.1
-websockets>=12.0
+# Core & Web
+fastapi>=0.115.0
+uvicorn>=0.30.0
+aiohttp>=3.10.0
+websockets>=13.0
+orjson>=3.10.0
 
-# Data & ML Packages
-pandas>=2.1.3
-numpy>=1.24.3
-scikit-learn>=1.3.2  # sklearn'in resmi adı bu
-scipy>=1.11.4
+# Data & ML
+pandas>=2.2.3
+numpy>=2.0.0
+scikit-learn>=1.5.2
+torch>=2.4.0
+torchvision>=0.19.0
+transformers>=4.45.0
 
-# Optional/Cache (eğer kodda kullanıyorsanız)
+# Technical Analysis
+ta-lib>=0.4.28          # pip install TA-Lib   (önce sistem bağımlılığı gerekir)
+pandas-ta>=0.3.14b0
+
+# Image / Chart Processing
+opencv-python>=4.10.0
+pillow>=10.4.0
+matplotlib>=3.9.0
+plotly>=5.24.0
+
+# Utils & Performance
+rich>=13.8.0
+loguru>=0.7.2
+aiocache>=0.12.1
+pydantic>=2.9.0
+psutil>=6.0.0
+
+# Opsiyonel ama faydalı
 redis>=5.0.1
-
-# Pydantic
-pydantic>=2.5.0
-psutil==5.9.8
-xgboost>=2.0.0
-jinja2>=3.1.0
-
+xgboost>=2.1.0
+scipy>=1.14.0
+jinja2>=3.1.4
