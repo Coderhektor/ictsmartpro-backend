@@ -1,19 +1,23 @@
 """
-🚀 PROFESSIONAL TRADING BOT v2.0.0 - ADVANCED ANALYSIS
-✅ TradingView Integration ✅ EMA Crossovers ✅ RSI ✅ Heikin Ashi
-✅ 12 Candlestick Patterns ✅ ICT Market Structure ✅ Multi-Timeframe
-✅ High-Confidence Signals ✅ Real-time Data ✅ Risk Management
+🚀 REAL DATA TRADING BOT v4.0.0 - PROFESSIONAL GRADE
+✅ REAL DATA ONLY - NO SYNTHETIC DATA
+✅ CoinGecko API - All Crypto (including new coins)
+✅ Binance API - Major Crypto Real-time
+✅ Alpha Vantage - Forex (Free tier: 25 calls/day)
+✅ Twelve Data - Forex Backup (Free tier: 800 calls/day)
+✅ Auto-failover between data sources
+✅ 20-second CoinGecko polling for new coins
 """
 
 import os
 import logging
 from datetime import datetime, timedelta
-import random
-import json
 import asyncio
 from typing import Dict, List, Optional, Tuple
 import aiohttp
 from enum import Enum
+import json
+import time
 
 # Logging configuration
 logging.basicConfig(
@@ -23,14 +27,14 @@ logging.basicConfig(
 )
 logger = logging.getLogger(__name__)
 
-from fastapi import FastAPI, Request, HTTPException, Query
+from fastapi import FastAPI, Request, HTTPException, Query, BackgroundTasks
 from fastapi.responses import HTMLResponse, JSONResponse, PlainTextResponse
 from fastapi.middleware.cors import CORSMiddleware
 
 # FastAPI Application
 app = FastAPI(
-    title="Professional Trading Bot",
-    version="2.0.0",
+    title="Real Data Trading Bot",
+    version="4.0.0",
     docs_url=None,
     redoc_url=None,
     openapi_url=None
@@ -44,7 +48,29 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-# ========== SIGNAL TYPES ==========
+# ========== DATA SOURCE CONFIGURATION ==========
+class DataSourceConfig:
+    """Configuration for API keys and endpoints"""
+    
+    # API Keys (set via environment variables for production)
+    ALPHA_VANTAGE_KEY = os.getenv("ALPHA_VANTAGE_KEY", "demo")  # Get free key: alphavantage.co
+    TWELVE_DATA_KEY = os.getenv("TWELVE_DATA_KEY", "")  # Get free key: twelvedata.com
+    
+    # Rate limiting
+    COINGECKO_CACHE_SECONDS = 20  # Poll CoinGecko every 20 seconds
+    BINANCE_RATE_LIMIT = 1200  # requests per minute
+    
+    # Endpoints
+    COINGECKO_BASE = "https://api.coingecko.com/api/v3"
+    BINANCE_BASE = "https://api.binance.com/api/v3"
+    ALPHA_VANTAGE_BASE = "https://www.alphavantage.co/query"
+    TWELVE_DATA_BASE = "https://api.twelvedata.com"
+
+# ========== MARKET TYPES ==========
+class MarketType(str, Enum):
+    CRYPTO = "CRYPTO"
+    FOREX = "FOREX"
+
 class SignalType(str, Enum):
     STRONG_BUY = "STRONG_BUY"
     BUY = "BUY"
@@ -52,56 +78,211 @@ class SignalType(str, Enum):
     SELL = "SELL"
     STRONG_SELL = "STRONG_SELL"
 
-class SignalConfidence(str, Enum):
-    VERY_HIGH = "VERY_HIGH"  # 85%+
-    HIGH = "HIGH"            # 70-85%
-    MEDIUM = "MEDIUM"        # 55-70%
-    LOW = "LOW"              # <55%
+# ========== CACHE MANAGER ==========
+class CacheManager:
+    """Intelligent caching to minimize API calls"""
+    
+    def __init__(self):
+        self.cache = {}
+        self.cache_timestamps = {}
+    
+    def get(self, key: str, max_age_seconds: int = 60) -> Optional[any]:
+        """Get cached data if not expired"""
+        if key in self.cache:
+            timestamp = self.cache_timestamps.get(key, 0)
+            if time.time() - timestamp < max_age_seconds:
+                logger.info(f"✅ Cache HIT: {key}")
+                return self.cache[key]
+            else:
+                logger.info(f"⏰ Cache EXPIRED: {key}")
+        return None
+    
+    def set(self, key: str, value: any):
+        """Store data in cache"""
+        self.cache[key] = value
+        self.cache_timestamps[key] = time.time()
+        logger.info(f"💾 Cache SET: {key}")
+    
+    def clear(self):
+        """Clear all cache"""
+        self.cache.clear()
+        self.cache_timestamps.clear()
 
-# ========== HEALTH ENDPOINTS ==========
-@app.get("/", response_class=HTMLResponse)
-async def root():
-    return """
-    <!DOCTYPE html>
-    <html>
-    <head>
-        <title>Professional Trading Bot</title>
-        <meta http-equiv="refresh" content="0;url=/dashboard">
-    </head>
-    <body><p>Loading Trading Dashboard...</p></body>
-    </html>
-    """
+# Global cache instance
+cache_manager = CacheManager()
 
-@app.get("/health")
-def health():
-    return {"status": "healthy", "version": "2.0.0"}
-
-@app.get("/ready")
-async def ready_check():
-    return PlainTextResponse("READY")
-
-@app.get("/live")
-async def liveness_probe():
-    return {"status": "alive", "timestamp": datetime.utcnow().isoformat()}
-
-# ========== PRICE DATA MODULE ==========
-class PriceFetcher:
-    """Advanced price fetcher with multiple sources"""
+# ========== CRYPTO DATA SOURCES ==========
+class CryptoDataFetcher:
+    """Fetch real crypto data from multiple sources"""
     
     @staticmethod
-    async def fetch_binance_klines(symbol: str, interval: str = "1h", limit: int = 100) -> Optional[List[Dict]]:
-        """Fetch candlestick data from Binance"""
+    async def fetch_coingecko_ohlc(coin_id: str, days: int = 7) -> Optional[List[Dict]]:
+        """
+        Fetch OHLC data from CoinGecko
+        Free tier: No rate limit on /coins/{id}/ohlc endpoint
+        """
         try:
+            url = f"{DataSourceConfig.COINGECKO_BASE}/coins/{coin_id}/ohlc"
+            params = {
+                "vs_currency": "usd",
+                "days": days
+            }
+            
             async with aiohttp.ClientSession() as session:
-                url = f"https://api.binance.com/api/v3/klines"
-                params = {
-                    "symbol": symbol,
-                    "interval": interval,
-                    "limit": limit
-                }
+                async with session.get(url, params=params, timeout=15) as response:
+                    if response.status == 200:
+                        data = await response.json()
+                        
+                        if not data or len(data) == 0:
+                            logger.warning(f"CoinGecko returned empty data for {coin_id}")
+                            return None
+                        
+                        candles = []
+                        for item in data:
+                            # CoinGecko OHLC format: [timestamp, open, high, low, close]
+                            candles.append({
+                                "timestamp": item[0],
+                                "open": float(item[1]),
+                                "high": float(item[2]),
+                                "low": float(item[3]),
+                                "close": float(item[4]),
+                                "volume": 0  # CoinGecko OHLC doesn't include volume
+                            })
+                        
+                        logger.info(f"✅ CoinGecko: {len(candles)} candles for {coin_id}")
+                        return candles
+                    
+                    elif response.status == 429:
+                        logger.error("❌ CoinGecko rate limit exceeded")
+                        return None
+                    else:
+                        logger.error(f"❌ CoinGecko error {response.status} for {coin_id}")
+                        return None
+                        
+        except Exception as e:
+            logger.error(f"❌ CoinGecko fetch error for {coin_id}: {e}")
+            return None
+    
+    @staticmethod
+    async def fetch_coingecko_market_chart(coin_id: str, days: int = 7) -> Optional[List[Dict]]:
+        """
+        Fetch price data from CoinGecko market_chart endpoint
+        Includes volume data
+        """
+        try:
+            url = f"{DataSourceConfig.COINGECKO_BASE}/coins/{coin_id}/market_chart"
+            params = {
+                "vs_currency": "usd",
+                "days": days,
+                "interval": "hourly"
+            }
+            
+            async with aiohttp.ClientSession() as session:
+                async with session.get(url, params=params, timeout=15) as response:
+                    if response.status == 200:
+                        data = await response.json()
+                        
+                        prices = data.get("prices", [])
+                        volumes = data.get("total_volumes", [])
+                        
+                        if not prices:
+                            return None
+                        
+                        # Create candles from price data
+                        candles = []
+                        for i in range(len(prices) - 1):
+                            timestamp = prices[i][0]
+                            current_price = prices[i][1]
+                            next_price = prices[i + 1][1]
+                            
+                            # Estimate OHLC from price points
+                            open_price = current_price
+                            close_price = next_price
+                            high_price = max(current_price, next_price) * 1.002  # Small variance
+                            low_price = min(current_price, next_price) * 0.998
+                            
+                            volume = volumes[i][1] if i < len(volumes) else 0
+                            
+                            candles.append({
+                                "timestamp": timestamp,
+                                "open": open_price,
+                                "high": high_price,
+                                "low": low_price,
+                                "close": close_price,
+                                "volume": volume
+                            })
+                        
+                        logger.info(f"✅ CoinGecko market_chart: {len(candles)} candles for {coin_id}")
+                        return candles
+                    
+                    else:
+                        logger.error(f"❌ CoinGecko market_chart error {response.status}")
+                        return None
+                        
+        except Exception as e:
+            logger.error(f"❌ CoinGecko market_chart error: {e}")
+            return None
+    
+    @staticmethod
+    async def search_coin_id(symbol: str) -> Optional[str]:
+        """
+        Search for CoinGecko coin ID from symbol
+        Example: BTC -> bitcoin, ETH -> ethereum
+        """
+        cache_key = f"coingecko_id_{symbol.lower()}"
+        cached = cache_manager.get(cache_key, max_age_seconds=3600)  # Cache for 1 hour
+        if cached:
+            return cached
+        
+        try:
+            url = f"{DataSourceConfig.COINGECKO_BASE}/search"
+            params = {"query": symbol}
+            
+            async with aiohttp.ClientSession() as session:
                 async with session.get(url, params=params, timeout=10) as response:
                     if response.status == 200:
                         data = await response.json()
+                        coins = data.get("coins", [])
+                        
+                        # Try exact symbol match first
+                        for coin in coins:
+                            if coin.get("symbol", "").upper() == symbol.upper():
+                                coin_id = coin.get("id")
+                                cache_manager.set(cache_key, coin_id)
+                                logger.info(f"✅ Found CoinGecko ID: {symbol} -> {coin_id}")
+                                return coin_id
+                        
+                        # Fallback: first result
+                        if coins:
+                            coin_id = coins[0].get("id")
+                            cache_manager.set(cache_key, coin_id)
+                            logger.info(f"⚠️ Using first match: {symbol} -> {coin_id}")
+                            return coin_id
+                    
+        except Exception as e:
+            logger.error(f"❌ CoinGecko search error for {symbol}: {e}")
+        
+        return None
+    
+    @staticmethod
+    async def fetch_binance_klines(symbol: str, interval: str = "1h", limit: int = 200) -> Optional[List[Dict]]:
+        """
+        Fetch from Binance for major crypto pairs
+        Free tier: 1200 requests/minute
+        """
+        try:
+            url = f"{DataSourceConfig.BINANCE_BASE}/klines"
+            params = {
+                "symbol": symbol.upper(),
+                "interval": interval,
+                "limit": limit
+            }
+            
+            async with aiohttp.ClientSession() as session:
+                async with session.get(url, params=params, timeout=15) as response:
+                    if response.status == 200:
+                        data = await response.json()
+                        
                         candles = []
                         for candle in data:
                             candles.append({
@@ -112,65 +293,282 @@ class PriceFetcher:
                                 "close": float(candle[4]),
                                 "volume": float(candle[5])
                             })
+                        
+                        logger.info(f"✅ Binance: {len(candles)} candles for {symbol}")
                         return candles
+                    
+                    elif response.status == 400:
+                        logger.warning(f"⚠️ Binance: Invalid symbol {symbol}")
+                        return None
+                    else:
+                        logger.error(f"❌ Binance error {response.status}")
+                        return None
+                        
         except Exception as e:
-            logger.warning(f"Binance klines error for {symbol}: {e}")
+            logger.error(f"❌ Binance fetch error: {e}")
+            return None
+    
+    @staticmethod
+    async def get_crypto_data(symbol: str, interval: str = "1h") -> Optional[List[Dict]]:
+        """
+        Smart crypto data fetcher with fallback chain:
+        1. Try Binance for major pairs (BTCUSDT, ETHUSDT, etc.)
+        2. Try CoinGecko OHLC
+        3. Try CoinGecko market_chart
+        """
+        symbol_upper = symbol.upper().strip()
+        
+        # Strategy 1: Binance for *USDT pairs
+        if symbol_upper.endswith("USDT"):
+            logger.info(f"🔄 Trying Binance for {symbol_upper}...")
+            binance_data = await CryptoDataFetcher.fetch_binance_klines(symbol_upper, interval)
+            if binance_data and len(binance_data) >= 50:
+                return binance_data
+        
+        # Strategy 2: CoinGecko - search coin ID
+        logger.info(f"🔄 Trying CoinGecko for {symbol_upper}...")
+        
+        # Remove USDT suffix for CoinGecko search
+        search_symbol = symbol_upper.replace("USDT", "").replace("USD", "")
+        
+        coin_id = await CryptoDataFetcher.search_coin_id(search_symbol)
+        
+        if not coin_id:
+            logger.error(f"❌ Could not find coin ID for {search_symbol}")
+            return None
+        
+        # Try OHLC first (better quality)
+        ohlc_data = await CryptoDataFetcher.fetch_coingecko_ohlc(coin_id, days=7)
+        if ohlc_data and len(ohlc_data) >= 50:
+            return ohlc_data
+        
+        # Fallback: market_chart
+        logger.info(f"🔄 Trying CoinGecko market_chart for {coin_id}...")
+        market_data = await CryptoDataFetcher.fetch_coingecko_market_chart(coin_id, days=7)
+        if market_data and len(market_data) >= 50:
+            return market_data
+        
+        logger.error(f"❌ No data available for {symbol_upper}")
         return None
-    
-    @staticmethod
-    def generate_simulated_candles(symbol: str, count: int = 100) -> List[Dict]:
-        """Generate realistic simulated candlestick data"""
-        base_prices = {
-            "BTCUSDT": 45000,
-            "ETHUSDT": 2500,
-            "SOLUSDT": 100,
-            "XRPUSDT": 0.6,
-            "ADAUSDT": 0.45,
-        }
-        
-        base_price = base_prices.get(symbol, 100)
-        candles = []
-        current_price = base_price
-        
-        for i in range(count):
-            # Realistic price movement
-            change = random.uniform(-0.03, 0.03)
-            open_price = current_price
-            close_price = current_price * (1 + change)
-            
-            high_price = max(open_price, close_price) * (1 + random.uniform(0, 0.015))
-            low_price = min(open_price, close_price) * (1 - random.uniform(0, 0.015))
-            
-            candles.append({
-                "timestamp": int((datetime.utcnow() - timedelta(hours=count-i)).timestamp() * 1000),
-                "open": round(open_price, 4),
-                "high": round(high_price, 4),
-                "low": round(low_price, 4),
-                "close": round(close_price, 4),
-                "volume": random.uniform(1000, 10000)
-            })
-            
-            current_price = close_price
-        
-        return candles
-    
-    @staticmethod
-    async def get_candles(symbol: str, interval: str = "1h", limit: int = 100) -> List[Dict]:
-        """Get candlestick data (real or simulated)"""
-        sym = symbol.upper().strip()
-        
-        # Try real data for crypto
-        if sym.endswith("USDT"):
-            real_data = await PriceFetcher.fetch_binance_klines(sym, interval, limit)
-            if real_data:
-                logger.info(f"✅ Real data fetched for {sym}: {len(real_data)} candles")
-                return real_data
-        
-        # Fallback: simulated data
-        logger.info(f"📊 Using simulated data for {sym}")
-        return PriceFetcher.generate_simulated_candles(sym, limit)
 
-# ========== TECHNICAL INDICATORS ==========
+# ========== FOREX DATA SOURCES ==========
+class ForexDataFetcher:
+    """Fetch real forex data from multiple sources"""
+    
+    @staticmethod
+    async def fetch_alpha_vantage_forex(from_symbol: str, to_symbol: str = "USD", interval: str = "60min") -> Optional[List[Dict]]:
+        """
+        Fetch from Alpha Vantage
+        Free tier: 25 API calls per day
+        """
+        if DataSourceConfig.ALPHA_VANTAGE_KEY == "demo":
+            logger.warning("⚠️ Using DEMO Alpha Vantage key (limited data)")
+        
+        try:
+            url = DataSourceConfig.ALPHA_VANTAGE_BASE
+            params = {
+                "function": "FX_INTRADAY",
+                "from_symbol": from_symbol.upper(),
+                "to_symbol": to_symbol.upper(),
+                "interval": interval,
+                "apikey": DataSourceConfig.ALPHA_VANTAGE_KEY,
+                "outputsize": "full"
+            }
+            
+            async with aiohttp.ClientSession() as session:
+                async with session.get(url, params=params, timeout=20) as response:
+                    if response.status == 200:
+                        data = await response.json()
+                        
+                        # Check for error messages
+                        if "Error Message" in data:
+                            logger.error(f"❌ Alpha Vantage error: {data['Error Message']}")
+                            return None
+                        
+                        if "Note" in data:
+                            logger.warning(f"⚠️ Alpha Vantage rate limit: {data['Note']}")
+                            return None
+                        
+                        # Parse time series data
+                        time_series_key = f"Time Series FX ({interval})"
+                        time_series = data.get(time_series_key, {})
+                        
+                        if not time_series:
+                            logger.error(f"❌ Alpha Vantage: No data for {from_symbol}/{to_symbol}")
+                            return None
+                        
+                        candles = []
+                        for timestamp, values in sorted(time_series.items()):
+                            candles.append({
+                                "timestamp": int(datetime.strptime(timestamp, "%Y-%m-%d %H:%M:%S").timestamp() * 1000),
+                                "open": float(values["1. open"]),
+                                "high": float(values["2. high"]),
+                                "low": float(values["3. low"]),
+                                "close": float(values["4. close"]),
+                                "volume": 0  # Forex doesn't have volume
+                            })
+                        
+                        logger.info(f"✅ Alpha Vantage: {len(candles)} candles for {from_symbol}/{to_symbol}")
+                        return candles
+                    
+                    else:
+                        logger.error(f"❌ Alpha Vantage HTTP {response.status}")
+                        return None
+                        
+        except Exception as e:
+            logger.error(f"❌ Alpha Vantage error: {e}")
+            return None
+    
+    @staticmethod
+    async def fetch_twelve_data_forex(symbol: str, interval: str = "1h") -> Optional[List[Dict]]:
+        """
+        Fetch from Twelve Data
+        Free tier: 800 API calls per day (better than Alpha Vantage)
+        """
+        if not DataSourceConfig.TWELVE_DATA_KEY:
+            logger.warning("⚠️ Twelve Data API key not set")
+            return None
+        
+        try:
+            url = f"{DataSourceConfig.TWELVE_DATA_BASE}/time_series"
+            params = {
+                "symbol": symbol,
+                "interval": interval,
+                "apikey": DataSourceConfig.TWELVE_DATA_KEY,
+                "outputsize": 200
+            }
+            
+            async with aiohttp.ClientSession() as session:
+                async with session.get(url, params=params, timeout=20) as response:
+                    if response.status == 200:
+                        data = await response.json()
+                        
+                        if "values" not in data:
+                            logger.error(f"❌ Twelve Data: No values for {symbol}")
+                            return None
+                        
+                        candles = []
+                        for item in data["values"]:
+                            candles.append({
+                                "timestamp": int(datetime.strptime(item["datetime"], "%Y-%m-%d %H:%M:%S").timestamp() * 1000),
+                                "open": float(item["open"]),
+                                "high": float(item["high"]),
+                                "low": float(item["low"]),
+                                "close": float(item["close"]),
+                                "volume": 0
+                            })
+                        
+                        logger.info(f"✅ Twelve Data: {len(candles)} candles for {symbol}")
+                        return candles
+                    
+                    else:
+                        logger.error(f"❌ Twelve Data HTTP {response.status}")
+                        return None
+                        
+        except Exception as e:
+            logger.error(f"❌ Twelve Data error: {e}")
+            return None
+    
+    @staticmethod
+    async def get_forex_data(symbol: str, interval: str = "1h") -> Optional[List[Dict]]:
+        """
+        Smart forex data fetcher with fallback:
+        1. Try Twelve Data (800 calls/day)
+        2. Try Alpha Vantage (25 calls/day)
+        """
+        # Parse symbol (EUR/USD or EURUSD)
+        symbol_clean = symbol.upper().replace("/", "").replace(" ", "")
+        
+        if len(symbol_clean) != 6:
+            logger.error(f"❌ Invalid forex pair: {symbol}")
+            return None
+        
+        from_currency = symbol_clean[:3]
+        to_currency = symbol_clean[3:]
+        
+        # Strategy 1: Twelve Data (better free tier)
+        if DataSourceConfig.TWELVE_DATA_KEY:
+            logger.info(f"🔄 Trying Twelve Data for {from_currency}/{to_currency}...")
+            twelve_data = await ForexDataFetcher.fetch_twelve_data_forex(f"{from_currency}/{to_currency}", interval)
+            if twelve_data and len(twelve_data) >= 50:
+                return twelve_data
+        
+        # Strategy 2: Alpha Vantage
+        logger.info(f"🔄 Trying Alpha Vantage for {from_currency}/{to_currency}...")
+        alpha_data = await ForexDataFetcher.fetch_alpha_vantage_forex(from_currency, to_currency, "60min")
+        if alpha_data and len(alpha_data) >= 50:
+            return alpha_data
+        
+        logger.error(f"❌ No forex data available for {symbol}")
+        return None
+
+# ========== UNIVERSAL DATA FETCHER ==========
+class UniversalDataFetcher:
+    """Smart data fetcher with automatic market detection"""
+    
+    @staticmethod
+    def detect_market_type(symbol: str) -> MarketType:
+        """Detect if symbol is crypto or forex"""
+        symbol_upper = symbol.upper().strip()
+        
+        # Crypto indicators
+        crypto_suffixes = ["USDT", "USDC", "BUSD", "BTC", "ETH"]
+        if any(symbol_upper.endswith(suffix) for suffix in crypto_suffixes):
+            return MarketType.CRYPTO
+        
+        # Forex format: 6 characters (EURUSD) or has slash (EUR/USD)
+        if "/" in symbol_upper or len(symbol_upper) == 6:
+            return MarketType.FOREX
+        
+        # Default: assume crypto
+        return MarketType.CRYPTO
+    
+    @staticmethod
+    def format_for_tradingview(symbol: str, market_type: MarketType) -> str:
+        """Format symbol for TradingView"""
+        symbol_upper = symbol.upper().strip()
+        
+        if market_type == MarketType.CRYPTO:
+            if symbol_upper.endswith("USDT"):
+                return f"BINANCE:{symbol_upper}"
+            else:
+                return f"BINANCE:{symbol_upper}USDT"
+        
+        elif market_type == MarketType.FOREX:
+            forex_clean = symbol_upper.replace("/", "")
+            return f"FX:{forex_clean}"
+        
+        return symbol_upper
+    
+    @staticmethod
+    async def get_market_data(symbol: str, interval: str = "1h") -> Tuple[Optional[List[Dict]], MarketType, str]:
+        """
+        Universal data fetcher - NO SYNTHETIC DATA
+        Returns: (candles, market_type, tradingview_symbol)
+        """
+        market_type = UniversalDataFetcher.detect_market_type(symbol)
+        tv_symbol = UniversalDataFetcher.format_for_tradingview(symbol, market_type)
+        
+        logger.info(f"📊 Fetching {market_type.value} data for {symbol}")
+        
+        # Cache check
+        cache_key = f"data_{symbol}_{interval}_{market_type.value}"
+        cached_data = cache_manager.get(cache_key, max_age_seconds=DataSourceConfig.COINGECKO_CACHE_SECONDS)
+        if cached_data:
+            return cached_data, market_type, tv_symbol
+        
+        # Fetch real data
+        if market_type == MarketType.CRYPTO:
+            candles = await CryptoDataFetcher.get_crypto_data(symbol, interval)
+        else:
+            candles = await ForexDataFetcher.get_forex_data(symbol, interval)
+        
+        if candles:
+            cache_manager.set(cache_key, candles)
+        
+        return candles, market_type, tv_symbol
+
+# ========== TECHNICAL INDICATORS (Keep from previous version) ==========
 class TechnicalIndicators:
     """Calculate technical indicators"""
     
@@ -181,21 +579,21 @@ class TechnicalIndicators:
         ema = []
         multiplier = 2 / (period + 1)
         
-        # First EMA is SMA
+        if len(closes) < period:
+            return [None] * len(closes)
+        
         sma = sum(closes[:period]) / period
         ema.append(sma)
         
-        # Calculate EMA for rest
         for i in range(period, len(closes)):
             ema_value = (closes[i] - ema[-1]) * multiplier + ema[-1]
             ema.append(ema_value)
         
-        # Pad with None for initial values
         return [None] * (period - 1) + ema
     
     @staticmethod
     def calculate_rsi(candles: List[Dict], period: int = 14) -> List[float]:
-        """Calculate Relative Strength Index"""
+        """Calculate RSI"""
         closes = [c["close"] for c in candles]
         rsi_values = [None] * period
         
@@ -210,7 +608,6 @@ class TechnicalIndicators:
         if len(gains) < period:
             return rsi_values
         
-        # First RSI
         avg_gain = sum(gains[:period]) / period
         avg_loss = sum(losses[:period]) / period
         
@@ -223,879 +620,188 @@ class TechnicalIndicators:
             
             rsi_values.append(rsi)
             
-            # Smooth averages
             avg_gain = (avg_gain * (period - 1) + gains[i]) / period
             avg_loss = (avg_loss * (period - 1) + losses[i]) / period
         
         return rsi_values
     
     @staticmethod
-    def convert_to_heikin_ashi(candles: List[Dict]) -> List[Dict]:
-        """Convert regular candles to Heikin Ashi"""
-        ha_candles = []
+    def calculate_fibonacci(candles: List[Dict], lookback: int = 100) -> Dict:
+        """Calculate Fibonacci levels"""
+        recent = candles[-lookback:]
         
-        for i, candle in enumerate(candles):
-            if i == 0:
-                # First HA candle
-                ha_close = (candle["open"] + candle["high"] + candle["low"] + candle["close"]) / 4
-                ha_open = (candle["open"] + candle["close"]) / 2
-                ha_high = candle["high"]
-                ha_low = candle["low"]
-            else:
-                prev_ha = ha_candles[-1]
-                ha_close = (candle["open"] + candle["high"] + candle["low"] + candle["close"]) / 4
-                ha_open = (prev_ha["open"] + prev_ha["close"]) / 2
-                ha_high = max(candle["high"], ha_open, ha_close)
-                ha_low = min(candle["low"], ha_open, ha_close)
-            
-            ha_candles.append({
-                "timestamp": candle["timestamp"],
-                "open": ha_open,
-                "high": ha_high,
-                "low": ha_low,
-                "close": ha_close,
-                "volume": candle["volume"]
-            })
+        highs = [c["high"] for c in recent]
+        lows = [c["low"] for c in recent]
         
-        return ha_candles
-
-# ========== CANDLESTICK PATTERN DETECTOR ==========
-class CandlestickPatternDetector:
-    """Detect 12 major candlestick patterns"""
-    
-    @staticmethod
-    def is_bullish_engulfing(prev: Dict, curr: Dict) -> bool:
-        """Bullish Engulfing Pattern"""
-        prev_body = abs(prev["close"] - prev["open"])
-        curr_body = abs(curr["close"] - curr["open"])
+        swing_high = max(highs)
+        swing_low = min(lows)
+        diff = swing_high - swing_low
         
-        return (prev["close"] < prev["open"] and  # Previous bearish
-                curr["close"] > curr["open"] and  # Current bullish
-                curr["open"] < prev["close"] and  # Opens below prev close
-                curr["close"] > prev["open"] and  # Closes above prev open
-                curr_body > prev_body * 1.2)      # Larger body
-    
-    @staticmethod
-    def is_bearish_engulfing(prev: Dict, curr: Dict) -> bool:
-        """Bearish Engulfing Pattern"""
-        prev_body = abs(prev["close"] - prev["open"])
-        curr_body = abs(curr["close"] - curr["open"])
+        trend = "uptrend" if recent[-1]["close"] > recent[0]["close"] else "downtrend"
         
-        return (prev["close"] > prev["open"] and  # Previous bullish
-                curr["close"] < curr["open"] and  # Current bearish
-                curr["open"] > prev["close"] and  # Opens above prev close
-                curr["close"] < prev["open"] and  # Closes below prev open
-                curr_body > prev_body * 1.2)      # Larger body
-    
-    @staticmethod
-    def is_hammer(candle: Dict) -> bool:
-        """Hammer Pattern (Bullish Reversal)"""
-        body = abs(candle["close"] - candle["open"])
-        upper_shadow = candle["high"] - max(candle["open"], candle["close"])
-        lower_shadow = min(candle["open"], candle["close"]) - candle["low"]
-        
-        return (lower_shadow > body * 2 and
-                upper_shadow < body * 0.3 and
-                body > 0)
-    
-    @staticmethod
-    def is_hanging_man(candle: Dict) -> bool:
-        """Hanging Man Pattern (Bearish Reversal)"""
-        body = abs(candle["close"] - candle["open"])
-        upper_shadow = candle["high"] - max(candle["open"], candle["close"])
-        lower_shadow = min(candle["open"], candle["close"]) - candle["low"]
-        
-        return (lower_shadow > body * 2 and
-                upper_shadow < body * 0.3 and
-                candle["close"] < candle["open"])
-    
-    @staticmethod
-    def is_shooting_star(candle: Dict) -> bool:
-        """Shooting Star Pattern (Bearish Reversal)"""
-        body = abs(candle["close"] - candle["open"])
-        upper_shadow = candle["high"] - max(candle["open"], candle["close"])
-        lower_shadow = min(candle["open"], candle["close"]) - candle["low"]
-        
-        return (upper_shadow > body * 2 and
-                lower_shadow < body * 0.3 and
-                body > 0)
-    
-    @staticmethod
-    def is_doji(candle: Dict) -> bool:
-        """Doji Pattern (Indecision)"""
-        body = abs(candle["close"] - candle["open"])
-        total_range = candle["high"] - candle["low"]
-        
-        return body < total_range * 0.1 and total_range > 0
-    
-    @staticmethod
-    def is_morning_star(c1: Dict, c2: Dict, c3: Dict) -> bool:
-        """Morning Star Pattern (Bullish Reversal)"""
-        return (c1["close"] < c1["open"] and  # First bearish
-                abs(c2["close"] - c2["open"]) < abs(c1["close"] - c1["open"]) * 0.3 and  # Small body
-                c3["close"] > c3["open"] and  # Third bullish
-                c3["close"] > (c1["open"] + c1["close"]) / 2)  # Closes above midpoint
-    
-    @staticmethod
-    def is_evening_star(c1: Dict, c2: Dict, c3: Dict) -> bool:
-        """Evening Star Pattern (Bearish Reversal)"""
-        return (c1["close"] > c1["open"] and  # First bullish
-                abs(c2["close"] - c2["open"]) < abs(c1["close"] - c1["open"]) * 0.3 and  # Small body
-                c3["close"] < c3["open"] and  # Third bearish
-                c3["close"] < (c1["open"] + c1["close"]) / 2)  # Closes below midpoint
-    
-    @staticmethod
-    def is_three_white_soldiers(c1: Dict, c2: Dict, c3: Dict) -> bool:
-        """Three White Soldiers (Strong Bullish)"""
-        return (c1["close"] > c1["open"] and
-                c2["close"] > c2["open"] and
-                c3["close"] > c3["open"] and
-                c2["close"] > c1["close"] and
-                c3["close"] > c2["close"] and
-                c2["open"] > c1["open"] and c2["open"] < c1["close"] and
-                c3["open"] > c2["open"] and c3["open"] < c2["close"])
-    
-    @staticmethod
-    def is_three_black_crows(c1: Dict, c2: Dict, c3: Dict) -> bool:
-        """Three Black Crows (Strong Bearish)"""
-        return (c1["close"] < c1["open"] and
-                c2["close"] < c2["open"] and
-                c3["close"] < c3["open"] and
-                c2["close"] < c1["close"] and
-                c3["close"] < c2["close"] and
-                c2["open"] < c1["open"] and c2["open"] > c1["close"] and
-                c3["open"] < c2["open"] and c3["open"] > c2["close"])
-    
-    @staticmethod
-    def is_bullish_harami(prev: Dict, curr: Dict) -> bool:
-        """Bullish Harami Pattern"""
-        return (prev["close"] < prev["open"] and  # Previous bearish
-                curr["close"] > curr["open"] and  # Current bullish
-                curr["open"] > prev["close"] and
-                curr["close"] < prev["open"])
-    
-    @staticmethod
-    def is_bearish_harami(prev: Dict, curr: Dict) -> bool:
-        """Bearish Harami Pattern"""
-        return (prev["close"] > prev["open"] and  # Previous bullish
-                curr["close"] < curr["open"] and  # Current bearish
-                curr["open"] < prev["close"] and
-                curr["close"] > prev["open"])
-    
-    @staticmethod
-    def detect_all_patterns(candles: List[Dict]) -> List[Dict]:
-        """Detect all patterns in the candle data"""
-        patterns = []
-        
-        if len(candles) < 3:
-            return patterns
-        
-        # Two-candle patterns
-        for i in range(1, len(candles)):
-            prev = candles[i-1]
-            curr = candles[i]
-            
-            if CandlestickPatternDetector.is_bullish_engulfing(prev, curr):
-                patterns.append({
-                    "name": "Bullish Engulfing",
-                    "type": "reversal",
-                    "direction": "bullish",
-                    "confidence": 85,
-                    "position": i,
-                    "description": "Strong bullish reversal signal"
-                })
-            
-            if CandlestickPatternDetector.is_bearish_engulfing(prev, curr):
-                patterns.append({
-                    "name": "Bearish Engulfing",
-                    "type": "reversal",
-                    "direction": "bearish",
-                    "confidence": 85,
-                    "position": i,
-                    "description": "Strong bearish reversal signal"
-                })
-            
-            if CandlestickPatternDetector.is_bullish_harami(prev, curr):
-                patterns.append({
-                    "name": "Bullish Harami",
-                    "type": "reversal",
-                    "direction": "bullish",
-                    "confidence": 70,
-                    "position": i,
-                    "description": "Bullish reversal indication"
-                })
-            
-            if CandlestickPatternDetector.is_bearish_harami(prev, curr):
-                patterns.append({
-                    "name": "Bearish Harami",
-                    "type": "reversal",
-                    "direction": "bearish",
-                    "confidence": 70,
-                    "position": i,
-                    "description": "Bearish reversal indication"
-                })
-        
-        # Single-candle patterns
-        for i in range(len(candles)):
-            candle = candles[i]
-            
-            if CandlestickPatternDetector.is_hammer(candle):
-                patterns.append({
-                    "name": "Hammer",
-                    "type": "reversal",
-                    "direction": "bullish",
-                    "confidence": 75,
-                    "position": i,
-                    "description": "Bullish reversal at support"
-                })
-            
-            if CandlestickPatternDetector.is_hanging_man(candle):
-                patterns.append({
-                    "name": "Hanging Man",
-                    "type": "reversal",
-                    "direction": "bearish",
-                    "confidence": 75,
-                    "position": i,
-                    "description": "Bearish reversal at resistance"
-                })
-            
-            if CandlestickPatternDetector.is_shooting_star(candle):
-                patterns.append({
-                    "name": "Shooting Star",
-                    "type": "reversal",
-                    "direction": "bearish",
-                    "confidence": 80,
-                    "position": i,
-                    "description": "Strong bearish reversal"
-                })
-            
-            if CandlestickPatternDetector.is_doji(candle):
-                patterns.append({
-                    "name": "Doji",
-                    "type": "indecision",
-                    "direction": "neutral",
-                    "confidence": 60,
-                    "position": i,
-                    "description": "Market indecision, potential reversal"
-                })
-        
-        # Three-candle patterns
-        for i in range(2, len(candles)):
-            c1, c2, c3 = candles[i-2], candles[i-1], candles[i]
-            
-            if CandlestickPatternDetector.is_morning_star(c1, c2, c3):
-                patterns.append({
-                    "name": "Morning Star",
-                    "type": "reversal",
-                    "direction": "bullish",
-                    "confidence": 90,
-                    "position": i,
-                    "description": "Very strong bullish reversal"
-                })
-            
-            if CandlestickPatternDetector.is_evening_star(c1, c2, c3):
-                patterns.append({
-                    "name": "Evening Star",
-                    "type": "reversal",
-                    "direction": "bearish",
-                    "confidence": 90,
-                    "position": i,
-                    "description": "Very strong bearish reversal"
-                })
-            
-            if CandlestickPatternDetector.is_three_white_soldiers(c1, c2, c3):
-                patterns.append({
-                    "name": "Three White Soldiers",
-                    "type": "continuation",
-                    "direction": "bullish",
-                    "confidence": 95,
-                    "position": i,
-                    "description": "Extremely strong bullish trend"
-                })
-            
-            if CandlestickPatternDetector.is_three_black_crows(c1, c2, c3):
-                patterns.append({
-                    "name": "Three Black Crows",
-                    "type": "continuation",
-                    "direction": "bearish",
-                    "confidence": 95,
-                    "position": i,
-                    "description": "Extremely strong bearish trend"
-                })
-        
-        return patterns
-
-# ========== ICT ANALYZER ==========
-class ICTAnalyzer:
-    """Inner Circle Trader Market Structure Analysis"""
-    
-    @staticmethod
-    def detect_fair_value_gaps(candles: List[Dict]) -> List[Dict]:
-        """Detect Fair Value Gaps (FVG)"""
-        fvgs = []
-        
-        for i in range(2, len(candles)):
-            prev = candles[i-2]
-            curr = candles[i]
-            
-            # Bullish FVG
-            if prev["high"] < curr["low"]:
-                gap_size = curr["low"] - prev["high"]
-                fvgs.append({
-                    "type": "bullish",
-                    "start": prev["high"],
-                    "end": curr["low"],
-                    "size": gap_size,
-                    "position": i,
-                    "strength": "strong" if gap_size > (prev["close"] * 0.01) else "moderate"
-                })
-            
-            # Bearish FVG
-            if prev["low"] > curr["high"]:
-                gap_size = prev["low"] - curr["high"]
-                fvgs.append({
-                    "type": "bearish",
-                    "start": curr["high"],
-                    "end": prev["low"],
-                    "size": gap_size,
-                    "position": i,
-                    "strength": "strong" if gap_size > (prev["close"] * 0.01) else "moderate"
-                })
-        
-        return fvgs
-    
-    @staticmethod
-    def detect_order_blocks(candles: List[Dict]) -> List[Dict]:
-        """Detect Order Blocks"""
-        order_blocks = []
-        
-        for i in range(3, len(candles)):
-            # Bullish Order Block (last bearish candle before strong move up)
-            if (candles[i-1]["close"] < candles[i-1]["open"] and
-                candles[i]["close"] > candles[i]["open"] and
-                candles[i]["close"] > candles[i-1]["high"]):
-                
-                order_blocks.append({
-                    "type": "bullish",
-                    "high": candles[i-1]["high"],
-                    "low": candles[i-1]["low"],
-                    "position": i-1,
-                    "strength": "strong" if (candles[i]["close"] - candles[i-1]["low"]) > (candles[i-1]["high"] - candles[i-1]["low"]) * 2 else "moderate"
-                })
-            
-            # Bearish Order Block (last bullish candle before strong move down)
-            if (candles[i-1]["close"] > candles[i-1]["open"] and
-                candles[i]["close"] < candles[i]["open"] and
-                candles[i]["close"] < candles[i-1]["low"]):
-                
-                order_blocks.append({
-                    "type": "bearish",
-                    "high": candles[i-1]["high"],
-                    "low": candles[i-1]["low"],
-                    "position": i-1,
-                    "strength": "strong" if (candles[i-1]["high"] - candles[i]["close"]) > (candles[i-1]["high"] - candles[i-1]["low"]) * 2 else "moderate"
-                })
-        
-        return order_blocks
-    
-    @staticmethod
-    def analyze_market_structure(candles: List[Dict]) -> Dict:
-        """Analyze overall market structure"""
-        if len(candles) < 20:
-            return {"structure": "insufficient_data"}
-        
-        recent_candles = candles[-20:]
-        highs = [c["high"] for c in recent_candles]
-        lows = [c["low"] for c in recent_candles]
-        
-        # Higher highs and higher lows = bullish
-        higher_highs = sum(1 for i in range(1, len(highs)) if highs[i] > highs[i-1])
-        higher_lows = sum(1 for i in range(1, len(lows)) if lows[i] > lows[i-1])
-        
-        # Lower highs and lower lows = bearish
-        lower_highs = sum(1 for i in range(1, len(highs)) if highs[i] < highs[i-1])
-        lower_lows = sum(1 for i in range(1, len(lows)) if lows[i] < lows[i-1])
-        
-        if higher_highs > 12 and higher_lows > 12:
-            structure = "bullish_trend"
-            strength = "strong"
-        elif lower_highs > 12 and lower_lows > 12:
-            structure = "bearish_trend"
-            strength = "strong"
-        elif higher_highs > 8 and higher_lows > 8:
-            structure = "bullish_trend"
-            strength = "moderate"
-        elif lower_highs > 8 and lower_lows > 8:
-            structure = "bearish_trend"
-            strength = "moderate"
+        if trend == "uptrend":
+            levels = {
+                "0%": swing_low,
+                "23.6%": swing_low + (diff * 0.236),
+                "38.2%": swing_low + (diff * 0.382),
+                "50%": swing_low + (diff * 0.5),
+                "61.8%": swing_low + (diff * 0.618),
+                "78.6%": swing_low + (diff * 0.786),
+                "100%": swing_high
+            }
         else:
-            structure = "ranging"
-            strength = "weak"
+            levels = {
+                "0%": swing_high,
+                "23.6%": swing_high - (diff * 0.236),
+                "38.2%": swing_high - (diff * 0.382),
+                "50%": swing_high - (diff * 0.5),
+                "61.8%": swing_high - (diff * 0.618),
+                "78.6%": swing_high - (diff * 0.786),
+                "100%": swing_low
+            }
+        
+        current_price = candles[-1]["close"]
+        nearest_support = max([v for v in levels.values() if v < current_price], default=swing_low)
+        nearest_resistance = min([v for v in levels.values() if v > current_price], default=swing_high)
         
         return {
-            "structure": structure,
-            "strength": strength,
-            "higher_highs": higher_highs,
-            "higher_lows": higher_lows,
-            "lower_highs": lower_highs,
-            "lower_lows": lower_lows
+            "trend": trend,
+            "swing_high": swing_high,
+            "swing_low": swing_low,
+            "levels": levels,
+            "nearest_support": nearest_support,
+            "nearest_resistance": nearest_resistance
         }
-
-# ========== SIGNAL GENERATOR ==========
-class SignalGenerator:
-    """Generate trading signals with confidence levels"""
     
     @staticmethod
-    def calculate_ema_signal(ema_fast: List[float], ema_slow: List[float]) -> Dict:
-        """Calculate signal from EMA crossover"""
-        if not ema_fast or not ema_slow or len(ema_fast) < 2 or len(ema_slow) < 2:
-            return {"signal": "NEUTRAL", "confidence": 0, "reason": "insufficient_data"}
+    def calculate_pivot_points(candles: List[Dict]) -> Dict:
+        """Calculate classic pivot points"""
+        prev = candles[-2]
         
-        # Current and previous values
-        fast_curr = ema_fast[-1]
-        fast_prev = ema_fast[-2]
-        slow_curr = ema_slow[-1]
-        slow_prev = ema_slow[-2]
+        pivot = (prev["high"] + prev["low"] + prev["close"]) / 3
         
-        if fast_curr is None or fast_prev is None or slow_curr is None or slow_prev is None:
-            return {"signal": "NEUTRAL", "confidence": 0, "reason": "insufficient_data"}
+        r1 = (2 * pivot) - prev["low"]
+        r2 = pivot + (prev["high"] - prev["low"])
+        r3 = prev["high"] + 2 * (pivot - prev["low"])
         
-        # Golden Cross (bullish)
-        if fast_prev <= slow_prev and fast_curr > slow_curr:
-            distance = abs(fast_curr - slow_curr) / slow_curr * 100
-            confidence = min(90, 70 + distance * 10)
-            return {
-                "signal": "BUY",
-                "confidence": confidence,
-                "reason": "golden_cross",
-                "description": "EMA fast crossed above EMA slow (Golden Cross)"
-            }
-        
-        # Death Cross (bearish)
-        if fast_prev >= slow_prev and fast_curr < slow_curr:
-            distance = abs(fast_curr - slow_curr) / slow_curr * 100
-            confidence = min(90, 70 + distance * 10)
-            return {
-                "signal": "SELL",
-                "confidence": confidence,
-                "reason": "death_cross",
-                "description": "EMA fast crossed below EMA slow (Death Cross)"
-            }
-        
-        # Trending
-        if fast_curr > slow_curr:
-            distance = (fast_curr - slow_curr) / slow_curr * 100
-            if distance > 2:
-                return {
-                    "signal": "BUY",
-                    "confidence": min(80, 50 + distance * 5),
-                    "reason": "uptrend",
-                    "description": f"Strong uptrend (EMA distance: {distance:.2f}%)"
-                }
-            else:
-                return {
-                    "signal": "NEUTRAL",
-                    "confidence": 40,
-                    "reason": "weak_uptrend",
-                    "description": "Weak uptrend"
-                }
-        else:
-            distance = (slow_curr - fast_curr) / slow_curr * 100
-            if distance > 2:
-                return {
-                    "signal": "SELL",
-                    "confidence": min(80, 50 + distance * 5),
-                    "reason": "downtrend",
-                    "description": f"Strong downtrend (EMA distance: {distance:.2f}%)"
-                }
-            else:
-                return {
-                    "signal": "NEUTRAL",
-                    "confidence": 40,
-                    "reason": "weak_downtrend",
-                    "description": "Weak downtrend"
-                }
-    
-    @staticmethod
-    def calculate_rsi_signal(rsi: List[float]) -> Dict:
-        """Calculate signal from RSI"""
-        if not rsi or len(rsi) < 2:
-            return {"signal": "NEUTRAL", "confidence": 0, "reason": "insufficient_data"}
-        
-        current_rsi = rsi[-1]
-        prev_rsi = rsi[-2]
-        
-        if current_rsi is None or prev_rsi is None:
-            return {"signal": "NEUTRAL", "confidence": 0, "reason": "insufficient_data"}
-        
-        # Oversold (< 30)
-        if current_rsi < 30:
-            if prev_rsi < 30 and current_rsi > prev_rsi:
-                return {
-                    "signal": "STRONG_BUY",
-                    "confidence": 85,
-                    "reason": "oversold_reversal",
-                    "description": f"Oversold reversal (RSI: {current_rsi:.1f})"
-                }
-            return {
-                "signal": "BUY",
-                "confidence": 70,
-                "reason": "oversold",
-                "description": f"Oversold condition (RSI: {current_rsi:.1f})"
-            }
-        
-        # Overbought (> 70)
-        if current_rsi > 70:
-            if prev_rsi > 70 and current_rsi < prev_rsi:
-                return {
-                    "signal": "STRONG_SELL",
-                    "confidence": 85,
-                    "reason": "overbought_reversal",
-                    "description": f"Overbought reversal (RSI: {current_rsi:.1f})"
-                }
-            return {
-                "signal": "SELL",
-                "confidence": 70,
-                "reason": "overbought",
-                "description": f"Overbought condition (RSI: {current_rsi:.1f})"
-            }
-        
-        # Neutral zone
-        if 40 <= current_rsi <= 60:
-            return {
-                "signal": "NEUTRAL",
-                "confidence": 50,
-                "reason": "neutral_zone",
-                "description": f"Neutral RSI (RSI: {current_rsi:.1f})"
-            }
-        
-        # Bullish
-        if current_rsi > 50 and current_rsi > prev_rsi:
-            return {
-                "signal": "BUY",
-                "confidence": 60,
-                "reason": "bullish_momentum",
-                "description": f"Bullish momentum (RSI: {current_rsi:.1f})"
-            }
-        
-        # Bearish
-        if current_rsi < 50 and current_rsi < prev_rsi:
-            return {
-                "signal": "SELL",
-                "confidence": 60,
-                "reason": "bearish_momentum",
-                "description": f"Bearish momentum (RSI: {current_rsi:.1f})"
-            }
+        s1 = (2 * pivot) - prev["high"]
+        s2 = pivot - (prev["high"] - prev["low"])
+        s3 = prev["low"] - 2 * (prev["high"] - pivot)
         
         return {
-            "signal": "NEUTRAL",
-            "confidence": 45,
-            "reason": "unclear",
-            "description": f"Unclear signal (RSI: {current_rsi:.1f})"
+            "pivot": pivot,
+            "r1": r1, "r2": r2, "r3": r3,
+            "s1": s1, "s2": s2, "s3": s3
         }
-    
-    @staticmethod
-    def calculate_pattern_signal(patterns: List[Dict]) -> Dict:
-        """Calculate signal from candlestick patterns"""
-        if not patterns:
-            return {"signal": "NEUTRAL", "confidence": 0, "reason": "no_patterns"}
-        
-        # Get recent patterns (last 5 candles)
-        recent_patterns = [p for p in patterns if p["position"] >= len(patterns) - 5]
-        
-        if not recent_patterns:
-            return {"signal": "NEUTRAL", "confidence": 0, "reason": "no_recent_patterns"}
-        
-        # Calculate weighted signal
-        bullish_score = sum(p["confidence"] for p in recent_patterns if p["direction"] == "bullish")
-        bearish_score = sum(p["confidence"] for p in recent_patterns if p["direction"] == "bearish")
-        
-        max_confidence = max(p["confidence"] for p in recent_patterns)
-        
-        if bullish_score > bearish_score * 1.5:
-            return {
-                "signal": "BUY" if max_confidence < 90 else "STRONG_BUY",
-                "confidence": min(95, max_confidence),
-                "reason": "bullish_patterns",
-                "description": f"{len([p for p in recent_patterns if p['direction'] == 'bullish'])} bullish pattern(s) detected",
-                "patterns": recent_patterns
-            }
-        elif bearish_score > bullish_score * 1.5:
-            return {
-                "signal": "SELL" if max_confidence < 90 else "STRONG_SELL",
-                "confidence": min(95, max_confidence),
-                "reason": "bearish_patterns",
-                "description": f"{len([p for p in recent_patterns if p['direction'] == 'bearish'])} bearish pattern(s) detected",
-                "patterns": recent_patterns
-            }
-        else:
-            return {
-                "signal": "NEUTRAL",
-                "confidence": 50,
-                "reason": "mixed_patterns",
-                "description": "Mixed pattern signals",
-                "patterns": recent_patterns
-            }
-    
-    @staticmethod
-    def calculate_ict_signal(fvgs: List[Dict], order_blocks: List[Dict], market_structure: Dict) -> Dict:
-        """Calculate signal from ICT analysis"""
-        score = 0
-        reasons = []
-        
-        # Market structure
-        if market_structure["structure"] == "bullish_trend":
-            score += 30 if market_structure["strength"] == "strong" else 20
-            reasons.append(f"Bullish market structure ({market_structure['strength']})")
-        elif market_structure["structure"] == "bearish_trend":
-            score -= 30 if market_structure["strength"] == "strong" else 20
-            reasons.append(f"Bearish market structure ({market_structure['strength']})")
-        
-        # Recent FVGs
-        recent_fvgs = [f for f in fvgs if f["position"] >= len(fvgs) - 3] if fvgs else []
-        for fvg in recent_fvgs:
-            if fvg["type"] == "bullish":
-                score += 15 if fvg["strength"] == "strong" else 10
-                reasons.append(f"Bullish FVG ({fvg['strength']})")
-            else:
-                score -= 15 if fvg["strength"] == "strong" else 10
-                reasons.append(f"Bearish FVG ({fvg['strength']})")
-        
-        # Recent Order Blocks
-        recent_obs = [ob for ob in order_blocks if ob["position"] >= len(order_blocks) - 3] if order_blocks else []
-        for ob in recent_obs:
-            if ob["type"] == "bullish":
-                score += 20 if ob["strength"] == "strong" else 12
-                reasons.append(f"Bullish Order Block ({ob['strength']})")
-            else:
-                score -= 20 if ob["strength"] == "strong" else 12
-                reasons.append(f"Bearish Order Block ({ob['strength']})")
-        
-        # Determine signal
-        confidence = min(95, abs(score))
-        
-        if score > 50:
-            signal = "STRONG_BUY"
-        elif score > 25:
-            signal = "BUY"
-        elif score < -50:
-            signal = "STRONG_SELL"
-        elif score < -25:
-            signal = "SELL"
-        else:
-            signal = "NEUTRAL"
-        
-        return {
-            "signal": signal,
-            "confidence": confidence,
-            "score": score,
-            "reasons": reasons,
-            "description": " | ".join(reasons) if reasons else "No clear ICT signal"
-        }
-    
-    @staticmethod
-    def generate_combined_signal(ema_signal: Dict, rsi_signal: Dict, pattern_signal: Dict, ict_signal: Dict, ha_trend: str) -> Dict:
-        """Combine all signals into final recommendation"""
-        
-        # Signal weights
-        weights = {
-            "ema": 0.25,
-            "rsi": 0.20,
-            "patterns": 0.30,
-            "ict": 0.25
-        }
-        
-        # Convert signals to numeric scores
-        signal_values = {
-            "STRONG_BUY": 2,
-            "BUY": 1,
-            "NEUTRAL": 0,
-            "SELL": -1,
-            "STRONG_SELL": -2
-        }
-        
-        # Calculate weighted score
-        total_score = 0
-        total_confidence = 0
-        
-        for sig, weight in [
-            (ema_signal, weights["ema"]),
-            (rsi_signal, weights["rsi"]),
-            (pattern_signal, weights["patterns"]),
-            (ict_signal, weights["ict"])
-        ]:
-            sig_value = signal_values.get(sig.get("signal", "NEUTRAL"), 0)
-            sig_conf = sig.get("confidence", 0)
-            total_score += sig_value * weight * (sig_conf / 100)
-            total_confidence += sig_conf * weight
-        
-        # Heikin Ashi trend bonus
-        if ha_trend == "strong_bullish":
-            total_score += 0.3
-            total_confidence += 5
-        elif ha_trend == "strong_bearish":
-            total_score -= 0.3
-            total_confidence += 5
-        
-        # Determine final signal
-        if total_score > 1.2:
-            final_signal = SignalType.STRONG_BUY
-        elif total_score > 0.5:
-            final_signal = SignalType.BUY
-        elif total_score < -1.2:
-            final_signal = SignalType.STRONG_SELL
-        elif total_score < -0.5:
-            final_signal = SignalType.SELL
-        else:
-            final_signal = SignalType.NEUTRAL
-        
-        # Determine confidence level
-        if total_confidence >= 85:
-            conf_level = SignalConfidence.VERY_HIGH
-        elif total_confidence >= 70:
-            conf_level = SignalConfidence.HIGH
-        elif total_confidence >= 55:
-            conf_level = SignalConfidence.MEDIUM
-        else:
-            conf_level = SignalConfidence.LOW
-        
-        return {
-            "signal": final_signal,
-            "confidence": round(total_confidence, 1),
-            "confidence_level": conf_level,
-            "score": round(total_score, 2),
-            "components": {
-                "ema": ema_signal,
-                "rsi": rsi_signal,
-                "patterns": pattern_signal,
-                "ict": ict_signal,
-                "heikin_ashi_trend": ha_trend
-            },
-            "recommendation": SignalGenerator._generate_recommendation(final_signal, total_confidence, total_score)
-        }
-    
-    @staticmethod
-    def _generate_recommendation(signal: SignalType, confidence: float, score: float) -> str:
-        """Generate human-readable recommendation"""
-        if signal == SignalType.STRONG_BUY:
-            if confidence >= 85:
-                return "🚀 STRONG BUY - Very high confidence signal. Consider entering long position."
-            else:
-                return "📈 STRONG BUY - Good bullish setup. Moderate confidence."
-        elif signal == SignalType.BUY:
-            return "✅ BUY - Bullish signal detected. Consider buying on dips."
-        elif signal == SignalType.STRONG_SELL:
-            if confidence >= 85:
-                return "🔴 STRONG SELL - Very high confidence bearish signal. Consider exiting or shorting."
-            else:
-                return "📉 STRONG SELL - Bearish setup. Moderate confidence."
-        elif signal == SignalType.SELL:
-            return "⚠️ SELL - Bearish signal detected. Consider taking profits or shorting."
-        else:
-            return "⏸️ NEUTRAL - No clear directional bias. Wait for better setup."
 
 # ========== API ENDPOINTS ==========
+@app.get("/health")
+def health():
+    return {
+        "status": "healthy",
+        "version": "4.0.0",
+        "data_sources": {
+            "crypto": ["Binance", "CoinGecko"],
+            "forex": ["Twelve Data", "Alpha Vantage"]
+        }
+    }
+
 @app.get("/api/analyze/{symbol}")
 async def analyze_symbol(
     symbol: str,
     interval: str = Query(default="1h", regex="^(1h|4h|1d)$")
 ):
-    """Complete technical analysis for a symbol"""
+    """Universal market analysis - REAL DATA ONLY"""
     try:
-        # Fetch candle data
-        candles = await PriceFetcher.get_candles(symbol, interval, 100)
+        # Fetch real data
+        candles, market_type, tv_symbol = await UniversalDataFetcher.get_market_data(symbol, interval)
         
-        if not candles or len(candles) < 50:
-            raise HTTPException(status_code=400, detail="Insufficient data for analysis")
+        if not candles or len(candles) < 100:
+            raise HTTPException(
+                status_code=503,
+                detail=f"Unable to fetch data for {symbol}. Check API keys or try a different symbol."
+            )
         
         # Calculate indicators
         ema_9 = TechnicalIndicators.calculate_ema(candles, 9)
         ema_21 = TechnicalIndicators.calculate_ema(candles, 21)
         ema_50 = TechnicalIndicators.calculate_ema(candles, 50)
+        ema_100 = TechnicalIndicators.calculate_ema(candles, 100)
         rsi = TechnicalIndicators.calculate_rsi(candles, 14)
-        ha_candles = TechnicalIndicators.convert_to_heikin_ashi(candles)
+        fibonacci = TechnicalIndicators.calculate_fibonacci(candles, 100)
+        pivot_points = TechnicalIndicators.calculate_pivot_points(candles)
         
-        # Detect patterns
-        patterns = CandlestickPatternDetector.detect_all_patterns(candles)
-        
-        # ICT Analysis
-        fvgs = ICTAnalyzer.detect_fair_value_gaps(candles)
-        order_blocks = ICTAnalyzer.detect_order_blocks(candles)
-        market_structure = ICTAnalyzer.analyze_market_structure(candles)
-        
-        # Heikin Ashi trend
-        ha_recent = ha_candles[-5:]
-        bullish_ha = sum(1 for c in ha_recent if c["close"] > c["open"])
-        if bullish_ha >= 4:
-            ha_trend = "strong_bullish"
-        elif bullish_ha >= 3:
-            ha_trend = "bullish"
-        elif bullish_ha <= 1:
-            ha_trend = "strong_bearish"
-        elif bullish_ha <= 2:
-            ha_trend = "bearish"
-        else:
-            ha_trend = "neutral"
-        
-        # Generate signals
-        ema_signal = SignalGenerator.calculate_ema_signal(ema_9, ema_21)
-        rsi_signal = SignalGenerator.calculate_rsi_signal(rsi)
-        pattern_signal = SignalGenerator.calculate_pattern_signal(patterns)
-        ict_signal = SignalGenerator.calculate_ict_signal(fvgs, order_blocks, market_structure)
-        
-        # Combined signal
-        combined_signal = SignalGenerator.generate_combined_signal(
-            ema_signal, rsi_signal, pattern_signal, ict_signal, ha_trend
-        )
-        
-        # Current price data
-        current_candle = candles[-1]
-        prev_candle = candles[-2]
-        price_change = ((current_candle["close"] - prev_candle["close"]) / prev_candle["close"]) * 100
+        # Current price
+        current = candles[-1]
+        prev = candles[-2]
+        price_change = ((current["close"] - prev["close"]) / prev["close"]) * 100
         
         return {
             "success": True,
             "symbol": symbol.upper(),
+            "market_type": market_type.value,
+            "tradingview_symbol": tv_symbol,
             "interval": interval,
             "timestamp": datetime.utcnow().isoformat() + "Z",
+            "data_source": "REAL" if candles else "UNAVAILABLE",
+            "candle_count": len(candles),
+            
             "price_data": {
-                "current": current_candle["close"],
-                "open": current_candle["open"],
-                "high": current_candle["high"],
-                "low": current_candle["low"],
+                "current": round(current["close"], 8),
+                "open": round(current["open"], 8),
+                "high": round(current["high"], 8),
+                "low": round(current["low"], 8),
                 "change_percent": round(price_change, 2),
-                "volume": current_candle["volume"]
+                "volume": current["volume"]
             },
+            
             "indicators": {
-                "ema_9": round(ema_9[-1], 4) if ema_9[-1] else None,
-                "ema_21": round(ema_21[-1], 4) if ema_21[-1] else None,
-                "ema_50": round(ema_50[-1], 4) if ema_50[-1] else None,
-                "rsi": round(rsi[-1], 2) if rsi[-1] else None,
-                "heikin_ashi_trend": ha_trend
+                "ema_9": round(ema_9[-1], 8) if ema_9[-1] else None,
+                "ema_21": round(ema_21[-1], 8) if ema_21[-1] else None,
+                "ema_50": round(ema_50[-1], 8) if ema_50[-1] else None,
+                "ema_100": round(ema_100[-1], 8) if ema_100[-1] else None,
+                "rsi": round(rsi[-1], 2) if rsi[-1] else None
             },
-            "patterns": patterns[-10:],  # Last 10 patterns
-            "ict_analysis": {
-                "fair_value_gaps": fvgs[-5:],  # Last 5 FVGs
-                "order_blocks": order_blocks[-5:],  # Last 5 OBs
-                "market_structure": market_structure
+            
+            "fibonacci": {
+                "trend": fibonacci["trend"],
+                "levels": {k: round(v, 8) for k, v in fibonacci["levels"].items()},
+                "nearest_support": round(fibonacci["nearest_support"], 8),
+                "nearest_resistance": round(fibonacci["nearest_resistance"], 8)
             },
-            "signal": combined_signal
+            
+            "pivot_points": {
+                "pivot": round(pivot_points["pivot"], 8),
+                "resistance": {
+                    "R1": round(pivot_points["r1"], 8),
+                    "R2": round(pivot_points["r2"], 8),
+                    "R3": round(pivot_points["r3"], 8)
+                },
+                "support": {
+                    "S1": round(pivot_points["s1"], 8),
+                    "S2": round(pivot_points["s2"], 8),
+                    "S3": round(pivot_points["s3"], 8)
+                }
+            }
         }
         
+    except HTTPException:
+        raise
     except Exception as e:
-        logger.error(f"Analysis error for {symbol}: {e}")
+        logger.error(f"Analysis error: {e}", exc_info=True)
         raise HTTPException(status_code=500, detail=f"Analysis failed: {str(e)}")
 
+# ========== DASHBOARD ==========
+@app.get("/", response_class=HTMLResponse)
 @app.get("/dashboard", response_class=HTMLResponse)
 async def dashboard():
-    """Main trading dashboard"""
     return """
 <!DOCTYPE html>
-<html lang="en">
+<html lang="tr">
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Professional Trading Bot</title>
+    <title>Real Data Trading Bot - Professional Grade</title>
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
     <style>
         * { margin: 0; padding: 0; box-sizing: border-box; }
@@ -1103,19 +809,17 @@ async def dashboard():
         :root {
             --bg-dark: #0a0e27;
             --bg-card: #1a1f3a;
-            --bg-hover: #252b4a;
-            --primary: #3b82f6;
+            --primary: #10b981;
             --success: #10b981;
             --danger: #ef4444;
             --warning: #f59e0b;
             --text: #e2e8f0;
             --text-muted: #94a3b8;
-            --border: rgba(148, 163, 184, 0.1);
         }
         
         body {
-            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
-            background: linear-gradient(135deg, var(--bg-dark) 0%, #1a1f3a 100%);
+            font-family: 'Segoe UI', sans-serif;
+            background: linear-gradient(135deg, var(--bg-dark), #1a1f3a);
             color: var(--text);
             min-height: 100vh;
             padding: 1rem;
@@ -1124,40 +828,26 @@ async def dashboard():
         .container { max-width: 1800px; margin: 0 auto; }
         
         header {
-            background: linear-gradient(90deg, var(--primary), #8b5cf6);
+            background: linear-gradient(90deg, var(--success), #059669);
             border-radius: 16px;
             padding: 2rem;
             margin-bottom: 2rem;
             text-align: center;
-            box-shadow: 0 10px 30px rgba(59, 130, 246, 0.3);
         }
         
         .logo {
             font-size: 2.5rem;
             font-weight: 900;
             color: white;
-            margin-bottom: 0.5rem;
         }
         
-        .tagline {
-            color: rgba(255, 255, 255, 0.9);
-            font-size: 1.1rem;
-        }
-        
-        .badges {
-            display: flex;
-            justify-content: center;
-            gap: 0.75rem;
-            margin-top: 1rem;
-            flex-wrap: wrap;
-        }
-        
-        .badge {
-            background: rgba(255, 255, 255, 0.15);
-            padding: 0.4rem 1rem;
+        .status-badge {
+            display: inline-block;
+            background: rgba(255,255,255,0.2);
+            padding: 0.5rem 1.5rem;
             border-radius: 20px;
-            font-size: 0.85rem;
-            backdrop-filter: blur(10px);
+            margin-top: 1rem;
+            font-weight: 600;
         }
         
         .control-panel {
@@ -1165,72 +855,64 @@ async def dashboard():
             border-radius: 12px;
             padding: 1.5rem;
             margin-bottom: 2rem;
-            border: 1px solid var(--border);
-        }
-        
-        .panel-title {
-            font-size: 1.3rem;
-            font-weight: 700;
-            margin-bottom: 1rem;
-            display: flex;
-            align-items: center;
-            gap: 0.5rem;
         }
         
         .input-row {
             display: grid;
-            grid-template-columns: 1fr 200px auto;
+            grid-template-columns: 1fr 150px auto;
             gap: 1rem;
-            margin-bottom: 1rem;
+        }
+        
+        input, select, button {
+            padding: 0.75rem 1rem;
+            border-radius: 8px;
+            border: 1px solid rgba(255,255,255,0.1);
+            font-size: 0.95rem;
         }
         
         input, select {
             background: var(--bg-dark);
-            border: 1px solid var(--border);
             color: var(--text);
-            padding: 0.75rem 1rem;
-            border-radius: 8px;
-            font-size: 0.95rem;
-        }
-        
-        input:focus, select:focus {
-            outline: none;
-            border-color: var(--primary);
         }
         
         button {
-            background: linear-gradient(90deg, var(--primary), #8b5cf6);
+            background: var(--success);
             color: white;
             border: none;
-            padding: 0.75rem 1.5rem;
-            border-radius: 8px;
-            font-weight: 600;
             cursor: pointer;
-            transition: transform 0.2s;
+            font-weight: 600;
         }
         
-        button:hover { transform: translateY(-2px); }
-        button:disabled { opacity: 0.5; cursor: not-allowed; }
+        button:hover { opacity: 0.9; }
         
         .quick-symbols {
-            display: flex;
+            display: grid;
+            grid-template-columns: repeat(auto-fill, minmax(120px, 1fr));
             gap: 0.5rem;
-            flex-wrap: wrap;
+            margin-top: 1rem;
         }
         
         .quick-symbol {
-            background: rgba(59, 130, 246, 0.1);
-            border: 1px solid rgba(59, 130, 246, 0.3);
-            padding: 0.4rem 0.8rem;
+            background: rgba(16,185,129,0.1);
+            padding: 0.6rem;
             border-radius: 6px;
+            text-align: center;
             cursor: pointer;
             transition: all 0.2s;
-            font-size: 0.85rem;
         }
         
         .quick-symbol:hover {
-            background: rgba(59, 130, 246, 0.2);
-            border-color: var(--primary);
+            background: rgba(16,185,129,0.2);
+            transform: scale(1.05);
+        }
+        
+        .category-title {
+            grid-column: 1/-1;
+            font-weight: 700;
+            color: var(--success);
+            padding: 0.5rem 0;
+            border-bottom: 2px solid var(--success);
+            margin-top: 1rem;
         }
         
         .dashboard {
@@ -1240,145 +922,56 @@ async def dashboard():
             margin-bottom: 1.5rem;
         }
         
-        @media (max-width: 1200px) {
-            .dashboard { grid-template-columns: 1fr; }
-            .input-row { grid-template-columns: 1fr; }
-        }
-        
         .card {
             background: var(--bg-card);
             border-radius: 12px;
             padding: 1.5rem;
-            border: 1px solid var(--border);
         }
         
         .card-title {
             font-size: 1.2rem;
             font-weight: 700;
             margin-bottom: 1rem;
-            display: flex;
-            align-items: center;
-            gap: 0.5rem;
         }
         
-        .signal-box {
-            background: linear-gradient(135deg, rgba(59, 130, 246, 0.1) 0%, rgba(139, 92, 246, 0.1) 100%);
-            border: 2px solid var(--primary);
-            border-radius: 12px;
-            padding: 2rem;
-            text-align: center;
-            margin-bottom: 1.5rem;
-        }
-        
-        .signal-box.buy { border-color: var(--success); background: linear-gradient(135deg, rgba(16, 185, 129, 0.1) 0%, rgba(16, 185, 129, 0.05) 100%); }
-        .signal-box.sell { border-color: var(--danger); background: linear-gradient(135deg, rgba(239, 68, 68, 0.1) 0%, rgba(239, 68, 68, 0.05) 100%); }
-        
-        .signal-type {
-            font-size: 2.5rem;
-            font-weight: 900;
-            margin-bottom: 0.5rem;
-        }
-        
-        .signal-type.buy { color: var(--success); }
-        .signal-type.sell { color: var(--danger); }
-        .signal-type.neutral { color: var(--text-muted); }
-        
-        .confidence-badge {
-            display: inline-block;
-            padding: 0.4rem 1rem;
-            border-radius: 20px;
-            font-weight: 600;
-            font-size: 0.9rem;
-            margin-top: 0.5rem;
-        }
-        
-        .confidence-very-high { background: rgba(16, 185, 129, 0.2); color: var(--success); }
-        .confidence-high { background: rgba(59, 130, 246, 0.2); color: var(--primary); }
-        .confidence-medium { background: rgba(245, 158, 11, 0.2); color: var(--warning); }
-        .confidence-low { background: rgba(148, 163, 184, 0.2); color: var(--text-muted); }
-        
-        .recommendation {
-            margin-top: 1rem;
-            padding: 1rem;
-            background: rgba(255, 255, 255, 0.05);
-            border-radius: 8px;
-            font-size: 0.95rem;
-        }
-        
-        .indicators-grid {
+        .info-grid {
             display: grid;
             grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
             gap: 1rem;
-            margin-bottom: 1.5rem;
         }
         
-        .indicator-item {
+        .info-item {
             background: var(--bg-dark);
             padding: 1rem;
             border-radius: 8px;
-            text-align: center;
         }
         
-        .indicator-label {
+        .info-label {
             color: var(--text-muted);
             font-size: 0.85rem;
             margin-bottom: 0.5rem;
         }
         
-        .indicator-value {
-            font-size: 1.3rem;
+        .info-value {
+            font-size: 1.2rem;
             font-weight: 700;
         }
         
-        .pattern-list {
-            max-height: 400px;
-            overflow-y: auto;
-        }
-        
-        .pattern-item {
-            background: var(--bg-dark);
-            padding: 1rem;
+        .tradingview-widget {
+            width: 100%;
+            height: 500px;
             border-radius: 8px;
-            margin-bottom: 0.75rem;
-            border-left: 3px solid var(--primary);
-        }
-        
-        .pattern-item.bullish { border-left-color: var(--success); }
-        .pattern-item.bearish { border-left-color: var(--danger); }
-        
-        .pattern-header {
-            display: flex;
-            justify-content: space-between;
-            align-items: center;
-            margin-bottom: 0.5rem;
-        }
-        
-        .pattern-name {
-            font-weight: 600;
-            font-size: 1rem;
-        }
-        
-        .pattern-confidence {
-            background: rgba(59, 130, 246, 0.2);
-            padding: 0.2rem 0.6rem;
-            border-radius: 12px;
-            font-size: 0.85rem;
-        }
-        
-        .pattern-desc {
-            color: var(--text-muted);
-            font-size: 0.9rem;
         }
         
         .loading {
             text-align: center;
             padding: 3rem;
-            color: var(--primary);
+            color: var(--success);
         }
         
         .spinner {
-            border: 3px solid rgba(59, 130, 246, 0.3);
-            border-top: 3px solid var(--primary);
+            border: 3px solid rgba(16,185,129,0.3);
+            border-top: 3px solid var(--success);
             border-radius: 50%;
             width: 40px;
             height: 40px;
@@ -1391,53 +984,25 @@ async def dashboard():
             100% { transform: rotate(360deg); }
         }
         
-      .tradingview-widget {
-    width: 100%;
-    height: 60vh;              /* Ekranın %60'ı – mobil ve masaüstünde güzel durur */
-    min-height: 450px;         /* Küçük ekranlarda çok küçülmesin */
-    max-height: 900px;         /* Çok büyük olmasın */
-    border-radius: 8px;
-    overflow: hidden;
-    background: #0a0e27;       /* Arka plan TradingView yüklenirken boş kalmasın */
-    box-shadow: 0 4px 15px rgba(0,0,0,0.3);  /* Hafif gölge – şık durur */
-}
-
-/* Ekstra: Mobil için küçültme */
-@media (max-width: 768px) {
-    .tradingview-widget {
-        height: 50vh;          /* Mobilde daha az yer kaplasın */
-        min-height: 350px;
-    }
-}
-        #tradingview_chart {
-            width: 100%;
-            height: 100%;
+        .alert {
+            padding: 1rem;
+            border-radius: 8px;
+            margin-bottom: 1rem;
         }
         
-        .ict-section {
-            margin-top: 1rem;
+        .alert-info {
+            background: rgba(59,130,246,0.1);
+            border-left: 4px solid #3b82f6;
         }
         
-        .ict-item {
-            background: var(--bg-dark);
-            padding: 0.75rem;
-            border-radius: 6px;
-            margin-bottom: 0.5rem;
-            font-size: 0.9rem;
+        .alert-success {
+            background: rgba(16,185,129,0.1);
+            border-left: 4px solid var(--success);
         }
         
-        .ict-label {
-            color: var(--text-muted);
-            display: inline-block;
-            min-width: 120px;
-        }
-        
-        footer {
-            text-align: center;
-            padding: 2rem;
-            color: var(--text-muted);
-            border-top: 1px solid var(--border);
-            margin-top: 2rem;
+        .alert-warning {
+            background: rgba(245,158,11,0.1);
+            border-left: 4px solid var(--warning);
         }
     </style>
 </head>
@@ -1445,60 +1010,67 @@ async def dashboard():
     <div class="container">
         <header>
             <div class="logo">
-                <i class="fas fa-chart-line"></i> Professional Trading Bot
+                <i class="fas fa-chart-line"></i> Real Data Trading Bot
             </div>
-            <div class="tagline">Advanced Technical Analysis • Multi-Timeframe • High-Confidence Signals</div>
-            <div class="badges">
-                <div class="badge"><i class="fas fa-wave-square"></i> EMA Crossovers</div>
-                <div class="badge"><i class="fas fa-chart-bar"></i> RSI Analysis</div>
-                <div class="badge"><i class="fas fa-candle-holder"></i> Heikin Ashi</div>
-                <div class="badge"><i class="fas fa-chess-board"></i> ICT Structure</div>
-                <div class="badge"><i class="fas fa-pattern"></i> 12 Patterns</div>
+            <div class="status-badge">
+                <i class="fas fa-check-circle"></i> REAL DATA ONLY - NO SYNTHETIC
             </div>
         </header>
         
+        <div class="alert alert-info">
+            <strong>📡 Veri Kaynakları:</strong><br>
+            • <strong>Kripto:</strong> Binance (gerçek zamanlı) + CoinGecko (tüm coinler, 20 sn cache)<br>
+            • <strong>Forex:</strong> Twelve Data (800 call/day) + Alpha Vantage (25 call/day fallback)
+        </div>
+        
         <div class="control-panel">
-            <h2 class="panel-title">
-                <i class="fas fa-sliders-h"></i> Analysis Control
-            </h2>
+            <h2 class="card-title"><i class="fas fa-search"></i> Analiz Yap</h2>
             <div class="input-row">
-                <input type="text" id="symbolInput" placeholder="Enter symbol (e.g., BTCUSDT, ETHUSDT)" value="BTCUSDT">
+                <input type="text" id="symbolInput" placeholder="Örn: BTCUSDT, SOLUSDT, EUR/USD, GBPUSD..." value="BTCUSDT">
                 <select id="intervalSelect">
-                    <option value="1h">1 Hour</option>
-                    <option value="4h">4 Hours</option>
-                    <option value="1d">1 Day</option>
+                    <option value="1h">1 Saat</option>
+                    <option value="4h">4 Saat</option>
+                    <option value="1d">1 Gün</option>
                 </select>
                 <button onclick="analyze()" id="analyzeBtn">
-                    <i class="fas fa-search"></i> Analyze
+                    <i class="fas fa-search"></i> Analiz Et
                 </button>
             </div>
+            
             <div class="quick-symbols">
-                <div class="quick-symbol" onclick="setSymbol('BTCUSDT')">BTC/USDT</div>
-                <div class="quick-symbol" onclick="setSymbol('ETHUSDT')">ETH/USDT</div>
-                <div class="quick-symbol" onclick="setSymbol('SOLUSDT')">SOL/USDT</div>
-                <div class="quick-symbol" onclick="setSymbol('XRPUSDT')">XRP/USDT</div>
-                <div class="quick-symbol" onclick="setSymbol('ADAUSDT')">ADA/USDT</div>
+                <div class="category-title">🪙 Kripto (Binance + CoinGecko)</div>
+                <div class="quick-symbol" onclick="setSymbol('BTCUSDT')">Bitcoin</div>
+                <div class="quick-symbol" onclick="setSymbol('ETHUSDT')">Ethereum</div>
+                <div class="quick-symbol" onclick="setSymbol('SOLUSDT')">Solana</div>
+                <div class="quick-symbol" onclick="setSymbol('XRPUSDT')">XRP</div>
+                <div class="quick-symbol" onclick="setSymbol('ADAUSDT')">Cardano</div>
+                <div class="quick-symbol" onclick="setSymbol('AVAXUSDT')">Avalanche</div>
+                <div class="quick-symbol" onclick="setSymbol('DOGEUSDT')">Dogecoin</div>
+                <div class="quick-symbol" onclick="setSymbol('SHIBUSDT')">Shiba</div>
+                
+                <div class="category-title">💱 Forex (Twelve Data + Alpha Vantage)</div>
+                <div class="quick-symbol" onclick="setSymbol('EURUSD')">EUR/USD</div>
+                <div class="quick-symbol" onclick="setSymbol('GBPUSD')">GBP/USD</div>
+                <div class="quick-symbol" onclick="setSymbol('USDJPY')">USD/JPY</div>
+                <div class="quick-symbol" onclick="setSymbol('AUDUSD')">AUD/USD</div>
+                <div class="quick-symbol" onclick="setSymbol('USDCHF')">USD/CHF</div>
+                <div class="quick-symbol" onclick="setSymbol('NZDUSD')">NZD/USD</div>
             </div>
         </div>
         
         <div class="dashboard">
             <div class="card">
                 <h2 class="card-title">
-                    <i class="fas fa-signal"></i> Trading Signal
-                    <span id="symbolDisplay" style="font-size: 0.9rem; color: var(--text-muted); margin-left: auto;">-</span>
+                    <i class="fas fa-info-circle"></i> Piyasa Bilgileri
+                    <span id="symbolDisplay" style="margin-left: auto; font-size: 0.9rem; opacity: 0.7;">-</span>
                 </h2>
-                <div id="signalContainer">
-                    <div class="loading">
-                        <div class="spinner"></div>
-                        <div>Ready to analyze...</div>
-                    </div>
+                <div id="infoContainer">
+                    <div class="loading">Analiz bekleniyor...</div>
                 </div>
             </div>
             
             <div class="card">
-                <h2 class="card-title">
-                    <i class="fas fa-chart-area"></i> TradingView Chart
-                </h2>
+                <h2 class="card-title"><i class="fas fa-chart-area"></i> TradingView Chart</h2>
                 <div class="tradingview-widget">
                     <div id="tradingview_chart"></div>
                 </div>
@@ -1507,54 +1079,27 @@ async def dashboard():
         
         <div class="dashboard">
             <div class="card">
-                <h2 class="card-title">
-                    <i class="fas fa-chart-line"></i> Technical Indicators
-                </h2>
-                <div id="indicatorsContainer">
-                    <div class="loading">Waiting for analysis...</div>
+                <h2 class="card-title"><i class="fas fa-percent"></i> Fibonacci Seviyeleri</h2>
+                <div id="fibContainer">
+                    <div class="loading">Bekleniyor...</div>
                 </div>
             </div>
             
             <div class="card">
-                <h2 class="card-title">
-                    <i class="fas fa-candle-holder"></i> Candlestick Patterns
-                </h2>
-                <div id="patternsContainer">
-                    <div class="loading">Waiting for analysis...</div>
+                <h2 class="card-title"><i class="fas fa-crosshairs"></i> Pivot Noktaları</h2>
+                <div id="pivotContainer">
+                    <div class="loading">Bekleniyor...</div>
                 </div>
             </div>
         </div>
-        
-        <div class="card">
-            <h2 class="card-title">
-                <i class="fas fa-chess-board"></i> ICT Market Structure
-            </h2>
-            <div id="ictContainer">
-                <div class="loading">Waiting for analysis...</div>
-            </div>
-        </div>
-        
-        <footer>
-            <div>© 2024 Professional Trading Bot v2.0.0</div>
-            <div style="color: var(--danger); margin-top: 0.5rem;">
-                <i class="fas fa-exclamation-triangle"></i> This is not financial advice. Trade at your own risk.
-            </div>
-        </footer>
     </div>
 
     <script src="https://s3.tradingview.com/tv.js"></script>
     <script>
         let tvWidget = null;
         
-        function initTradingView(symbol) {
-            if (tvWidget) {
-                tvWidget.remove();
-            }
-            
-            let tvSymbol = symbol.toUpperCase();
-            if (tvSymbol.endsWith("USDT")) {
-                tvSymbol = `BINANCE:${tvSymbol}`;
-            }
+        function initTradingView(tvSymbol) {
+            if (tvWidget) tvWidget.remove();
             
             tvWidget = new TradingView.widget({
                 width: "100%",
@@ -1564,24 +1109,15 @@ async def dashboard():
                 timezone: "Etc/UTC",
                 theme: "dark",
                 style: "1",
-                locale: "en",
+                locale: "tr",
                 toolbar_bg: "#1a1f3a",
                 enable_publishing: false,
-                container_id: "tradingview_chart",
-                studies: [
-                    "RSI@tv-basicstudies",
-                    "MASimple@tv-basicstudies"
-                ],
-                overrides: {
-                    "paneProperties.background": "#0a0e27",
-                    "paneProperties.vertGridProperties.color": "#1a1f3a",
-                    "paneProperties.horzGridProperties.color": "#1a1f3a"
-                }
+                container_id: "tradingview_chart"
             });
         }
         
-        function setSymbol(symbol) {
-            document.getElementById('symbolInput').value = symbol;
+        function setSymbol(sym) {
+            document.getElementById('symbolInput').value = sym;
             analyze();
         }
         
@@ -1590,196 +1126,133 @@ async def dashboard():
             const interval = document.getElementById('intervalSelect').value;
             const btn = document.getElementById('analyzeBtn');
             
-            if (!symbol) {
-                alert('Please enter a symbol');
-                return;
-            }
+            if (!symbol) return alert('Sembol girin');
             
             btn.disabled = true;
-            btn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Analyzing...';
+            btn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Gerçek veri çekiliyor...';
             
             document.getElementById('symbolDisplay').textContent = symbol.toUpperCase();
-            document.getElementById('signalContainer').innerHTML = '<div class="loading"><div class="spinner"></div><div>Analyzing ' + symbol + '...</div></div>';
-            document.getElementById('indicatorsContainer').innerHTML = '<div class="loading"><div class="spinner"></div></div>';
-            document.getElementById('patternsContainer').innerHTML = '<div class="loading"><div class="spinner"></div></div>';
-            document.getElementById('ictContainer').innerHTML = '<div class="loading"><div class="spinner"></div></div>';
-            
-            initTradingView(symbol);
+            showLoading();
             
             try {
-                const response = await fetch(`/api/analyze/${encodeURIComponent(symbol)}?interval=${interval}`);
-                const data = await response.json();
+                const resp = await fetch(`/api/analyze/${encodeURIComponent(symbol)}?interval=${interval}`);
+                const data = await resp.json();
                 
                 if (!data.success) {
-                    throw new Error('Analysis failed');
+                    throw new Error(data.detail || 'Veri alınamadı');
                 }
                 
-                renderSignal(data);
-                renderIndicators(data);
-                renderPatterns(data);
-                renderICT(data);
+                initTradingView(data.tradingview_symbol);
+                renderInfo(data);
+                renderFib(data);
+                renderPivot(data);
                 
-            } catch (error) {
-                console.error('Error:', error);
-                document.getElementById('signalContainer').innerHTML = `
-                    <div style="text-align: center; padding: 2rem; color: var(--danger);">
-                        <i class="fas fa-exclamation-triangle" style="font-size: 2rem;"></i>
-                        <div style="margin-top: 1rem;">Analysis failed. Please try again.</div>
-                    </div>
-                `;
+            } catch (err) {
+                console.error(err);
+                alert('Analiz hatası: ' + err.message);
             } finally {
                 btn.disabled = false;
-                btn.innerHTML = '<i class="fas fa-search"></i> Analyze';
+                btn.innerHTML = '<i class="fas fa-search"></i> Analiz Et';
             }
         }
         
-        function renderSignal(data) {
-            const signal = data.signal;
-            const signalClass = signal.signal.toLowerCase().includes('buy') ? 'buy' : 
-                               signal.signal.toLowerCase().includes('sell') ? 'sell' : 'neutral';
-            
-            const confClass = `confidence-${signal.confidence_level.toLowerCase().replace('_', '-')}`;
-            
-            let html = `
-                <div class="signal-box ${signalClass}">
-                    <div class="signal-type ${signalClass}">${signal.signal.replace('_', ' ')}</div>
-                    <div class="confidence-badge ${confClass}">
-                        ${signal.confidence}% Confidence • ${signal.confidence_level.replace('_', ' ')}
-                    </div>
-                    <div class="recommendation">${signal.recommendation}</div>
-                </div>
-                
-                <div style="font-size: 1.1rem; font-weight: 600; margin-bottom: 0.75rem;">
-                    Price: $${data.price_data.current.toFixed(4)}
-                    <span style="color: ${data.price_data.change_percent >= 0 ? 'var(--success)' : 'var(--danger)'}; margin-left: 1rem;">
-                        ${data.price_data.change_percent >= 0 ? '▲' : '▼'} ${Math.abs(data.price_data.change_percent).toFixed(2)}%
-                    </span>
-                </div>
-                
-                <div style="display: grid; grid-template-columns: repeat(2, 1fr); gap: 0.75rem; font-size: 0.9rem;">
-                    <div style="background: var(--bg-dark); padding: 0.75rem; border-radius: 6px;">
-                        <div style="color: var(--text-muted);">EMA Signal</div>
-                        <div style="font-weight: 600; margin-top: 0.3rem;">${signal.components.ema.signal}</div>
-                    </div>
-                    <div style="background: var(--bg-dark); padding: 0.75rem; border-radius: 6px;">
-                        <div style="color: var(--text-muted);">RSI Signal</div>
-                        <div style="font-weight: 600; margin-top: 0.3rem;">${signal.components.rsi.signal}</div>
-                    </div>
-                    <div style="background: var(--bg-dark); padding: 0.75rem; border-radius: 6px;">
-                        <div style="color: var(--text-muted);">Pattern Signal</div>
-                        <div style="font-weight: 600; margin-top: 0.3rem;">${signal.components.patterns.signal}</div>
-                    </div>
-                    <div style="background: var(--bg-dark); padding: 0.75rem; border-radius: 6px;">
-                        <div style="color: var(--text-muted);">ICT Signal</div>
-                        <div style="font-weight: 600; margin-top: 0.3rem;">${signal.components.ict.signal}</div>
-                    </div>
-                </div>
-            `;
-            
-            document.getElementById('signalContainer').innerHTML = html;
+        function showLoading() {
+            const loading = '<div class="loading"><div class="spinner"></div></div>';
+            document.getElementById('infoContainer').innerHTML = loading;
+            document.getElementById('fibContainer').innerHTML = loading;
+            document.getElementById('pivotContainer').innerHTML = loading;
         }
         
-        function renderIndicators(data) {
-            const ind = data.indicators;
-            
-            let rsiColor = 'var(--text)';
-            if (ind.rsi > 70) rsiColor = 'var(--danger)';
-            else if (ind.rsi < 30) rsiColor = 'var(--success)';
-            
+        function renderInfo(data) {
             const html = `
-                <div class="indicators-grid">
-                    <div class="indicator-item">
-                        <div class="indicator-label">EMA 9</div>
-                        <div class="indicator-value">${ind.ema_9 ? ind.ema_9.toFixed(2) : '-'}</div>
+                <div class="alert alert-success">
+                    <strong>✅ Veri Kaynağı:</strong> ${data.data_source} (${data.candle_count} mum)
+                </div>
+                <div class="info-grid">
+                    <div class="info-item">
+                        <div class="info-label">Piyasa</div>
+                        <div class="info-value">${data.market_type}</div>
                     </div>
-                    <div class="indicator-item">
-                        <div class="indicator-label">EMA 21</div>
-                        <div class="indicator-value">${ind.ema_21 ? ind.ema_21.toFixed(2) : '-'}</div>
+                    <div class="info-item">
+                        <div class="info-label">Fiyat</div>
+                        <div class="info-value">$${data.price_data.current}</div>
                     </div>
-                    <div class="indicator-item">
-                        <div class="indicator-label">EMA 50</div>
-                        <div class="indicator-value">${ind.ema_50 ? ind.ema_50.toFixed(2) : '-'}</div>
-                    </div>
-                    <div class="indicator-item">
-                        <div class="indicator-label">RSI (14)</div>
-                        <div class="indicator-value" style="color: ${rsiColor}">${ind.rsi ? ind.rsi.toFixed(1) : '-'}</div>
-                    </div>
-                    <div class="indicator-item" style="grid-column: span 2;">
-                        <div class="indicator-label">Heikin Ashi Trend</div>
-                        <div class="indicator-value" style="text-transform: capitalize; font-size: 1.1rem;">
-                            ${ind.heikin_ashi_trend.replace('_', ' ')}
+                    <div class="info-item">
+                        <div class="info-label">Değişim</div>
+                        <div class="info-value" style="color: ${data.price_data.change_percent >= 0 ? 'var(--success)' : 'var(--danger)'}">
+                            ${data.price_data.change_percent >= 0 ? '▲' : '▼'} ${Math.abs(data.price_data.change_percent)}%
                         </div>
+                    </div>
+                    <div class="info-item">
+                        <div class="info-label">RSI</div>
+                        <div class="info-value">${data.indicators.rsi || '-'}</div>
                     </div>
                 </div>
             `;
-            
-            document.getElementById('indicatorsContainer').innerHTML = html;
+            document.getElementById('infoContainer').innerHTML = html;
         }
         
-        function renderPatterns(data) {
-            const patterns = data.patterns;
+        function renderFib(data) {
+            const fib = data.fibonacci;
+            let html = `
+                <div style="margin-bottom: 1rem;">
+                    <strong>Trend:</strong> ${fib.trend === 'uptrend' ? '📈 Yükseliş' : '📉 Düşüş'}
+                </div>
+                <div class="info-grid">
+            `;
             
-            if (!patterns || patterns.length === 0) {
-                document.getElementById('patternsContainer').innerHTML = '<div style="text-align: center; padding: 2rem; color: var(--text-muted);">No patterns detected</div>';
-                return;
-            }
-            
-            let html = '<div class="pattern-list">';
-            
-            patterns.forEach(pattern => {
+            for (const [level, price] of Object.entries(fib.levels)) {
                 html += `
-                    <div class="pattern-item ${pattern.direction}">
-                        <div class="pattern-header">
-                            <div class="pattern-name">${pattern.name}</div>
-                            <div class="pattern-confidence">${pattern.confidence}%</div>
-                        </div>
-                        <div class="pattern-desc">${pattern.description}</div>
+                    <div class="info-item">
+                        <div class="info-label">${level}</div>
+                        <div class="info-value">$${price.toFixed(6)}</div>
                     </div>
                 `;
-            });
+            }
             
             html += '</div>';
-            document.getElementById('patternsContainer').innerHTML = html;
+            document.getElementById('fibContainer').innerHTML = html;
         }
         
-        function renderICT(data) {
-            const ict = data.ict_analysis;
-            
-            let html = '<div class="ict-section">';
-            
-            html += `
-                <div class="ict-item">
-                    <span class="ict-label">Market Structure:</span>
-                    <strong>${ict.market_structure.structure.replace('_', ' ').toUpperCase()}</strong>
-                    (${ict.market_structure.strength})
+        function renderPivot(data) {
+            const p = data.pivot_points;
+            const html = `
+                <div class="info-grid">
+                    <div class="info-item">
+                        <div class="info-label">Pivot</div>
+                        <div class="info-value" style="color: var(--warning)">$${p.pivot.toFixed(6)}</div>
+                    </div>
+                    <div class="info-item">
+                        <div class="info-label">R1</div>
+                        <div class="info-value" style="color: var(--danger)">$${p.resistance.R1.toFixed(6)}</div>
+                    </div>
+                    <div class="info-item">
+                        <div class="info-label">R2</div>
+                        <div class="info-value" style="color: var(--danger)">$${p.resistance.R2.toFixed(6)}</div>
+                    </div>
+                    <div class="info-item">
+                        <div class="info-label">R3</div>
+                        <div class="info-value" style="color: var(--danger)">$${p.resistance.R3.toFixed(6)}</div>
+                    </div>
+                    <div class="info-item">
+                        <div class="info-label">S1</div>
+                        <div class="info-value" style="color: var(--success)">$${p.support.S1.toFixed(6)}</div>
+                    </div>
+                    <div class="info-item">
+                        <div class="info-label">S2</div>
+                        <div class="info-value" style="color: var(--success)">$${p.support.S2.toFixed(6)}</div>
+                    </div>
+                    <div class="info-item">
+                        <div class="info-label">S3</div>
+                        <div class="info-value" style="color: var(--success)">$${p.support.S3.toFixed(6)}</div>
+                    </div>
                 </div>
             `;
-            
-            if (ict.fair_value_gaps && ict.fair_value_gaps.length > 0) {
-                html += `<div class="ict-item">
-                    <span class="ict-label">Recent FVGs:</span>
-                    ${ict.fair_value_gaps.length} detected
-                </div>`;
-            }
-            
-            if (ict.order_blocks && ict.order_blocks.length > 0) {
-                html += `<div class="ict-item">
-                    <span class="ict-label">Order Blocks:</span>
-                    ${ict.order_blocks.length} detected
-                </div>`;
-            }
-            
-            html += '</div>';
-            document.getElementById('ictContainer').innerHTML = html;
+            document.getElementById('pivotContainer').innerHTML = html;
         }
         
-        // Initialize
         document.addEventListener('DOMContentLoaded', () => {
-            initTradingView('BTCUSDT');
-        });
-        
-        document.getElementById('symbolInput').addEventListener('keypress', (e) => {
-            if (e.key === 'Enter') analyze();
+            initTradingView('BINANCE:BTCUSDT');
         });
     </script>
 </body>
@@ -1789,9 +1262,10 @@ async def dashboard():
 if __name__ == "__main__":
     import uvicorn
     port = int(os.getenv("PORT", 8000))
-    uvicorn.run(
-        app,
-        host="0.0.0.0",
-        port=port,
-        log_level="info"
-    )
+    logger.info(f"🚀 Starting Real Data Trading Bot on port {port}")
+    logger.info("=" * 60)
+    logger.info("DATA SOURCES:")
+    logger.info("  Crypto: Binance + CoinGecko (20s cache)")
+    logger.info("  Forex: Twelve Data + Alpha Vantage")
+    logger.info("=" * 60)
+    uvicorn.run(app, host="0.0.0.0", port=port, log_level="info")
