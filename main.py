@@ -998,7 +998,7 @@ class SignalGenerator:
 @app.get("/api/analyze/{symbol}")
 async def analyze_symbol(
     symbol: str,
-    interval: str = Query(default="1h", regex="^(1h|4h|1d)$")
+ interval: str = Query(default="1h", pattern="^(1h|4h|1d)$")
 ):
     """Complete technical analysis for a symbol"""
     try:
