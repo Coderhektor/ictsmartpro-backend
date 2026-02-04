@@ -871,6 +871,16 @@ async def websocket_endpoint(websocket: WebSocket):
             
     except WebSocketDisconnect:
         active_connections.remove(websocket)
+#===========================================================================
+@app.get("/health")
+async def health_check():
+    """Health check endpoint for Railway"""
+    return {
+        "status": "healthy",
+        "version": "9.0.0",
+        "service": "QUANTUM TRADER PRO",
+        "timestamp": datetime.now(timezone.utc).isoformat()
+    }
 
 # ════════════════════════════════════════════════════════════════════════════════
 # STUNNING DASHBOARD WITH TRADINGVIEW
