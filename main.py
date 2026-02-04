@@ -26,6 +26,36 @@ logger = logging.getLogger(__name__)
 from fastapi import FastAPI, Request, HTTPException, Query
 from fastapi.responses import HTMLResponse, JSONResponse, PlainTextResponse
 from fastapi.middleware.cors import CORSMiddleware
+# main.py dosyasının en üstüne (diğer import'lardan sonra)
+try:
+    from ai_integration import ai_service
+    AI_ENABLED = True
+    logger.info("✅ AI module loaded successfully")
+except ImportError as e:
+    AI_ENABLED = False
+    logger.warning(f"⚠️ AI module not available: {e}")
+    
+    # Sahte servis sınıfı
+    class DummyAIService:
+        def __init__(self):
+            self.initialized = False
+        
+        async def initialize(self): 
+            return False
+        
+        async def get_quick_prediction(self, *args, **kwargs): 
+            return {"error": "AI module not available"}
+        
+        async def get_comprehensive_analysis(self, *args, **kwargs):
+            return {"error": "AI module not available"}
+        
+        async def chat_with_ai(self, *args, **kwargs):
+            return {"error": "AI module not available"}
+        
+        async def analyze_trading_image(self, *args, **kwargs):
+            return {"error": "AI module not available"}
+    
+    ai_service = DummyAIService()
 
 # FastAPI Application
 app = FastAPI(
@@ -299,6 +329,7 @@ async def _combine_analysis(traditional: Dict, ai: Optional[Dict] = None) -> Dic
                 "description": f"⚠️ Conflict: AI ({ai_signal}) chosen over Traditional ({trad_signal})"
             }
 
+ # Bu kısmı düzeltin (HBO yazısından sonraki kısım)
 async def _generate_final_recommendation(combined: Dict, trad: Dict, ai: Optional[Dict] = None) -> str:
     """Nihai öneriyi oluştur"""
     signal = combined["signal"]
@@ -317,8 +348,18 @@ async def _generate_final_recommendation(combined: Dict, trad: Dict, ai: Optiona
     # Güven seviyesi ekle
     if confidence >= 80:
         recommendation += f"\n📈 **Confidence**: Very High ({confidence:.1f}%)"
-    elif confidence >= 70:HBO
-
+    elif confidence >= 70:
+        recommendation += f"\n📈 **Confidence**: High ({confidence:.1f}%)"
+    elif confidence >= 60:
+        recommendation += f"\n📈 **Confidence**: Moderate ({confidence:.1f}%)"
+    else:
+        recommendation += f"\n⚠️ **Confidence**: Low ({confidence:.1f}%) - Trade carefully"
+    
+    # AI önerisi ekle
+    if ai and ai.get("recommendation"):
+        recommendation += f"\n🤖 **AI Insight**: {ai['recommendation']}"
+    
+    return recommendation
 # ========== PRICE DATA MODULE ==========
 class PriceFetcher:
     """Price fetcher with REAL Binance data only - NO SIMULATION"""
