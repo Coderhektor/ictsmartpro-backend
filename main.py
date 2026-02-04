@@ -57,6 +57,39 @@ except ImportError as e:
     
     ai_service = DummyAIService()
 
+# main.py - Hatalı kısmı düzeltin
+
+# ========== YAPAY ZEKA BAĞLANTISI ==========
+# FASTAPI import'larından sonra (tekrarlanan kodu kaldırın)
+from fastapi import BackgroundTasks, UploadFile, File
+from fastapi.responses import JSONResponse
+import base64
+
+# AI import'larını ZATEN yukarıda yaptık (39-60. satırlar), TEKRARLAMAYIN
+# Aşağıdaki tekrarlı kodu SİLİN:
+'''
+# AI modülünü içe aktar
+try:
+    from ai_integration import ai_service
+    AI_ENABLED = True
+    logger.info("✅ AI module loaded successfully")
+except ImportError as e:
+    AI_ENABLED = False
+    logger.warning(f"⚠️ AI module not available: {e}")
+    # Sahte servis sınıfı
+    class DummyAIService:
+        async def initialize(self): return False
+        async def get_quick_prediction(self, *args, **kwargs): 
+            return {"error": "AI module not available"}
+        async def get_comprehensive_analysis(self, *args, **kwargs):
+            return {"error": "AI module not available"}
+        async def chat_with_ai(self, *args, **kwargs):
+            return {"error": "AI module not available"}
+    
+    ai_service = DummyAIService()
+'''
+# Yukarıdaki 15 satırı TAMAMEN SİLİN (zaten 39-60. satırlarda var)
+
 # FastAPI Application
 app = FastAPI(
     title="Professional Trading Bot",
@@ -1350,6 +1383,7 @@ async def dashboard():
     <title>Professional Trading Bot</title>
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
     <style>
+        /* CSS kodunuz aynı kalabilir */
         * { margin: 0; padding: 0; box-sizing: border-box; }
         
         :root {
@@ -1643,24 +1677,24 @@ async def dashboard():
             100% { transform: rotate(360deg); }
         }
         
-      .tradingview-widget {
-    width: 100%;
-    height: 60vh;              /* Ekranın %60'ı – mobil ve masaüstünde güzel durur */
-    min-height: 450px;         /* Küçük ekranlarda çok küçülmesin */
-    max-height: 900px;         /* Çok büyük olmasın */
-    border-radius: 8px;
-    overflow: hidden;
-    background: #0a0e27;       /* Arka plan TradingView yüklenirken boş kalmasın */
-    box-shadow: 0 4px 15px rgba(0,0,0,0.3);  /* Hafif gölge – şık durur */
-}
-
-/* Ekstra: Mobil için küçültme */
-@media (max-width: 768px) {
-    .tradingview-widget {
-        height: 50vh;          /* Mobilde daha az yer kaplasın */
-        min-height: 350px;
-    }
-}
+        .tradingview-widget {
+            width: 100%;
+            height: 60vh;
+            min-height: 450px;
+            max-height: 900px;
+            border-radius: 8px;
+            overflow: hidden;
+            background: #0a0e27;
+            box-shadow: 0 4px 15px rgba(0,0,0,0.3);
+        }
+        
+        @media (max-width: 768px) {
+            .tradingview-widget {
+                height: 50vh;
+                min-height: 350px;
+            }
+        }
+        
         #tradingview_chart {
             width: 100%;
             height: 100%;
@@ -1691,6 +1725,38 @@ async def dashboard():
             border-top: 1px solid var(--border);
             margin-top: 2rem;
         }
+        
+        /* AI Specific Styles */
+        .ai-btn {
+            color: white;
+            border: none;
+            padding: 12px;
+            border-radius: 8px;
+            cursor: pointer;
+            font-weight: 600;
+            transition: all 0.3s;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            gap: 5px;
+        }
+        
+        .ai-btn:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 5px 15px rgba(0,0,0,0.3);
+        }
+        
+        .ai-result {
+            background: linear-gradient(135deg, rgba(59, 130, 246, 0.1), rgba(139, 92, 246, 0.1));
+            border: 2px solid #3b82f6;
+            border-radius: 10px;
+            padding: 15px;
+            margin-top: 10px;
+        }
+        
+        .ai-signal-buy { border-color: #10b981; background: linear-gradient(135deg, rgba(16, 185, 129, 0.1), rgba(16, 185, 129, 0.05)); }
+        .ai-signal-sell { border-color: #ef4444; background: linear-gradient(135deg, rgba(239, 68, 68, 0.1), rgba(239, 68, 68, 0.05)); }
+        .ai-signal-hold { border-color: #f59e0b; background: linear-gradient(135deg, rgba(245, 158, 11, 0.1), rgba(245, 158, 11, 0.05)); }
     </style>
 </head>
 <body>
@@ -1706,6 +1772,7 @@ async def dashboard():
                 <div class="badge"><i class="fas fa-candle-holder"></i> Heikin Ashi</div>
                 <div class="badge"><i class="fas fa-chess-board"></i> ICT Structure</div>
                 <div class="badge"><i class="fas fa-pattern"></i> 12 Patterns</div>
+                <div class="badge"><i class="fas fa-brain"></i> AI Assistant</div>
             </div>
         </header>
         
@@ -1758,501 +1825,119 @@ async def dashboard():
         </div>
         
         <div class="dashboard">
-           <!-- Dashboard HTML'ine bu kısmı ekleyin -->
-<div class="card">
-    <h2 class="card-title">
-        <i class="fas fa-brain"></i> AI Trading Assistant
-        <span id="aiStatus" style="font-size: 0.8rem; background: #ef4444; color: white; padding: 2px 8px; border-radius: 10px; margin-left: 10px;">
-            OFF
-        </span>
-    </h2>
-    
-    <div id="aiContainer">
-        <div id="aiLoading" style="text-align: center; padding: 20px;">
-            <div class="spinner"></div>
-            <div>Loading AI module...</div>
-        </div>
-        
-        <div id="aiControls" style="display: none;">
-            <!-- AI Chat Input -->
-            <div style="margin-bottom: 20px;">
-                <div style="display: flex; gap: 10px; margin-bottom: 10px;">
-                    <input type="text" id="aiChatInput" placeholder="Ask AI trading question..." style="flex: 1;">
-                    <button onclick="askAI()" style="background: #3b82f6; color: white; border: none; padding: 10px 15px; border-radius: 6px; cursor: pointer;">
-                        <i class="fas fa-paper-plane"></i> Ask
-                    </button>
-                </div>
-                <div id="aiChatResponse" style="background: #1a1f3a; padding: 10px; border-radius: 6px; min-height: 40px; font-size: 0.9rem;"></div>
-            </div>
-            
-            <!-- AI Analysis Buttons -->
-            <div style="display: grid; grid-template-columns: repeat(3, 1fr); gap: 10px; margin-bottom: 20px;">
-                <button class="ai-btn" onclick="runQuickAIPrediction()" style="background: linear-gradient(135deg, #10b981, #059669);">
-                    <i class="fas fa-bolt"></i> Quick AI
-                </button>
-                <button class="ai-btn" onclick="runDetailedAIAnalysis()" style="background: linear-gradient(135deg, #3b82f6, #2563eb);">
-                    <i class="fas fa-chart-line"></i> AI Analysis
-                </button>
-                <button class="ai-btn" onclick="runAdvancedAnalysis()" style="background: linear-gradient(135deg, #8b5cf6, #7c3aed);">
-                    <i class="fas fa-star"></i> Advanced
-                </button>
-            </div>
-            
-            <!-- AI Results -->
-            <div id="aiResults" style="background: #1a1f3a; border-radius: 8px; padding: 15px; min-height: 100px;">
-                <div style="text-align: center; color: #94a3b8;">
-                    <i class="fas fa-robot" style="font-size: 2rem; margin-bottom: 10px;"></i>
-                    <div>AI results will appear here</div>
+            <div class="card">
+                <h2 class="card-title">
+                    <i class="fas fa-chart-bar"></i> Technical Indicators
+                </h2>
+                <div id="indicatorsContainer">
+                    <div class="loading">
+                        <div class="spinner"></div>
+                        <div>Indicators will appear here</div>
+                    </div>
                 </div>
             </div>
             
-            <!-- Image Analysis -->
-            <div style="margin-top: 15px; border-top: 1px solid #334155; padding-top: 15px;">
-                <div style="font-size: 0.9rem; color: #94a3b8; margin-bottom: 10px;">Chart Image Analysis</div>
-                <div style="display: flex; gap: 10px;">
-                    <input type="file" id="chartImage" accept="image/*" style="flex: 1; background: #0a0e27; border: 1px solid #334155; color: white; padding: 8px; border-radius: 6px;">
-                    <button onclick="analyzeChartImage()" style="background: #f59e0b; color: white; border: none; padding: 8px 15px; border-radius: 6px; cursor: pointer;">
-                        <i class="fas fa-image"></i> Analyze
-                    </button>
+            <div class="card">
+                <h2 class="card-title">
+                    <i class="fas fa-pattern"></i> Candlestick Patterns
+                </h2>
+                <div id="patternsContainer">
+                    <div class="loading">
+                        <div class="spinner"></div>
+                        <div>Patterns will appear here</div>
+                    </div>
                 </div>
-                <div id="imageAnalysisResult" style="margin-top: 10px; font-size: 0.85rem;"></div>
             </div>
         </div>
-    </div>
-</div>
-
-<style>
-.ai-btn {
-    color: white;
-    border: none;
-    padding: 12px;
-    border-radius: 8px;
-    cursor: pointer;
-    font-weight: 600;
-    transition: all 0.3s;
-    display: flex;
-    flex-direction: column;
-    align-items: center;
-    gap: 5px;
-}
-.ai-btn:hover {
-    transform: translateY(-2px);
-    box-shadow: 0 5px 15px rgba(0,0,0,0.3);
-}
-.ai-result {
-    background: linear-gradient(135deg, rgba(59, 130, 246, 0.1), rgba(139, 92, 246, 0.1));
-    border: 2px solid #3b82f6;
-    border-radius: 10px;
-    padding: 15px;
-    margin-top: 10px;
-}
-.ai-signal-buy { border-color: #10b981; background: linear-gradient(135deg, rgba(16, 185, 129, 0.1), rgba(16, 185, 129, 0.05)); }
-.ai-signal-sell { border-color: #ef4444; background: linear-gradient(135deg, rgba(239, 68, 68, 0.1), rgba(239, 68, 68, 0.05)); }
-.ai-signal-hold { border-color: #f59e0b; background: linear-gradient(135deg, rgba(245, 158, 11, 0.1), rgba(245, 158, 11, 0.05)); }
-</style>
-
-<script>
-// AI durumunu kontrol et
-async function checkAIStatus() {
-    try {
-        const response = await fetch('/api/ai/status');
-        const data = await response.json();
         
-        const statusEl = document.getElementById('aiStatus');
-        const loadingEl = document.getElementById('aiLoading');
-        const controlsEl = document.getElementById('aiControls');
-        
-        if (data.ai_enabled) {
-            if (data.initialized) {
-                statusEl.textContent = 'ACTIVE';
-                statusEl.style.background = '#10b981';
-                loadingEl.style.display = 'none';
-                controlsEl.style.display = 'block';
-            } else {
-                statusEl.textContent = 'INIT';
-                statusEl.style.background = '#f59e0b';
-                loadingEl.innerHTML = `
-                    <div style="color: #f59e0b;">
-                        <i class="fas fa-hourglass-half"></i>
-                        <div>AI initializing...</div>
-                        <button onclick="initializeAI()" style="margin-top: 10px; background: #3b82f6; color: white; border: none; padding: 8px 15px; border-radius: 6px; cursor: pointer;">
-                            Initialize Now
-                        </button>
-                    </div>
-                `;
-            }
-        } else {
-            statusEl.textContent = 'OFF';
-            statusEl.style.background = '#ef4444';
-            loadingEl.innerHTML = '<div style="color: #ef4444;">AI module not available</div>';
-        }
-    } catch (error) {
-        console.error('AI status check failed:', error);
-    }
-}
-
-// AI başlat
-async function initializeAI() {
-    try {
-        const response = await fetch('/api/ai/initialize', { method: 'POST' });
-        const data = await response.json();
-        
-        if (data.success) {
-            showNotification('AI service initializing...', 'info');
-            setTimeout(checkAIStatus, 2000);
-        }
-    } catch (error) {
-        console.error('AI initialization failed:', error);
-        showNotification('AI initialization failed', 'error');
-    }
-}
-
-// AI'ya soru sor
-async function askAI() {
-    const input = document.getElementById('aiChatInput');
-    const message = input.value.trim();
-    const symbol = document.getElementById('symbolInput').value.trim();
-    
-    if (!message) {
-        showNotification('Please enter a question', 'warning');
-        return;
-    }
-    
-    const responseEl = document.getElementById('aiChatResponse');
-    responseEl.innerHTML = '<div class="loading"><div class="spinner" style="width: 20px; height: 20px;"></div> AI thinking...</div>';
-    
-    try {
-        const response = await fetch('/api/ai/chat', {
-            method: 'POST',
-            headers: {'Content-Type': 'application/json'},
-            body: JSON.stringify({ message, symbol: symbol || 'BTCUSDT' })
-        });
-        
-        const data = await response.json();
-        
-        if (data.success) {
-            responseEl.innerHTML = `
-                <div style="color: #3b82f6; margin-bottom: 5px;">
-                    <i class="fas fa-robot"></i> AI Response:
-                </div>
-                <div>${data.response}</div>
-            `;
-            input.value = '';
-        } else {
-            responseEl.innerHTML = `<div style="color: #ef4444;">Error: ${data.error}</div>`;
-        }
-    } catch (error) {
-        console.error('AI chat error:', error);
-        responseEl.innerHTML = '<div style="color: #ef4444;">AI service unavailable</div>';
-    }
-}
-
-// Hızlı AI tahmini
-async function runQuickAIPrediction() {
-    const symbol = document.getElementById('symbolInput').value.trim();
-    if (!symbol) {
-        showNotification('Please enter a symbol', 'warning');
-        return;
-    }
-    
-    const resultsEl = document.getElementById('aiResults');
-    resultsEl.innerHTML = '<div class="loading"><div class="spinner"></div><div>Running quick AI prediction...</div></div>';
-    
-    try {
-        const response = await fetch(`/api/ai/predict/${encodeURIComponent(symbol)}?detailed=false`);
-        const data = await response.json();
-        
-        if (data.success) {
-            const signalClass = `ai-signal-${data.prediction.toLowerCase()}`;
-            
-            let html = `
-                <div class="ai-result ${signalClass}">
-                    <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 10px;">
-                        <div style="font-size: 1.3rem; font-weight: 700;">${data.prediction}</div>
-                        <div style="background: ${data.confidence >= 0.7 ? '#10b981' : data.confidence >= 0.6 ? '#f59e0b' : '#ef4444'}; 
-                                    color: white; padding: 3px 10px; border-radius: 12px;">
-                            ${(data.confidence * 100).toFixed(0)}% confidence
-                        </div>
-                    </div>
-                    
-                    <div style="font-size: 0.9rem; margin-bottom: 15px;">
-                        <div><strong>Symbol:</strong> ${data.symbol}</div>
-                        <div><strong>Price:</strong> $${data.current_price}</div>
-                        ${data.momentum ? `<div><strong>Momentum:</strong> ${data.momentum}%</div>` : ''}
-                    </div>
-                    
-                    <div style="background: rgba(255,255,255,0.05); padding: 10px; border-radius: 6px; font-size: 0.85rem;">
-                        <strong>Quick AI Analysis:</strong>
-                        <div style="margin-top: 5px;">
-                            ${data.prediction === 'Buy' ? 'AI detects potential buying opportunity' : 
-                              data.prediction === 'Sell' ? 'AI suggests caution or profit taking' : 
-                              'AI recommends holding or waiting for clearer signals'}
-                        </div>
+        <div class="dashboard">
+            <div class="card">
+                <h2 class="card-title">
+                    <i class="fas fa-chess-board"></i> ICT Market Structure
+                </h2>
+                <div id="ictContainer">
+                    <div class="loading">
+                        <div class="spinner"></div>
+                        <div>ICT analysis will appear here</div>
                     </div>
                 </div>
-            `;
+            </div>
             
-            resultsEl.innerHTML = html;
-        } else {
-            resultsEl.innerHTML = `<div style="color: #ef4444;">Error: ${data.error}</div>`;
-        }
-    } catch (error) {
-        console.error('Quick AI prediction error:', error);
-        resultsEl.innerHTML = '<div style="color: #ef4444;">AI service unavailable</div>';
-    }
-}
-
-// Detaylı AI analizi
-async function runDetailedAIAnalysis() {
-    const symbol = document.getElementById('symbolInput').value.trim();
-    if (!symbol) {
-        showNotification('Please enter a symbol', 'warning');
-        return;
-    }
-    
-    const resultsEl = document.getElementById('aiResults');
-    resultsEl.innerHTML = '<div class="loading"><div class="spinner"></div><div>Running detailed AI analysis...</div></div>';
-    
-    try {
-        const response = await fetch(`/api/ai/predict/${encodeURIComponent(symbol)}?detailed=true`);
-        const data = await response.json();
-        
-        if (data.success) {
-            const signalClass = `ai-signal-${data.final_signal.toLowerCase()}`;
-            
-            let html = `
-                <div class="ai-result ${signalClass}">
-                    <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 15px;">
-                        <div style="font-size: 1.5rem; font-weight: 900;">${data.final_signal}</div>
-                        <div style="background: ${data.final_confidence >= 0.7 ? '#10b981' : data.final_confidence >= 0.6 ? '#f59e0b' : '#ef4444'}; 
-                                    color: white; padding: 5px 15px; border-radius: 20px; font-weight: 600;">
-                            ${(data.final_confidence * 100).toFixed(1)}%
-                        </div>
+            <div class="card">
+                <h2 class="card-title">
+                    <i class="fas fa-brain"></i> AI Trading Assistant
+                    <span id="aiStatus" style="font-size: 0.8rem; background: #ef4444; color: white; padding: 2px 8px; border-radius: 10px; margin-left: auto;">
+                        OFF
+                    </span>
+                </h2>
+                
+                <div id="aiContainer">
+                    <div id="aiLoading" style="text-align: center; padding: 20px;">
+                        <div class="spinner"></div>
+                        <div>Loading AI module...</div>
                     </div>
                     
-                    <div style="margin-bottom: 15px; font-size: 1.1rem;">
-                        ${data.recommendation}
-                    </div>
-                    
-                    <div style="background: rgba(255,255,255,0.05); padding: 15px; border-radius: 8px; margin-bottom: 15px;">
-                        <strong>Multi-Timeframe Analysis:</strong>
-                        <div style="display: grid; grid-template-columns: repeat(3, 1fr); gap: 10px; margin-top: 10px;">
-            `;
-            
-            for (const [tf, analysis] of Object.entries(data.timeframe_analysis)) {
-                if (analysis && !analysis.error) {
-                    html += `
-                        <div style="background: #0a0e27; padding: 10px; border-radius: 6px; text-align: center;">
-                            <div style="font-size: 0.8rem; color: #94a3b8;">${tf}</div>
-                            <div style="font-size: 1.1rem; font-weight: 700; color: ${analysis.signal === 'Buy' ? '#10b981' : analysis.signal === 'Sell' ? '#ef4444' : '#f59e0b'}">
-                                ${analysis.signal}
+                    <div id="aiControls" style="display: none;">
+                        <!-- AI Chat Input -->
+                        <div style="margin-bottom: 20px;">
+                            <div style="display: flex; gap: 10px; margin-bottom: 10px;">
+                                <input type="text" id="aiChatInput" placeholder="Ask AI trading question..." style="flex: 1;">
+                                <button onclick="askAI()" style="background: #3b82f6; color: white; border: none; padding: 10px 15px; border-radius: 6px; cursor: pointer;">
+                                    <i class="fas fa-paper-plane"></i> Ask
+                                </button>
                             </div>
-                            <div style="font-size: 0.8rem;">RSI: ${analysis.rsi || 'N/A'}</div>
-                        </div>
-                    `;
-                }
-            }
-            
-            html += `
-                        </div>
-                    </div>
-                    
-                    <div style="font-size: 0.9rem; color: #94a3b8;">
-                        <div><strong>Risk Level:</strong> ${data.risk_level}</div>
-                        <div><strong>Last Updated:</strong> ${new Date(data.timestamp).toLocaleTimeString()}</div>
-                    </div>
-                </div>
-            `;
-            
-            resultsEl.innerHTML = html;
-        } else {
-            resultsEl.innerHTML = `<div style="color: #ef4444;">Error: ${data.error}</div>`;
-        }
-    } catch (error) {
-        console.error('Detailed AI analysis error:', error);
-        resultsEl.innerHTML = '<div style="color: #ef4444;">AI service unavailable</div>';
-    }
-}
-
-// Gelişmiş analiz (Geleneksel + AI)
-async function runAdvancedAnalysis() {
-    const symbol = document.getElementById('symbolInput').value.trim();
-    if (!symbol) {
-        showNotification('Please enter a symbol', 'warning');
-        return;
-    }
-    
-    const resultsEl = document.getElementById('aiResults');
-    resultsEl.innerHTML = '<div class="loading"><div class="spinner"></div><div>Running advanced analysis...</div></div>';
-    
-    try {
-        const response = await fetch(`/api/advanced/analyze/${encodeURIComponent(symbol)}?include_ai=true`);
-        const data = await response.json();
-        
-        if (data.success) {
-            const signal = data.combined_signal.signal;
-            const signalClass = signal.includes('BUY') ? 'ai-signal-buy' : 
-                              signal.includes('SELL') ? 'ai-signal-sell' : 'ai-signal-hold';
-            
-            let html = `
-                <div class="ai-result ${signalClass}">
-                    <div style="text-align: center; margin-bottom: 20px;">
-                        <div style="font-size: 2rem; font-weight: 900; margin-bottom: 10px;">${signal}</div>
-                        <div style="font-size: 1.2rem; color: ${data.combined_signal.alignment === 'perfect' ? '#10b981' : '#f59e0b'}">
-                            ${data.combined_signal.description || ''}
-                        </div>
-                    </div>
-                    
-                    <div style="margin-bottom: 20px; white-space: pre-line; font-size: 0.95rem; line-height: 1.5;">
-                        ${data.final_recommendation}
-                    </div>
-                    
-                    <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 15px; margin-bottom: 20px;">
-                        <div style="background: rgba(59, 130, 246, 0.1); padding: 15px; border-radius: 8px;">
-                            <div style="color: #3b82f6; font-weight: 700; margin-bottom: 10px;">
-                                <i class="fas fa-chart-line"></i> Traditional
-                            </div>
-                            <div>Signal: <strong>${data.traditional_analysis.signal.signal}</strong></div>
-                            <div>Confidence: ${data.traditional_analysis.signal.confidence}%</div>
+                            <div id="aiChatResponse" style="background: #1a1f3a; padding: 10px; border-radius: 6px; min-height: 40px; font-size: 0.9rem;"></div>
                         </div>
                         
-                        <div style="background: rgba(16, 185, 129, 0.1); padding: 15px; border-radius: 8px;">
-                            <div style="color: #10b981; font-weight: 700; margin-bottom: 10px;">
-                                <i class="fas fa-brain"></i> AI
+                        <!-- AI Analysis Buttons -->
+                        <div style="display: grid; grid-template-columns: repeat(3, 1fr); gap: 10px; margin-bottom: 20px;">
+                            <button class="ai-btn" onclick="runQuickAIPrediction()" style="background: linear-gradient(135deg, #10b981, #059669);">
+                                <i class="fas fa-bolt"></i> Quick AI
+                            </button>
+                            <button class="ai-btn" onclick="runDetailedAIAnalysis()" style="background: linear-gradient(135deg, #3b82f6, #2563eb);">
+                                <i class="fas fa-chart-line"></i> AI Analysis
+                            </button>
+                            <button class="ai-btn" onclick="runAdvancedAnalysis()" style="background: linear-gradient(135deg, #8b5cf6, #7c3aed);">
+                                <i class="fas fa-star"></i> Advanced
+                            </button>
+                        </div>
+                        
+                        <!-- AI Results -->
+                        <div id="aiResults" style="background: #1a1f3a; border-radius: 8px; padding: 15px; min-height: 100px;">
+                            <div style="text-align: center; color: #94a3b8;">
+                                <i class="fas fa-robot" style="font-size: 2rem; margin-bottom: 10px;"></i>
+                                <div>AI results will appear here</div>
                             </div>
-                            <div>Signal: <strong>${data.ai_analysis?.final_signal || 'N/A'}</strong></div>
-                            <div>Confidence: ${data.ai_analysis ? (data.ai_analysis.final_confidence * 100).toFixed(1) + '%' : 'N/A'}</div>
+                        </div>
+                        
+                        <!-- Image Analysis -->
+                        <div style="margin-top: 15px; border-top: 1px solid #334155; padding-top: 15px;">
+                            <div style="font-size: 0.9rem; color: #94a3b8; margin-bottom: 10px;">Chart Image Analysis</div>
+                            <div style="display: flex; gap: 10px;">
+                                <input type="file" id="chartImage" accept="image/*" style="flex: 1; background: #0a0e27; border: 1px solid #334155; color: white; padding: 8px; border-radius: 6px;">
+                                <button onclick="analyzeChartImage()" style="background: #f59e0b; color: white; border: none; padding: 8px 15px; border-radius: 6px; cursor: pointer;">
+                                    <i class="fas fa-image"></i> Analyze
+                                </button>
+                            </div>
+                            <div id="imageAnalysisResult" style="margin-top: 10px; font-size: 0.85rem;"></div>
                         </div>
                     </div>
-                    
-                    <div style="font-size: 0.85rem; color: #94a3b8; text-align: center;">
-                        Combined confidence: ${data.combined_signal.confidence.toFixed(1)}% • Source: ${data.combined_signal.source}
-                    </div>
                 </div>
-            `;
-            
-            resultsEl.innerHTML = html;
-        } else {
-            resultsEl.innerHTML = `<div style="color: #ef4444;">Error: ${data.error}</div>`;
-        }
-    } catch (error) {
-        console.error('Advanced analysis error:', error);
-        resultsEl.innerHTML = '<div style="color: #ef4444;">Service unavailable</div>';
-    }
-}
-
-// Grafik görseli analiz et
-async function analyzeChartImage() {
-    const fileInput = document.getElementById('chartImage');
-    const file = fileInput.files[0];
-    
-    if (!file) {
-        showNotification('Please select an image file', 'warning');
-        return;
-    }
-    
-    const resultEl = document.getElementById('imageAnalysisResult');
-    resultEl.innerHTML = '<div class="loading"><div class="spinner" style="width: 16px; height: 16px;"></div> Analyzing chart...</div>';
-    
-    try {
-        const formData = new FormData();
-        formData.append('file', file);
+            </div>
+        </div>
         
-        const response = await fetch('/api/ai/analyze-image', {
-            method: 'POST',
-            body: formData
-        });
-        
-        const data = await response.json();
-        
-        if (data.success) {
-            resultEl.innerHTML = `
-                <div style="background: rgba(245, 158, 11, 0.1); padding: 10px; border-radius: 6px; border: 1px solid #f59e0b;">
-                    <div style="color: #f59e0b; font-weight: 600; margin-bottom: 5px;">
-                        <i class="fas fa-chart-bar"></i> Chart Analysis Result
-                    </div>
-                    <div><strong>Sentiment:</strong> ${data.sentiment}</div>
-                    <div><strong>Confidence:</strong> ${(data.confidence * 100).toFixed(0)}%</div>
-                    <div><strong>Patterns:</strong> ${data.patterns.join(', ')}</div>
-                    <div style="margin-top: 5px; font-size: 0.8rem;">${data.analysis}</div>
-                </div>
-            `;
-        } else {
-            resultEl.innerHTML = `<div style="color: #ef4444;">Analysis failed: ${data.error}</div>`;
-        }
-    } catch (error) {
-        console.error('Image analysis error:', error);
-        resultEl.innerHTML = '<div style="color: #ef4444;">Image analysis service unavailable</div>';
-    }
-}
-
-// Yardımcı fonksiyon
-function showNotification(message, type = 'info') {
-    const notification = document.createElement('div');
-    notification.style.cssText = `
-        position: fixed;
-        top: 20px;
-        right: 20px;
-        padding: 12px 20px;
-        border-radius: 6px;
-        color: white;
-        font-weight: 600;
-        z-index: 1000;
-        animation: slideIn 0.3s ease;
-    `;
+        <footer>
+            <div>Professional Trading Bot v2.0.0 • Real-time Analysis • AI Enhanced</div>
+            <div style="font-size: 0.9rem; margin-top: 0.5rem; color: var(--text-muted);">
+                <i class="fas fa-info-circle"></i> Data provided by Binance API • AI module: <span id="aiFooterStatus">Not available</span>
+            </div>
+        </footer>
+    </div>
     
-    if (type === 'success') {
-        notification.style.background = '#10b981';
-    } else if (type === 'error') {
-        notification.style.background = '#ef4444';
-    } else if (type === 'warning') {
-        notification.style.background = '#f59e0b';
-    } else {
-        notification.style.background = '#3b82f6';
-    }
-    
-    notification.textContent = message;
-    document.body.appendChild(notification);
-    
-    setTimeout(() => {
-        notification.style.animation = 'slideOut 0.3s ease';
-        setTimeout(() => notification.remove(), 300);
-    }, 3000);
-}
-
-// Sayfa yüklendiğinde AI durumunu kontrol et
-document.addEventListener('DOMContentLoaded', () => {
-    setTimeout(checkAIStatus, 1000);
-});
-
-// Mevcut analyze() fonksiyonunu güncelle
-async function analyze() {
-    const symbol = document.getElementById('symbolInput').value.trim();
-    const interval = document.getElementById('intervalSelect').value;
-    const btn = document.getElementById('analyzeBtn');
-    
-    if (!symbol) {
-        alert('Please enter a symbol');
-        return;
-    }
-    
-    btn.disabled = true;
-    btn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Analyzing...';
-    
-    // Mevcut analiz kodunuz burada...
-    
-    // AI analizini de çalıştır
-    setTimeout(() => {
-        runQuickAIPrediction();
-    }, 500);
-    
-    btn.disabled = false;
-    btn.innerHTML = '<i class="fas fa-search"></i> Analyze';
-}
-</script>
-
     <script src="https://s3.tradingview.com/tv.js"></script>
     <script>
+        // AI ve trading fonksiyonları aynen kalacak
+        // Sadece JavaScript kısmını olduğu gibi kopyalayın
         let tvWidget = null;
         
         function initTradingView(symbol) {
@@ -2327,6 +2012,11 @@ async function analyze() {
                 renderIndicators(data);
                 renderPatterns(data);
                 renderICT(data);
+                
+                // AI analizini de çalıştır
+                setTimeout(() => {
+                    runQuickAIPrediction();
+                }, 500);
                 
             } catch (error) {
                 console.error('Error:', error);
@@ -2485,15 +2175,408 @@ async function analyze() {
         // Initialize
         document.addEventListener('DOMContentLoaded', () => {
             initTradingView('BTCUSDT');
+            setTimeout(checkAIStatus, 1000);
         });
         
         document.getElementById('symbolInput').addEventListener('keypress', (e) => {
             if (e.key === 'Enter') analyze();
         });
     </script>
+    
+    <!-- AI JavaScript fonksiyonlarınız buraya gelsin -->
+    <!-- Bunları aynen kopyalayın -->
+    <script>
+        // AI durumunu kontrol et
+        async function checkAIStatus() {
+            try {
+                const response = await fetch('/api/ai/status');
+                const data = await response.json();
+                
+                const statusEl = document.getElementById('aiStatus');
+                const footerStatusEl = document.getElementById('aiFooterStatus');
+                const loadingEl = document.getElementById('aiLoading');
+                const controlsEl = document.getElementById('aiControls');
+                
+                if (data.ai_enabled) {
+                    if (data.initialized) {
+                        statusEl.textContent = 'ACTIVE';
+                        statusEl.style.background = '#10b981';
+                        footerStatusEl.textContent = 'Active';
+                        footerStatusEl.style.color = '#10b981';
+                        loadingEl.style.display = 'none';
+                        controlsEl.style.display = 'block';
+                    } else {
+                        statusEl.textContent = 'INIT';
+                        statusEl.style.background = '#f59e0b';
+                        footerStatusEl.textContent = 'Initializing';
+                        footerStatusEl.style.color = '#f59e0b';
+                        loadingEl.innerHTML = `
+                            <div style="color: #f59e0b;">
+                                <i class="fas fa-hourglass-half"></i>
+                                <div>AI initializing...</div>
+                                <button onclick="initializeAI()" style="margin-top: 10px; background: #3b82f6; color: white; border: none; padding: 8px 15px; border-radius: 6px; cursor: pointer;">
+                                    Initialize Now
+                                </button>
+                            </div>
+                        `;
+                    }
+                } else {
+                    statusEl.textContent = 'OFF';
+                    statusEl.style.background = '#ef4444';
+                    footerStatusEl.textContent = 'Not available';
+                    footerStatusEl.style.color = '#ef4444';
+                    loadingEl.innerHTML = '<div style="color: #ef4444;">AI module not available</div>';
+                }
+            } catch (error) {
+                console.error('AI status check failed:', error);
+            }
+        }
+
+        // AI başlat
+        async function initializeAI() {
+            try {
+                const response = await fetch('/api/ai/initialize', { method: 'POST' });
+                const data = await response.json();
+                
+                if (data.success) {
+                    showNotification('AI service initializing...', 'info');
+                    setTimeout(checkAIStatus, 2000);
+                }
+            } catch (error) {
+                console.error('AI initialization failed:', error);
+                showNotification('AI initialization failed', 'error');
+            }
+        }
+
+        // AI'ya soru sor
+        async function askAI() {
+            const input = document.getElementById('aiChatInput');
+            const message = input.value.trim();
+            const symbol = document.getElementById('symbolInput').value.trim();
+            
+            if (!message) {
+                showNotification('Please enter a question', 'warning');
+                return;
+            }
+            
+            const responseEl = document.getElementById('aiChatResponse');
+            responseEl.innerHTML = '<div class="loading"><div class="spinner" style="width: 20px; height: 20px;"></div> AI thinking...</div>';
+            
+            try {
+                const response = await fetch('/api/ai/chat', {
+                    method: 'POST',
+                    headers: {'Content-Type': 'application/json'},
+                    body: JSON.stringify({ message, symbol: symbol || 'BTCUSDT' })
+                });
+                
+                const data = await response.json();
+                
+                if (data.success) {
+                    responseEl.innerHTML = `
+                        <div style="color: #3b82f6; margin-bottom: 5px;">
+                            <i class="fas fa-robot"></i> AI Response:
+                        </div>
+                        <div>${data.response}</div>
+                    `;
+                    input.value = '';
+                } else {
+                    responseEl.innerHTML = `<div style="color: #ef4444;">Error: ${data.error}</div>`;
+                }
+            } catch (error) {
+                console.error('AI chat error:', error);
+                responseEl.innerHTML = '<div style="color: #ef4444;">AI service unavailable</div>';
+            }
+        }
+
+        // Hızlı AI tahmini
+        async function runQuickAIPrediction() {
+            const symbol = document.getElementById('symbolInput').value.trim();
+            if (!symbol) {
+                showNotification('Please enter a symbol', 'warning');
+                return;
+            }
+            
+            const resultsEl = document.getElementById('aiResults');
+            resultsEl.innerHTML = '<div class="loading"><div class="spinner"></div><div>Running quick AI prediction...</div></div>';
+            
+            try {
+                const response = await fetch(`/api/ai/predict/${encodeURIComponent(symbol)}?detailed=false`);
+                const data = await response.json();
+                
+                if (data.success) {
+                    const signalClass = `ai-signal-${data.prediction.toLowerCase()}`;
+                    
+                    let html = `
+                        <div class="ai-result ${signalClass}">
+                            <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 10px;">
+                                <div style="font-size: 1.3rem; font-weight: 700;">${data.prediction}</div>
+                                <div style="background: ${data.confidence >= 0.7 ? '#10b981' : data.confidence >= 0.6 ? '#f59e0b' : '#ef4444'}; 
+                                            color: white; padding: 3px 10px; border-radius: 12px;">
+                                    ${(data.confidence * 100).toFixed(0)}% confidence
+                                </div>
+                            </div>
+                            
+                            <div style="font-size: 0.9rem; margin-bottom: 15px;">
+                                <div><strong>Symbol:</strong> ${data.symbol}</div>
+                                <div><strong>Price:</strong> $${data.current_price}</div>
+                                ${data.momentum ? `<div><strong>Momentum:</strong> ${data.momentum}%</div>` : ''}
+                            </div>
+                            
+                            <div style="background: rgba(255,255,255,0.05); padding: 10px; border-radius: 6px; font-size: 0.85rem;">
+                                <strong>Quick AI Analysis:</strong>
+                                <div style="margin-top: 5px;">
+                                    ${data.prediction === 'Buy' ? 'AI detects potential buying opportunity' : 
+                                      data.prediction === 'Sell' ? 'AI suggests caution or profit taking' : 
+                                      'AI recommends holding or waiting for clearer signals'}
+                                </div>
+                            </div>
+                        </div>
+                    `;
+                    
+                    resultsEl.innerHTML = html;
+                } else {
+                    resultsEl.innerHTML = `<div style="color: #ef4444;">Error: ${data.error}</div>`;
+                }
+            } catch (error) {
+                console.error('Quick AI prediction error:', error);
+                resultsEl.innerHTML = '<div style="color: #ef4444;">AI service unavailable</div>';
+            }
+        }
+
+        // Detaylı AI analizi
+        async function runDetailedAIAnalysis() {
+            const symbol = document.getElementById('symbolInput').value.trim();
+            if (!symbol) {
+                showNotification('Please enter a symbol', 'warning');
+                return;
+            }
+            
+            const resultsEl = document.getElementById('aiResults');
+            resultsEl.innerHTML = '<div class="loading"><div class="spinner"></div><div>Running detailed AI analysis...</div></div>';
+            
+            try {
+                const response = await fetch(`/api/ai/predict/${encodeURIComponent(symbol)}?detailed=true`);
+                const data = await response.json();
+                
+                if (data.success) {
+                    const signalClass = `ai-signal-${data.final_signal.toLowerCase()}`;
+                    
+                    let html = `
+                        <div class="ai-result ${signalClass}">
+                            <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 15px;">
+                                <div style="font-size: 1.5rem; font-weight: 900;">${data.final_signal}</div>
+                                <div style="background: ${data.final_confidence >= 0.7 ? '#10b981' : data.final_confidence >= 0.6 ? '#f59e0b' : '#ef4444'}; 
+                                            color: white; padding: 5px 15px; border-radius: 20px; font-weight: 600;">
+                                    ${(data.final_confidence * 100).toFixed(1)}%
+                                </div>
+                            </div>
+                            
+                            <div style="margin-bottom: 15px; font-size: 1.1rem;">
+                                ${data.recommendation}
+                            </div>
+                            
+                            <div style="background: rgba(255,255,255,0.05); padding: 15px; border-radius: 8px; margin-bottom: 15px;">
+                                <strong>Multi-Timeframe Analysis:</strong>
+                                <div style="display: grid; grid-template-columns: repeat(3, 1fr); gap: 10px; margin-top: 10px;">
+                    `;
+                    
+                    for (const [tf, analysis] of Object.entries(data.timeframe_analysis)) {
+                        if (analysis && !analysis.error) {
+                            html += `
+                                <div style="background: #0a0e27; padding: 10px; border-radius: 6px; text-align: center;">
+                                    <div style="font-size: 0.8rem; color: #94a3b8;">${tf}</div>
+                                    <div style="font-size: 1.1rem; font-weight: 700; color: ${analysis.signal === 'Buy' ? '#10b981' : analysis.signal === 'Sell' ? '#ef4444' : '#f59e0b'}">
+                                        ${analysis.signal}
+                                    </div>
+                                    <div style="font-size: 0.8rem;">RSI: ${analysis.rsi || 'N/A'}</div>
+                                </div>
+                            `;
+                        }
+                    }
+                    
+                    html += `
+                                </div>
+                            </div>
+                            
+                            <div style="font-size: 0.9rem; color: #94a3b8;">
+                                <div><strong>Risk Level:</strong> ${data.risk_level}</div>
+                                <div><strong>Last Updated:</strong> ${new Date(data.timestamp).toLocaleTimeString()}</div>
+                            </div>
+                        </div>
+                    `;
+                    
+                    resultsEl.innerHTML = html;
+                } else {
+                    resultsEl.innerHTML = `<div style="color: #ef4444;">Error: ${data.error}</div>`;
+                }
+            } catch (error) {
+                console.error('Detailed AI analysis error:', error);
+                resultsEl.innerHTML = '<div style="color: #ef4444;">AI service unavailable</div>';
+            }
+        }
+
+        // Gelişmiş analiz (Geleneksel + AI)
+        async function runAdvancedAnalysis() {
+            const symbol = document.getElementById('symbolInput').value.trim();
+            if (!symbol) {
+                showNotification('Please enter a symbol', 'warning');
+                return;
+            }
+            
+            const resultsEl = document.getElementById('aiResults');
+            resultsEl.innerHTML = '<div class="loading"><div class="spinner"></div><div>Running advanced analysis...</div></div>';
+            
+            try {
+                const response = await fetch(`/api/advanced/analyze/${encodeURIComponent(symbol)}?include_ai=true`);
+                const data = await response.json();
+                
+                if (data.success) {
+                    const signal = data.combined_signal.signal;
+                    const signalClass = signal.includes('BUY') ? 'ai-signal-buy' : 
+                                      signal.includes('SELL') ? 'ai-signal-sell' : 'ai-signal-hold';
+                    
+                    let html = `
+                        <div class="ai-result ${signalClass}">
+                            <div style="text-align: center; margin-bottom: 20px;">
+                                <div style="font-size: 2rem; font-weight: 900; margin-bottom: 10px;">${signal}</div>
+                                <div style="font-size: 1.2rem; color: ${data.combined_signal.alignment === 'perfect' ? '#10b981' : '#f59e0b'}">
+                                    ${data.combined_signal.description || ''}
+                                </div>
+                            </div>
+                            
+                            <div style="margin-bottom: 20px; white-space: pre-line; font-size: 0.95rem; line-height: 1.5;">
+                                ${data.final_recommendation}
+                            </div>
+                            
+                            <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 15px; margin-bottom: 20px;">
+                                <div style="background: rgba(59, 130, 246, 0.1); padding: 15px; border-radius: 8px;">
+                                    <div style="color: #3b82f6; font-weight: 700; margin-bottom: 10px;">
+                                        <i class="fas fa-chart-line"></i> Traditional
+                                    </div>
+                                    <div>Signal: <strong>${data.traditional_analysis.signal.signal}</strong></div>
+                                    <div>Confidence: ${data.traditional_analysis.signal.confidence}%</div>
+                                </div>
+                                
+                                <div style="background: rgba(16, 185, 129, 0.1); padding: 15px; border-radius: 8px;">
+                                    <div style="color: #10b981; font-weight: 700; margin-bottom: 10px;">
+                                        <i class="fas fa-brain"></i> AI
+                                    </div>
+                                    <div>Signal: <strong>${data.ai_analysis?.final_signal || 'N/A'}</strong></div>
+                                    <div>Confidence: ${data.ai_analysis ? (data.ai_analysis.final_confidence * 100).toFixed(1) + '%' : 'N/A'}</div>
+                                </div>
+                            </div>
+                            
+                            <div style="font-size: 0.85rem; color: #94a3b8; text-align: center;">
+                                Combined confidence: ${data.combined_signal.confidence.toFixed(1)}% • Source: ${data.combined_signal.source}
+                            </div>
+                        </div>
+                    `;
+                    
+                    resultsEl.innerHTML = html;
+                } else {
+                    resultsEl.innerHTML = `<div style="color: #ef4444;">Error: ${data.error}</div>`;
+                }
+            } catch (error) {
+                console.error('Advanced analysis error:', error);
+                resultsEl.innerHTML = '<div style="color: #ef4444;">Service unavailable</div>';
+            }
+        }
+
+        // Grafik görseli analiz et
+        async function analyzeChartImage() {
+            const fileInput = document.getElementById('chartImage');
+            const file = fileInput.files[0];
+            
+            if (!file) {
+                showNotification('Please select an image file', 'warning');
+                return;
+            }
+            
+            const resultEl = document.getElementById('imageAnalysisResult');
+            resultEl.innerHTML = '<div class="loading"><div class="spinner" style="width: 16px; height: 16px;"></div> Analyzing chart...</div>';
+            
+            try {
+                const formData = new FormData();
+                formData.append('file', file);
+                
+                const response = await fetch('/api/ai/analyze-image', {
+                    method: 'POST',
+                    body: formData
+                });
+                
+                const data = await response.json();
+                
+                if (data.success) {
+                    resultEl.innerHTML = `
+                        <div style="background: rgba(245, 158, 11, 0.1); padding: 10px; border-radius: 6px; border: 1px solid #f59e0b;">
+                            <div style="color: #f59e0b; font-weight: 600; margin-bottom: 5px;">
+                                <i class="fas fa-chart-bar"></i> Chart Analysis Result
+                            </div>
+                            <div><strong>Sentiment:</strong> ${data.sentiment}</div>
+                            <div><strong>Confidence:</strong> ${(data.confidence * 100).toFixed(0)}%</div>
+                            <div><strong>Patterns:</strong> ${data.patterns.join(', ')}</div>
+                            <div style="margin-top: 5px; font-size: 0.8rem;">${data.analysis}</div>
+                        </div>
+                    `;
+                } else {
+                    resultEl.innerHTML = `<div style="color: #ef4444;">Analysis failed: ${data.error}</div>`;
+                }
+            } catch (error) {
+                console.error('Image analysis error:', error);
+                resultEl.innerHTML = '<div style="color: #ef4444;">Image analysis service unavailable</div>';
+            }
+        }
+
+        // Yardımcı fonksiyon
+        function showNotification(message, type = 'info') {
+            const notification = document.createElement('div');
+            notification.style.cssText = `
+                position: fixed;
+                top: 20px;
+                right: 20px;
+                padding: 12px 20px;
+                border-radius: 6px;
+                color: white;
+                font-weight: 600;
+                z-index: 1000;
+                animation: slideIn 0.3s ease;
+            `;
+            
+            if (type === 'success') {
+                notification.style.background = '#10b981';
+            } else if (type === 'error') {
+                notification.style.background = '#ef4444';
+            } else if (type === 'warning') {
+                notification.style.background = '#f59e0b';
+            } else {
+                notification.style.background = '#3b82f6';
+            }
+            
+            notification.textContent = message;
+            document.body.appendChild(notification);
+            
+            setTimeout(() => {
+                notification.style.animation = 'slideOut 0.3s ease';
+                setTimeout(() => notification.remove(), 300);
+            }, 3000);
+        }
+
+        // CSS Animations
+        const style = document.createElement('style');
+        style.textContent = `
+            @keyframes slideIn {
+                from { transform: translateX(100%); opacity: 0; }
+                to { transform: translateX(0); opacity: 1; }
+            }
+            @keyframes slideOut {
+                from { transform: translateX(0); opacity: 1; }
+                to { transform: translateX(100%); opacity: 0; }
+            }
+        `;
+        document.head.appendChild(style);
+    </script>
 </body>
 </html>
-    """
 
 if __name__ == "__main__":
     import uvicorn
@@ -2503,4 +2586,4 @@ if __name__ == "__main__":
         host="0.0.0.0",
         port=port,
         log_level="info"
-    ) XXX
+    ) 
