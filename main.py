@@ -14,7 +14,7 @@ import asyncio
 from typing import Dict, List, Optional, Tuple
 import aiohttp
 from enum import Enum
-
+from fastapi import Query
 # Logging configuration
 logging.basicConfig(
     level=logging.INFO,
@@ -995,10 +995,19 @@ class SignalGenerator:
             return "⏸️ NEUTRAL - No clear directional bias. Wait for better setup."
 
 # ========== API ENDPOINTS ==========
+from fastapi import Query
+
+# Tüm desteklenen zaman dilimleri (regex ile sıkı kontrol)
+ALLOWED_INTERVALS = r"^(5m|15m|30m|1h|4h|1d|1w|1M|1y)$"
+
 @app.get("/api/analyze/{symbol}")
 async def analyze_symbol(
     symbol: str,
- interval: str = Query(default="1h", pattern="^(1h|4h|1d)$")
+    interval: str = Query(
+        default="1h",
+        pattern=ALLOWED_INTERVALS,
+        description="Zaman dilimi: 5m, 15m, 30m, 1h, 4h, 1d, 1w, 1M, 1y"
+    )
 ):
     """Complete technical analysis for a symbol"""
     try:
@@ -1007,6 +1016,8 @@ async def analyze_symbol(
         
         if not candles or len(candles) < 50:
             raise HTTPException(status_code=400, detail="Insufficient data for analysis")
+        
+        # ... geri kalan kod aynı kalıyor ...
         
         # Calculate indicators
         ema_9 = TechnicalIndicators.calculate_ema(candles, 9)
