@@ -1393,7 +1393,7 @@ async def dashboard():
         
         .tradingview-widget {
             width: 100%;
-            height: 500px;
+            height: 600px;
             border-radius: 8px;
             overflow: hidden;
         }
