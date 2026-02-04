@@ -1,1068 +1,807 @@
-
 """
-ICTSmartPro Real-Time Price Tracker v2.0 - PURE REAL-TIME
-✅ Sadece gerçek zamanlı veri ✅ Sıfır simülasyon
-✅ TradingView WebSocket entegrasyonu ✅ Minimal bellek kullanımı
+🎯 PROFESSIONAL SUPPORT/RESISTANCE & TREND REVERSAL ANALYZER
+✅ Major/Minor Support & Resistance Levels
+✅ Swing High/Low Detection
+✅ Higher Highs (HH) & Higher Lows (HL) - Uptrend
+✅ Lower Highs (LH) & Lower Lows (LL) - Downtrend
+✅ Trend Change Detection (Break of Structure - BOS)
+✅ Smart Entry/Exit Zones
+✅ Buy at Support / Sell at Resistance Strategy
 """
 
-import os
-import logging
-from datetime import datetime, timezone, timedelta
-from typing import Dict, List, Optional, Deque
-from collections import deque
-import json
-import asyncio
-import aiohttp
-import websockets
-from contextlib import asynccontextmanager
+from typing import List, Dict, Optional, Tuple
+from dataclasses import dataclass
+from enum import Enum
+import numpy as np
 
-logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(message)s')
-logger = logging.getLogger(__name__)
+class TrendDirection(str, Enum):
+    """Trend yönü"""
+    UPTREND = "UPTREND"
+    DOWNTREND = "DOWNTREND"
+    SIDEWAYS = "SIDEWAYS"
+    REVERSAL_TO_UP = "REVERSAL_TO_UP"  # Yükseliş trendine dönüş
+    REVERSAL_TO_DOWN = "REVERSAL_TO_DOWN"  # Düşüş trendine dönüş
 
-from fastapi import FastAPI, HTTPException
-from fastapi.responses import HTMLResponse, JSONResponse, PlainTextResponse
-from fastapi.middleware.cors import CORSMiddleware
+class LevelStrength(str, Enum):
+    """Seviye gücü"""
+    MAJOR = "MAJOR"  # Çok güçlü, birden fazla test edilmiş
+    MINOR = "MINOR"  # Orta güçte
+    WEAK = "WEAK"    # Zayıf
 
-# ==================== WEBSOCKET CLIENT FOR REAL DATA ====================
-class BinanceWebSocketClient:
-    """Binance WebSocket'ten gerçek zamanlı veri alır"""
+@dataclass
+class SwingPoint:
+    """Swing High/Low noktası"""
+    index: int
+    price: float
+    is_high: bool  # True = Swing High, False = Swing Low
+    strength: int  # Kaç mum ile confirm edildi
+    timestamp: Optional[int] = None
+
+@dataclass
+class SupportResistanceLevel:
+    """Destek/Direnç seviyesi"""
+    price: float
+    level_type: str  # "support" veya "resistance"
+    strength: LevelStrength
+    touch_count: int  # Kaç kez test edildi
+    first_touch_index: int
+    last_touch_index: int
+    zone_high: float  # Bölge üst sınırı
+    zone_low: float   # Bölge alt sınırı
+    confidence: float  # 0-100 arası güven skoru
+
+@dataclass
+class TrendStructure:
+    """Trend yapısı analizi"""
+    direction: TrendDirection
+    swing_highs: List[SwingPoint]
+    swing_lows: List[SwingPoint]
+    higher_highs_count: int
+    higher_lows_count: int
+    lower_highs_count: int
+    lower_lows_count: int
+    trend_strength: float  # 0-100
+    bos_detected: bool  # Break of Structure
+    bos_price: Optional[float] = None
+    bos_index: Optional[int] = None
+
+@dataclass
+class TradingSignal:
+    """Trading sinyali"""
+    signal_type: str  # "BUY" veya "SELL"
+    entry_price: float
+    stop_loss: float
+    target_1: float
+    target_2: float
+    target_3: float
+    confidence: float
+    reason: str
+    risk_reward: float
+
+class SupportResistanceAnalyzer:
+    """Destek/Direnç ve Trend Analiz Motoru"""
     
-    def __init__(self):
-        self.ws = None
-        self.connected = False
-        self.symbol_data = {}
-        self.subscribed_symbols = set()
+    def __init__(self, swing_window: int = 5, zone_threshold: float = 0.002):
+        """
+        Args:
+            swing_window: Swing point tespiti için bakılacak mum sayısı (her iki yön)
+            zone_threshold: Fiyat seviyelerini birleştirme eşiği (% olarak, 0.002 = %0.2)
+        """
+        self.swing_window = swing_window
+        self.zone_threshold = zone_threshold
+    
+    def detect_swing_points(self, candles: List[Dict]) -> Tuple[List[SwingPoint], List[SwingPoint]]:
+        """
+        Swing High ve Swing Low noktalarını tespit et
         
-    async def connect(self, symbols: List[str]):
-        """Binance WebSocket'ine bağlan"""
-        try:
-            # Binance WebSocket URL
-            stream_names = [f"{symbol.lower()}@ticker" for symbol in symbols]
-            streams = "/".join(stream_names)
-            ws_url = f"wss://stream.binance.com:9443/stream?streams={streams}"
+        Swing High: Sağında ve solunda en az swing_window kadar mum var ve hepsi daha düşük
+        Swing Low: Sağında ve solunda en az swing_window kadar mum var ve hepsi daha yüksek
+        """
+        swing_highs = []
+        swing_lows = []
+        
+        for i in range(self.swing_window, len(candles) - self.swing_window):
+            candle = candles[i]
             
-            logger.info(f"Connecting to Binance WebSocket: {ws_url}")
+            # Swing High kontrolü
+            is_swing_high = True
+            for j in range(1, self.swing_window + 1):
+                # Sol taraf
+                if candles[i - j]["high"] >= candle["high"]:
+                    is_swing_high = False
+                    break
+                # Sağ taraf
+                if candles[i + j]["high"] >= candle["high"]:
+                    is_swing_high = False
+                    break
             
-            async with websockets.connect(ws_url) as websocket:
-                self.ws = websocket
-                self.connected = True
-                logger.info(f"✅ Connected to Binance WebSocket for {len(symbols)} symbols")
+            if is_swing_high:
+                swing_highs.append(SwingPoint(
+                    index=i,
+                    price=candle["high"],
+                    is_high=True,
+                    strength=self.swing_window,
+                    timestamp=candle.get("timestamp")
+                ))
+            
+            # Swing Low kontrolü
+            is_swing_low = True
+            for j in range(1, self.swing_window + 1):
+                # Sol taraf
+                if candles[i - j]["low"] <= candle["low"]:
+                    is_swing_low = False
+                    break
+                # Sağ taraf
+                if candles[i + j]["low"] <= candle["low"]:
+                    is_swing_low = False
+                    break
+            
+            if is_swing_low:
+                swing_lows.append(SwingPoint(
+                    index=i,
+                    price=candle["low"],
+                    is_high=False,
+                    strength=self.swing_window,
+                    timestamp=candle.get("timestamp")
+                ))
+        
+        return swing_highs, swing_lows
+    
+    def analyze_trend_structure(self, swing_highs: List[SwingPoint], 
+                                swing_lows: List[SwingPoint]) -> TrendStructure:
+        """
+        Trend yapısını analiz et (HH, HL, LH, LL)
+        
+        Uptrend: Higher Highs (HH) + Higher Lows (HL)
+        Downtrend: Lower Highs (LH) + Lower Lows (LL)
+        Trend Change: HH/HL dizisi LH/LL'ye dönüşür veya tersi
+        """
+        # Higher Highs / Lower Highs
+        hh_count = 0
+        lh_count = 0
+        for i in range(1, len(swing_highs)):
+            if swing_highs[i].price > swing_highs[i-1].price:
+                hh_count += 1
+            elif swing_highs[i].price < swing_highs[i-1].price:
+                lh_count += 1
+        
+        # Higher Lows / Lower Lows
+        hl_count = 0
+        ll_count = 0
+        for i in range(1, len(swing_lows)):
+            if swing_lows[i].price > swing_lows[i-1].price:
+                hl_count += 1
+            elif swing_lows[i].price < swing_lows[i-1].price:
+                ll_count += 1
+        
+        # Trend direction belirleme
+        total_highs = hh_count + lh_count
+        total_lows = hl_count + ll_count
+        
+        # Break of Structure (BOS) tespiti
+        bos_detected = False
+        bos_price = None
+        bos_index = None
+        
+        # Trend değişimi: Son 3 swing point'e bak
+        if len(swing_highs) >= 3 and len(swing_lows) >= 3:
+            recent_highs = swing_highs[-3:]
+            recent_lows = swing_lows[-3:]
+            
+            # Uptrend'den Downtrend'e dönüş: Son HH kırıldı mı?
+            if (len(recent_highs) >= 2 and 
+                recent_highs[-1].price < recent_highs[-2].price and
+                len(recent_lows) >= 2 and
+                recent_lows[-1].price < recent_lows[-2].price):
                 
-                # WebSocket mesajlarını dinle
-                async for message in websocket:
-                    try:
-                        data = json.loads(message)
-                        await self.process_message(data)
-                    except json.JSONDecodeError as e:
-                        logger.error(f"JSON decode error: {e}")
-                    except Exception as e:
-                        logger.error(f"Message processing error: {e}")
-                        
-        except Exception as e:
-            logger.error(f"WebSocket connection error: {e}")
-            self.connected = False
-            raise
+                # Önceki HL kırıldıysa BOS
+                if len(swing_lows) >= 2:
+                    prev_hl = swing_lows[-2].price
+                    if recent_lows[-1].price < prev_hl:
+                        bos_detected = True
+                        bos_price = prev_hl
+                        bos_index = recent_lows[-1].index
             
-    async def process_message(self, data: Dict):
-        """WebSocket mesajını işle"""
-        try:
-            if 'data' in data:
-                stream_data = data['data']
-                symbol = stream_data['s']  # Örnek: BTCUSDT
+            # Downtrend'den Uptrend'e dönüş: Son LL kırıldı mı?
+            if (len(recent_lows) >= 2 and 
+                recent_lows[-1].price > recent_lows[-2].price and
+                len(recent_highs) >= 2 and
+                recent_highs[-1].price > recent_highs[-2].price):
                 
-                # Güncel fiyat verisini kaydet
-                self.symbol_data[symbol] = {
-                    'symbol': symbol,
-                    'price': float(stream_data.get('c', 0)),  # Son fiyat
-                    'change': float(stream_data.get('P', 0)),  # Yüzde değişim
-                    'volume': float(stream_data.get('v', 0)),  # Hacim
-                    'high': float(stream_data.get('h', 0)),    # 24s yüksek
-                    'low': float(stream_data.get('l', 0)),     # 24s düşük
-                    'open': float(stream_data.get('o', 0)),    # 24s açılış
-                    'timestamp': datetime.now(timezone.utc).isoformat(),
-                    'last_update': datetime.now(timezone.utc)
+                # Önceki LH kırıldıysa BOS
+                if len(swing_highs) >= 2:
+                    prev_lh = swing_highs[-2].price
+                    if recent_highs[-1].price > prev_lh:
+                        bos_detected = True
+                        bos_price = prev_lh
+                        bos_index = recent_highs[-1].index
+        
+        # Trend direction
+        if hh_count > lh_count and hl_count > ll_count:
+            # Güçlü uptrend
+            if bos_detected and bos_index and len(swing_lows) > 0:
+                if swing_lows[-1].index < bos_index:
+                    direction = TrendDirection.UPTREND
+                else:
+                    direction = TrendDirection.REVERSAL_TO_DOWN
+            else:
+                direction = TrendDirection.UPTREND
+        elif lh_count > hh_count and ll_count > hl_count:
+            # Güçlü downtrend
+            if bos_detected and bos_index and len(swing_highs) > 0:
+                if swing_highs[-1].index < bos_index:
+                    direction = TrendDirection.DOWNTREND
+                else:
+                    direction = TrendDirection.REVERSAL_TO_UP
+            else:
+                direction = TrendDirection.DOWNTREND
+        elif bos_detected:
+            # BOS var ama net trend yok - reversal
+            if hh_count >= lh_count:
+                direction = TrendDirection.REVERSAL_TO_UP
+            else:
+                direction = TrendDirection.REVERSAL_TO_DOWN
+        else:
+            direction = TrendDirection.SIDEWAYS
+        
+        # Trend strength hesapla
+        if total_highs > 0 and total_lows > 0:
+            high_consistency = max(hh_count, lh_count) / total_highs
+            low_consistency = max(hl_count, ll_count) / total_lows
+            trend_strength = ((high_consistency + low_consistency) / 2) * 100
+        else:
+            trend_strength = 0.0
+        
+        return TrendStructure(
+            direction=direction,
+            swing_highs=swing_highs,
+            swing_lows=swing_lows,
+            higher_highs_count=hh_count,
+            higher_lows_count=hl_count,
+            lower_highs_count=lh_count,
+            lower_lows_count=ll_count,
+            trend_strength=trend_strength,
+            bos_detected=bos_detected,
+            bos_price=bos_price,
+            bos_index=bos_index
+        )
+    
+    def identify_support_resistance_levels(self, candles: List[Dict], 
+                                          swing_highs: List[SwingPoint],
+                                          swing_lows: List[SwingPoint]) -> Tuple[List[SupportResistanceLevel], List[SupportResistanceLevel]]:
+        """
+        Destek ve direnç seviyelerini tespit et ve sınıflandır
+        """
+        # Tüm swing point'leri fiyata göre grupla
+        all_points = []
+        
+        # Swing lows = potential support
+        for sl in swing_lows:
+            all_points.append({
+                "price": sl.price,
+                "type": "support",
+                "index": sl.index
+            })
+        
+        # Swing highs = potential resistance
+        for sh in swing_highs:
+            all_points.append({
+                "price": sh.price,
+                "type": "resistance",
+                "index": sh.index
+            })
+        
+        # Fiyata göre sırala
+        all_points.sort(key=lambda x: x["price"])
+        
+        # Yakın fiyatları birleştir (zone oluştur)
+        zones = []
+        current_zone = None
+        
+        for point in all_points:
+            if current_zone is None:
+                current_zone = {
+                    "prices": [point["price"]],
+                    "types": [point["type"]],
+                    "indices": [point["index"]]
                 }
+            else:
+                # Son fiyatla karşılaştır
+                last_price = current_zone["prices"][-1]
+                price_diff = abs(point["price"] - last_price) / last_price
                 
-                # Her 10. mesajda log
-                if len(self.symbol_data) % 10 == 0:
-                    logger.debug(f"📡 {symbol}: ${self.symbol_data[symbol]['price']}")
-                    
-        except Exception as e:
-            logger.error(f"Message processing error: {e}")
+                if price_diff <= self.zone_threshold:
+                    # Aynı zone'a ekle
+                    current_zone["prices"].append(point["price"])
+                    current_zone["types"].append(point["type"])
+                    current_zone["indices"].append(point["index"])
+                else:
+                    # Yeni zone başlat
+                    zones.append(current_zone)
+                    current_zone = {
+                        "prices": [point["price"]],
+                        "types": [point["type"]],
+                        "indices": [point["index"]]
+                    }
+        
+        if current_zone:
+            zones.append(current_zone)
+        
+        # Zone'ları destek/direnç seviyelerine dönüştür
+        support_levels = []
+        resistance_levels = []
+        
+        current_price = candles[-1]["close"]
+        
+        for zone in zones:
+            avg_price = np.mean(zone["prices"])
+            touch_count = len(zone["prices"])
+            zone_high = max(zone["prices"])
+            zone_low = min(zone["prices"])
             
-    async def get_symbol_data(self, symbol: str) -> Optional[Dict]:
-        """Sembol verisini getir"""
-        return self.symbol_data.get(symbol.upper())
+            # Tip belirleme (çoğunluk)
+            support_count = zone["types"].count("support")
+            resistance_count = zone["types"].count("resistance")
+            
+            # Strength belirleme
+            if touch_count >= 4:
+                strength = LevelStrength.MAJOR
+                confidence = 90
+            elif touch_count >= 2:
+                strength = LevelStrength.MINOR
+                confidence = 70
+            else:
+                strength = LevelStrength.WEAK
+                confidence = 50
+            
+            # Fiyat yakınlığı bonusu
+            price_distance = abs(avg_price - current_price) / current_price
+            if price_distance < 0.01:  # %1 içinde
+                confidence += 10
+            
+            confidence = min(100, confidence)
+            
+            level = SupportResistanceLevel(
+                price=avg_price,
+                level_type="support" if support_count >= resistance_count else "resistance",
+                strength=strength,
+                touch_count=touch_count,
+                first_touch_index=min(zone["indices"]),
+                last_touch_index=max(zone["indices"]),
+                zone_high=zone_high,
+                zone_low=zone_low,
+                confidence=confidence
+            )
+            
+            # Current price'a göre ayır
+            if avg_price < current_price:
+                # Aşağıda = Support
+                level.level_type = "support"
+                support_levels.append(level)
+            else:
+                # Yukarıda = Resistance
+                level.level_type = "resistance"
+                resistance_levels.append(level)
         
-    async def get_all_symbols_data(self) -> Dict:
-        """Tüm sembol verilerini getir"""
-        return self.symbol_data.copy()
-
-# ==================== PRICE TRACKER (Real Data Only) ====================
-class RealTimePriceTracker:
-    """Sadece gerçek veriyi kullanır, hiç simülasyon yok"""
+        # En yakın ve en güçlü seviyeleri tut
+        support_levels.sort(key=lambda x: (x.confidence, current_price - x.price), reverse=True)
+        resistance_levels.sort(key=lambda x: (x.confidence, x.price - current_price))
+        
+        # En fazla 5'er seviye
+        return support_levels[:5], resistance_levels[:5]
     
-    def __init__(self, symbol: str):
-        self.symbol = symbol.upper()
-        self.current_data = None
-        self.candle_cache = deque(maxlen=50)  # Son 50 mum
-        self.levels_cache = None
-        self.last_calculated = None
+    def generate_trading_signals(self, candles: List[Dict],
+                                trend_structure: TrendStructure,
+                                support_levels: List[SupportResistanceLevel],
+                                resistance_levels: List[SupportResistanceLevel]) -> List[TradingSignal]:
+        """
+        Destek/direnç ve trend yapısına göre trading sinyalleri üret
         
-    def update_from_websocket(self, ws_data: Dict):
-        """WebSocket verisi ile güncelle"""
-        try:
-            if not ws_data:
-                return
+        Stratejiler:
+        1. Destekte Alış (Buy at Support in Uptrend)
+        2. Dirençte Satış (Sell at Resistance in Downtrend)
+        3. Breakout (Direnç kırılımı = Buy, Destek kırılımı = Sell)
+        4. Trend Reversal (BOS sonrası ilk pullback)
+        """
+        signals = []
+        current_price = candles[-1]["close"]
+        atr = self._calculate_atr(candles, period=14)
+        
+        # Strategy 1: Buy at Support (Uptrend)
+        if trend_structure.direction in [TrendDirection.UPTREND, TrendDirection.REVERSAL_TO_UP]:
+            for support in support_levels[:3]:  # En iyi 3 destek
+                distance_pct = abs(current_price - support.price) / current_price
                 
-            self.current_data = {
-                'symbol': self.symbol,
-                'price': ws_data.get('price', 0),
-                'change_percent': ws_data.get('change', 0),
-                'volume': ws_data.get('volume', 0),
-                'high_24h': ws_data.get('high', 0),
-                'low_24h': ws_data.get('low', 0),
-                'open_24h': ws_data.get('open', 0),
-                'timestamp': ws_data.get('timestamp'),
-                'last_update': datetime.now(timezone.utc)
-            }
-            
-            # Yeni mum ekle (basit zaman bazlı)
-            now = datetime.now(timezone.utc)
-            if not self.candle_cache or (now - self.candle_cache[-1]['timestamp']).seconds >= 60:
-                new_candle = {
-                    'timestamp': now,
-                    'open': ws_data.get('price', 0),
-                    'high': ws_data.get('price', 0),
-                    'low': ws_data.get('price', 0),
-                    'close': ws_data.get('price', 0),
-                    'volume': ws_data.get('volume', 0),
-                    'is_final': False
-                }
-                self.candle_cache.append(new_candle)
+                # Fiyat desteğe yakınsa (%1 içinde)
+                if distance_pct < 0.01 and support.confidence >= 70:
+                    entry = support.zone_high
+                    stop_loss = support.zone_low - atr
+                    
+                    # Risk/Reward 1:2, 1:3, 1:4
+                    risk = entry - stop_loss
+                    target_1 = entry + (risk * 2)
+                    target_2 = entry + (risk * 3)
+                    target_3 = entry + (risk * 4)
+                    
+                    # Dirençlere göre ayarla
+                    if resistance_levels:
+                        nearest_resistance = resistance_levels[0].price
+                        if target_1 > nearest_resistance:
+                            target_1 = nearest_resistance * 0.98
+                        if target_2 > nearest_resistance:
+                            target_2 = nearest_resistance * 0.99
+                    
+                    confidence = support.confidence * (trend_structure.trend_strength / 100)
+                    
+                    signals.append(TradingSignal(
+                        signal_type="BUY",
+                        entry_price=entry,
+                        stop_loss=stop_loss,
+                        target_1=target_1,
+                        target_2=target_2,
+                        target_3=target_3,
+                        confidence=confidence,
+                        reason=f"Buy at {support.strength.value} Support in {trend_structure.direction.value}",
+                        risk_reward=2.0
+                    ))
+        
+        # Strategy 2: Sell at Resistance (Downtrend)
+        if trend_structure.direction in [TrendDirection.DOWNTREND, TrendDirection.REVERSAL_TO_DOWN]:
+            for resistance in resistance_levels[:3]:  # En iyi 3 direnç
+                distance_pct = abs(current_price - resistance.price) / current_price
                 
-        except Exception as e:
-            logger.error(f"Update error for {self.symbol}: {e}")
-            
-    def get_statistics(self) -> Dict:
-        """İstatistikleri hesapla"""
-        if not self.current_data:
-            return {
-                'symbol': self.symbol,
-                'status': 'waiting_for_data',
-                'message': 'Gerçek zamanlı veri bekleniyor...'
-            }
-            
-        return {
-            'symbol': self.symbol,
-            'current_price': round(self.current_data['price'], 4),
-            'price_change_percent': round(self.current_data['change_percent'], 2),
-            'volume_24h': round(self.current_data['volume'], 2),
-            'high_24h': round(self.current_data['high_24h'], 4),
-            'low_24h': round(self.current_data['low_24h'], 4),
-            'open_24h': round(self.current_data['open_24h'], 4),
-            'last_update': self.current_data['last_update'].isoformat(),
-            'candle_count': len(self.candle_cache),
-            'status': 'live'
-        }
-        
-    def calculate_levels(self) -> Dict:
-        """Destek/direnç seviyelerini hesapla (gerçek veri ile)"""
-        if len(self.candle_cache) < 10:
-            return {
-                "supports": [],
-                "resistances": [],
-                "ready": False,
-                "message": f"{len(self.candle_cache)}/10 mum gerekiyor",
-                "calculated_at": datetime.now(timezone.utc).isoformat()
-            }
-            
-        try:
-            # Gerçek fiyat verileri
-            closes = [c['close'] for c in self.candle_cache]
-            highs = [c['high'] for c in self.candle_cache]
-            lows = [c['low'] for c in self.candle_cache]
-            
-            # Basit destek/direnç hesaplama
-            current_price = self.current_data['price'] if self.current_data else closes[-1]
-            
-            # Pivot Point (klasik hesaplama)
-            recent_high = max(highs[-5:]) if len(highs) >= 5 else highs[-1]
-            recent_low = min(lows[-5:]) if len(lows) >= 5 else lows[-1]
-            recent_close = closes[-1]
-            
-            pivot = (recent_high + recent_low + recent_close) / 3
-            
-            # Seviyeler
-            r1 = 2 * pivot - recent_low
-            r2 = pivot + (recent_high - recent_low)
-            s1 = 2 * pivot - recent_high
-            s2 = pivot - (recent_high - recent_low)
-            
-            # Mevcut fiyata göre filtrele
-            resistances = sorted([r for r in [r1, r2] if r > current_price], reverse=True)[:3]
-            supports = sorted([s for s in [s1, s2] if s < current_price])[:3]
-            
-            self.levels_cache = {
-                "supports": [round(s, 4) for s in supports],
-                "resistances": [round(r, 4) for r in resistances],
-                "pivot": round(pivot, 4),
-                "current_price": round(current_price, 4),
-                "ready": True,
-                "calculated_at": datetime.now(timezone.utc).isoformat()
-            }
-            self.last_calculated = datetime.now(timezone.utc)
-            
-            return self.levels_cache
-            
-        except Exception as e:
-            logger.error(f"Level calculation error for {self.symbol}: {e}")
-            return {
-                "supports": [],
-                "resistances": [],
-                "ready": False,
-                "error": str(e),
-                "calculated_at": datetime.now(timezone.utc).isoformat()
-            }
-
-# ==================== GLOBAL MANAGER ====================
-class RealTimeTrackerManager:
-    """Gerçek zamanlı veri yöneticisi"""
-    
-    def __init__(self):
-        self.trackers = {}
-        self.ws_client = BinanceWebSocketClient()
-        self.symbols = ["BTCUSDT", "ETHUSDT", "SOLUSDT", "XRPUSDT", "ADAUSDT"]
-        self.is_running = False
-        
-        # Tracker'ları oluştur
-        for symbol in self.symbols:
-            self.trackers[symbol] = RealTimePriceTracker(symbol)
-            
-        logger.info(f"✅ {len(self.symbols)} sembol için gerçek zamanlı tracker oluşturuldu")
-        
-    async def start_real_time_updates(self):
-        """Gerçek zamanlı veri akışını başlat"""
-        if self.is_running:
-            return
-            
-        self.is_running = True
-        
-        # Binance WebSocket'e bağlan
-        try:
-            # WebSocket bağlantısını arka planda çalıştır
-            asyncio.create_task(self.ws_client.connect(self.symbols))
-            
-            # Veri güncelleme döngüsü
-            while self.is_running:
-                try:
-                    # Tüm sembolleri güncelle
-                    for symbol in self.symbols:
-                        ws_data = await self.ws_client.get_symbol_data(symbol)
-                        if ws_data:
-                            self.trackers[symbol].update_from_websocket(ws_data)
+                # Fiyat dirence yakınsa (%1 içinde)
+                if distance_pct < 0.01 and resistance.confidence >= 70:
+                    entry = resistance.zone_low
+                    stop_loss = resistance.zone_high + atr
                     
-                    # Her 5 saniyede bir güncelle
-                    await asyncio.sleep(5)
+                    # Risk/Reward 1:2, 1:3, 1:4
+                    risk = stop_loss - entry
+                    target_1 = entry - (risk * 2)
+                    target_2 = entry - (risk * 3)
+                    target_3 = entry - (risk * 4)
                     
-                except Exception as e:
-                    logger.error(f"Update loop error: {e}")
-                    await asyncio.sleep(10)
+                    # Desteklere göre ayarla
+                    if support_levels:
+                        nearest_support = support_levels[0].price
+                        if target_1 < nearest_support:
+                            target_1 = nearest_support * 1.02
+                        if target_2 < nearest_support:
+                            target_2 = nearest_support * 1.01
                     
-        except Exception as e:
-            logger.error(f"Real-time updates failed: {e}")
-            self.is_running = False
-            
-    async def stop_real_time_updates(self):
-        """Gerçek zamanlı güncellemeyi durdur"""
-        self.is_running = False
+                    confidence = resistance.confidence * (trend_structure.trend_strength / 100)
+                    
+                    signals.append(TradingSignal(
+                        signal_type="SELL",
+                        entry_price=entry,
+                        stop_loss=stop_loss,
+                        target_1=target_1,
+                        target_2=target_2,
+                        target_3=target_3,
+                        confidence=confidence,
+                        reason=f"Sell at {resistance.strength.value} Resistance in {trend_structure.direction.value}",
+                        risk_reward=2.0
+                    ))
         
-    def get_symbol_data(self, symbol: str) -> Optional[Dict]:
-        """Sembol verisini getir"""
-        symbol = symbol.upper()
-        if symbol not in self.trackers:
-            return None
+        # Strategy 3: Break of Structure (BOS) Trades
+        if trend_structure.bos_detected and trend_structure.bos_price:
+            bos_price = trend_structure.bos_price
             
-        tracker = self.trackers[symbol]
-        
-        # WebSocket bağlantı durumu
-        ws_connected = self.ws_client.connected
-        ws_data = None
-        
-        return {
-            "symbol": symbol,
-            "statistics": tracker.get_statistics(),
-            "levels": tracker.calculate_levels(),
-            "connection": {
-                "websocket_connected": ws_connected,
-                "data_received": tracker.current_data is not None,
-                "last_update": tracker.current_data['last_update'].isoformat() if tracker.current_data else None
-            },
-            "status": "live" if tracker.current_data else "waiting"
-        }
-        
-    def get_all_symbols_data(self) -> Dict:
-        """Tüm sembollerin verisini getir"""
-        result = {}
-        for symbol in self.symbols:
-            result[symbol] = self.get_symbol_data(symbol)
-        return result
-
-# ==================== FASTAPI APP LIFECYCLE ====================
-@asynccontextmanager
-async def lifespan(app: FastAPI):
-    """Uygulama ömrünü yönet"""
-    # Başlangıç
-    logger.info("🚀 ICTSmartPro Real-Time Tracker v2.0 starting...")
-    
-    # Global manager oluştur
-    app.state.tracker_manager = RealTimeTrackerManager()
-    
-    # Gerçek zamanlı güncellemeleri başlat
-    asyncio.create_task(app.state.tracker_manager.start_real_time_updates())
-    
-    yield
-    
-    # Kapanış
-    logger.info("🛑 ICTSmartPro Real-Time Tracker shutting down...")
-    await app.state.tracker_manager.stop_real_time_updates()
-
-# FastAPI uygulaması
-app = FastAPI(
-    title="ICTSmartPro Real-Time Price Tracker",
-    version="2.0",
-    docs_url=None,
-    redoc_url=None,
-    lifespan=lifespan
-)
-
-# CORS
-app.add_middleware(
-    CORSMiddleware,
-    allow_origins=["*"],
-    allow_credentials=True,
-    allow_methods=["*"],
-    allow_headers=["*"],
-)
-
-# ==================== RAILWAY CRITICAL ENDPOINTS ====================
-@app.get("/", response_class=HTMLResponse)
-async def root():
-    """Ana sayfa"""
-    return """
-    <html>
-    <head>
-        <meta http-equiv="refresh" content="0;url=/dashboard">
-        <title>ICTSmartPro Tracker</title>
-    </head>
-    <body>
-        <div style="text-align: center; margin-top: 50px;">
-            <h2>ICTSmartPro Real-Time Tracker v2.0</h2>
-            <p>Gerçek zamanlı fiyat takip sistemine yönlendiriliyorsunuz...</p>
-            <p><a href="/dashboard">Hemen git</a></p>
-        </div>
-    </body>
-    </html>
-    """
-
-@app.get("/health", response_class=JSONResponse)
-async def health_check():
-    """Railway health check"""
-    manager = app.state.tracker_manager
-    
-    # Bağlantı durumu kontrolü
-    live_trackers = 0
-    for symbol in manager.symbols:
-        data = manager.get_symbol_data(symbol)
-        if data and data.get("status") == "live":
-            live_trackers += 1
+            if trend_structure.direction == TrendDirection.REVERSAL_TO_UP:
+                # Downtrend kırıldı, uptrend başlıyor
+                # Pullback bekle ve al
+                if current_price > bos_price * 1.005:  # BOS'un üzerinde
+                    entry = bos_price * 1.002
+                    stop_loss = bos_price * 0.995
+                    risk = entry - stop_loss
+                    
+                    target_1 = entry + (risk * 2.5)
+                    target_2 = entry + (risk * 4)
+                    target_3 = entry + (risk * 6)
+                    
+                    signals.append(TradingSignal(
+                        signal_type="BUY",
+                        entry_price=entry,
+                        stop_loss=stop_loss,
+                        target_1=target_1,
+                        target_2=target_2,
+                        target_3=target_3,
+                        confidence=85,
+                        reason="BUY on Break of Structure - Trend Reversal to Uptrend",
+                        risk_reward=2.5
+                    ))
             
-    return {
-        "status": "healthy" if live_trackers > 0 else "starting",
-        "version": "2.0",
-        "service": "ICTSmartPro Real-Time Tracker",
-        "timestamp": datetime.now(timezone.utc).isoformat(),
-        "tracked_symbols": len(manager.symbols),
-        "live_symbols": live_trackers,
-        "websocket_connected": manager.ws_client.connected,
-        "real_time_updates": manager.is_running
-    }
-
-@app.get("/ready", response_class=PlainTextResponse)
-async def ready_check():
-    """Kubernetes readiness probe"""
-    manager = app.state.tracker_manager
-    
-    # En az 2 sembol canlı veri alıyorsa hazır
-    live_count = 0
-    for symbol in manager.symbols:
-        data = manager.get_symbol_data(symbol)
-        if data and data.get("status") == "live":
-            live_count += 1
+            elif trend_structure.direction == TrendDirection.REVERSAL_TO_DOWN:
+                # Uptrend kırıldı, downtrend başlıyor
+                if current_price < bos_price * 0.995:  # BOS'un altında
+                    entry = bos_price * 0.998
+                    stop_loss = bos_price * 1.005
+                    risk = stop_loss - entry
+                    
+                    target_1 = entry - (risk * 2.5)
+                    target_2 = entry - (risk * 4)
+                    target_3 = entry - (risk * 6)
+                    
+                    signals.append(TradingSignal(
+                        signal_type="SELL",
+                        entry_price=entry,
+                        stop_loss=stop_loss,
+                        target_1=target_1,
+                        target_2=target_2,
+                        target_3=target_3,
+                        confidence=85,
+                        reason="SELL on Break of Structure - Trend Reversal to Downtrend",
+                        risk_reward=2.5
+                    ))
+        
+        # Strategy 4: Breakout Trades
+        if resistance_levels and trend_structure.direction == TrendDirection.UPTREND:
+            nearest_resistance = resistance_levels[0]
+            distance_pct = (nearest_resistance.price - current_price) / current_price
             
-    return "READY" if live_count >= 2 else "NOT_READY"
-
-@app.get("/live", response_class=JSONResponse)
-async def live_check():
-    """Liveness probe"""
-    return {
-        "status": "alive",
-        "timestamp": datetime.now(timezone.utc).isoformat(),
-        "service": "real-time-tracker"
-    }
-
-# ==================== API ENDPOINTS ====================
-@app.get("/api/price/{symbol}")
-async def get_price(symbol: str):
-    """Sembolün gerçek zamanlı fiyatını getir"""
-    manager = app.state.tracker_manager
-    data = manager.get_symbol_data(symbol)
+            # Dirence çok yakınsa (%0.5 içinde) breakout beklentisi
+            if 0 < distance_pct < 0.005 and nearest_resistance.confidence >= 70:
+                entry = nearest_resistance.zone_high * 1.002  # Kırılım confirmasyonu
+                stop_loss = nearest_resistance.zone_low - atr
+                risk = entry - stop_loss
+                
+                target_1 = entry + (risk * 2)
+                target_2 = entry + (risk * 3.5)
+                target_3 = entry + (risk * 5)
+                
+                signals.append(TradingSignal(
+                    signal_type="BUY",
+                    entry_price=entry,
+                    stop_loss=stop_loss,
+                    target_1=target_1,
+                    target_2=target_2,
+                    target_3=target_3,
+                    confidence=nearest_resistance.confidence * 0.9,
+                    reason=f"Resistance Breakout - {nearest_resistance.strength.value} level",
+                    risk_reward=2.0
+                ))
+        
+        if support_levels and trend_structure.direction == TrendDirection.DOWNTREND:
+            nearest_support = support_levels[0]
+            distance_pct = (current_price - nearest_support.price) / current_price
+            
+            # Desteğe çok yakınsa (%0.5 içinde) breakdown beklentisi
+            if 0 < distance_pct < 0.005 and nearest_support.confidence >= 70:
+                entry = nearest_support.zone_low * 0.998  # Kırılım confirmasyonu
+                stop_loss = nearest_support.zone_high + atr
+                risk = stop_loss - entry
+                
+                target_1 = entry - (risk * 2)
+                target_2 = entry - (risk * 3.5)
+                target_3 = entry - (risk * 5)
+                
+                signals.append(TradingSignal(
+                    signal_type="SELL",
+                    entry_price=entry,
+                    stop_loss=stop_loss,
+                    target_1=target_1,
+                    target_2=target_2,
+                    target_3=target_3,
+                    confidence=nearest_support.confidence * 0.9,
+                    reason=f"Support Breakdown - {nearest_support.strength.value} level",
+                    risk_reward=2.0
+                ))
+        
+        # Confidence'a göre sırala
+        signals.sort(key=lambda x: x.confidence, reverse=True)
+        
+        return signals[:3]  # En iyi 3 sinyal
     
-    if not data:
-        raise HTTPException(
-            status_code=404,
-            detail=f"Sembol bulunamadı. Desteklenenler: {', '.join(manager.symbols)}"
+    def _calculate_atr(self, candles: List[Dict], period: int = 14) -> float:
+        """Average True Range hesapla"""
+        if len(candles) < period + 1:
+            return 0.0
+        
+        true_ranges = []
+        for i in range(1, len(candles)):
+            high = candles[i]["high"]
+            low = candles[i]["low"]
+            prev_close = candles[i-1]["close"]
+            
+            tr = max(
+                high - low,
+                abs(high - prev_close),
+                abs(low - prev_close)
+            )
+            true_ranges.append(tr)
+        
+        if len(true_ranges) < period:
+            return 0.0
+        
+        return np.mean(true_ranges[-period:])
+    
+    def full_analysis(self, candles: List[Dict]) -> Dict:
+        """Tam analiz - Tüm fonksiyonları çalıştır"""
+        # 1. Swing points tespit et
+        swing_highs, swing_lows = self.detect_swing_points(candles)
+        
+        # 2. Trend yapısını analiz et
+        trend_structure = self.analyze_trend_structure(swing_highs, swing_lows)
+        
+        # 3. Destek/direnç seviyelerini tespit et
+        support_levels, resistance_levels = self.identify_support_resistance_levels(
+            candles, swing_highs, swing_lows
         )
         
-    return {
-        "success": True,
-        "data": data,
-        "timestamp": datetime.now(timezone.utc).isoformat(),
-        "source": "binance_websocket",
-        "is_real_time": True
-    }
-
-@app.get("/api/price/{symbol}/levels")
-async def get_levels(symbol: str):
-    """Destek/direnç seviyelerini getir"""
-    manager = app.state.tracker_manager
-    data = manager.get_symbol_data(symbol)
-    
-    if not data:
-        raise HTTPException(status_code=404, detail="Sembol bulunamadı")
+        # 4. Trading sinyalleri üret
+        signals = self.generate_trading_signals(
+            candles, trend_structure, support_levels, resistance_levels
+        )
         
-    levels = data["levels"]
-    
-    if not levels["ready"]:
+        current_price = candles[-1]["close"]
+        
         return {
-            "success": False,
-            "error": "Yetersiz gerçek zamanlı veri",
-            "message": levels.get("message", "Veri bekleniyor..."),
-            "timestamp": datetime.now(timezone.utc).isoformat()
-        }
-        
-    # Seviye analizi
-    current_price = levels["current_price"]
-    supports = levels["supports"]
-    resistances = levels["resistances"]
-    
-    nearest_support = min([current_price - s for s in supports]) if supports else None
-    nearest_resistance = min([r - current_price for r in resistances]) if resistances else None
-    
-    # Analiz
-    if nearest_support and nearest_support < current_price * 0.01: #  % 1'den az
-        analysis = "ALIM BÖLGESİ"
-        signal = "BUY"
-    elif nearest_resistance and nearest_resistance < current_price * 0.01:  % 1'den az
-        analysis = "SATIŞ BÖLGESİ"
-        signal = "SELL"
-    else:
-        analysis = "NÖTR BÖLGE"
-        signal = "HOLD"
-        
-    return {
-        "success": True,
-        "symbol": symbol.upper(),
-        "current_price": current_price,
-        "pivot_point": levels["pivot"],
-        "supports": supports,
-        "resistances": resistances,
-        "nearest_support": round(nearest_support, 4) if nearest_support else None,
-        "nearest_resistance": round(nearest_resistance, 4) if nearest_resistance else None,
-        "analysis": analysis,
-        "signal": signal,
-        "timestamp": datetime.now(timezone.utc).isoformat(),
-        "data_source": "real_time_binance",
-        "calculation_time": levels["calculated_at"]
-    }
-
-@app.get("/api/market/overview")
-async def market_overview():
-    """Piyasa genel görünümü"""
-    manager = app.state.tracker_manager
-    all_data = manager.get_all_symbols_data()
-    
-    # İstatistikler
-    live_count = 0
-    total_change = 0
-    symbol_summary = {}
-    
-    for symbol, data in all_data.items():
-        if data and data["statistics"]:
-            stats = data["statistics"]
-            
-            if stats.get("status") == "live":
-                live_count += 1
-                total_change += stats.get("price_change_percent", 0)
-                
-            symbol_summary[symbol] = {
-                "price": stats.get("current_price", 0),
-                "change": stats.get("price_change_percent", 0),
-                "volume": stats.get("volume_24h", 0),
-                "status": stats.get("status", "waiting"),
-                "last_update": stats.get("last_update")
-            }
-    
-    avg_change = total_change / live_count if live_count > 0 else 0
-    
-    return {
-        "success": True,
-        "market": {
-            "total_symbols": len(symbol_summary),
-            "live_symbols": live_count,
-            "average_change": round(avg_change, 2),
-            "trend": "BULLISH" if avg_change > 0 else "BEARISH" if avg_change < 0 else "NEUTRAL",
-            "websocket_status": manager.ws_client.connected,
-            "update_active": manager.is_running,
-            "timestamp": datetime.now(timezone.utc).isoformat()
-        },
-        "symbols": symbol_summary
-    }
-
-@app.get("/api/system/status")
-async def system_status():
-    """Sistem durumu detayları"""
-    manager = app.state.tracker_manager
-    
-    symbol_status = {}
-    for symbol in manager.symbols:
-        data = manager.get_symbol_data(symbol)
-        symbol_status[symbol] = {
-            "status": data.get("status") if data else "unknown",
-            "last_update": data.get("connection", {}).get("last_update") if data else None,
-            "has_data": data.get("statistics", {}).get("current_price") is not None if data else False
-        }
-    
-    return {
-        "system": {
-            "version": "2.0",
-            "mode": "real_time_only",
-            "simulation": False,
-            "websocket": {
-                "connected": manager.ws_client.connected,
-                "symbols_subscribed": list(manager.symbols)
+            "current_price": current_price,
+            "trend_structure": {
+                "direction": trend_structure.direction.value,
+                "strength": round(trend_structure.trend_strength, 1),
+                "higher_highs": trend_structure.higher_highs_count,
+                "higher_lows": trend_structure.higher_lows_count,
+                "lower_highs": trend_structure.lower_highs_count,
+                "lower_lows": trend_structure.lower_lows_count,
+                "break_of_structure": trend_structure.bos_detected,
+                "bos_price": trend_structure.bos_price,
+                "total_swing_highs": len(swing_highs),
+                "total_swing_lows": len(swing_lows)
             },
-            "update_service": {
-                "running": manager.is_running,
-                "interval_seconds": 5
-            }
-        },
-        "symbols": symbol_status,
-        "timestamp": datetime.now(timezone.utc).isoformat()
-    }
-
-# ==================== DASHBOARD ====================
-@app.get("/dashboard", response_class=HTMLResponse)
-async def dashboard():
-    """Ana kontrol paneli"""
-    return """
-<!DOCTYPE html>
-<html lang="tr">
-<head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>ICTSmartPro Real-Time Tracker v2.0</title>
-    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
-    <style>
-        :root {
-            --primary: #3b82f6;
-            --secondary: #8b5cf6;
-            --success: #10b981;
-            --danger: #ef4444;
-            --warning: #f59e0b;
-            --dark: #0f172a;
-            --dark-800: #1e293b;
-            --gray: #94a3b8;
-        }
-        
-        * { margin: 0; padding: 0; box-sizing: border-box; }
-        
-        body {
-            font-family: 'Segoe UI', system-ui, sans-serif;
-            background: linear-gradient(135deg, var(--dark), var(--dark-800));
-            color: #e2e8f0;
-            min-height: 100vh;
-            padding: 1rem;
-        }
-        
-        .container { max-width: 1400px; margin: 0 auto; }
-        
-        header {
-            text-align: center;
-            padding: 2rem 1rem;
-            margin-bottom: 2rem;
-            background: linear-gradient(90deg, var(--primary), var(--secondary));
-            border-radius: 20px;
-            box-shadow: 0 10px 30px rgba(59, 130, 246, 0.3);
-        }
-        
-        .logo {
-            font-size: 2.5rem;
-            font-weight: 900;
-            background: linear-gradient(45deg, #fbbf24, #f97316);
-            -webkit-background-clip: text;
-            -webkit-text-fill-color: transparent;
-            margin-bottom: 0.5rem;
-        }
-        
-        .status-badge {
-            display: inline-flex;
-            align-items: center;
-            gap: 0.5rem;
-            background: rgba(16, 185, 129, 0.2);
-            color: var(--success);
-            padding: 0.4rem 1.2rem;
-            border-radius: 50px;
-            margin-top: 1rem;
-            font-weight: 500;
-        }
-        
-        .card {
-            background: rgba(30, 41, 59, 0.85);
-            border-radius: 16px;
-            padding: 1.5rem;
-            margin-bottom: 1.5rem;
-            border: 1px solid rgba(255, 255, 255, 0.08);
-        }
-        
-        .card-title {
-            font-size: 1.4rem;
-            font-weight: 700;
-            color: white;
-            margin-bottom: 1.2rem;
-            display: flex;
-            align-items: center;
-            gap: 0.7rem;
-        }
-        
-        .symbols-grid {
-            display: grid;
-            grid-template-columns: repeat(auto-fill, minmax(240px, 1fr));
-            gap: 1.2rem;
-            margin-top: 1rem;
-        }
-        
-        .symbol-card {
-            background: rgba(25, 35, 60, 0.7);
-            border-radius: 12px;
-            padding: 1.2rem;
-            cursor: pointer;
-            transition: all 0.3s ease;
-            border: 1px solid rgba(59, 130, 246, 0.1);
-        }
-        
-        .symbol-card:hover {
-            transform: translateY(-3px);
-            border-color: var(--primary);
-        }
-        
-        .symbol-name {
-            font-size: 1.1rem;
-            font-weight: 600;
-            margin-bottom: 0.5rem;
-        }
-        
-        .symbol-price {
-            font-size: 1.5rem;
-            font-weight: 700;
-            margin: 0.5rem 0;
-        }
-        
-        .symbol-change {
-            font-size: 0.95rem;
-            font-weight: 500;
-        }
-        
-        .positive { color: var(--success); }
-        .negative { color: var(--danger); }
-        
-        .analysis-grid {
-            display: grid;
-            grid-template-columns: repeat(auto-fit, minmax(250px, 1fr));
-            gap: 1.2rem;
-            margin-top: 1rem;
-        }
-        
-        .analysis-card {
-            background: rgba(25, 35, 60, 0.7);
-            border-radius: 12px;
-            padding: 1.2rem;
-        }
-        
-        .analysis-title {
-            color: var(--gray);
-            font-size: 0.9rem;
-            margin-bottom: 0.5rem;
-        }
-        
-        .analysis-value {
-            font-size: 1.4rem;
-            font-weight: 700;
-            color: white;
-        }
-        
-        .support-value { color: var(--success); }
-        .resistance-value { color: var(--danger); }
-        
-        .tradingview-container {
-            width: 100%;
-            height: 500px;
-            border-radius: 12px;
-            overflow: hidden;
-            margin-top: 1.5rem;
-            background: rgba(15, 23, 42, 0.6);
-        }
-        
-        #tradingview_chart {
-            width: 100%;
-            height: 100%;
-        }
-        
-        .connection-status {
-            padding: 0.5rem 1rem;
-            border-radius: 8px;
-            font-size: 0.9rem;
-            font-weight: 500;
-            display: inline-flex;
-            align-items: center;
-            gap: 0.5rem;
-        }
-        
-        .connected { background: rgba(16, 185, 129, 0.2); color: var(--success); }
-        .disconnected { background: rgba(239, 68, 68, 0.2); color: var(--danger); }
-        
-        .loading {
-            text-align: center;
-            padding: 2rem;
-            color: var(--primary);
-        }
-        
-        .spinner {
-            border: 4px solid rgba(59, 130, 246, 0.3);
-            border-top: 4px solid var(--primary);
-            border-radius: 50%;
-            width: 40px;
-            height: 40px;
-            animation: spin 1s linear infinite;
-            margin: 0 auto 1rem;
-        }
-        
-        @keyframes spin {
-            0% { transform: rotate(0deg); }
-            100% { transform: rotate(360deg); }
-        }
-        
-        footer {
-            text-align: center;
-            padding: 2rem;
-            color: var(--gray);
-            border-top: 1px solid rgba(255, 255, 255, 0.07);
-            margin-top: 2rem;
-        }
-        
-        @media (max-width: 768px) {
-            .symbols-grid {
-                grid-template-columns: repeat(auto-fill, minmax(200px, 1fr));
-            }
-            .analysis-grid {
-                grid-template-columns: 1fr;
-            }
-            .logo {
-                font-size: 2rem;
-            }
-        }
-    </style>
-</head>
-<body>
-    <div class="container">
-        <header>
-            <div class="logo">
-                <i class="fas fa-bolt"></i> ICTSmartPro v2.0
-            </div>
-            <div style="color: rgba(255, 255, 255, 0.9); margin: 0.5rem 0; font-size: 1.1rem;">
-                Gerçek Zamanlı Fiyat Takip - Sıfır Simülasyon
-            </div>
-            <div class="status-badge">
-                <i class="fas fa-satellite-dish"></i> 
-                <span id="statusText">Binance WebSocket Bağlanıyor...</span>
-                <span id="lastUpdate" style="margin-left: 1rem; font-size: 0.9rem;"></span>
-            </div>
-        </header>
-        
-        <div class="card">
-            <h2 class="card-title">
-                <i class="fas fa-coins"></i> Canlı Semboller
-                <div id="connectionStatus" class="connection-status disconnected">
-                    <i class="fas fa-circle"></i> Bağlantı Yok
-                </div>
-            </h2>
-            <div class="symbols-grid" id="symbolsGrid">
-                <div class="loading">
-                    <div class="spinner"></div>
-                    <div>Binance'dan veri bekleniyor...</div>
-                </div>
-            </div>
-        </div>
-        
-        <div class="card">
-            <h2 class="card-title">
-                <i class="fas fa-chart-bar"></i> Gerçek Zamanlı Analiz - <span id="selectedSymbol">BTCUSDT</span>
-            </h2>
-            
-            <div class="analysis-grid">
-                <div class="analysis-card">
-                    <div class="analysis-title">Mevcut Fiyat (Gerçek Zamanlı)</div>
-                    <div class="analysis-value" id="currentPrice">-</div>
-                    <div style="font-size: 0.85rem; color: var(--gray); margin-top: 0.5rem;" id="priceSource"></div>
-                </div>
-                <div class="analysis-card">
-                    <div class="analysis-title">Pivot Noktası</div>
-                    <div class="analysis-value" id="pivotPoint">-</div>
-                </div>
-                <div class="analysis-card">
-                    <div class="analysis-title">Destek Seviyeleri</div>
-                    <div class="analysis-value support-value" id="supports">-</div>
-                </div>
-                <div class="analysis-card">
-                    <div class="analysis-title">Direnç Seviyeleri</div>
-                    <div class="analysis-value resistance-value" id="resistances">-</div>
-                </div>
-            </div>
-            
-            <div class="tradingview-container">
-                <div id="tradingview_chart"></div>
-            </div>
-        </div>
-        
-        <footer>
-            <div>© 2024 ICTSmartPro Real-Time Tracker v2.0</div>
-            <div style="color: var(--success); margin-top: 0.5rem; font-size: 0.9rem;">
-                <i class="fas fa-check-circle"></i> Sıfır Simülasyon - Tamamen Gerçek Veri
-            </div>
-            <div style="margin-top: 1rem; font-size: 0.85rem; color: var(--gray);">
-                Binance WebSocket • Real-time Updates • Live Technical Analysis
-            </div>
-        </footer>
-    </div>
-
-    <!-- TradingView Widget -->
-    <script type="text/javascript" src="https://s3.tradingview.com/tv.js"></script>
-    <script>
-        let tvWidget = null;
-        let currentSymbol = "BTCUSDT";
-        let connectionStatus = "disconnected";
-        
-        // Bağlantı durumunu güncelle
-        function updateConnectionStatus(connected) {
-            const statusEl = document.getElementById('connectionStatus');
-            if (connected) {
-                statusEl.className = 'connection-status connected';
-                statusEl.innerHTML = '<i class="fas fa-circle"></i> Binance WebSocket Bağlı';
-                connectionStatus = "connected";
-            } else {
-                statusEl.className = 'connection-status disconnected';
-                statusEl.innerHTML = '<i class="fas fa-circle"></i> WebSocket Bağlantısı Yok';
-                connectionStatus = "disconnected";
-            }
-        }
-        
-        // TradingView başlat
-        function initTradingView(symbol = "BTCUSDT") {
-            if (tvWidget) {
-                tvWidget.remove();
-            }
-            
-            let tvSymbol = symbol.toUpperCase();
-            if (tvSymbol.endsWith("USDT")) {
-                tvSymbol = `BINANCE:${tvSymbol.replace('USDT', 'USDT.P')}`;
-            }
-            
-            tvWidget = new TradingView.widget({
-                width: "100%",
-                height: "100%",
-                symbol: tvSymbol,
-                interval: "1",
-                timezone: "Etc/UTC",
-                theme: "dark",
-                style: "1",
-                locale: "tr",
-                toolbar_bg: "#1e293b",
-                enable_publishing: false,
-                allow_symbol_change: true,
-                container_id: "tradingview_chart",
-                studies: ["RSI@tv-basicstudies", "MASimple@tv-basicstudies"],
-                overrides: {
-                    "paneProperties.background": "#0f172a",
-                    "paneProperties.vertGridProperties.color": "#1e293b",
-                    "paneProperties.horzGridProperties.color": "#1e293b",
-                    "symbolWatermarkProperties.color": "rgba(0,0,0,0)",
-                    "scalesProperties.textColor": "#e2e8f0",
-                    "mainSeriesProperties.candleStyle.wickUpColor": "#10b981",
-                    "mainSeriesProperties.candleStyle.wickDownColor": "#ef4444"
+            "support_levels": [
+                {
+                    "price": round(s.price, 4),
+                    "strength": s.strength.value,
+                    "touches": s.touch_count,
+                    "confidence": round(s.confidence, 1),
+                    "zone_high": round(s.zone_high, 4),
+                    "zone_low": round(s.zone_low, 4),
+                    "distance_from_price_pct": round(((s.price - current_price) / current_price) * 100, 2)
                 }
-            });
-        }
-        
-        // Sembolleri yükle
-        async function loadSymbols() {
-            try {
-                const response = await fetch('/api/market/overview');
-                const data = await response.json();
-                
-                if (!data.success) {
-                    throw new Error('Market data failed');
+                for s in support_levels
+            ],
+            "resistance_levels": [
+                {
+                    "price": round(r.price, 4),
+                    "strength": r.strength.value,
+                    "touches": r.touch_count,
+                    "confidence": round(r.confidence, 1),
+                    "zone_high": round(r.zone_high, 4),
+                    "zone_low": round(r.zone_low, 4),
+                    "distance_from_price_pct": round(((r.price - current_price) / current_price) * 100, 2)
                 }
-                
-                // Bağlantı durumu
-                updateConnectionStatus(data.market.websocket_status);
-                
-                const grid = document.getElementById('symbolsGrid');
-                grid.innerHTML = '';
-                
-                for (const [symbol, info] of Object.entries(data.symbols)) {
-                    const card = document.createElement('div');
-                    card.className = 'symbol-card';
-                    card.onclick = () => selectSymbol(symbol);
-                    
-                    const statusColor = info.status === 'live' ? '#10b981' : 
-                                      info.status === 'waiting' ? '#f59e0b' : '#ef4444';
-                    const statusIcon = info.status === 'live' ? '🔴' : '⏳';
-                    
-                    card.innerHTML = `
-                        <div class="symbol-name">${symbol} ${statusIcon}</div>
-                        <div class="symbol-price">$${info.price.toLocaleString('en-US', {minimumFractionDigits: 2, maximumFractionDigits: 4})}</div>
-                        <div class="symbol-change ${info.change >= 0 ? 'positive' : 'negative'}">
-                            ${info.change >= 0 ? '↗' : '↘'} ${Math.abs(info.change).toFixed(2)}%
-                        </div>
-                        <div style="margin-top: 0.5rem; font-size: 0.85rem; color: ${statusColor}">
-                            ${info.status === 'live' ? '✅ Gerçek Zamanlı' : '⏳ Veri Bekleniyor'}
-                        </div>
-                        ${info.last_update ? `<div style="font-size: 0.75rem; color: #94a3b8; margin-top: 0.3rem;">${new Date(info.last_update).toLocaleTimeString('tr-TR')}</div>` : ''}
-                    `;
-                    grid.appendChild(card);
+                for r in resistance_levels
+            ],
+            "trading_signals": [
+                {
+                    "type": sig.signal_type,
+                    "entry": round(sig.entry_price, 4),
+                    "stop_loss": round(sig.stop_loss, 4),
+                    "target_1": round(sig.target_1, 4),
+                    "target_2": round(sig.target_2, 4),
+                    "target_3": round(sig.target_3, 4),
+                    "confidence": round(sig.confidence, 1),
+                    "risk_reward": sig.risk_reward,
+                    "reason": sig.reason
                 }
-                
-                // İlk canlı sembolü seç
-                const liveSymbols = Object.keys(data.symbols).filter(s => data.symbols[s].status === 'live');
-                if (liveSymbols.length > 0) {
-                    selectSymbol(liveSymbols[0]);
-                }
-                
-                // Status güncelle
-                document.getElementById('statusText').textContent = 
-                    `${data.market.live_symbols}/${data.market.total_symbols} sembol canlı`;
-                document.getElementById('lastUpdate').textContent = 
-                    new Date().toLocaleTimeString('tr-TR');
-                
-            } catch (error) {
-                console.error('Symbol load error:', error);
-                document.getElementById('symbolsGrid').innerHTML = `
-                    <div style="grid-column: 1/-1; text-align: center; padding: 2rem; color: #ef4444;">
-                        <i class="fas fa-exclamation-triangle" style="font-size: 2rem; margin-bottom: 1rem;"></i>
-                        <div>Binance bağlantısı kurulamadı</div>
-                        <div style="font-size: 0.9rem; color: #94a3b8; margin-top: 0.5rem;">
-                            WebSocket bağlantısı bekleniyor...
-                        </div>
-                    </div>
-                `;
-                updateConnectionStatus(false);
-            }
-        }
-        
-        // Sembol seç
-        async function selectSymbol(symbol) {
-            currentSymbol = symbol;
-            document.getElementById('selectedSymbol').textContent = symbol;
-            
-            // Fiyat bilgisi
-            try {
-                const priceRes = await fetch(`/api/price/${symbol}`);
-                const priceData = await priceRes.json();
-                
-                if (priceData.success && priceData.data) {
-                    const stats = priceData.data.statistics;
-                    
-                    if (stats.status === 'live') {
-                        document.getElementById('currentPrice').textContent = 
-                            `$${stats.current_price.toLocaleString('en-US', {minimumFractionDigits: 2, maximumFractionDigits: 4})}`;
-                        document.getElementById('priceSource').innerHTML = 
-                            `<i class="fas fa-satellite-dish"></i> Binance WebSocket • ${new Date(stats.last_update).toLocaleTimeString('tr-TR')}`;
-                    } else {
-                        document.getElementById('currentPrice').textContent = 'Veri Bekleniyor';
-                        document.getElementById('priceSource').textContent = 'Binance bağlantısı kuruluyor...';
+                for sig in signals
+            ],
+            "swing_points": {
+                "recent_highs": [
+                    {
+                        "index": sh.index,
+                        "price": round(sh.price, 4),
+                        "strength": sh.strength
                     }
-                }
-            } catch (e) {
-                console.error('Price fetch error:', e);
-                document.getElementById('currentPrice').textContent = 'Hata';
-                document.getElementById('priceSource').textContent = 'Bağlantı hatası';
-            }
-            
-            // Seviyeler
-            try {
-                const levelsRes = await fetch(`/api/price/${symbol}/levels`);
-                const levelsData = await levelsRes.json();
-                
-                if (levelsData.success) {
-                    document.getElementById('pivotPoint').textContent = 
-                        `$${levelsData.pivot_point.toLocaleString('en-US', {minimumFractionDigits: 2, maximumFractionDigits: 4})}`;
-                    document.getElementById('supports').innerHTML = 
-                        levelsData.supports.map(s => `$${s.toFixed(2)}`).join('<br>');
-                    document.getElementById('resistances').innerHTML = 
-                        levelsData.resistances.map(r => `$${r.toFixed(2)}`).join('<br>');
-                } else {
-                    document.getElementById('pivotPoint').textContent = '-';
-                    document.getElementById('supports').innerHTML = levelsData.message || 'Veri yok';
-                    document.getElementById('resistances').innerHTML = '-';
-                }
-            } catch (e) {
-                console.error('Levels fetch error:', e);
-                document.getElementById('pivotPoint').textContent = '-';
-                document.getElementById('supports').innerHTML = 'Hata';
-                document.getElementById('resistances').innerHTML = 'Hata';
-            }
-            
-            // TradingView güncelle (sadece bağlıysa)
-            if (connectionStatus === "connected") {
-                initTradingView(symbol);
+                    for sh in swing_highs[-5:]  # Son 5 swing high
+                ],
+                "recent_lows": [
+                    {
+                        "index": sl.index,
+                        "price": round(sl.price, 4),
+                        "strength": sl.strength
+                    }
+                    for sl in swing_lows[-5:]  # Son 5 swing low
+                ]
             }
         }
-        
-        // Sayfa yüklendiğinde
-        document.addEventListener('DOMContentLoaded', () => {
-            // İlk yükleme
-            loadSymbols();
-            
-            // Her 3 saniyede bir güncelle (gerçek zamanlı)
-            setInterval(loadSymbols, 3000);
-            setInterval(() => {
-                if (connectionStatus === "connected") {
-                    selectSymbol(currentSymbol);
-                }
-            }, 3000);
-        });
-    </script>
-</body>
-</html>
-    """
 
-# ==================== RAILWAY DEPLOYMENT ====================
+
+# ========== TEST FONKSİYONU ==========
+def test_analyzer():
+    """Test verisi ile analyzer'ı çalıştır"""
+    import random
+    
+    # Simüle edilmiş mum verisi oluştur
+    candles = []
+    base_price = 50000.0
+    
+    # Uptrend simülasyonu
+    for i in range(50):
+        trend = i * 100  # Yavaş artış
+        volatility = random.uniform(-500, 500)
+        
+        open_price = base_price + trend + volatility
+        close_price = open_price + random.uniform(-300, 400)
+        high_price = max(open_price, close_price) + random.uniform(0, 200)
+        low_price = min(open_price, close_price) - random.uniform(0, 200)
+        
+        candles.append({
+            "timestamp": i * 3600000,
+            "open": open_price,
+            "high": high_price,
+            "low": low_price,
+            "close": close_price,
+            "volume": random.uniform(1000, 5000)
+        })
+    
+    # Downtrend simülasyonu
+    for i in range(50, 100):
+        trend = -(i - 50) * 80  # Düşüş
+        volatility = random.uniform(-500, 500)
+        
+        open_price = base_price + 5000 + trend + volatility
+        close_price = open_price + random.uniform(-400, 300)
+        high_price = max(open_price, close_price) + random.uniform(0, 200)
+        low_price = min(open_price, close_price) - random.uniform(0, 200)
+        
+        candles.append({
+            "timestamp": i * 3600000,
+            "open": open_price,
+            "high": high_price,
+            "low": low_price,
+            "close": close_price,
+            "volume": random.uniform(1000, 5000)
+        })
+    
+    # Analyzer'ı çalıştır
+    analyzer = SupportResistanceAnalyzer(swing_window=4, zone_threshold=0.003)
+    result = analyzer.full_analysis(candles)
+    
+    # Sonuçları yazdır
+    print("=" * 80)
+    print("📊 SUPPORT/RESISTANCE & TREND ANALYSIS RESULTS")
+    print("=" * 80)
+    
+    print(f"\n💰 Current Price: ${result['current_price']:.2f}")
+    
+    print(f"\n📈 TREND STRUCTURE:")
+    ts = result['trend_structure']
+    print(f"   Direction: {ts['direction']}")
+    print(f"   Strength: {ts['strength']}%")
+    print(f"   Higher Highs: {ts['higher_highs']} | Higher Lows: {ts['higher_lows']}")
+    print(f"   Lower Highs: {ts['lower_highs']} | Lower Lows: {ts['lower_lows']}")
+    print(f"   Break of Structure: {'YES ⚠️' if ts['break_of_structure'] else 'NO'}")
+    if ts['bos_price']:
+        print(f"   BOS Price: ${ts['bos_price']:.2f}")
+    
+    print(f"\n🟢 SUPPORT LEVELS ({len(result['support_levels'])} found):")
+    for i, sup in enumerate(result['support_levels'][:3], 1):
+        print(f"   {i}. ${sup['price']:.2f} | {sup['strength']} | "
+              f"{sup['touches']} touches | Conf: {sup['confidence']}% | "
+              f"Distance: {sup['distance_from_price_pct']:.2f}%")
+    
+    print(f"\n🔴 RESISTANCE LEVELS ({len(result['resistance_levels'])} found):")
+    for i, res in enumerate(result['resistance_levels'][:3], 1):
+        print(f"   {i}. ${res['price']:.2f} | {res['strength']} | "
+              f"{res['touches']} touches | Conf: {res['confidence']}% | "
+              f"Distance: {res['distance_from_price_pct']:.2f}%")
+    
+    print(f"\n🎯 TRADING SIGNALS ({len(result['trading_signals'])} found):")
+    for i, sig in enumerate(result['trading_signals'], 1):
+        print(f"\n   Signal #{i}: {sig['type']} ({'🟢' if sig['type'] == 'BUY' else '🔴'})")
+        print(f"   Reason: {sig['reason']}")
+        print(f"   Entry: ${sig['entry']:.2f}")
+        print(f"   Stop Loss: ${sig['stop_loss']:.2f}")
+        print(f"   Target 1: ${sig['target_1']:.2f} (R:R 2:1)")
+        print(f"   Target 2: ${sig['target_2']:.2f} (R:R 3:1)")
+        print(f"   Target 3: ${sig['target_3']:.2f} (R:R 4:1)")
+        print(f"   Confidence: {sig['confidence']:.1f}%")
+    
+    print("\n" + "=" * 80)
+
+
 if __name__ == "__main__":
-    import uvicorn
-    port = int(os.getenv("PORT", 8000))
-    uvicorn.run(
-        app,
-        host="0.0.0.0",
-        port=port,
-        log_level="info"
-    )
+    print("🚀 Support/Resistance Analyzer Test")
+    test_analyzer()  
