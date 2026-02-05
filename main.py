@@ -4027,4 +4027,4 @@ if __name__ == "__main__":
         port=port,
         log_level="info",
         access_log=True
-    )Bu kodda makina öğrenmesi ve tradingview varmı, eklenmiş mi chatbot varmı?
+    ) 
