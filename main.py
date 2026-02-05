@@ -481,174 +481,168 @@ class AITradingEngine:
         except Exception as e:
             logger.error(f"Error training Transformer for {symbol}: {str(e)}")
     
-    def predict(self, symbol: str, df: pd.DataFrame) -> Dict:
-        """Generate predictions from all models"""
-        try:
-            # Create features
-            df_features = self.create_features(df)
-            
-            if len(df_features) < 60 or self.feature_columns is None:
-                return {
-                    'prediction': 'NEUTRAL',
-                    'confidence': 0.5,
-                    'method': 'fallback',
-                    'ml_score': 0.5,
-                    'model_details': {}
-                }
-            
-            # Prepare recent sequence
-            features = df_features[self.feature_columns].values
-            seq_len = 60
-            
-            if len(features) < seq_len:
-                # Pad with zeros if insufficient data
-                pad_len = seq_len - len(features)
-                pad = np.zeros((pad_len, features.shape[1]))
-                features = np.vstack([pad, features])
-            
-            recent_seq = features[-seq_len:].reshape(1, seq_len, -1)
-            
-            predictions = []
-            confidences = []
-            model_details = {}
-            
-            # LSTM prediction
-            lstm_key = f"{symbol}_lstm"
-            if lstm_key in self.models:
-                try:
-                    model = self.models[lstm_key]
-                    model.eval()
-                    
-                    if symbol in self.scalers:
-                        scaler = self.scalers[symbol]
-                        recent_flat = recent_seq.reshape(-1, recent_seq.shape[-1])
-                        recent_scaled = scaler.transform(recent_flat).reshape(recent_seq.shape)
-                        recent_t = torch.FloatTensor(recent_scaled).to(self.device)
-                    else:
-                        recent_t = torch.FloatTensor(recent_seq).to(self.device)
-                    
-                    with torch.no_grad():
-                        output = model(recent_t)
-                        prob = F.softmax(output, dim=1)[0].cpu().numpy()
-                        pred = np.argmax(prob)
-                        confidence = np.max(prob)
-                        
-                        predictions.append(pred)
-                        confidences.append(confidence)
-                        model_details['lstm'] = {
-                            'prediction': int(pred),
-                            'confidence': float(confidence),
-                            'probabilities': prob.tolist()
-                        }
-                except Exception as e:
-                    logger.error(f"LSTM prediction error for {symbol}: {str(e)}")
-            
-            # Transformer prediction
-            trans_key = f"{symbol}_transformer"
-            if trans_key in self.models:
-                try:
-                    model = self.models[trans_key]
-                    model.eval()
-                    
-                    if symbol in self.scalers:
-                        scaler = self.scalers[symbol]
-                        recent_flat = recent_seq.reshape(-1, recent_seq.shape[-1])
-                        recent_scaled = scaler.transform(recent_flat).reshape(recent_seq.shape)
-                        recent_t = torch.FloatTensor(recent_scaled).to(self.device)
-                    else:
-                        recent_t = torch.FloatTensor(recent_seq).to(self.device)
-                    
-                    with torch.no_grad():
-                        output = model(recent_t)
-                        prob = F.softmax(output, dim=1)[0].cpu().numpy()
-                        pred = np.argmax(prob)
-                        confidence = np.max(prob)
-                        
-                        predictions.append(pred)
-                        confidences.append(confidence)
-                        model_details['transformer'] = {
-                            'prediction': int(pred),
-                            'confidence': float(confidence),
-                            'probabilities': prob.tolist()
-                        }
-                except Exception as e:
-                    logger.error(f"Transformer prediction error for {symbol}: {str(e)}")
-            
-            # LightGBM prediction
-            if symbol in self.lgb_models:
-                try:
-                    model = self.lgb_models[symbol]
-                    
-                    # Use the most recent flattened features
-                    recent_flat = recent_seq.reshape(-1, recent_seq.shape[-1])
-                    
-                    if symbol in self.scalers:
-                        scaler = self.scalers[symbol]
-                        recent_flat = scaler.transform(recent_flat)
-                    
-                    # Take the last flattened vector
-                    if len(recent_flat) > 0:
-                        recent_features = recent_flat[-1:].reshape(1, -1)
-                        prob = model.predict(recent_features)[0]
-                        pred = np.argmax(prob)
-                        confidence = np.max(prob)
-                        
-                        predictions.append(pred)
-                        confidences.append(confidence)
-                        model_details['lightgbm'] = {
-                            'prediction': int(pred),
-                            'confidence': float(confidence),
-                            'probabilities': prob.tolist()
-                        }
-                except Exception as e:
-                    logger.error(f"LightGBM prediction error for {symbol}: {str(e)}")
-            
-            # Ensemble prediction
-            if predictions:
-                # Weighted average based on confidence
-                pred_weights = []
-                for i, conf in enumerate(confidences):
-                    pred_weights.extend([predictions[i]] * int(conf * 100))
-                
-                if pred_weights:
-                    final_pred = np.bincount(pred_weights).argmax()
-                else:
-                    final_pred = 1  # Default to neutral
-                
-                final_confidence = np.mean(confidences) if confidences else 0.5
-            else:
-                final_pred = 1
-                final_confidence = 0.5
-            
-            # Map to signal
-            pred_map = {0: 'SELL', 1: 'NEUTRAL', 2: 'BUY'}
-            final_signal = pred_map.get(final_pred, 'NEUTRAL')
-            
-            # Adjust signal strength based on confidence
-            if final_confidence > 0.7:
-                if final_signal == 'BUY':
-                    final_signal = 'STRONG_BUY'
-                elif final_signal == 'SELL':
-                    final_signal = 'STRONG_SELL'
-            
-            return {
-                'prediction': final_signal,
-                'confidence': float(final_confidence),
-                'method': 'ensemble',
-                'ml_score': float(final_pred),
-                'model_details': model_details
-            }
-            
-        except Exception as e:
-            logger.error(f"Prediction error for {symbol}: {str(e)}")
+   def predict(self, symbol: str, df: pd.DataFrame) -> Dict:
+    """Generate predictions from all models - daha güvenli versiyon"""
+    try:
+        if df.empty or len(df) < 30:
             return {
                 'prediction': 'NEUTRAL',
-                'confidence': 0.5,
-                'method': 'fallback',
+                'confidence': 0.50,
+                'method': 'fallback_insufficient_data',
                 'ml_score': 0.5,
-                'error': str(e)
+                'model_details': {}
             }
-    
+
+        df_features = self.create_features(df)
+        if len(df_features) < 60 or not self.feature_columns:
+            return {
+                'prediction': 'NEUTRAL',
+                'confidence': 0.50,
+                'method': 'fallback_feature_creation_failed',
+                'ml_score': 0.5,
+                'model_details': {}
+            }
+
+        # Son 60 satırı al, eksikse padding yap
+        features = df_features[self.feature_columns].values
+        seq_len = 60
+        if len(features) < seq_len:
+            pad_len = seq_len - len(features)
+            pad = np.zeros((pad_len, features.shape[1]))
+            features = np.vstack([pad, features])
+
+        recent_seq = features[-seq_len:].reshape(1, seq_len, -1)
+        predictions = []
+        confidences = []
+        model_details = {}
+
+        # LSTM tahmini
+        lstm_key = f"{symbol}_lstm"
+        if lstm_key in self.models and symbol in self.scalers:
+            try:
+                model = self.models[lstm_key]
+                model.eval()
+                scaler = self.scalers[symbol]
+                
+                recent_flat = recent_seq.reshape(-1, recent_seq.shape[-1])
+                recent_scaled = scaler.transform(recent_flat).reshape(recent_seq.shape)
+                recent_t = torch.FloatTensor(recent_scaled).to(self.device)
+                
+                with torch.no_grad():
+                    output = model(recent_t)
+                    prob = F.softmax(output, dim=1)[0].cpu().numpy()
+                    pred = int(np.argmax(prob))
+                    confidence = float(np.max(prob))
+                    
+                    predictions.append(pred)
+                    confidences.append(confidence)
+                    model_details['lstm'] = {
+                        'prediction': pred,
+                        'confidence': confidence,
+                        'probabilities': prob.tolist()
+                    }
+            except Exception as e:
+                logger.warning(f"LSTM prediction failed for {symbol}: {e}")
+
+        # Transformer tahmini (aynı mantıkla)
+        trans_key = f"{symbol}_transformer"
+        if trans_key in self.models and symbol in self.scalers:
+            try:
+                model = self.models[trans_key]
+                model.eval()
+                scaler = self.scalers[symbol]
+                
+                recent_flat = recent_seq.reshape(-1, recent_seq.shape[-1])
+                recent_scaled = scaler.transform(recent_flat).reshape(recent_seq.shape)
+                recent_t = torch.FloatTensor(recent_scaled).to(self.device)
+                
+                with torch.no_grad():
+                    output = model(recent_t)
+                    prob = F.softmax(output, dim=1)[0].cpu().numpy()
+                    pred = int(np.argmax(prob))
+                    confidence = float(np.max(prob))
+                    
+                    predictions.append(pred)
+                    confidences.append(confidence)
+                    model_details['transformer'] = {
+                        'prediction': pred,
+                        'confidence': confidence,
+                        'probabilities': prob.tolist()
+                    }
+            except Exception as e:
+                logger.warning(f"Transformer prediction failed for {symbol}: {e}")
+
+        # LightGBM tahmini
+        if symbol in self.lgb_models and symbol in self.scalers:
+            try:
+                model = self.lgb_models[symbol]
+                scaler = self.scalers[symbol]
+                
+                recent_flat = recent_seq.reshape(-1, recent_seq.shape[-1])
+                recent_scaled = scaler.transform(recent_flat)
+                recent_features = recent_scaled[-1:].reshape(1, -1)  # son satır
+                
+                prob = model.predict(recent_features)[0]
+                pred = int(np.argmax(prob))
+                confidence = float(np.max(prob))
+                
+                predictions.append(pred)
+                confidences.append(confidence)
+                model_details['lightgbm'] = {
+                    'prediction': pred,
+                    'confidence': confidence,
+                    'probabilities': prob.tolist()
+                }
+            except Exception as e:
+                logger.warning(f"LightGBM prediction failed for {symbol}: {e}")
+
+        # Ensemble
+        if not predictions:
+            return {
+                'prediction': 'NEUTRAL',
+                'confidence': 0.50,
+                'method': 'no_valid_models',
+                'ml_score': 0.5,
+                'model_details': {}
+            }
+
+        # En basit ensemble: çoğunluk + ağırlıklı güven
+        from collections import Counter
+        weighted_votes = []
+        for p, c in zip(predictions, confidences):
+            weighted_votes.extend([p] * int(c * 20))  # güveni oya çevir
+
+        if weighted_votes:
+            final_pred = Counter(weighted_votes).most_common(1)[0][0]
+            avg_conf = sum(confidences) / len(confidences)
+        else:
+            final_pred = 1  # neutral
+            avg_conf = 0.5
+
+        pred_map = {0: 'SELL', 1: 'NEUTRAL', 2: 'BUY'}
+        signal_str = pred_map.get(final_pred, 'NEUTRAL')
+
+        if avg_conf > 0.75:
+            if signal_str == 'BUY':   signal_str = 'STRONG_BUY'
+            if signal_str == 'SELL':  signal_str = 'STRONG_SELL'
+
+        return {
+            'prediction': signal_str,
+            'confidence': float(avg_conf),
+            'method': 'ensemble',
+            'ml_score': float(final_pred),
+            'model_details': model_details
+        }
+
+    except Exception as e:
+        logger.error(f"Critical prediction error for {symbol}: {str(e)}", exc_info=True)
+        return {
+            'prediction': 'NEUTRAL',
+            'confidence': 0.40,
+            'method': 'error_fallback',
+            'ml_score': 0.5,
+            'error': str(e)
+        }
     def get_feature_importance(self, symbol: str) -> Dict:
         """Get feature importance from LightGBM model"""
         if symbol not in self.lgb_models or self.feature_columns is None:
