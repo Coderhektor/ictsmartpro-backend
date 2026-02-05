@@ -2058,7 +2058,7 @@ async def websocket_endpoint(websocket: WebSocket):
 async def dashboard():
     """Main trading dashboard"""
     return """
-    """
+   
 <!DOCTYPE html>
 <html lang="en">
 <head>
