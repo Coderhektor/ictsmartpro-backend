@@ -2107,6 +2107,7 @@ def health():
     return {"status": "healthy", "version": "4.5.0"}
 
 @app.get("/dashboard", response_class=HTMLResponse)
+
 async def dashboard():
     """Trading Dashboard"""
     return """
