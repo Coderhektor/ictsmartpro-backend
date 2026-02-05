@@ -4052,7 +4052,7 @@ async def dashboard():
 </body>
 </html>
        
-  """
+  """ )
 # ========== MAIN ENTRY POINT ==========
 if __name__ == "__main__":
     import uvicorn
