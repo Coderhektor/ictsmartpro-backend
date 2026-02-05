@@ -81,23 +81,23 @@ class SignalConfidence(str, Enum):
 # ========== VOLATILITY ADJUSTED TRAIL ==========
 class VolatilityAdjustedTrail:
     """Volatility Adjusted Trail System - Advanced trailing stop system"""
-    
+
     @staticmethod
     def calculate_atr(df: pd.DataFrame, period: int = 14) -> pd.Series:
         """Calculate Average True Range"""
         high = df['high']
         low = df['low']
         close = df['close']
-        
+
         tr1 = high - low
         tr2 = abs(high - close.shift())
         tr3 = abs(low - close.shift())
-        
+
         tr = pd.concat([tr1, tr2, tr3], axis=1).max(axis=1)
         atr = tr.rolling(window=period).mean()
-        
+
         return atr
-    
+
     @staticmethod
     def calculate_trail(df: pd.DataFrame, atr_multiplier: float = 2.0) -> Dict:
         """Calculate Volatility Adjusted Trail"""
@@ -108,33 +108,33 @@ class VolatilityAdjustedTrail:
                 'trend_strength': 0.0,
                 'signals': []
             }
-        
+
         # Calculate ATR
         atr = VolatilityAdjustedTrail.calculate_atr(df)
-        
+
         # Calculate EMA for trend direction
         ema_fast = df['close'].ewm(span=9, adjust=False).mean()
         ema_slow = df['close'].ewm(span=21, adjust=False).mean()
-        
+
         # Calculate standard deviation for volatility
         volatility = df['close'].rolling(window=20).std()
         avg_volatility = volatility.rolling(window=20).mean()
-        
+
         # Calculate dynamic multiplier based on volatility
         vol_ratio = volatility / avg_volatility
         dynamic_multiplier = atr_multiplier * (1 + 0.5 * (vol_ratio - 1))
-        
+
         # Calculate trail
         long_trail = df['high'].rolling(window=20).max() - (atr * dynamic_multiplier)
         short_trail = df['low'].rolling(window=20).min() + (atr * dynamic_multiplier)
-        
+
         # Determine direction
         current_dir = 0
         if ema_fast.iloc[-1] > ema_slow.iloc[-1]:
             current_dir = 1  # Uptrend
         elif ema_fast.iloc[-1] < ema_slow.iloc[-1]:
             current_dir = -1  # Downtrend
-        
+
         # Calculate trend strength
         if current_dir == 1:
             trend_strength = (df['close'].iloc[-1] - long_trail.iloc[-1]) / (atr.iloc[-1] * dynamic_multiplier.iloc[-1])
@@ -142,10 +142,10 @@ class VolatilityAdjustedTrail:
             trend_strength = (short_trail.iloc[-1] - df['close'].iloc[-1]) / (atr.iloc[-1] * dynamic_multiplier.iloc[-1])
         else:
             trend_strength = 0.0
-        
+
         # Normalize trend strength
         trend_strength = max(0.0, min(1.0, trend_strength))
-        
+
         # Generate signals
         signals = []
         for i in range(1, len(df)):
@@ -163,7 +163,7 @@ class VolatilityAdjustedTrail:
                     'price': df['close'].iloc[i],
                     'trail': short_trail.iloc[i-1]
                 })
-        
+
         return {
             'current_trail': long_trail.iloc[-1] if current_dir == 1 else short_trail.iloc[-1],
             'current_direction': current_dir,
@@ -196,7 +196,7 @@ class AdvancedLSTM(nn.Module):
         self.fc2 = nn.Linear(128, output_size)
         self.dropout = nn.Dropout(dropout)
         self.layer_norm = nn.LayerNorm(hidden_size * 2)
-        
+
     def forward(self, x):
         lstm_out, _ = self.lstm(x)
         attn_out, _ = self.attention(lstm_out, lstm_out, lstm_out)
@@ -219,7 +219,7 @@ class AdvancedTransformer(nn.Module):
         )
         self.transformer = nn.TransformerEncoder(encoder_layer, num_layers)
         self.fc = nn.Linear(d_model, output_size)
-        
+
     def forward(self, x):
         x = self.embedding(x)
         x = self.transformer(x)
@@ -235,53 +235,53 @@ class AITradingEngine:
         self.lgb_models = {}
         self.feature_columns = None
         logger.info(f"AI Trading Engine initialized on device: {self.device}")
-    
+
     def create_features(self, df: pd.DataFrame) -> pd.DataFrame:
         """Create comprehensive trading features"""
         try:
             df = df.copy()
-            
+
             if len(df) < 50:
                 logger.warning(f"Insufficient data for feature creation: {len(df)} rows")
                 return pd.DataFrame()
-            
+
             # Ensure required columns
             required_cols = ['open', 'high', 'low', 'close', 'volume']
             missing = [col for col in required_cols if col not in df.columns]
             if missing:
                 logger.error(f"Missing required columns: {missing}")
                 return pd.DataFrame()
-            
+
             # Price-based features
             df['returns'] = df['close'].pct_change()
             df['log_returns'] = np.log(df['close'] / df['close'].shift(1))
-            
+
             # Volatility features
             for window in [5, 10, 20, 50]:
                 df[f'volatility_{window}'] = df['returns'].rolling(window).std()
                 df[f'atr_{window}'] = (df['high'] - df['low']).rolling(window).mean()
-            
+
             # Moving averages
             for period in [5, 9, 20, 50, 100, 200]:
                 if len(df) >= period:
                     df[f'sma_{period}'] = df['close'].rolling(period).mean()
                     df[f'ema_{period}'] = df['close'].ewm(span=period, adjust=False).mean()
                     df[f'price_sma_ratio_{period}'] = df['close'] / df[f'sma_{period}']
-            
+
             # RSI
             delta = df['close'].diff()
             gain = (delta.where(delta > 0, 0)).rolling(window=14).mean()
             loss = (-delta.where(delta < 0, 0)).rolling(window=14).mean()
             rs = gain / loss
             df['rsi'] = 100 - (100 / (1 + rs))
-            
+
             # MACD
             exp1 = df['close'].ewm(span=12, adjust=False).mean()
             exp2 = df['close'].ewm(span=26, adjust=False).mean()
             df['macd'] = exp1 - exp2
             df['macd_signal'] = df['macd'].ewm(span=9, adjust=False).mean()
             df['macd_hist'] = df['macd'] - df['macd_signal']
-            
+
             # Bollinger Bands
             df['bb_middle'] = df['close'].rolling(20).mean()
             bb_std = df['close'].rolling(20).std()
@@ -289,39 +289,39 @@ class AITradingEngine:
             df['bb_lower'] = df['bb_middle'] - (bb_std * 2)
             df['bb_width'] = df['bb_upper'] - df['bb_lower']
             df['bb_position'] = (df['close'] - df['bb_lower']) / (df['bb_upper'] - df['bb_lower'])
-            
+
             # Volume features
             df['volume_sma_20'] = df['volume'].rolling(20).mean()
             df['volume_ratio'] = df['volume'] / df['volume_sma_20']
             df['obv'] = (np.sign(df['close'].diff()) * df['volume']).fillna(0).cumsum()
-            
+
             # Price patterns
             df['high_low_pct'] = (df['high'] - df['low']) / df['close'] * 100
             df['close_open_pct'] = (df['close'] - df['open']) / df['open'] * 100
-            
+
             # Momentum indicators
             df['momentum_5'] = df['close'].pct_change(5)
             df['momentum_10'] = df['close'].pct_change(10)
             df['roc'] = ((df['close'] - df['close'].shift(10)) / df['close'].shift(10)) * 100
-            
+
             # Support/Resistance
             df['resistance'] = df['high'].rolling(20).max()
             df['support'] = df['low'].rolling(20).min()
             df['distance_to_resistance'] = (df['resistance'] - df['close']) / df['close'] * 100
             df['distance_to_support'] = (df['close'] - df['support']) / df['close'] * 100
-            
+
             # Lagged features
             for lag in [1, 2, 3, 5, 10]:
                 df[f'returns_lag_{lag}'] = df['returns'].shift(lag)
                 df[f'close_lag_{lag}'] = df['close'].shift(lag)
-            
+
             # Target creation (3-class classification)
             future_return = df['close'].shift(-5) / df['close'] - 1
-            
+
             # Use dynamic percentiles
             upper_threshold = future_return.quantile(0.65)
             lower_threshold = future_return.quantile(0.35)
-            
+
             df['target'] = np.where(
                 future_return > upper_threshold, 2,  # Buy
                 np.where(
@@ -329,88 +329,88 @@ class AITradingEngine:
                     1  # Hold
                 )
             )
-            
+
             # Drop NaN values
             df = df.dropna()
-            
+
             # Store feature columns
             non_feature_cols = ['target', 'timestamp', 'datetime', 'date', 'time']
             self.feature_columns = [col for col in df.columns if col not in non_feature_cols]
-            
+
             logger.info(f"Created {len(self.feature_columns)} features, {len(df)} samples")
             return df
-            
+
         except Exception as e:
             logger.error(f"Error in create_features: {str(e)}")
             return pd.DataFrame()
-    
+
     def prepare_sequences(self, df: pd.DataFrame, sequence_length: int = 60) -> Tuple[np.ndarray, np.ndarray]:
         """Prepare sequential data for LSTM/Transformer"""
         if self.feature_columns is None or len(df) < sequence_length:
             return np.array([]), np.array([])
-        
+
         try:
             features = df[self.feature_columns].values
             targets = df['target'].values
-            
+
             X, y = [], []
             for i in range(len(features) - sequence_length):
                 X.append(features[i:i+sequence_length])
                 y.append(targets[i+sequence_length])
-            
+
             return np.array(X), np.array(y)
         except Exception as e:
             logger.error(f"Error in prepare_sequences: {str(e)}")
             return np.array([]), np.array([])
-    
+
     async def train_models(self, symbol: str, df: pd.DataFrame) -> bool:
         """Train all ML models for a symbol"""
         try:
             logger.info(f"Training models for {symbol} with {len(df)} data points")
-            
+
             # Create features
             df_features = self.create_features(df)
             if len(df_features) < 100:
                 logger.warning(f"Insufficient features for {symbol}: {len(df_features)} samples")
                 return False
-            
+
             # Prepare sequences
             X, y = self.prepare_sequences(df_features, sequence_length=60)
             if len(X) < 100:
                 logger.warning(f"Insufficient sequences for {symbol}: {len(X)} sequences")
                 return False
-            
+
             # Split data
             split_idx = int(len(X) * 0.8)
             X_train, X_val = X[:split_idx], X[split_idx:]
             y_train, y_val = y[:split_idx], y[split_idx:]
-            
+
             # Scale features
             scaler = StandardScaler()
             X_train_flat = X_train.reshape(-1, X_train.shape[-1])
             X_val_flat = X_val.reshape(-1, X_val.shape[-1])
-            
+
             X_train_scaled = scaler.fit_transform(X_train_flat).reshape(X_train.shape)
             X_val_scaled = scaler.transform(X_val_flat).reshape(X_val.shape)
-            
+
             self.scalers[symbol] = scaler
-            
+
             # Train LightGBM
             await self._train_lightgbm(symbol, X_train_flat, y_train, X_val_flat, y_val)
-            
+
             # Train LSTM
             await self._train_lstm(symbol, X_train_scaled, y_train, X_val_scaled, y_val)
-            
+
             # Train Transformer
             await self._train_transformer(symbol, X_train_scaled, y_train, X_val_scaled, y_val)
-            
+
             logger.info(f"✅ Successfully trained all models for {symbol}")
             return True
-            
+
         except Exception as e:
             logger.error(f"Error training models for {symbol}: {str(e)}", exc_info=True)
             return False
-    
+
     async def _train_lightgbm(self, symbol: str, X_train, y_train, X_val, y_val):
         """Train LightGBM model"""
         try:
@@ -418,7 +418,7 @@ class AITradingEngine:
             y_train = np.array(y_train)
             X_val = np.array(X_val)
             y_val = np.array(y_val)
-            
+
             params = {
                 'objective': 'multiclass',
                 'num_class': 3,
@@ -432,10 +432,10 @@ class AITradingEngine:
                 'verbose': -1,
                 'seed': 42
             }
-            
+
             train_data = lgb.Dataset(X_train, label=y_train)
             val_data = lgb.Dataset(X_val, label=y_val, reference=train_data)
-            
+
             model = lgb.train(
                 params,
                 train_data,
@@ -443,19 +443,19 @@ class AITradingEngine:
                 num_boost_round=1000,
                 callbacks=[early_stopping(50), lgb.log_evaluation(100)]
             )
-            
+
             self.lgb_models[symbol] = model
-            
+
             # Evaluate
             y_pred = model.predict(X_val)
             y_pred_class = np.argmax(y_pred, axis=1)
             accuracy = accuracy_score(y_val, y_pred_class)
-            
+
             logger.info(f"✅ LightGBM trained for {symbol}. Validation accuracy: {accuracy:.4f}")
-            
+
         except Exception as e:
             logger.error(f"Error training LightGBM for {symbol}: {str(e)}")
-    
+
     async def _train_lstm(self, symbol: str, X_train, y_train, X_val, y_val):
         """Train LSTM model"""
         try:
@@ -463,23 +463,23 @@ class AITradingEngine:
             y_train_t = torch.LongTensor(y_train).to(self.device)
             X_val_t = torch.FloatTensor(X_val).to(self.device)
             y_val_t = torch.LongTensor(y_val).to(self.device)
-            
+
             input_size = X_train.shape[-1]
             model = AdvancedLSTM(input_size=input_size).to(self.device)
-            
+
             criterion = nn.CrossEntropyLoss()
             optimizer = optim.Adam(model.parameters(), lr=0.001, weight_decay=1e-5)
             scheduler = optim.lr_scheduler.ReduceLROnPlateau(optimizer, patience=5, factor=0.5)
-            
+
             batch_size = min(32, len(X_train_t))
             train_dataset = TensorDataset(X_train_t, y_train_t)
             train_loader = DataLoader(train_dataset, batch_size=batch_size, shuffle=True)
-            
+
             best_acc = 0
             for epoch in range(30):
                 model.train()
                 train_loss = 0
-                
+
                 for batch_X, batch_y in train_loader:
                     optimizer.zero_grad()
                     outputs = model(batch_X)
@@ -488,28 +488,28 @@ class AITradingEngine:
                     torch.nn.utils.clip_grad_norm_(model.parameters(), max_norm=1.0)
                     optimizer.step()
                     train_loss += loss.item()
-                
+
                 model.eval()
                 with torch.no_grad():
                     val_outputs = model(X_val_t)
                     val_loss = criterion(val_outputs, y_val_t).item()
                     val_pred = torch.argmax(val_outputs, dim=1).cpu().numpy()
                     val_acc = accuracy_score(y_val, val_pred)
-                
+
                 scheduler.step(val_loss)
-                
+
                 if val_acc > best_acc:
                     best_acc = val_acc
                     self.models[f"{symbol}_lstm"] = model
-                
+
                 if (epoch + 1) % 10 == 0:
                     logger.info(f"LSTM {symbol} Epoch {epoch+1}: Val Loss {val_loss:.4f}, Acc {val_acc:.4f}")
-            
+
             logger.info(f"✅ LSTM trained for {symbol}. Best accuracy: {best_acc:.4f}")
-            
+
         except Exception as e:
             logger.error(f"Error training LSTM for {symbol}: {str(e)}")
-    
+
     async def _train_transformer(self, symbol: str, X_train, y_train, X_val, y_val):
         """Train Transformer model"""
         try:
@@ -517,23 +517,23 @@ class AITradingEngine:
             y_train_t = torch.LongTensor(y_train).to(self.device)
             X_val_t = torch.FloatTensor(X_val).to(self.device)
             y_val_t = torch.LongTensor(y_val).to(self.device)
-            
+
             input_size = X_train.shape[-1]
             model = AdvancedTransformer(input_size=input_size).to(self.device)
-            
+
             criterion = nn.CrossEntropyLoss()
             optimizer = optim.Adam(model.parameters(), lr=0.0005, weight_decay=1e-5)
             scheduler = optim.lr_scheduler.CosineAnnealingLR(optimizer, T_max=30)
-            
+
             batch_size = min(32, len(X_train_t))
             train_dataset = TensorDataset(X_train_t, y_train_t)
             train_loader = DataLoader(train_dataset, batch_size=batch_size, shuffle=True)
-            
+
             best_acc = 0
             for epoch in range(30):
                 model.train()
                 train_loss = 0
-                
+
                 for batch_X, batch_y in train_loader:
                     optimizer.zero_grad()
                     outputs = model(batch_X)
@@ -542,28 +542,28 @@ class AITradingEngine:
                     torch.nn.utils.clip_grad_norm_(model.parameters(), max_norm=1.0)
                     optimizer.step()
                     train_loss += loss.item()
-                
+
                 scheduler.step()
-                
+
                 model.eval()
                 with torch.no_grad():
                     val_outputs = model(X_val_t)
                     val_loss = criterion(val_outputs, y_val_t).item()
                     val_pred = torch.argmax(val_outputs, dim=1).cpu().numpy()
                     val_acc = accuracy_score(y_val, val_pred)
-                
+
                 if val_acc > best_acc:
                     best_acc = val_acc
                     self.models[f"{symbol}_transformer"] = model
-                
+
                 if (epoch + 1) % 10 == 0:
                     logger.info(f"Transformer {symbol} Epoch {epoch+1}: Val Loss {val_loss:.4f}, Acc {val_acc:.4f}")
-            
+
             logger.info(f"✅ Transformer trained for {symbol}. Best accuracy: {best_acc:.4f}")
-            
+
         except Exception as e:
             logger.error(f"Error training Transformer for {symbol}: {str(e)}")
-    
+
     def predict(self, symbol: str, df: pd.DataFrame) -> Dict:
         """Generate predictions from all models"""
         try:
@@ -605,17 +605,17 @@ class AITradingEngine:
                     model = self.models[lstm_key]
                     model.eval()
                     scaler = self.scalers[symbol]
-                    
+
                     recent_flat = recent_seq.reshape(-1, recent_seq.shape[-1])
                     recent_scaled = scaler.transform(recent_flat).reshape(recent_seq.shape)
                     recent_t = torch.FloatTensor(recent_scaled).to(self.device)
-                    
+
                     with torch.no_grad():
                         output = model(recent_t)
                         prob = F.softmax(output, dim=1)[0].cpu().numpy()
                         pred = int(np.argmax(prob))
                         confidence = float(np.max(prob))
-                        
+
                         predictions.append(pred)
                         confidences.append(confidence)
                         model_details['lstm'] = {
@@ -633,17 +633,17 @@ class AITradingEngine:
                     model = self.models[trans_key]
                     model.eval()
                     scaler = self.scalers[symbol]
-                    
+
                     recent_flat = recent_seq.reshape(-1, recent_seq.shape[-1])
                     recent_scaled = scaler.transform(recent_flat).reshape(recent_seq.shape)
                     recent_t = torch.FloatTensor(recent_scaled).to(self.device)
-                    
+
                     with torch.no_grad():
                         output = model(recent_t)
                         prob = F.softmax(output, dim=1)[0].cpu().numpy()
                         pred = int(np.argmax(prob))
                         confidence = float(np.max(prob))
-                        
+
                         predictions.append(pred)
                         confidences.append(confidence)
                         model_details['transformer'] = {
@@ -659,15 +659,15 @@ class AITradingEngine:
                 try:
                     model = self.lgb_models[symbol]
                     scaler = self.scalers[symbol]
-                    
+
                     recent_flat = recent_seq.reshape(-1, recent_seq.shape[-1])
                     recent_scaled = scaler.transform(recent_flat)
                     recent_features = recent_scaled[-1:].reshape(1, -1)
-                    
+
                     prob = model.predict(recent_features)[0]
                     pred = int(np.argmax(prob))
                     confidence = float(np.max(prob))
-                    
+
                     predictions.append(pred)
                     confidences.append(confidence)
                     model_details['lightgbm'] = {
@@ -723,27 +723,27 @@ class AITradingEngine:
                 'ml_score': 0.5,
                 'error': str(e)
             }
-    
+
     def get_feature_importance(self, symbol: str) -> Dict:
         """Get feature importance from LightGBM model"""
         if symbol not in self.lgb_models or self.feature_columns is None:
             return {}
-        
+
         try:
             model = self.lgb_models[symbol]
             importance = model.feature_importance(importance_type='gain')
-            
+
             importance_dict = {}
             for i, imp in enumerate(importance):
                 if i < len(self.feature_columns):
                     importance_dict[self.feature_columns[i]] = float(imp)
-            
+
             sorted_importance = dict(sorted(
                 importance_dict.items(),
                 key=lambda x: x[1],
                 reverse=True
             )[:15])
-            
+
             return sorted_importance
         except Exception as e:
             logger.error(f"Error getting feature importance for {symbol}: {str(e)}")
@@ -756,7 +756,7 @@ class PriceFetcher:
     11+ Exchanges + Forex Markets
     Real Data Only - NO Synthetic Data
     """
-    
+
     EXCHANGES = [
         # Cryptocurrency Exchanges
         {
@@ -941,7 +941,7 @@ class PriceFetcher:
             }
         }
     ]
-    
+
     INTERVAL_MAPPING = {
         "1m": {"Binance": "1m", "Bybit": "1", "OKX": "1m", "KuCoin": "1min", "Gate.io": "1m"},
         "5m": {"Binance": "5m", "Bybit": "5", "OKX": "5m", "KuCoin": "5min", "Gate.io": "5m"},
@@ -953,7 +953,7 @@ class PriceFetcher:
         "1W": {"Binance": "1w", "Bybit": "W", "OKX": "1W", "KuCoin": "1week", "Gate.io": "1w"},
         "1M": {"Binance": "1M", "Bybit": "M", "OKX": "1M", "KuCoin": "1month", "Gate.io": "1M"}
     }
-    
+
     def __init__(self, max_cache_age: int = 60):
         self.data_pool = {}
         self.max_cache_age = max_cache_age
@@ -965,12 +965,12 @@ class PriceFetcher:
             "exchange_stats": defaultdict(lambda: {"success": 0, "fail": 0})
         }
         logger.info("PriceFetcher started - Real Data Only Mode")
-    
+
     async def get_candles(self, symbol: str, interval: str = "1h", limit: int = 100) -> List[Dict]:
         """Get candles from exchanges"""
         self.stats["total_requests"] += 1
         cache_key = f"{symbol}_{interval}"
-        
+
         # Cache check
         if cache_key in self.data_pool:
             cached = self.data_pool[cache_key]
@@ -978,12 +978,12 @@ class PriceFetcher:
             if age < self.max_cache_age:
                 self.stats["cache_hits"] += 1
                 return cached["data"][-limit:]
-        
+
         # Fetch from exchanges
         logger.info(f"Fetching data: {symbol} {interval} ({limit} candles)")
-        
+
         fetch_limit = max(limit * 2, 200)
-        
+
         async with aiohttp.ClientSession() as session:
             tasks = []
             for exchange in sorted(self.EXCHANGES, key=lambda x: x["priority"]):
@@ -991,21 +991,21 @@ class PriceFetcher:
                     session, exchange, symbol, interval, fetch_limit
                 )
                 tasks.append(task)
-            
+
             results = await asyncio.gather(*tasks, return_exceptions=True)
-        
+
         valid_results = [
-            r for r in results 
+            r for r in results
             if r and not isinstance(r, Exception) and len(r) > 0
         ]
-        
+
         if not valid_results:
             logger.error(f"All exchanges failed for {symbol} {interval}")
             return []
-        
+
         # Aggregate data
         aggregated = self._aggregate_candles(valid_results)
-        
+
         if aggregated:
             self.data_pool[cache_key] = {
                 "data": aggregated,
@@ -1013,54 +1013,54 @@ class PriceFetcher:
                 "sources": len(valid_results)
             }
             logger.info(f"Aggregated {len(aggregated)} candles from {len(valid_results)} sources")
-        
+
         return aggregated[-limit:] if aggregated else []
-    
-    async def _fetch_single_exchange(self, session: aiohttp.ClientSession, exchange: Dict, 
+
+    async def _fetch_single_exchange(self, session: aiohttp.ClientSession, exchange: Dict,
                                    symbol: str, interval: str, limit: int) -> Optional[List[Dict]]:
         """Fetch from single exchange"""
         exchange_name = exchange["name"]
-        
+
         try:
             # Skip if interval not supported
             if exchange_name == "CoinGecko" and interval not in ["1h", "4h", "1D", "1W", "1M"]:
                 return None
-            
+
             formatted_symbol = exchange["symbol_fmt"](symbol)
             exchange_interval = self.INTERVAL_MAPPING.get(interval, {}).get(exchange_name, interval)
-            
+
             # Build endpoint
             if "endpoint_builder" in exchange:
                 endpoint = exchange["endpoint_builder"](formatted_symbol, exchange_interval)
             else:
                 endpoint = exchange["endpoint"]
-            
+
             # Build params
             params = exchange["params_builder"](formatted_symbol, exchange_interval, limit)
-            
+
             async with session.get(endpoint, params=params, timeout=aiohttp.ClientTimeout(total=10)) as response:
                 if response.status not in [200, 201]:
                     self.stats["exchange_stats"][exchange_name]["fail"] += 1
                     return None
-                
+
                 data = await response.json()
                 candles = self._parse_exchange_data(exchange_name, data, symbol)
-                
+
                 if candles:
                     self.stats["exchange_stats"][exchange_name]["success"] += 1
                     self.stats["successful_fetches"] += 1
                     return candles
-        
+
         except Exception as e:
             self.stats["exchange_stats"][exchange_name]["fail"] += 1
             self.stats["failed_fetches"] += 1
-        
+
         return None
-    
+
     def _parse_exchange_data(self, exchange_name: str, data: Any, symbol: str) -> List[Dict]:
         """Parse exchange-specific data"""
         candles = []
-        
+
         try:
             if exchange_name == "Binance":
                 for row in data:
@@ -1072,7 +1072,7 @@ class PriceFetcher:
                         "close": float(row[4]),
                         "volume": float(row[5])
                     })
-            
+
             elif exchange_name == "Bybit":
                 if isinstance(data, dict) and "result" in data:
                     for row in data["result"].get("list", []):
@@ -1084,7 +1084,7 @@ class PriceFetcher:
                             "close": float(row[4]),
                             "volume": float(row[5])
                         })
-            
+
             elif exchange_name == "OKX":
                 if isinstance(data, dict) and "data" in data:
                     for row in data["data"]:
@@ -1096,32 +1096,32 @@ class PriceFetcher:
                             "close": float(row[4]),
                             "volume": float(row[5])
                         })
-            
+
             # Add more exchange parsers as needed...
-            
+
             # Sort by timestamp
             candles.sort(key=lambda x: x["timestamp"])
-            
+
         except Exception as e:
             logger.error(f"Parse error for {exchange_name}: {e}")
-        
+
         return candles
-    
+
     def _aggregate_candles(self, all_candles: List[List[Dict]]) -> List[Dict]:
         """Aggregate candles from multiple sources"""
         if not all_candles:
             return []
-        
+
         timestamp_data = defaultdict(list)
-        
+
         for exchange_candles in all_candles:
             for candle in exchange_candles:
                 timestamp_data[candle["timestamp"]].append(candle)
-        
+
         aggregated = []
         for timestamp in sorted(timestamp_data.keys()):
             candles_at_ts = timestamp_data[timestamp]
-            
+
             if len(candles_at_ts) == 1:
                 aggregated.append(candles_at_ts[0])
             else:
@@ -1134,7 +1134,7 @@ class PriceFetcher:
                     "volume": np.sum([c["volume"] for c in candles_at_ts]),
                     "source_count": len(candles_at_ts)
                 })
-        
+
         return aggregated
 
 # ========== TECHNICAL INDICATORS ==========
@@ -1145,58 +1145,58 @@ class TechnicalIndicators:
         closes = [c["close"] for c in candles]
         if len(closes) < period:
             return [None] * len(closes)
-        
+
         ema = []
         multiplier = 2 / (period + 1)
-        
+
         sma = sum(closes[:period]) / period
         ema.append(sma)
-        
+
         for i in range(period, len(closes)):
             ema_value = (closes[i] - ema[-1]) * multiplier + ema[-1]
             ema.append(ema_value)
-        
+
         return [None] * (period - 1) + ema
-    
+
     @staticmethod
     def calculate_rsi(candles: List[Dict], period: int = 14) -> List[float]:
         """Calculate RSI"""
         closes = [c["close"] for c in candles]
         if len(closes) <= period:
             return [None] * len(closes)
-        
+
         gains = []
         losses = []
-        
+
         for i in range(1, len(closes)):
             change = closes[i] - closes[i-1]
             gains.append(max(change, 0))
             losses.append(max(-change, 0))
-        
+
         avg_gain = sum(gains[:period]) / period
         avg_loss = sum(losses[:period]) / period
-        
+
         rsi_values = [None] * period
-        
+
         for i in range(period, len(gains)):
             if avg_loss == 0:
                 rsi = 100
             else:
                 rs = avg_gain / avg_loss
                 rsi = 100 - (100 / (1 + rs))
-            
+
             rsi_values.append(rsi)
-            
+
             avg_gain = (avg_gain * (period - 1) + gains[i]) / period
             avg_loss = (avg_loss * (period - 1) + losses[i]) / period
-        
+
         return rsi_values
-    
+
     @staticmethod
     def convert_to_heikin_ashi(candles: List[Dict]) -> List[Dict]:
         """Convert to Heikin Ashi"""
         ha_candles = []
-        
+
         for i, candle in enumerate(candles):
             if i == 0:
                 ha_close = (candle["open"] + candle["high"] + candle["low"] + candle["close"]) / 4
@@ -1209,7 +1209,7 @@ class TechnicalIndicators:
                 ha_open = (prev_ha["open"] + prev_ha["close"]) / 2
                 ha_high = max(candle["high"], ha_open, ha_close)
                 ha_low = min(candle["low"], ha_open, ha_close)
-            
+
             ha_candles.append({
                 "timestamp": candle["timestamp"],
                 "open": ha_open,
@@ -1218,13 +1218,13 @@ class TechnicalIndicators:
                 "close": ha_close,
                 "volume": candle["volume"]
             })
-        
+
         return ha_candles
 
 # ========== CANDLESTICK PATTERN DETECTOR ==========
 class CandlestickPatternDetector:
     """Detect 12 major candlestick patterns"""
-    
+
     @staticmethod
     def is_bullish_engulfing(prev: Dict, curr: Dict) -> bool:
         prev_body = abs(prev["close"] - prev["open"])
@@ -1234,7 +1234,7 @@ class CandlestickPatternDetector:
                 curr["open"] < prev["close"] and
                 curr["close"] > prev["open"] and
                 curr_body > prev_body * 1.2)
-    
+
     @staticmethod
     def is_bearish_engulfing(prev: Dict, curr: Dict) -> bool:
         prev_body = abs(prev["close"] - prev["open"])
@@ -1244,7 +1244,7 @@ class CandlestickPatternDetector:
                 curr["open"] > prev["close"] and
                 curr["close"] < prev["open"] and
                 curr_body > prev_body * 1.2)
-    
+
     @staticmethod
     def is_hammer(candle: Dict) -> bool:
         body = abs(candle["close"] - candle["open"])
@@ -1253,7 +1253,7 @@ class CandlestickPatternDetector:
         return (lower_shadow > body * 2 and
                 upper_shadow < body * 0.3 and
                 body > 0)
-    
+
     @staticmethod
     def is_hanging_man(candle: Dict) -> bool:
         body = abs(candle["close"] - candle["open"])
@@ -1262,7 +1262,7 @@ class CandlestickPatternDetector:
         return (lower_shadow > body * 2 and
                 upper_shadow < body * 0.3 and
                 candle["close"] < candle["open"])
-    
+
     @staticmethod
     def is_shooting_star(candle: Dict) -> bool:
         body = abs(candle["close"] - candle["open"])
@@ -1271,27 +1271,27 @@ class CandlestickPatternDetector:
         return (upper_shadow > body * 2 and
                 lower_shadow < body * 0.3 and
                 body > 0)
-    
+
     @staticmethod
     def is_doji(candle: Dict) -> bool:
         body = abs(candle["close"] - candle["open"])
         total_range = candle["high"] - candle["low"]
         return body < total_range * 0.1 and total_range > 0
-    
+
     @staticmethod
     def is_morning_star(c1: Dict, c2: Dict, c3: Dict) -> bool:
         return (c1["close"] < c1["open"] and
                 abs(c2["close"] - c2["open"]) < abs(c1["close"] - c1["open"]) * 0.3 and
                 c3["close"] > c3["open"] and
                 c3["close"] > (c1["open"] + c1["close"]) / 2)
-    
+
     @staticmethod
     def is_evening_star(c1: Dict, c2: Dict, c3: Dict) -> bool:
         return (c1["close"] > c1["open"] and
                 abs(c2["close"] - c2["open"]) < abs(c1["close"] - c1["open"]) * 0.3 and
                 c3["close"] < c3["open"] and
                 c3["close"] < (c1["open"] + c1["close"]) / 2)
-    
+
     @staticmethod
     def is_three_white_soldiers(c1: Dict, c2: Dict, c3: Dict) -> bool:
         return (c1["close"] > c1["open"] and
@@ -1301,7 +1301,7 @@ class CandlestickPatternDetector:
                 c3["close"] > c2["close"] and
                 c2["open"] > c1["open"] and c2["open"] < c1["close"] and
                 c3["open"] > c2["open"] and c3["open"] < c2["close"])
-    
+
     @staticmethod
     def is_three_black_crows(c1: Dict, c2: Dict, c3: Dict) -> bool:
         return (c1["close"] < c1["open"] and
@@ -1311,29 +1311,29 @@ class CandlestickPatternDetector:
                 c3["close"] < c2["close"] and
                 c2["open"] < c1["open"] and c2["open"] > c1["close"] and
                 c3["open"] < c2["open"] and c3["open"] > c2["close"])
-    
+
     @staticmethod
     def is_bullish_harami(prev: Dict, curr: Dict) -> bool:
         return (prev["close"] < prev["open"] and
                 curr["close"] > curr["open"] and
                 curr["open"] > prev["close"] and
                 curr["close"] < prev["open"])
-    
+
     @staticmethod
     def is_bearish_harami(prev: Dict, curr: Dict) -> bool:
         return (prev["close"] > prev["open"] and
                 curr["close"] < curr["open"] and
                 curr["open"] < prev["close"] and
                 curr["close"] > prev["open"])
-    
+
     @staticmethod
     def detect_all_patterns(candles: List[Dict]) -> List[Dict]:
         """Detect all patterns"""
         patterns = []
-        
+
         if len(candles) < 3:
             return patterns
-        
+
         # Single candle patterns
         for i, candle in enumerate(candles):
             if CandlestickPatternDetector.is_hammer(candle):
@@ -1344,7 +1344,7 @@ class CandlestickPatternDetector:
                     "confidence": 75,
                     "position": i
                 })
-            
+
             if CandlestickPatternDetector.is_hanging_man(candle):
                 patterns.append({
                     "name": "Hanging Man",
@@ -1353,7 +1353,7 @@ class CandlestickPatternDetector:
                     "confidence": 75,
                     "position": i
                 })
-            
+
             if CandlestickPatternDetector.is_shooting_star(candle):
                 patterns.append({
                     "name": "Shooting Star",
@@ -1362,7 +1362,7 @@ class CandlestickPatternDetector:
                     "confidence": 80,
                     "position": i
                 })
-            
+
             if CandlestickPatternDetector.is_doji(candle):
                 patterns.append({
                     "name": "Doji",
@@ -1371,11 +1371,11 @@ class CandlestickPatternDetector:
                     "confidence": 60,
                     "position": i
                 })
-        
+
         # Two candle patterns
         for i in range(1, len(candles)):
             prev, curr = candles[i-1], candles[i]
-            
+
             if CandlestickPatternDetector.is_bullish_engulfing(prev, curr):
                 patterns.append({
                     "name": "Bullish Engulfing",
@@ -1384,7 +1384,7 @@ class CandlestickPatternDetector:
                     "confidence": 85,
                     "position": i
                 })
-            
+
             if CandlestickPatternDetector.is_bearish_engulfing(prev, curr):
                 patterns.append({
                     "name": "Bearish Engulfing",
@@ -1393,7 +1393,7 @@ class CandlestickPatternDetector:
                     "confidence": 85,
                     "position": i
                 })
-            
+
             if CandlestickPatternDetector.is_bullish_harami(prev, curr):
                 patterns.append({
                     "name": "Bullish Harami",
@@ -1402,7 +1402,7 @@ class CandlestickPatternDetector:
                     "confidence": 70,
                     "position": i
                 })
-            
+
             if CandlestickPatternDetector.is_bearish_harami(prev, curr):
                 patterns.append({
                     "name": "Bearish Harami",
@@ -1411,11 +1411,11 @@ class CandlestickPatternDetector:
                     "confidence": 70,
                     "position": i
                 })
-        
+
         # Three candle patterns
         for i in range(2, len(candles)):
             c1, c2, c3 = candles[i-2], candles[i-1], candles[i]
-            
+
             if CandlestickPatternDetector.is_morning_star(c1, c2, c3):
                 patterns.append({
                     "name": "Morning Star",
@@ -1424,7 +1424,7 @@ class CandlestickPatternDetector:
                     "confidence": 90,
                     "position": i
                 })
-            
+
             if CandlestickPatternDetector.is_evening_star(c1, c2, c3):
                 patterns.append({
                     "name": "Evening Star",
@@ -1433,7 +1433,7 @@ class CandlestickPatternDetector:
                     "confidence": 90,
                     "position": i
                 })
-            
+
             if CandlestickPatternDetector.is_three_white_soldiers(c1, c2, c3):
                 patterns.append({
                     "name": "Three White Soldiers",
@@ -1442,7 +1442,7 @@ class CandlestickPatternDetector:
                     "confidence": 95,
                     "position": i
                 })
-            
+
             if CandlestickPatternDetector.is_three_black_crows(c1, c2, c3):
                 patterns.append({
                     "name": "Three Black Crows",
@@ -1451,7 +1451,7 @@ class CandlestickPatternDetector:
                     "confidence": 95,
                     "position": i
                 })
-        
+
         return patterns
 
 # ========== ICT ANALYZER ==========
@@ -1459,10 +1459,10 @@ class ICTAnalyzer:
     @staticmethod
     def detect_fair_value_gaps(candles: List[Dict]) -> List[Dict]:
         fvgs = []
-        
+
         for i in range(2, len(candles)):
             prev, curr = candles[i-2], candles[i]
-            
+
             if prev["high"] < curr["low"]:
                 gap_size = curr["low"] - prev["high"]
                 fvgs.append({
@@ -1472,7 +1472,7 @@ class ICTAnalyzer:
                     "size": gap_size,
                     "position": i
                 })
-            
+
             if prev["low"] > curr["high"]:
                 gap_size = prev["low"] - curr["high"]
                 fvgs.append({
@@ -1482,52 +1482,52 @@ class ICTAnalyzer:
                     "size": gap_size,
                     "position": i
                 })
-        
+
         return fvgs
-    
+
     @staticmethod
     def detect_order_blocks(candles: List[Dict]) -> List[Dict]:
         order_blocks = []
-        
+
         for i in range(3, len(candles)):
             if (candles[i-1]["close"] < candles[i-1]["open"] and
                 candles[i]["close"] > candles[i]["open"] and
                 candles[i]["close"] > candles[i-1]["high"]):
-                
+
                 order_blocks.append({
                     "type": "bullish",
                     "high": candles[i-1]["high"],
                     "low": candles[i-1]["low"],
                     "position": i-1
                 })
-            
+
             if (candles[i-1]["close"] > candles[i-1]["open"] and
                 candles[i]["close"] < candles[i]["open"] and
                 candles[i]["close"] < candles[i-1]["low"]):
-                
+
                 order_blocks.append({
                     "type": "bearish",
                     "high": candles[i-1]["high"],
                     "low": candles[i-1]["low"],
                     "position": i-1
                 })
-        
+
         return order_blocks
-    
+
     @staticmethod
     def analyze_market_structure(candles: List[Dict]) -> Dict:
         if len(candles) < 20:
             return {"structure": "insufficient_data"}
-        
+
         recent = candles[-20:]
         highs = [c["high"] for c in recent]
         lows = [c["low"] for c in recent]
-        
+
         higher_highs = sum(1 for i in range(1, len(highs)) if highs[i] > highs[i-1])
         higher_lows = sum(1 for i in range(1, len(lows)) if lows[i] > lows[i-1])
         lower_highs = sum(1 for i in range(1, len(highs)) if highs[i] < highs[i-1])
         lower_lows = sum(1 for i in range(1, len(lows)) if lows[i] < lows[i-1])
-        
+
         if higher_highs > 12 and higher_lows > 12:
             structure = "bullish_trend"
             strength = "strong"
@@ -1543,7 +1543,7 @@ class ICTAnalyzer:
         else:
             structure = "ranging"
             strength = "weak"
-        
+
         return {
             "structure": structure,
             "strength": strength,
@@ -1556,18 +1556,18 @@ class ICTAnalyzer:
 # ========== SIGNAL GENERATOR ==========
 class SignalGenerator:
     """Generate trading signals"""
-    
+
     @staticmethod
     def calculate_ema_signal(ema_fast: List[float], ema_slow: List[float]) -> Dict:
         if not ema_fast or not ema_slow or len(ema_fast) < 2:
             return {"signal": "NEUTRAL", "confidence": 0}
-        
+
         fast_curr, fast_prev = ema_fast[-1], ema_fast[-2]
         slow_curr, slow_prev = ema_slow[-1], ema_slow[-2]
-        
+
         if None in [fast_curr, fast_prev, slow_curr, slow_prev]:
             return {"signal": "NEUTRAL", "confidence": 0}
-        
+
         # Golden Cross
         if fast_prev <= slow_prev and fast_curr > slow_curr:
             distance = abs(fast_curr - slow_curr) / slow_curr * 100
@@ -1577,7 +1577,7 @@ class SignalGenerator:
                 "confidence": confidence,
                 "reason": "golden_cross"
             }
-        
+
         # Death Cross
         if fast_prev >= slow_prev and fast_curr < slow_curr:
             distance = abs(fast_curr - slow_curr) / slow_curr * 100
@@ -1587,7 +1587,7 @@ class SignalGenerator:
                 "confidence": confidence,
                 "reason": "death_cross"
             }
-        
+
         # Trend following
         if fast_curr > slow_curr:
             distance = (fast_curr - slow_curr) / slow_curr * 100
@@ -1597,7 +1597,7 @@ class SignalGenerator:
                     "confidence": min(80, 50 + distance * 5),
                     "reason": "uptrend"
                 }
-        
+
         if fast_curr < slow_curr:
             distance = (slow_curr - fast_curr) / slow_curr * 100
             if distance > 2:
@@ -1606,19 +1606,19 @@ class SignalGenerator:
                     "confidence": min(80, 50 + distance * 5),
                     "reason": "downtrend"
                 }
-        
+
         return {"signal": "NEUTRAL", "confidence": 40}
-    
+
     @staticmethod
     def calculate_rsi_signal(rsi: List[float]) -> Dict:
         if not rsi or len(rsi) < 2:
             return {"signal": "NEUTRAL", "confidence": 0}
-        
+
         current, prev = rsi[-1], rsi[-2]
-        
+
         if None in [current, prev]:
             return {"signal": "NEUTRAL", "confidence": 0}
-        
+
         if current < 30:
             if prev < 30 and current > prev:
                 return {
@@ -1631,7 +1631,7 @@ class SignalGenerator:
                 "confidence": 70,
                 "reason": "oversold"
             }
-        
+
         if current > 70:
             if prev > 70 and current < prev:
                 return {
@@ -1644,29 +1644,29 @@ class SignalGenerator:
                 "confidence": 70,
                 "reason": "overbought"
             }
-        
+
         if 40 <= current <= 60:
             return {
                 "signal": "NEUTRAL",
                 "confidence": 50,
                 "reason": "neutral_zone"
             }
-        
+
         return {"signal": "NEUTRAL", "confidence": 45}
-    
+
     @staticmethod
     def calculate_pattern_signal(patterns: List[Dict]) -> Dict:
         if not patterns:
             return {"signal": "NEUTRAL", "confidence": 0}
-        
+
         recent = [p for p in patterns if p.get("position", 0) >= len(patterns) - 5]
-        
+
         if not recent:
             return {"signal": "NEUTRAL", "confidence": 0}
-        
+
         bullish = sum(p["confidence"] for p in recent if p["direction"] == "bullish")
         bearish = sum(p["confidence"] for p in recent if p["direction"] == "bearish")
-        
+
         if bullish > bearish * 1.5:
             return {
                 "signal": "BUY",
@@ -1679,34 +1679,34 @@ class SignalGenerator:
                 "confidence": min(95, max(p["confidence"] for p in recent if p["direction"] == "bearish")),
                 "reason": "bearish_patterns"
             }
-        
+
         return {"signal": "NEUTRAL", "confidence": 50}
-    
+
     @staticmethod
     def calculate_ict_signal(fvgs: List[Dict], order_blocks: List[Dict], market_structure: Dict) -> Dict:
         score = 0
-        
+
         if market_structure["structure"] == "bullish_trend":
             score += 30 if market_structure["strength"] == "strong" else 20
         elif market_structure["structure"] == "bearish_trend":
             score -= 30 if market_structure["strength"] == "strong" else 20
-        
+
         recent_fvgs = [f for f in fvgs if f.get("position", 0) >= len(fvgs) - 3] if fvgs else []
         for fvg in recent_fvgs:
             if fvg["type"] == "bullish":
                 score += 15
             else:
                 score -= 15
-        
+
         recent_obs = [ob for ob in order_blocks if ob.get("position", 0) >= len(order_blocks) - 3] if order_blocks else []
         for ob in recent_obs:
             if ob["type"] == "bullish":
                 score += 20
             else:
                 score -= 20
-        
+
         confidence = min(95, abs(score))
-        
+
         if score > 50:
             signal = "STRONG_BUY"
         elif score > 25:
@@ -1717,13 +1717,13 @@ class SignalGenerator:
             signal = "SELL"
         else:
             signal = "NEUTRAL"
-        
+
         return {
             "signal": signal,
             "confidence": confidence,
             "score": score
         }
-    
+
     @staticmethod
     def calculate_volatility_trail_signal(
         candles: List[Dict],
@@ -1780,7 +1780,7 @@ class SignalGenerator:
                 "trail_value": round(result['current_trail'], 4),
                 "trend_strength": round(trend_strength, 3)
             }
-    
+
     @staticmethod
     def generate_combined_signal(
         ema_signal: Dict,
@@ -1811,7 +1811,7 @@ class SignalGenerator:
 
         total_score = 0
         total_confidence = 0
-        
+
         component_signals = {
             "ema": ema_signal,
             "rsi": rsi_signal,
@@ -1833,10 +1833,10 @@ class SignalGenerator:
             weight = weights.get(name, 0)
             sig_value = signal_values.get(sig.get("signal", "NEUTRAL"), 0)
             sig_conf = sig.get("confidence", 0)
-            
+
             total_score += sig_value * weight * (sig_conf / 100)
             total_confidence += sig_conf * weight
-        
+
         # Heikin Ashi adjustment
         if ha_trend == "strong_bullish":
             total_score += 0.3
@@ -1844,7 +1844,7 @@ class SignalGenerator:
         elif ha_trend == "strong_bearish":
             total_score -= 0.3
             total_confidence += 5
-        
+
         # Determine final signal
         if total_score > 1.2:
             final_signal = SignalType.STRONG_BUY
@@ -1856,7 +1856,7 @@ class SignalGenerator:
             final_signal = SignalType.SELL
         else:
             final_signal = SignalType.NEUTRAL
-        
+
         # Confidence level
         if total_confidence >= 85:
             conf_level = SignalConfidence.VERY_HIGH
@@ -1866,7 +1866,7 @@ class SignalGenerator:
             conf_level = SignalConfidence.MEDIUM
         else:
             conf_level = SignalConfidence.LOW
-        
+
         return {
             "signal": final_signal,
             "confidence": round(total_confidence, 1),
@@ -1876,7 +1876,7 @@ class SignalGenerator:
             "heikin_ashi_trend": ha_trend,
             "recommendation": SignalGenerator._generate_recommendation(final_signal, total_confidence, total_score)
         }
-    
+
     @staticmethod
     def _generate_recommendation(signal: SignalType, confidence: float, score: float) -> str:
         if signal == SignalType.STRONG_BUY:
@@ -1930,19 +1930,19 @@ class TradingChatBot:
                 "market structure": "Higher highs + higher lows = bullish."
             }
         }
-    
+
     async def process_message(self, message: str, symbol: str = None) -> str:
         try:
             self.context.append(f"User: {message}")
             if len(self.context) > 20:
                 self.context = self.context[-20:]
-            
+
             lower_msg = message.lower()
-            
+
             # Greetings
             if any(word in lower_msg for word in ["hello", "hi", "hey"]):
                 return "🤖 Hello! I'm your AI trading assistant. How can I help you?"
-            
+
             # Price queries
             if "price" in lower_msg and symbol and self.price_fetcher:
                 candles = await self.price_fetcher.get_candles(symbol, "1h", 2)
@@ -1951,30 +1951,30 @@ class TradingChatBot:
                     previous = candles[-2]["close"]
                     change = ((current - previous) / previous) * 100
                     return f"📊 {symbol}: ${current:,.2f} ({'▲' if change >= 0 else '▼'} {abs(change):.2f}%)"
-            
+
             # Pattern explanations
             for pattern, explanation in self.knowledge_base["patterns"].items():
                 if pattern in lower_msg:
                     return f"📈 **{pattern.upper()}**: {explanation}"
-            
+
             # Indicator explanations
             for indicator, explanation in self.knowledge_base["indicators"].items():
                 if indicator in lower_msg:
                     return f"📊 **{indicator.upper()}**: {explanation}"
-            
+
             # ICT concepts
             for concept, explanation in self.knowledge_base["ict"].items():
                 if concept in lower_msg:
                     return f"🎯 **{concept.upper()}**: {explanation}"
-            
+
             # Strategy advice
             if "strategy" in lower_msg:
                 return self._get_strategy_advice(lower_msg)
-            
+
             # Analysis request
             if "analyze" in lower_msg and symbol and self.price_fetcher:
                 return await self._analyze_symbol(symbol)
-            
+
             # ML prediction
             if "predict" in lower_msg and symbol and self.ai_engine and self.price_fetcher:
                 df = pd.DataFrame(await self.price_fetcher.get_candles(symbol, "1h", 200))
@@ -1984,7 +1984,7 @@ class TradingChatBot:
                     signal = prediction.get('prediction', 'NEUTRAL')
                     confidence = prediction.get('confidence', 0) * 100
                     return f"🤖 ML Prediction for {symbol}: **{signal}** ({confidence:.1f}% confidence)"
-            
+
             # General advice
             if any(word in lower_msg for word in ["advice", "tip", "suggest"]):
                 tips = [
@@ -1996,7 +1996,7 @@ class TradingChatBot:
                     "Never risk more than 1-2% per trade."
                 ]
                 return f"💡 **Trading Tip**: {random.choice(tips)}"
-            
+
             # Default response
             responses = [
                 "I can help you with technical analysis, explain patterns and indicators.",
@@ -2004,11 +2004,11 @@ class TradingChatBot:
                 "You can ask me to analyze a symbol or provide strategy advice."
             ]
             return random.choice(responses)
-            
+
         except Exception as e:
             logger.error(f"Chat error: {str(e)}")
             return "I encountered an error processing your request."
-    
+
     def _get_strategy_advice(self, message: str) -> str:
         if "trend" in message:
             return """**Trend Following Strategy**:
@@ -2029,30 +2029,30 @@ class TradingChatBot:
 3. Use Confirmation
 4. Be Patient
 5. Stay Disciplined"""
-    
+
     async def _analyze_symbol(self, symbol: str) -> str:
         try:
             if not self.price_fetcher:
                 return "Price fetcher not available"
-            
+
             candles = await self.price_fetcher.get_candles(symbol, "1h", 100)
             if not candles:
                 return f"Could not fetch data for {symbol}"
-            
+
             current = candles[-1]["close"]
             prev_close = candles[-2]["close"] if len(candles) > 1 else current
             change = ((current - prev_close) / prev_close) * 100
-            
+
             highs = [c["high"] for c in candles[-20:]]
             lows = [c["low"] for c in candles[-20:]]
             avg_volume = np.mean([c["volume"] for c in candles[-20:]])
-            
+
             return f"""📊 **{symbol} Analysis**:
 • **Price**: ${current:,.2f} ({'▲' if change >= 0 else '▼'} {abs(change):.2f}%)
 • **Recent Range**: ${min(lows):,.2f} - ${max(highs):,.2f}
 • **Avg Volume**: {avg_volume:,.0f}
 • **Data Points**: {len(candles)} candles"""
-        
+
         except Exception as e:
             logger.error(f"Analysis error: {str(e)}")
             return f"Error analyzing {symbol}."
@@ -2061,17 +2061,17 @@ class TradingChatBot:
 class WebSocketManager:
     def __init__(self):
         self.active_connections: List[WebSocket] = []
-    
+
     async def connect(self, websocket: WebSocket):
         await websocket.accept()
         self.active_connections.append(websocket)
         logger.info(f"New WebSocket connection. Total: {len(self.active_connections)}")
-    
+
     def disconnect(self, websocket: WebSocket):
         if websocket in self.active_connections:
             self.active_connections.remove(websocket)
             logger.info(f"WebSocket disconnected. Remaining: {len(self.active_connections)}")
-    
+
     async def broadcast(self, message: str):
         disconnected = []
         for connection in self.active_connections:
@@ -2079,7 +2079,7 @@ class WebSocketManager:
                 await connection.send_text(message)
             except Exception:
                 disconnected.append(connection)
-        
+
         for connection in disconnected:
             self.disconnect(connection)
 
@@ -2106,68 +2106,7 @@ async def root():
 def health():
     return {"status": "healthy", "version": "4.5.0"}
 
-    @app.get("/dashboard", response_class=HTMLResponse)
-
-async def dashboard():
-        """Trading Dashboard"""
-        return """
-    <!DOCTYPE html>
-    <html>
-    <head>
-        <title>Professional Trading Bot v4.5</title>
-        <style>
-            body {
-                background: #0a0e27;
-                color: white;
-                font-family: Arial, sans-serif;
-            }
-            .container {
-                max-width: 1200px;
-                margin: 0 auto;
-                padding: 20px;
-            }
-            .card {
-                background: #1a1f3a;
-                border-radius: 10px;
-                padding: 20px;
-                margin: 10px 0;
-                box-shadow: 0 4px 6px rgba(0,0,0,0.1);
-            }
-            .signal-buy { color: #22c55e; }
-            .signal-sell { color: #ef4444; }
-            .signal-neutral { color: #f59e0b; }
-        </style>
-    </head>
-    <body>
-        <div class="container">
-            <h1>🚀 Professional Trading Bot v4.5</h1>
-            <div class="card">
-                <h2>System Status: <span style="color: #22c55e;">✅ Online</span></h2>
-                <p>Version 4.5.0 - Advanced AI Trading System</p>
-            </div>
-            <div class="card">
-                <h3>Features</h3>
-                <ul>
-                    <li>✅ 11+ Exchange Support</li>
-                    <li>✅ Forex Market Integration</li>
-                    <li>✅ Volatility Adjusted Trail</li>
-                    <li>✅ Advanced AI Models (LSTM, Transformer, LightGBM)</li>
-                    <li>✅ 12 Candlestick Patterns</li>
-                    <li>✅ ICT Market Structure Analysis</li>
-                    <li>✅ Real Data Only - NO Synthetic Data</li>
-                </ul>
-            </div>
-            <div class="card">
-                <h3>Quick Start</h3>
-                <p>Use the API endpoints to analyze symbols:</p>
-                <code>/api/analyze/BTCUSDT?interval=1h</code><br>
-                <code>/api/train/BTCUSDT</code><br>
-                <code>/api/chat</code>
-            </div>
-        </div>
-    </body>
-    </html>
-    """
+@app.get("/dashboard", response_class=HTMLResponse)
 
 @app.get("/api/analyze/{symbol}")
 async def analyze_symbol(
@@ -2177,24 +2116,24 @@ async def analyze_symbol(
     """Complete technical analysis for a symbol"""
     try:
         candles = await price_fetcher.get_candles(symbol, interval, 100)
-        
+
         if not candles or len(candles) < 50:
             raise HTTPException(status_code=400, detail="Insufficient data")
-        
+
         # Calculate indicators
         ema_9 = TechnicalIndicators.calculate_ema(candles, 9)
         ema_21 = TechnicalIndicators.calculate_ema(candles, 21)
         rsi = TechnicalIndicators.calculate_rsi(candles, 14)
         ha_candles = TechnicalIndicators.convert_to_heikin_ashi(candles)
-        
+
         # Detect patterns
         patterns = CandlestickPatternDetector.detect_all_patterns(candles)
-        
+
         # ICT Analysis
         fvgs = ICTAnalyzer.detect_fair_value_gaps(candles)
         order_blocks = ICTAnalyzer.detect_order_blocks(candles)
         market_structure = ICTAnalyzer.analyze_market_structure(candles)
-        
+
         # Heikin Ashi trend
         ha_recent = ha_candles[-5:]
         bullish_ha = sum(1 for c in ha_recent if c["close"] > c["open"])
@@ -2208,14 +2147,14 @@ async def analyze_symbol(
             ha_trend = "bearish"
         else:
             ha_trend = "neutral"
-        
+
         # Generate signals
         ema_signal = SignalGenerator.calculate_ema_signal(ema_9, ema_21)
         rsi_signal = SignalGenerator.calculate_rsi_signal(rsi)
         pattern_signal = SignalGenerator.calculate_pattern_signal(patterns)
         ict_signal = SignalGenerator.calculate_ict_signal(fvgs, order_blocks, market_structure)
         vat_signal = SignalGenerator.calculate_volatility_trail_signal(candles)
-        
+
         # ML Prediction
         df = pd.DataFrame(candles)
         ml_prediction = None
@@ -2227,17 +2166,17 @@ async def analyze_symbol(
                 ml_prediction = ai_engine.predict(symbol, df_copy)
             except Exception as e:
                 logger.warning(f"ML prediction failed: {e}")
-        
+
         # Combined signal
         combined_signal = SignalGenerator.generate_combined_signal(
             ema_signal, rsi_signal, pattern_signal, ict_signal,
             ha_trend, ml_prediction, vat_signal
         )
-        
+
         current_candle = candles[-1]
         prev_candle = candles[-2]
         price_change = ((current_candle["close"] - prev_candle["close"]) / prev_candle["close"]) * 100
-        
+
         return {
             "success": True,
             "symbol": symbol.upper(),
@@ -2261,7 +2200,7 @@ async def analyze_symbol(
             "ml_prediction": ml_prediction,
             "signal": combined_signal
         }
-        
+
     except Exception as e:
         logger.error(f"Analysis error for {symbol}: {e}")
         raise HTTPException(status_code=500, detail=f"Analysis failed: {str(e)}")
@@ -2271,20 +2210,20 @@ async def train_model(symbol: str):
     """Train ML models for a symbol"""
     try:
         candles = await price_fetcher.get_candles(symbol, "1h", 1000)
-        
+
         if not candles or len(candles) < 500:
             raise HTTPException(status_code=400, detail="Insufficient data for training")
-        
+
         df = pd.DataFrame(candles)
         if not df.empty:
             if 'timestamp' in df.columns:
                 df.set_index('timestamp', inplace=True)
-        
+
         success = await ai_engine.train_models(symbol, df)
-        
+
         if success:
             feature_importance = ai_engine.get_feature_importance(symbol)
-            
+
             return {
                 "success": True,
                 "message": f"Successfully trained ML models for {symbol}",
@@ -2292,7 +2231,7 @@ async def train_model(symbol: str):
             }
         else:
             raise HTTPException(status_code=500, detail="Training failed")
-        
+
     except Exception as e:
         logger.error(f"Training error: {str(e)}")
         raise HTTPException(status_code=500, detail=f"Training failed: {str(e)}")
@@ -2304,17 +2243,17 @@ async def chat_endpoint(request: Request):
         data = await request.json()
         message = data.get("message", "")
         symbol = data.get("symbol", "BTCUSDT")
-        
+
         if not message:
             raise HTTPException(status_code=400, detail="Message is required")
-        
+
         response = await chatbot.process_message(message, symbol)
-        
+
         return {
             "success": True,
             "response": response
         }
-        
+
     except Exception as e:
         logger.error(f"Chat error: {str(e)}")
         raise HTTPException(status_code=500, detail=f"Chat failed: {str(e)}")
@@ -2334,7 +2273,7 @@ async def websocket_endpoint(websocket: WebSocket):
                         current = candles[-1]["close"]
                         previous = candles[-2]["close"]
                         change = ((current - previous) / previous) * 100
-                        
+
                         await websocket.send_text(json.dumps({
                             "type": "price_update",
                             "symbol": symbol,
@@ -2349,7 +2288,7 @@ async def websocket_endpoint(websocket: WebSocket):
         @app.get("/dashboard", response_class=HTMLResponse)
 async def dashboard():
     """Professional Trading Dashboard with Charts and AI Interface"""
-    
+
     return """
     <!DOCTYPE html>
     <html lang="en">
@@ -2357,16 +2296,16 @@ async def dashboard():
         <meta charset="UTF-8">
         <meta name="viewport" content="width=device-width, initial-scale=1.0">
         <title>🚀 Professional Trading Bot v4.5</title>
-        
+
         <!-- Bootstrap 5 -->
         <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
-        
+
         <!-- Font Awesome -->
         <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
-        
+
         <!-- TradingView Charting Library -->
         <script type="text/javascript" src="https://s3.tradingview.com/tv.js"></script>
-        
+
         <style>
             :root {
                 --primary-dark: #0a0e27;
@@ -2378,36 +2317,36 @@ async def dashboard():
                 --text-light: #ffffff;
                 --text-gray: #94a3b8;
             }
-            
+
             body {
                 background: linear-gradient(135deg, #0a0e27 0%, #1a1f3a 100%);
                 color: var(--text-light);
                 font-family: 'Segoe UI', system-ui, -apple-system, sans-serif;
                 min-height: 100vh;
             }
-            
+
             /* Navbar */
             .navbar {
                 background: rgba(26, 31, 58, 0.95);
                 backdrop-filter: blur(10px);
                 border-bottom: 2px solid rgba(59, 130, 246, 0.3);
             }
-            
+
             .navbar-brand {
                 font-weight: 700;
                 font-size: 1.5rem;
             }
-            
+
             .navbar-brand i {
                 color: var(--accent-blue);
                 animation: rotate 3s linear infinite;
             }
-            
+
             @keyframes rotate {
                 from { transform: rotate(0deg); }
                 to { transform: rotate(360deg); }
             }
-            
+
             /* Cards */
             .card {
                 background: var(--secondary-dark);
@@ -2416,40 +2355,40 @@ async def dashboard():
                 box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
                 transition: all 0.3s ease;
             }
-            
+
             .card:hover {
                 transform: translateY(-2px);
                 box-shadow: 0 6px 12px rgba(59, 130, 246, 0.2);
             }
-            
+
             .card-title {
                 color: var(--text-light);
                 font-weight: 600;
             }
-            
+
             .card-title i {
                 margin-right: 10px;
             }
-            
+
             /* Signal Indicators */
             .signal-buy {
                 background: linear-gradient(135deg, var(--accent-green), #10b981) !important;
                 color: white !important;
                 font-weight: 800 !important;
             }
-            
+
             .signal-sell {
                 background: linear-gradient(135deg, var(--accent-red), #dc2626) !important;
                 color: white !important;
                 font-weight: 800 !important;
             }
-            
+
             .signal-neutral {
                 background: linear-gradient(135deg, #6366f1, #8b5cf6) !important;
                 color: white !important;
                 font-weight: 800 !important;
             }
-            
+
             /* Progress Bar */
             .progress {
                 background: rgba(255, 255, 255, 0.1);
@@ -2457,12 +2396,12 @@ async def dashboard():
                 border-radius: 12px;
                 overflow: hidden;
             }
-            
+
             .progress-bar {
                 background: linear-gradient(90deg, #ef4444, #facc15, #22c55e);
                 font-weight: 700;
             }
-            
+
             /* Pattern Tags */
             .pattern-tag {
                 display: inline-block;
@@ -2472,25 +2411,25 @@ async def dashboard():
                 font-weight: 600;
                 margin: 2px;
             }
-            
+
             .pattern-bullish {
                 background: rgba(34, 197, 94, 0.2);
                 color: #4ade80;
                 border: 1px solid #22c55e;
             }
-            
+
             .pattern-bearish {
                 background: rgba(239, 68, 68, 0.2);
                 color: #f87171;
                 border: 1px solid #ef4444;
             }
-            
+
             .pattern-neutral {
                 background: rgba(168, 85, 247, 0.2);
                 color: #a855f7;
                 border: 1px solid #a855f7;
             }
-            
+
             /* Chat Container */
             .chat-container {
                 height: 400px;
@@ -2500,57 +2439,57 @@ async def dashboard():
                 padding: 15px;
                 border: 1px solid rgba(255, 255, 255, 0.1);
             }
-            
+
             .chat-message {
                 margin-bottom: 10px;
                 padding: 10px 15px;
                 border-radius: 10px;
                 max-width: 80%;
             }
-            
+
             .chat-bot {
                 background: rgba(59, 130, 246, 0.2);
                 border-left: 4px solid var(--accent-blue);
             }
-            
+
             .chat-user {
                 background: rgba(34, 197, 94, 0.2);
                 margin-left: auto;
                 border-right: 4px solid var(--accent-green);
             }
-            
+
             /* Stats */
             .stat-number {
                 font-size: 2rem;
                 font-weight: 800;
                 color: var(--accent-blue);
             }
-            
+
             /* TradingView Chart */
             #tradingview_chart {
                 height: 500px;
                 border-radius: 10px;
                 overflow: hidden;
             }
-            
+
             /* Button Styles */
             .btn-primary {
                 background: linear-gradient(135deg, var(--accent-blue), #1d4ed8);
                 border: none;
                 font-weight: 600;
             }
-            
+
             .btn-primary:hover {
                 background: linear-gradient(135deg, #1d4ed8, #1e40af);
                 transform: translateY(-1px);
             }
-            
+
             /* Responsive */
             @media (max-width: 768px) {
                 .stat-number {
                     font-size: 1.5rem;
                 }
-                
+
                 #tradingview_chart {
                     height: 300px;
                 }
@@ -2652,7 +2591,7 @@ async def dashboard():
                                 </div>
                             </div>
                         </div>
-                        
+
                         <div class="col-md-6">
                             <div class="card h-100">
                                 <div class="card-body text-center">
@@ -2704,7 +2643,7 @@ async def dashboard():
                                 </div>
                             </div>
                         </div>
-                        
+
                         <div class="col-md-6 mb-4">
                             <div class="card h-100">
                                 <div class="card-body">
@@ -2764,7 +2703,7 @@ async def dashboard():
                                 </div>
                             </div>
                             <div class="input-group mt-3">
-                                <input type="text" class="form-control" id="chatInput" 
+                                <input type="text" class="form-control" id="chatInput"
                                        placeholder="Ask about trading, patterns, or analysis...">
                                 <button class="btn btn-primary" type="button" onclick="sendChatMessage()">
                                     <i class="fas fa-paper-plane"></i>
@@ -2792,7 +2731,7 @@ async def dashboard():
                                         <div class="progress-bar bg-success" style="width: 78%"></div>
                                     </div>
                                 </div>
-                                
+
                                 <div class="mb-3">
                                     <div class="d-flex justify-content-between mb-1">
                                         <span>LSTM Network</span>
@@ -2802,7 +2741,7 @@ async def dashboard():
                                         <div class="progress-bar" style="background: #06b6d4; width: 82%"></div>
                                     </div>
                                 </div>
-                                
+
                                 <div class="mb-3">
                                     <div class="d-flex justify-content-between mb-1">
                                         <span>Transformer</span>
@@ -2815,7 +2754,7 @@ async def dashboard():
                             </div>
                             <div class="mt-3">
                                 <p class="mb-2" id="mlPrediction">
-                                    <strong>AI Ensemble Prediction:</strong> 
+                                    <strong>AI Ensemble Prediction:</strong>
                                     <span class="badge bg-secondary">Loading...</span>
                                 </p>
                                 <button class="btn btn-outline-success btn-sm w-100" onclick="trainCurrentModel()">
@@ -2886,15 +2825,15 @@ async def dashboard():
         <!-- JavaScript Libraries -->
         <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
         <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
-        
+
         <!-- TradingView Widget Script -->
         <script type="text/javascript">
             function loadTradingViewChart(symbol = "BTCUSDT", interval = "60") {
                 const container = document.getElementById('tradingview_chart');
                 if (!container) return;
-                
+
                 container.innerHTML = '';
-                
+
                 const script = document.createElement('script');
                 script.type = 'text/javascript';
                 script.src = 'https://s3.tradingview.com/tv.js';
@@ -2941,19 +2880,19 @@ async def dashboard():
             async function analyzeCurrentSymbol() {
                 const symbol = document.getElementById('symbolSelect').value;
                 const interval = document.getElementById('intervalSelect').value;
-                
+
                 // Update UI
                 document.getElementById('currentSymbol').textContent = symbol.replace('USDT', '/USDT');
                 document.getElementById('currentPrice').innerHTML = '<i class="fas fa-spinner fa-spin"></i>';
                 document.getElementById('signalText').textContent = 'ANALYZING...';
-                
+
                 // Load TradingView chart
                 loadTradingViewChart(symbol, interval);
-                
+
                 try {
                     const response = await fetch(`/api/analyze/${symbol}?interval=${interval}`);
                     const data = await response.json();
-                    
+
                     if (data.success) {
                         updateDashboard(data);
                         updateChartData(data);
@@ -2973,12 +2912,12 @@ async def dashboard():
                 // Update price
                 const price = data.price_data.current;
                 const change = data.price_data.change_percent;
-                
+
                 document.getElementById('currentPrice').textContent = `$${price.toLocaleString('en-US', {
                     minimumFractionDigits: 2,
                     maximumFractionDigits: 2
                 })}`;
-                
+
                 const changeElement = document.getElementById('priceChange');
                 if (change >= 0) {
                     changeElement.innerHTML = `<span class="badge bg-success">
@@ -2989,13 +2928,13 @@ async def dashboard():
                         <i class="fas fa-arrow-down me-1"></i>${Math.abs(change).toFixed(2)}%
                     </span>`;
                 }
-                
+
                 // Update signal
                 const signal = data.signal.signal;
                 const confidence = data.signal.confidence;
                 const signalElement = document.getElementById('signalIndicator');
                 const signalText = document.getElementById('signalText');
-                
+
                 // Set signal color
                 if (signal.includes('BUY')) {
                     signalElement.className = 'p-4 rounded mb-3 signal-buy';
@@ -3004,22 +2943,22 @@ async def dashboard():
                 } else {
                     signalElement.className = 'p-4 rounded mb-3 signal-neutral';
                 }
-                
+
                 signalText.textContent = signal.replace('_', ' ');
-                
+
                 // Update confidence bar
                 document.getElementById('confidenceBar').style.width = `${confidence}%`;
                 document.getElementById('confidenceBar').textContent = `${confidence}%`;
                 document.getElementById('confidenceText').textContent = `Confidence: ${confidence}%`;
-                
+
                 // Update recommendation
-                document.getElementById('signalRecommendation').textContent = 
+                document.getElementById('signalRecommendation').textContent =
                     data.signal.recommendation || 'Analyzing market conditions...';
-                
+
                 // Update patterns
                 const patternsContainer = document.getElementById('patternsContainer');
                 patternsContainer.innerHTML = '';
-                
+
                 if (data.patterns && data.patterns.length > 0) {
                     const recentPatterns = data.patterns.slice(-6);
                     recentPatterns.forEach(pattern => {
@@ -3028,31 +2967,31 @@ async def dashboard():
                         span.textContent = pattern.name;
                         patternsContainer.appendChild(span);
                     });
-                    document.getElementById('patternCount').textContent = 
+                    document.getElementById('patternCount').textContent =
                         `${data.patterns.length} patterns detected`;
                 } else {
                     document.getElementById('patternCount').textContent = 'No patterns detected';
                 }
-                
+
                 // Update ICT analysis
                 if (data.ict_analysis) {
-                    document.getElementById('marketStructure').textContent = 
+                    document.getElementById('marketStructure').textContent =
                         data.ict_analysis.market_structure?.structure || 'Unknown';
-                    document.getElementById('fvgCount').textContent = 
+                    document.getElementById('fvgCount').textContent =
                         data.ict_analysis.fair_value_gaps?.length || 0;
-                    document.getElementById('obCount').textContent = 
+                    document.getElementById('obCount').textContent =
                         data.ict_analysis.order_blocks?.length || 0;
                 }
-                
+
                 // Update Volatility Adjusted Trail
                 if (data.volatility_trail) {
-                    document.getElementById('vatTrail').textContent = 
+                    document.getElementById('vatTrail').textContent =
                         `$${data.volatility_trail.trail_value?.toFixed(2) || 'N/A'}`;
-                    
+
                     const strength = data.volatility_trail.trend_strength;
                     const strengthElement = document.getElementById('vatStrength');
                     strengthElement.textContent = `${(strength * 100).toFixed(1)}%`;
-                    
+
                     if (strength > 0.7) {
                         strengthElement.className = 'badge bg-success';
                     } else if (strength > 0.4) {
@@ -3061,23 +3000,23 @@ async def dashboard():
                         strengthElement.className = 'badge bg-secondary';
                     }
                 }
-                
+
                 // Update ML prediction
                 if (data.ml_prediction) {
                     const pred = data.ml_prediction.prediction;
                     const conf = (data.ml_prediction.confidence * 100).toFixed(1);
                     const predElement = document.getElementById('mlPrediction');
-                    
+
                     let badgeClass = 'bg-secondary';
                     let signalText = pred;
-                    
+
                     if (pred.includes('BUY')) {
                         badgeClass = 'bg-success';
                     } else if (pred.includes('SELL')) {
                         badgeClass = 'bg-danger';
                     }
-                    
-                    predElement.innerHTML = `<strong>AI Ensemble Prediction:</strong> 
+
+                    predElement.innerHTML = `<strong>AI Ensemble Prediction:</strong>
                         <span class="badge ${badgeClass}">${signalText} (${conf}%)</span>`;
                 }
             }
@@ -3096,21 +3035,21 @@ async def dashboard():
                     lstm: { accuracy: 82 + Math.random() * 3 },
                     transformer: { accuracy: 85 + Math.random() * 2 }
                 };
-                
+
                 // Update UI
-                document.getElementById('lgbmAccuracy').textContent = 
+                document.getElementById('lgbmAccuracy').textContent =
                     `${models.lgbm.accuracy.toFixed(1)}%`;
-                document.querySelector('#lgbmAccuracy ~ .progress .progress-bar').style.width = 
+                document.querySelector('#lgbmAccuracy ~ .progress .progress-bar').style.width =
                     `${models.lgbm.accuracy}%`;
-                
-                document.getElementById('lstmAccuracy').textContent = 
+
+                document.getElementById('lstmAccuracy').textContent =
                     `${models.lstm.accuracy.toFixed(1)}%`;
-                document.querySelector('#lstmAccuracy ~ .progress .progress-bar').style.width = 
+                document.querySelector('#lstmAccuracy ~ .progress .progress-bar').style.width =
                     `${models.lstm.accuracy}%`;
-                
-                document.getElementById('transformerAccuracy').textContent = 
+
+                document.getElementById('transformerAccuracy').textContent =
                     `${models.transformer.accuracy.toFixed(1)}%`;
-                document.querySelector('#transformerAccuracy ~ .progress .progress-bar').style.width = 
+                document.querySelector('#transformerAccuracy ~ .progress .progress-bar').style.width =
                     `${models.transformer.accuracy}%`;
             }
 
@@ -3118,12 +3057,12 @@ async def dashboard():
             function updateExchangeStatus() {
                 const exchanges = ['Binance', 'Bybit', 'OKX', 'KuCoin', 'Gate.io'];
                 const statusElements = document.querySelectorAll('.exchange-status');
-                
+
                 statusElements.forEach((element, index) => {
                     if (index < exchanges.length) {
                         // Simulate status check
                         const isOnline = Math.random() > 0.1; // 90% online probability
-                        element.innerHTML = isOnline ? 
+                        element.innerHTML = isOnline ?
                             '<i class="fas fa-check-circle text-success"></i>' :
                             '<i class="fas fa-times-circle text-danger"></i>';
                     }
@@ -3133,14 +3072,14 @@ async def dashboard():
             // Train AI model
             async function trainCurrentModel() {
                 const symbol = document.getElementById('symbolSelect').value;
-                
+
                 showMessage(`Training AI models for ${symbol}...`, 'info');
-                
+
                 try {
                     const response = await fetch(`/api/train/${symbol}`, {
                         method: 'POST'
                     });
-                    
+
                     if (response.ok) {
                         const data = await response.json();
                         showMessage(`✅ ${data.message}`, 'success');
@@ -3157,16 +3096,16 @@ async def dashboard():
             async function sendChatMessage() {
                 const input = document.getElementById('chatInput');
                 const message = input.value.trim();
-                
+
                 if (!message) return;
-                
+
                 // Add user message
                 addChatMessage(message, 'user');
                 input.value = '';
-                
+
                 // Get current symbol
                 const symbol = document.getElementById('symbolSelect').value;
-                
+
                 try {
                     const response = await fetch('/api/chat', {
                         method: 'POST',
@@ -3178,7 +3117,7 @@ async def dashboard():
                             symbol: symbol
                         })
                     });
-                    
+
                     if (response.ok) {
                         const data = await response.json();
                         setTimeout(() => {
@@ -3193,7 +3132,7 @@ async def dashboard():
                         "My AI models are processing the market conditions...",
                         "For detailed analysis, please check the technical indicators above."
                     ];
-                    
+
                     setTimeout(() => {
                         addChatMessage(responses[Math.floor(Math.random() * responses.length)], 'bot');
                     }, 500);
@@ -3204,10 +3143,10 @@ async def dashboard():
             function addChatMessage(message, sender) {
                 const chatMessages = document.getElementById('chatMessages');
                 const messageDiv = document.createElement('div');
-                
+
                 messageDiv.className = `chat-message ${sender === 'user' ? 'chat-user' : 'chat-bot'}`;
                 messageDiv.innerHTML = `<strong>${sender === 'user' ? '👤 You:' : '🤖 Assistant:'}</strong><br>${message}`;
-                
+
                 chatMessages.appendChild(messageDiv);
                 chatMessages.scrollTop = chatMessages.scrollHeight;
             }
@@ -3244,7 +3183,7 @@ async def dashboard():
                         confidence: 0.6 + Math.random() * 0.3
                     }
                 };
-                
+
                 updateDashboard(demoData);
             }
 
@@ -3258,7 +3197,7 @@ async def dashboard():
                     <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
                 `;
                 document.body.appendChild(alertDiv);
-                
+
                 setTimeout(() => {
                     alertDiv.remove();
                 }, 3000);
@@ -3291,12 +3230,12 @@ async def dashboard():
 # ========== MAIN ENTRY POINT ==========
 if __name__ == "__main__":
     import uvicorn
-    
+
     port = int(os.getenv("PORT", 8000))
     host = os.getenv("HOST", "0.0.0.0")
-    
+
     logger.info(f"Starting Professional AI Trading Bot v4.5 on {host}:{port}")
-    
+
     uvicorn.run(
         app,
         host=host,
