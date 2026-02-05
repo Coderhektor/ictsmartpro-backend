@@ -2060,7 +2060,7 @@ async def dashboard():
     return """
    
 # HTML Template
-HTML_TEMPLATE = """
+ 
 <!DOCTYPE html>
 <html lang="en">
 <head>
