@@ -1,5 +1,3 @@
-
-
 """
 🚀 PROFESSIONAL TRADING BOT v4.0 - ADVANCED AI TRADING SYSTEM
 ✅ TradingView Integration ✅ EMA Crossovers ✅ RSI ✅ Heikin Ashi
@@ -18,14 +16,6 @@ import asyncio
 from typing import Dict, List, Optional, Tuple
 import aiohttp
 from enum import Enum
-import asyncio
-import aiohttp
-import logging
-from typing import List, Dict, Optional, Any
-from datetime import datetime
-import numpy as np
-from collections import defaultdict
-import time
 
 # Machine Learning Libraries
 import torch
@@ -489,168 +479,169 @@ class AITradingEngine:
         except Exception as e:
             logger.error(f"Error training Transformer for {symbol}: {str(e)}")
     
-def predict(self, symbol: str, df: pd.DataFrame) -> Dict:
-    """Generate predictions from all models - daha güvenli versiyon"""
-    try:
-        if df.empty or len(df) < 30:
-            return {
-                'prediction': 'NEUTRAL',
-                'confidence': 0.50,
-                'method': 'fallback_insufficient_data',
-                'ml_score': 0.5,
-                'model_details': {}
-            }
-
-        df_features = self.create_features(df)
-        if len(df_features) < 60 or not self.feature_columns:
-            return {
-                'prediction': 'NEUTRAL',
-                'confidence': 0.50,
-                'method': 'fallback_feature_creation_failed',
-                'ml_score': 0.5,
-                'model_details': {}
-            }
-
-        # Son 60 satırı al, eksikse padding yap
-        features = df_features[self.feature_columns].values
-        seq_len = 60
-        if len(features) < seq_len:
-            pad_len = seq_len - len(features)
-            pad = np.zeros((pad_len, features.shape[1]))
-            features = np.vstack([pad, features])
-
-        recent_seq = features[-seq_len:].reshape(1, seq_len, -1)
-        predictions = []
-        confidences = []
-        model_details = {}
-
-        # LSTM tahmini
-        lstm_key = f"{symbol}_lstm"
-        if lstm_key in self.models and symbol in self.scalers:
-            try:
-                model = self.models[lstm_key]
-                model.eval()
-                scaler = self.scalers[symbol]
-                
-                recent_flat = recent_seq.reshape(-1, recent_seq.shape[-1])
-                recent_scaled = scaler.transform(recent_flat).reshape(recent_seq.shape)
-                recent_t = torch.FloatTensor(recent_scaled).to(self.device)
-                
-                with torch.no_grad():
-                    output = model(recent_t)
-                    prob = F.softmax(output, dim=1)[0].cpu().numpy()
-                    pred = int(np.argmax(prob))
-                    confidence = float(np.max(prob))
-                    
-                    predictions.append(pred)
-                    confidences.append(confidence)
-                    model_details['lstm'] = {
-                        'prediction': pred,
-                        'confidence': confidence,
-                        'probabilities': prob.tolist()
-                    }
-            except Exception as e:
-                logger.warning(f"LSTM prediction failed for {symbol}: {e}")
-
-        # Transformer tahmini (aynı mantıkla)
-        trans_key = f"{symbol}_transformer"
-        if trans_key in self.models and symbol in self.scalers:
-            try:
-                model = self.models[trans_key]
-                model.eval()
-                scaler = self.scalers[symbol]
-                
-                recent_flat = recent_seq.reshape(-1, recent_seq.shape[-1])
-                recent_scaled = scaler.transform(recent_flat).reshape(recent_seq.shape)
-                recent_t = torch.FloatTensor(recent_scaled).to(self.device)
-                
-                with torch.no_grad():
-                    output = model(recent_t)
-                    prob = F.softmax(output, dim=1)[0].cpu().numpy()
-                    pred = int(np.argmax(prob))
-                    confidence = float(np.max(prob))
-                    
-                    predictions.append(pred)
-                    confidences.append(confidence)
-                    model_details['transformer'] = {
-                        'prediction': pred,
-                        'confidence': confidence,
-                        'probabilities': prob.tolist()
-                    }
-            except Exception as e:
-                logger.warning(f"Transformer prediction failed for {symbol}: {e}")
-
-        # LightGBM tahmini
-        if symbol in self.lgb_models and symbol in self.scalers:
-            try:
-                model = self.lgb_models[symbol]
-                scaler = self.scalers[symbol]
-                
-                recent_flat = recent_seq.reshape(-1, recent_seq.shape[-1])
-                recent_scaled = scaler.transform(recent_flat)
-                recent_features = recent_scaled[-1:].reshape(1, -1)  # son satır
-                
-                prob = model.predict(recent_features)[0]
-                pred = int(np.argmax(prob))
-                confidence = float(np.max(prob))
-                
-                predictions.append(pred)
-                confidences.append(confidence)
-                model_details['lightgbm'] = {
-                    'prediction': pred,
-                    'confidence': confidence,
-                    'probabilities': prob.tolist()
+    def predict(self, symbol: str, df: pd.DataFrame) -> Dict:
+        """Generate predictions from all models - daha güvenli versiyon"""
+        try:
+            if df.empty or len(df) < 30:
+                return {
+                    'prediction': 'NEUTRAL',
+                    'confidence': 0.50,
+                    'method': 'fallback_insufficient_data',
+                    'ml_score': 0.5,
+                    'model_details': {}
                 }
-            except Exception as e:
-                logger.warning(f"LightGBM prediction failed for {symbol}: {e}")
 
-        # Ensemble
-        if not predictions:
+            df_features = self.create_features(df)
+            if len(df_features) < 60 or not self.feature_columns:
+                return {
+                    'prediction': 'NEUTRAL',
+                    'confidence': 0.50,
+                    'method': 'fallback_feature_creation_failed',
+                    'ml_score': 0.5,
+                    'model_details': {}
+                }
+
+            # Son 60 satırı al, eksikse padding yap
+            features = df_features[self.feature_columns].values
+            seq_len = 60
+            if len(features) < seq_len:
+                pad_len = seq_len - len(features)
+                pad = np.zeros((pad_len, features.shape[1]))
+                features = np.vstack([pad, features])
+
+            recent_seq = features[-seq_len:].reshape(1, seq_len, -1)
+            predictions = []
+            confidences = []
+            model_details = {}
+
+            # LSTM tahmini
+            lstm_key = f"{symbol}_lstm"
+            if lstm_key in self.models and symbol in self.scalers:
+                try:
+                    model = self.models[lstm_key]
+                    model.eval()
+                    scaler = self.scalers[symbol]
+                    
+                    recent_flat = recent_seq.reshape(-1, recent_seq.shape[-1])
+                    recent_scaled = scaler.transform(recent_flat).reshape(recent_seq.shape)
+                    recent_t = torch.FloatTensor(recent_scaled).to(self.device)
+                    
+                    with torch.no_grad():
+                        output = model(recent_t)
+                        prob = F.softmax(output, dim=1)[0].cpu().numpy()
+                        pred = int(np.argmax(prob))
+                        confidence = float(np.max(prob))
+                        
+                        predictions.append(pred)
+                        confidences.append(confidence)
+                        model_details['lstm'] = {
+                            'prediction': pred,
+                            'confidence': confidence,
+                            'probabilities': prob.tolist()
+                        }
+                except Exception as e:
+                    logger.warning(f"LSTM prediction failed for {symbol}: {e}")
+
+            # Transformer tahmini (aynı mantıkla)
+            trans_key = f"{symbol}_transformer"
+            if trans_key in self.models and symbol in self.scalers:
+                try:
+                    model = self.models[trans_key]
+                    model.eval()
+                    scaler = self.scalers[symbol]
+                    
+                    recent_flat = recent_seq.reshape(-1, recent_seq.shape[-1])
+                    recent_scaled = scaler.transform(recent_flat).reshape(recent_seq.shape)
+                    recent_t = torch.FloatTensor(recent_scaled).to(self.device)
+                    
+                    with torch.no_grad():
+                        output = model(recent_t)
+                        prob = F.softmax(output, dim=1)[0].cpu().numpy()
+                        pred = int(np.argmax(prob))
+                        confidence = float(np.max(prob))
+                        
+                        predictions.append(pred)
+                        confidences.append(confidence)
+                        model_details['transformer'] = {
+                            'prediction': pred,
+                            'confidence': confidence,
+                            'probabilities': prob.tolist()
+                        }
+                except Exception as e:
+                    logger.warning(f"Transformer prediction failed for {symbol}: {e}")
+
+            # LightGBM tahmini
+            if symbol in self.lgb_models and symbol in self.scalers:
+                try:
+                    model = self.lgb_models[symbol]
+                    scaler = self.scalers[symbol]
+                    
+                    recent_flat = recent_seq.reshape(-1, recent_seq.shape[-1])
+                    recent_scaled = scaler.transform(recent_flat)
+                    recent_features = recent_scaled[-1:].reshape(1, -1)  # son satır
+                    
+                    prob = model.predict(recent_features)[0]
+                    pred = int(np.argmax(prob))
+                    confidence = float(np.max(prob))
+                    
+                    predictions.append(pred)
+                    confidences.append(confidence)
+                    model_details['lightgbm'] = {
+                        'prediction': pred,
+                        'confidence': confidence,
+                        'probabilities': prob.tolist()
+                    }
+                except Exception as e:
+                    logger.warning(f"LightGBM prediction failed for {symbol}: {e}")
+
+            # Ensemble
+            if not predictions:
+                return {
+                    'prediction': 'NEUTRAL',
+                    'confidence': 0.50,
+                    'method': 'no_valid_models',
+                    'ml_score': 0.5,
+                    'model_details': {}
+                }
+
+            # En basit ensemble: çoğunluk + ağırlıklı güven
+            from collections import Counter
+            weighted_votes = []
+            for p, c in zip(predictions, confidences):
+                weighted_votes.extend([p] * int(c * 20))  # güveni oya çevir
+
+            if weighted_votes:
+                final_pred = Counter(weighted_votes).most_common(1)[0][0]
+                avg_conf = sum(confidences) / len(confidences)
+            else:
+                final_pred = 1  # neutral
+                avg_conf = 0.5
+
+            pred_map = {0: 'SELL', 1: 'NEUTRAL', 2: 'BUY'}
+            signal_str = pred_map.get(final_pred, 'NEUTRAL')
+
+            if avg_conf > 0.75:
+                if signal_str == 'BUY':   signal_str = 'STRONG_BUY'
+                if signal_str == 'SELL':  signal_str = 'STRONG_SELL'
+
             return {
-                'prediction': 'NEUTRAL',
-                'confidence': 0.50,
-                'method': 'no_valid_models',
-                'ml_score': 0.5,
-                'model_details': {}
+                'prediction': signal_str,
+                'confidence': float(avg_conf),
+                'method': 'ensemble',
+                'ml_score': float(final_pred),
+                'model_details': model_details
             }
 
-        # En basit ensemble: çoğunluk + ağırlıklı güven
-        from collections import Counter
-        weighted_votes = []
-        for p, c in zip(predictions, confidences):
-            weighted_votes.extend([p] * int(c * 20))  # güveni oya çevir
-
-        if weighted_votes:
-            final_pred = Counter(weighted_votes).most_common(1)[0][0]
-            avg_conf = sum(confidences) / len(confidences)
-        else:
-            final_pred = 1  # neutral
-            avg_conf = 0.5
-
-        pred_map = {0: 'SELL', 1: 'NEUTRAL', 2: 'BUY'}
-        signal_str = pred_map.get(final_pred, 'NEUTRAL')
-
-        if avg_conf > 0.75:
-            if signal_str == 'BUY':   signal_str = 'STRONG_BUY'
-            if signal_str == 'SELL':  signal_str = 'STRONG_SELL'
-
-        return {
-            'prediction': signal_str,
-            'confidence': float(avg_conf),
-            'method': 'ensemble',
-            'ml_score': float(final_pred),
-            'model_details': model_details
-        }
-
-    except Exception as e:
-        logger.error(f"Critical prediction error for {symbol}: {str(e)}", exc_info=True)
-        return {
-            'prediction': 'NEUTRAL',
-            'confidence': 0.40,
-            'method': 'error_fallback',
-            'ml_score': 0.5,
-            'error': str(e)
-        }
+        except Exception as e:
+            logger.error(f"Critical prediction error for {symbol}: {str(e)}", exc_info=True)
+            return {
+                'prediction': 'NEUTRAL',
+                'confidence': 0.40,
+                'method': 'error_fallback',
+                'ml_score': 0.5,
+                'error': str(e)
+            }
+    
     def get_feature_importance(self, symbol: str) -> Dict:
         """Get feature importance from LightGBM model"""
         if symbol not in self.lgb_models or self.feature_columns is None:
@@ -890,9 +881,6 @@ async def liveness_probe():
     return {"status": "alive", "timestamp": datetime.utcnow().isoformat()}
 
 # ========== PRICE DATA MODULE ==========
-
- 
-
 class PriceFetcher:
     """
     Profesyonel Çoklu Borsa Veri Toplayıcı
@@ -1528,7 +1516,6 @@ class PriceFetcher:
         if aggregated:
             sources = self.data_pool[cache_key]["sources"]
             logger.info(f"✅ {symbol} {interval}: {len(aggregated)} mum, {sources} borsadan aggregate edildi")
-            exchange_names = [ex["name"] for ex in self.EXCHANGES if ex["name"] == "CoinGecko"]
             if "CoinGecko" in [ex["name"] for ex in self.EXCHANGES]:
                 for ex in self.EXCHANGES:
                     if ex["name"] == "CoinGecko":
@@ -1611,71 +1598,6 @@ class PriceFetcher:
                     }
         
         return results
-
-
-# Test fonksiyonu
-async def test_price_fetcher():
-    """Test ve örnek kullanım"""
-    fetcher = PriceFetcher(max_cache_age=60)
-    
-    print("=" * 80)
-    print("PROFESYONEL FİYAT TOPLAYICI TEST")
-    print("=" * 80)
-    
-    # Sağlık kontrolü
-    print("\n1️⃣ Sağlık Kontrolü...")
-    health = await fetcher.health_check()
-    for exchange, status in health.items():
-        print(f"  {exchange}: {status}")
-    
-    # Tek sembol test
-    print("\n2️⃣ BTC/USDT - 1 Saatlik Test...")
-    candles = await fetcher.get_candles("BTCUSDT", "1h", 50)
-    if candles:
-        print(f"  ✅ {len(candles)} mum alındı")
-        print(f"  İlk mum: {datetime.fromtimestamp(candles[0]['timestamp']/1000)}")
-        print(f"  Son mum: {datetime.fromtimestamp(candles[-1]['timestamp']/1000)}")
-        print(f"  Son fiyat: ${candles[-1]['close']:.2f}")
-    
-    # Farklı timeframe'ler
-    print("\n3️⃣ Tüm Timeframe Testi...")
-    for tf in ["1m", "5m", "15m", "30m", "1h", "4h", "1D", "1W"]:
-        candles = await fetcher.get_candles("BTCUSDT", tf, 10)
-        status = f"✅ {len(candles)} mum" if candles else "❌ Başarısız"
-        print(f"  {tf:4s}: {status}")
-    
-    # Çoklu sembol
-    print("\n4️⃣ Çoklu Sembol Testi...")
-    multi = await fetcher.get_multiple_symbols(
-        ["BTCUSDT", "ETHUSDT", "SOLUSDT"],
-        "1h",
-        20
-    )
-    for sym, data in multi.items():
-        print(f"  {sym}: {len(data)} mum")
-    
-    # İstatistikler
-    print("\n5️⃣ İstatistikler:")
-    stats = fetcher.get_stats()
-    print(f"  Toplam istek: {stats['total_requests']}")
-    print(f"  Başarılı: {stats['successful_fetches']}")
-    print(f"  Başarısız: {stats['failed_fetches']}")
-    print(f"  Cache hit: {stats['cache_hits']}")
-    print(f"  Cache boyut: {stats['cache_size']}")
-    
-    # Test küçük coin (CoinGecko fallback testi)
-    print("\n6️⃣ Küçük Coin Testi (CoinGecko fallback)...")
-    small_coin = await fetcher.get_candles("AVAXUSDT", "1h", 10)
-    if small_coin:
-        print(f"  ✅ AVAX: {len(small_coin)} mum alındı")
-    
-    print("\n" + "=" * 80)
-    print("TEST TAMAMLANDI")
-    print("=" * 80)
-
-
- 
-    
 
 # ========== TECHNICAL INDICATORS ==========
 class TechnicalIndicators:
@@ -4020,13 +3942,73 @@ async def dashboard():
 </body>
 </html>
   """
+
+# ========== TEST FUNCTIONS ==========
+async def test_price_fetcher():
+    """Test and example usage"""
+    fetcher = PriceFetcher(max_cache_age=60)
+    
+    print("=" * 80)
+    print("PROFESSIONAL PRICE FETCHER TEST")
+    print("=" * 80)
+    
+    # Health check
+    print("\n1️⃣ Health Check...")
+    health = await fetcher.health_check()
+    for exchange, status in health.items():
+        print(f"  {exchange}: {status}")
+    
+    # Single symbol test
+    print("\n2️⃣ BTC/USDT - 1 Hour Test...")
+    candles = await fetcher.get_candles("BTCUSDT", "1h", 50)
+    if candles:
+        print(f"  ✅ {len(candles)} candles received")
+        print(f"  First candle: {datetime.fromtimestamp(candles[0]['timestamp']/1000)}")
+        print(f"  Last candle: {datetime.fromtimestamp(candles[-1]['timestamp']/1000)}")
+        print(f"  Last price: ${candles[-1]['close']:.2f}")
+    
+    # Multiple timeframes
+    print("\n3️⃣ All Timeframe Test...")
+    for tf in ["1m", "5m", "15m", "30m", "1h", "4h", "1D", "1W"]:
+        candles = await fetcher.get_candles("BTCUSDT", tf, 10)
+        status = f"✅ {len(candles)} candles" if candles else "❌ Failed"
+        print(f"  {tf:4s}: {status}")
+    
+    # Multiple symbols
+    print("\n4️⃣ Multiple Symbol Test...")
+    multi = await fetcher.get_multiple_symbols(
+        ["BTCUSDT", "ETHUSDT", "SOLUSDT"],
+        "1h",
+        20
+    )
+    for sym, data in multi.items():
+        print(f"  {sym}: {len(data)} candles")
+    
+    # Statistics
+    print("\n5️⃣ Statistics:")
+    stats = fetcher.get_stats()
+    print(f"  Total requests: {stats['total_requests']}")
+    print(f"  Successful: {stats['successful_fetches']}")
+    print(f"  Failed: {stats['failed_fetches']}")
+    print(f"  Cache hits: {stats['cache_hits']}")
+    print(f"  Cache size: {stats['cache_size']}")
+    
+    # Test small coin (CoinGecko fallback test)
+    print("\n6️⃣ Small Coin Test (CoinGecko fallback)...")
+    small_coin = await fetcher.get_candles("AVAXUSDT", "1h", 10)
+    if small_coin:
+        print(f"  ✅ AVAX: {len(small_coin)} candles received")
+    
+    print("\n" + "=" * 80)
+    print("TEST COMPLETED")
+    print("=" * 80)
+
+# ========== MAIN ENTRY POINT ==========
 if __name__ == "__main__":
     import uvicorn
     import signal
     import sys
     
-    # Test çalıştır
-    asyncio.run(test_price_fetcher())
     def signal_handler(sig, frame):
         logger.info("Shutdown signal received")
         sys.exit(0)
@@ -4045,4 +4027,4 @@ if __name__ == "__main__":
         port=port,
         log_level="info",
         access_log=True
-    )
+    )Bu kodda makina öğrenmesi ve tradingview varmı, eklenmiş mi chatbot varmı?
