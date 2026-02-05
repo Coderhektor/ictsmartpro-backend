@@ -18,6 +18,14 @@ import asyncio
 from typing import Dict, List, Optional, Tuple
 import aiohttp
 from enum import Enum
+import asyncio
+import aiohttp
+import logging
+from typing import List, Dict, Optional, Any
+from datetime import datetime
+import numpy as np
+from collections import defaultdict
+import time
 
 # Machine Learning Libraries
 import torch
@@ -882,90 +890,792 @@ async def liveness_probe():
     return {"status": "alive", "timestamp": datetime.utcnow().isoformat()}
 
 # ========== PRICE DATA MODULE ==========
+
+ 
+
 class PriceFetcher:
-    """Advanced price fetcher with multiple sources"""
-    
-    @staticmethod
-    async def fetch_binance_klines(symbol: str, interval: str = "1h", limit: int = 100) -> Optional[List[Dict]]:
-        """Fetch candlestick data from Binance"""
-        try:
-            async with aiohttp.ClientSession() as session:
-                url = f"https://api.binance.com/api/v3/klines"
-                params = {
-                    "symbol": symbol,
-                    "interval": interval,
-                    "limit": limit
-                }
-                async with session.get(url, params=params, timeout=10) as response:
-                    if response.status == 200:
-                        data = await response.json()
-                        candles = []
-                        for candle in data:
-                            candles.append({
-                                "timestamp": candle[0],
-                                "open": float(candle[1]),
-                                "high": float(candle[2]),
-                                "low": float(candle[3]),
-                                "close": float(candle[4]),
-                                "volume": float(candle[5])
-                            })
-                        return candles
-        except Exception as e:
-            logger.warning(f"Binance klines error for {symbol}: {e}")
-        return None
-    
-    @staticmethod
-    def generate_simulated_candles(symbol: str, count: int = 100) -> List[Dict]:
-        """Generate realistic simulated candlestick data"""
-        base_prices = {
-            "BTCUSDT": 45000,
-            "ETHUSDT": 2500,
-            "SOLUSDT": 100,
-            "XRPUSDT": 0.6,
-            "ADAUSDT": 0.45,
+    """
+    Profesyonel Çoklu Borsa Veri Toplayıcı
+    - Tüm timeframe'ler: 1m, 5m, 15m, 30m, 1h, 4h, 1D, 1W, 1M
+    - 10+ borsa desteği + CoinGecko fallback
+    - Aggregate havuz sistemi
+    - Sadece gerçek veriler, sentetik veri YOK
+    - Otomatik failover
+    - Smart caching
+    """
+
+    # Desteklenen tüm borsalar ve API detayları
+    EXCHANGES = [
+        {
+            "name": "Binance",
+            "priority": 1,  # En yüksek öncelik
+            "symbol_fmt": lambda s: s,
+            "endpoint": "https://api.binance.com/api/v3/klines",
+            "method": "GET",
+            "params_builder": lambda s, i, l: {
+                "symbol": s,
+                "interval": i,
+                "limit": l
+            }
+        },
+        {
+            "name": "Bybit",
+            "priority": 2,
+            "symbol_fmt": lambda s: s,
+            "endpoint": "https://api.bybit.com/v5/market/kline",
+            "method": "GET",
+            "params_builder": lambda s, i, l: {
+                "category": "spot",
+                "symbol": s,
+                "interval": i,
+                "limit": l
+            }
+        },
+        {
+            "name": "OKX",
+            "priority": 3,
+            "symbol_fmt": lambda s: s.replace("USDT", "-USDT"),
+            "endpoint": "https://www.okx.com/api/v5/market/candles",
+            "method": "GET",
+            "params_builder": lambda s, i, l: {
+                "instId": s,
+                "bar": i,
+                "limit": str(l)
+            }
+        },
+        {
+            "name": "KuCoin",
+            "priority": 4,
+            "symbol_fmt": lambda s: s.replace("USDT", "-USDT"),
+            "endpoint": "https://api.kucoin.com/api/v1/market/candles",
+            "method": "GET",
+            "params_builder": lambda s, i, l: {
+                "symbol": s,
+                "type": i
+            }
+        },
+        {
+            "name": "Gate.io",
+            "priority": 5,
+            "symbol_fmt": lambda s: s.replace("USDT", "_USDT"),
+            "endpoint": "https://api.gateio.ws/api/v4/spot/candlesticks",
+            "method": "GET",
+            "params_builder": lambda s, i, l: {
+                "currency_pair": s,
+                "interval": i,
+                "limit": l
+            }
+        },
+        {
+            "name": "MEXC",
+            "priority": 6,
+            "symbol_fmt": lambda s: s,
+            "endpoint": "https://api.mexc.com/api/v3/klines",
+            "method": "GET",
+            "params_builder": lambda s, i, l: {
+                "symbol": s,
+                "interval": i,
+                "limit": l
+            }
+        },
+        {
+            "name": "Kraken",
+            "priority": 7,
+            "symbol_fmt": lambda s: s.replace("USDT", "USD"),
+            "endpoint": "https://api.kraken.com/0/public/OHLC",
+            "method": "GET",
+            "params_builder": lambda s, i, l: {
+                "pair": s,
+                "interval": i
+            }
+        },
+        {
+            "name": "Bitfinex",
+            "priority": 8,
+            "symbol_fmt": lambda s: f"t{s.replace('USDT', 'UST')}",
+            "endpoint_builder": lambda s, i: f"https://api-pub.bitfinex.com/v2/candles/trade:{i}:{s}/hist",
+            "method": "GET",
+            "params_builder": lambda s, i, l: {
+                "limit": l
+            }
+        },
+        {
+            "name": "Huobi",
+            "priority": 9,
+            "symbol_fmt": lambda s: s.lower(),
+            "endpoint": "https://api.huobi.pro/market/history/kline",
+            "method": "GET",
+            "params_builder": lambda s, i, l: {
+                "symbol": s,
+                "period": i,
+                "size": l
+            }
+        },
+        {
+            "name": "Coinbase",
+            "priority": 10,
+            "symbol_fmt": lambda s: s.replace("USDT", "-USD"),
+            "endpoint_builder": lambda s, i: f"https://api.exchange.coinbase.com/products/{s}/candles",
+            "method": "GET",
+            "params_builder": lambda s, i, l: {
+                "granularity": i
+            }
+        },
+        {
+            "name": "CoinGecko",
+            "priority": 99,  # En son denenecek - fallback
+            "symbol_fmt": lambda s: s.replace("USDT", "").lower(),
+            "endpoint_builder": lambda s, i: f"https://api.coingecko.com/api/v3/coins/{s}/ohlc",
+            "method": "GET",
+            "params_builder": lambda s, i, l: {
+                "vs_currency": "usd",
+                "days": "max" if i in ["1D", "1W", "1M"] else "30"
+            }
+        }
+    ]
+
+    # Tüm timeframe mapping'leri - HER BORSA İÇİN
+    INTERVAL_MAPPING = {
+        "1m": {
+            "Binance": "1m",
+            "Bybit": "1",
+            "OKX": "1m",
+            "KuCoin": "1min",
+            "Gate.io": "1m",
+            "MEXC": "1m",
+            "Kraken": "1",
+            "Bitfinex": "1m",
+            "Huobi": "1min",
+            "Coinbase": "60",
+            "CoinGecko": "1m"  # CoinGecko 1m desteklemez, ama mapping'de olsun
+        },
+        "5m": {
+            "Binance": "5m",
+            "Bybit": "5",
+            "OKX": "5m",
+            "KuCoin": "5min",
+            "Gate.io": "5m",
+            "MEXC": "5m",
+            "Kraken": "5",
+            "Bitfinex": "5m",
+            "Huobi": "5min",
+            "Coinbase": "300",
+            "CoinGecko": "5m"  # CoinGecko 5m desteklemez
+        },
+        "15m": {
+            "Binance": "15m",
+            "Bybit": "15",
+            "OKX": "15m",
+            "KuCoin": "15min",
+            "Gate.io": "15m",
+            "MEXC": "15m",
+            "Kraken": "15",
+            "Bitfinex": "15m",
+            "Huobi": "15min",
+            "Coinbase": "900",
+            "CoinGecko": "15m"  # CoinGecko 15m desteklemez
+        },
+        "30m": {
+            "Binance": "30m",
+            "Bybit": "30",
+            "OKX": "30m",
+            "KuCoin": "30min",
+            "Gate.io": "30m",
+            "MEXC": "30m",
+            "Kraken": "30",
+            "Bitfinex": "30m",
+            "Huobi": "30min",
+            "Coinbase": "1800",
+            "CoinGecko": "30m"  # CoinGecko 30m desteklemez
+        },
+        "1h": {
+            "Binance": "1h",
+            "Bybit": "60",
+            "OKX": "1H",
+            "KuCoin": "1hour",
+            "Gate.io": "1h",
+            "MEXC": "1h",
+            "Kraken": "60",
+            "Bitfinex": "1h",
+            "Huobi": "60min",
+            "Coinbase": "3600",
+            "CoinGecko": "1h"
+        },
+        "4h": {
+            "Binance": "4h",
+            "Bybit": "240",
+            "OKX": "4H",
+            "KuCoin": "4hour",
+            "Gate.io": "4h",
+            "MEXC": "4h",
+            "Kraken": "240",
+            "Bitfinex": "4h",
+            "Huobi": "4hour",
+            "Coinbase": "14400",
+            "CoinGecko": "4h"
+        },
+        "1D": {
+            "Binance": "1d",
+            "Bybit": "D",
+            "OKX": "1D",
+            "KuCoin": "1day",
+            "Gate.io": "1d",
+            "MEXC": "1d",
+            "Kraken": "1440",
+            "Bitfinex": "1D",
+            "Huobi": "1day",
+            "Coinbase": "86400",
+            "CoinGecko": "1"
+        },
+        "1W": {
+            "Binance": "1w",
+            "Bybit": "W",
+            "OKX": "1W",
+            "KuCoin": "1week",
+            "Gate.io": "1w",
+            "MEXC": "1w",
+            "Kraken": "10080",
+            "Bitfinex": "1W",
+            "Huobi": "1week",
+            "Coinbase": "604800",
+            "CoinGecko": "7"
+        },
+        "1M": {
+            "Binance": "1M",
+            "Bybit": "M",
+            "OKX": "1M",
+            "KuCoin": "1month",
+            "Gate.io": "1M",
+            "MEXC": "1M",
+            "Kraken": "43200",  # 30 gün
+            "Bitfinex": "1M",
+            "Huobi": "1mon",
+            "Coinbase": "2592000",
+            "CoinGecko": "30"
+        }
+    }
+
+    def __init__(self, max_cache_age: int = 60):
+        """
+        Args:
+            max_cache_age: Cache süresi (saniye), varsayılan 60s
+        """
+        # Havuz sistemi: {symbol}_{interval} -> {data, timestamp, sources}
+        self.data_pool: Dict[str, Dict] = {}
+        self.max_cache_age = max_cache_age
+        
+        # İstatistikler
+        self.stats = {
+            "total_requests": 0,
+            "successful_fetches": 0,
+            "failed_fetches": 0,
+            "cache_hits": 0,
+            "exchange_stats": defaultdict(lambda: {"success": 0, "fail": 0})
         }
         
-        base_price = base_prices.get(symbol, 100)
-        candles = []
-        current_price = base_price
+        logger.info("PriceFetcher başlatıldı - Sadece gerçek veri modu")
+
+    def _get_exchange_interval(self, exchange_name: str, interval: str) -> str:
+        """Borsa-spesifik interval formatını al"""
+        return self.INTERVAL_MAPPING.get(interval, {}).get(exchange_name, interval)
+
+    async def _fetch_single_exchange(
+        self, 
+        session: aiohttp.ClientSession,
+        exchange: Dict,
+        symbol: str,
+        interval: str,
+        limit: int
+    ) -> Optional[List[Dict]]:
+        """Tek bir borsadan veri çek"""
+        exchange_name = exchange["name"]
         
-        for i in range(count):
-            # Realistic price movement
-            change = random.uniform(-0.03, 0.03)
-            open_price = current_price
-            close_price = current_price * (1 + change)
+        # CoinGecko kısa timeframe desteklemiyorsa baştan atla
+        if exchange_name == "CoinGecko" and interval not in ["1h", "4h", "1D", "1W", "1M"]:
+            logger.info(f"{exchange_name}: {interval} desteklenmiyor → atlanıyor")
+            return None
+        
+        try:
+            # Sembol formatını düzenle
+            formatted_symbol = exchange["symbol_fmt"](symbol)
             
-            high_price = max(open_price, close_price) * (1 + random.uniform(0, 0.015))
-            low_price = min(open_price, close_price) * (1 - random.uniform(0, 0.015))
+            # Exchange-specific interval
+            exchange_interval = self._get_exchange_interval(exchange_name, interval)
             
-            candles.append({
-                "timestamp": int((datetime.utcnow() - timedelta(hours=count-i)).timestamp() * 1000),
-                "open": round(open_price, 4),
-                "high": round(high_price, 4),
-                "low": round(low_price, 4),
-                "close": round(close_price, 4),
-                "volume": random.uniform(1000, 10000)
-            })
+            # Endpoint oluştur
+            if "endpoint_builder" in exchange:
+                endpoint = exchange["endpoint_builder"](formatted_symbol, exchange_interval)
+            else:
+                endpoint = exchange["endpoint"]
             
-            current_price = close_price
+            # Parametreleri oluştur
+            params = exchange["params_builder"](
+                formatted_symbol,
+                exchange_interval,
+                limit
+            )
+            
+            # İstek gönder
+            async with session.get(
+                endpoint,
+                params=params,
+                timeout=aiohttp.ClientTimeout(total=10)
+            ) as response:
+                
+                if response.status in (400, 404):
+                    logger.info(f"{exchange_name}: {symbol} çifti bulunamadı (HTTP {response.status}) → atlanıyor")
+                    self.stats["exchange_stats"][exchange_name]["fail"] += 1
+                    return None
+                    
+                if response.status != 200:
+                    logger.warning(f"{exchange_name}: HTTP {response.status}")
+                    self.stats["exchange_stats"][exchange_name]["fail"] += 1
+                    return None
+                
+                data = await response.json()
+                
+                # Parse et
+                candles = self._parse_exchange_data(exchange_name, data, symbol)
+                
+                if candles and len(candles) > 0:
+                    logger.info(f"✅ {exchange_name}: {len(candles)} mum alındı ({symbol} {interval})")
+                    self.stats["exchange_stats"][exchange_name]["success"] += 1
+                    self.stats["successful_fetches"] += 1
+                    return candles
+                else:
+                    logger.warning(f"{exchange_name}: Parse başarısız")
+                    self.stats["exchange_stats"][exchange_name]["fail"] += 1
+                    return None
+                    
+        except asyncio.TimeoutError:
+            logger.warning(f"{exchange_name}: Timeout")
+            self.stats["exchange_stats"][exchange_name]["fail"] += 1
+        except Exception as e:
+            if "not found" in str(e).lower() or "invalid" in str(e).lower():
+                logger.info(f"{exchange_name}: {symbol} desteklenmiyor → atlanıyor")
+            else:
+                logger.debug(f"{exchange_name}: Hata - {str(e)[:100]}")
+            self.stats["exchange_stats"][exchange_name]["fail"] += 1
+        
+        self.stats["failed_fetches"] += 1
+        return None
+
+    def _parse_exchange_data(self, exchange_name: str, data: Any, symbol: str) -> List[Dict]:
+        """Borsa-spesifik veriyi ortak formata parse et"""
+        candles = []
+        
+        try:
+            if exchange_name == "Binance":
+                # [[timestamp, open, high, low, close, volume, ...], ...]
+                for row in data:
+                    candles.append({
+                        "timestamp": int(row[0]),
+                        "open": float(row[1]),
+                        "high": float(row[2]),
+                        "low": float(row[3]),
+                        "close": float(row[4]),
+                        "volume": float(row[5])
+                    })
+            
+            elif exchange_name == "Bybit":
+                if isinstance(data, dict) and "result" in data:
+                    result = data["result"]
+                    if isinstance(result, dict) and "list" in result:
+                        for row in result["list"]:
+                            candles.append({
+                                "timestamp": int(row[0]),
+                                "open": float(row[1]),
+                                "high": float(row[2]),
+                                "low": float(row[3]),
+                                "close": float(row[4]),
+                                "volume": float(row[5])
+                            })
+            
+            elif exchange_name == "OKX":
+                if isinstance(data, dict) and "data" in data:
+                    for row in data["data"]:
+                        candles.append({
+                            "timestamp": int(row[0]),
+                            "open": float(row[1]),
+                            "high": float(row[2]),
+                            "low": float(row[3]),
+                            "close": float(row[4]),
+                            "volume": float(row[5])
+                        })
+            
+            elif exchange_name == "KuCoin":
+                if isinstance(data, dict) and "data" in data:
+                    for row in data["data"]:
+                        candles.append({
+                            "timestamp": int(row[0]) * 1000,  # Saniye -> milisaniye
+                            "open": float(row[1]),
+                            "close": float(row[2]),
+                            "high": float(row[3]),
+                            "low": float(row[4]),
+                            "volume": float(row[5])
+                        })
+            
+            elif exchange_name == "Gate.io":
+                if isinstance(data, list):
+                    for row in data:
+                        candles.append({
+                            "timestamp": int(row[0]) * 1000,  # Saniye -> milisaniye
+                            "open": float(row[5]),
+                            "high": float(row[3]),
+                            "low": float(row[4]),
+                            "close": float(row[2]),
+                            "volume": float(row[1])
+                        })
+            
+            elif exchange_name == "MEXC":
+                for row in data:
+                    candles.append({
+                        "timestamp": int(row[0]),
+                        "open": float(row[1]),
+                        "high": float(row[2]),
+                        "low": float(row[3]),
+                        "close": float(row[4]),
+                        "volume": float(row[5])
+                    })
+            
+            elif exchange_name == "Kraken":
+                if isinstance(data, dict) and "result" in data:
+                    # İlk anahtar pair ismi
+                    pair_key = list(data["result"].keys())[0]
+                    for row in data["result"][pair_key]:
+                        candles.append({
+                            "timestamp": int(row[0]) * 1000,
+                            "open": float(row[1]),
+                            "high": float(row[2]),
+                            "low": float(row[3]),
+                            "close": float(row[4]),
+                            "volume": float(row[6])
+                        })
+            
+            elif exchange_name == "Bitfinex":
+                if isinstance(data, list):
+                    for row in data:
+                        candles.append({
+                            "timestamp": int(row[0]),
+                            "open": float(row[1]),
+                            "close": float(row[2]),
+                            "high": float(row[3]),
+                            "low": float(row[4]),
+                            "volume": float(row[5])
+                        })
+            
+            elif exchange_name == "Huobi":
+                if isinstance(data, dict) and "data" in data:
+                    for row in data["data"]:
+                        candles.append({
+                            "timestamp": int(row["id"]) * 1000,
+                            "open": float(row["open"]),
+                            "high": float(row["high"]),
+                            "low": float(row["low"]),
+                            "close": float(row["close"]),
+                            "volume": float(row["vol"])
+                        })
+            
+            elif exchange_name == "Coinbase":
+                if isinstance(data, list):
+                    for row in data:
+                        candles.append({
+                            "timestamp": int(row[0]) * 1000,
+                            "low": float(row[1]),
+                            "high": float(row[2]),
+                            "open": float(row[3]),
+                            "close": float(row[4]),
+                            "volume": float(row[5])
+                        })
+            
+            elif exchange_name == "CoinGecko":
+                if isinstance(data, list):
+                    for row in data:
+                        # [timestamp_ms, open, high, low, close]
+                        candles.append({
+                            "timestamp": int(row[0]),  # zaten ms
+                            "open": float(row[1]),
+                            "high": float(row[2]),
+                            "low": float(row[3]),
+                            "close": float(row[4]),
+                            "volume": 0.0  # CoinGecko OHLC endpoint volume vermiyor
+                        })
+            
+            # Timestamp'e göre sırala (en eski -> en yeni)
+            candles.sort(key=lambda x: x["timestamp"])
+            
+        except Exception as e:
+            logger.error(f"{exchange_name} parse hatası: {e}")
+            return []
         
         return candles
+
+    def _aggregate_candles(self, all_candles: List[List[Dict]]) -> List[Dict]:
+        """Farklı borsalardan gelen mumları birleştir ve ortala"""
+        if not all_candles:
+            return []
+        
+        # Tüm timestamp'leri topla
+        timestamp_data = defaultdict(list)
+        
+        for exchange_candles in all_candles:
+            for candle in exchange_candles:
+                timestamp_data[candle["timestamp"]].append(candle)
+        
+        # Her timestamp için ortalama al
+        aggregated = []
+        for timestamp in sorted(timestamp_data.keys()):
+            candles_at_ts = timestamp_data[timestamp]
+            
+            if len(candles_at_ts) == 1:
+                # Tek kaynak varsa direkt kullan
+                aggregated.append(candles_at_ts[0])
+            else:
+                # Birden fazla kaynak varsa ortala
+                aggregated.append({
+                    "timestamp": timestamp,
+                    "open": np.mean([c["open"] for c in candles_at_ts]),
+                    "high": np.max([c["high"] for c in candles_at_ts]),  # En yüksek high
+                    "low": np.min([c["low"] for c in candles_at_ts]),    # En düşük low
+                    "close": np.mean([c["close"] for c in candles_at_ts]),
+                    "volume": np.sum([c["volume"] for c in candles_at_ts]),  # Volume topla
+                    "source_count": len(candles_at_ts)  # Kaç kaynaktan geldi
+                })
+        
+        return aggregated
+
+    async def get_candles(
+        self,
+        symbol: str,
+        interval: str = "1h",
+        limit: int = 100,
+        force_refresh: bool = False
+    ) -> List[Dict]:
+        """
+        Ana fonksiyon: Mumları al (cache'den veya borsalardan)
+        
+        Args:
+            symbol: İşlem çifti (örn: BTCUSDT)
+            interval: Zaman dilimi (1m, 5m, 15m, 30m, 1h, 4h, 1D, 1W, 1M)
+            limit: Kaç mum isteniyor
+            force_refresh: Cache'i atla, zorla yenile
+        
+        Returns:
+            Mum listesi, en eski -> en yeni sıralı
+        """
+        self.stats["total_requests"] += 1
+        cache_key = f"{symbol}_{interval}"
+        
+        # Cache kontrolü
+        if not force_refresh and cache_key in self.data_pool:
+            cached = self.data_pool[cache_key]
+            age = time.time() - cached["timestamp"]
+            
+            if age < self.max_cache_age:
+                logger.info(f"📦 Cache hit: {symbol} {interval} (yaş: {age:.1f}s)")
+                self.stats["cache_hits"] += 1
+                return cached["data"][-limit:]
+        
+        # Cache yoksa veya eski, yeni veri çek
+        logger.info(f"🔄 Veri çekiliyor: {symbol} {interval} ({limit} mum)")
+        
+        # Ekstra mum çek (cache için), minimum 200
+        fetch_limit = max(limit * 2, 200)
+        
+        # Tüm borsalardan paralel çek
+        async with aiohttp.ClientSession() as session:
+            tasks = []
+            for exchange in sorted(self.EXCHANGES, key=lambda x: x["priority"]):
+                task = self._fetch_single_exchange(
+                    session,
+                    exchange,
+                    symbol,
+                    interval,
+                    fetch_limit
+                )
+                tasks.append(task)
+            
+            results = await asyncio.gather(*tasks, return_exceptions=True)
+        
+        # Başarılı sonuçları filtrele
+        valid_results = [
+            r for r in results 
+            if r is not None and not isinstance(r, Exception) and len(r) > 0
+        ]
+        
+        if not valid_results:
+            logger.error(f"❌ TÜM BORSALAR BAŞARISIZ: {symbol} {interval}")
+            logger.error("Sentetik veri kullanılamaz! Lütfen internet bağlantınızı kontrol edin.")
+            return []
+        
+        # Verileri aggregate et
+        aggregated = self._aggregate_candles(valid_results)
+        
+        if not aggregated:
+            logger.error(f"❌ Aggregate başarısız: {symbol} {interval}")
+            return []
+        
+        # Cache'e kaydet
+        self.data_pool[cache_key] = {
+            "data": aggregated,
+            "timestamp": time.time(),
+            "sources": len(valid_results),
+            "symbol": symbol,
+            "interval": interval
+        }
+        
+        # Log detayları
+        if aggregated:
+            sources = self.data_pool[cache_key]["sources"]
+            logger.info(f"✅ {symbol} {interval}: {len(aggregated)} mum, {sources} borsadan aggregate edildi")
+            exchange_names = [ex["name"] for ex in self.EXCHANGES if ex["name"] == "CoinGecko"]
+            if "CoinGecko" in [ex["name"] for ex in self.EXCHANGES]:
+                for ex in self.EXCHANGES:
+                    if ex["name"] == "CoinGecko":
+                        if any("CoinGecko" in str(result) for result in valid_results):
+                            logger.info("  (CoinGecko'dan veri kullanıldı – bazı borsalarda coin bulunamadı)")
+        
+        return aggregated[-limit:]
+
+    async def get_multiple_symbols(
+        self,
+        symbols: List[str],
+        interval: str = "1h",
+        limit: int = 100
+    ) -> Dict[str, List[Dict]]:
+        """Birden fazla sembol için paralel veri çek"""
+        tasks = {
+            symbol: self.get_candles(symbol, interval, limit)
+            for symbol in symbols
+        }
+        
+        results = await asyncio.gather(*tasks.values())
+        
+        return {
+            symbol: result
+            for symbol, result in zip(tasks.keys(), results)
+        }
+
+    def get_stats(self) -> Dict:
+        """İstatistikleri döndür"""
+        return {
+            **self.stats,
+            "cache_size": len(self.data_pool),
+            "cache_symbols": list(self.data_pool.keys())
+        }
+
+    def clear_cache(self, symbol: str = None, interval: str = None):
+        """Cache'i temizle"""
+        if symbol and interval:
+            cache_key = f"{symbol}_{interval}"
+            if cache_key in self.data_pool:
+                del self.data_pool[cache_key]
+                logger.info(f"Cache temizlendi: {cache_key}")
+        elif symbol:
+            # Sembolün tüm interval'lerini temizle
+            keys_to_delete = [k for k in self.data_pool.keys() if k.startswith(f"{symbol}_")]
+            for key in keys_to_delete:
+                del self.data_pool[key]
+            logger.info(f"{len(keys_to_delete)} cache entry silindi ({symbol})")
+        else:
+            # Tümünü temizle
+            self.data_pool.clear()
+            logger.info("Tüm cache temizlendi")
+
+    async def health_check(self) -> Dict[str, Any]:
+        """Sistem sağlık kontrolü"""
+        results = {}
+        
+        async with aiohttp.ClientSession() as session:
+            for exchange in self.EXCHANGES[:3]:  # İlk 3 borsa test et
+                try:
+                    start = time.time()
+                    candles = await self._fetch_single_exchange(
+                        session,
+                        exchange,
+                        "BTCUSDT",
+                        "1h",
+                        10
+                    )
+                    elapsed = time.time() - start
+                    
+                    results[exchange["name"]] = {
+                        "status": "OK" if candles else "FAIL",
+                        "response_time": f"{elapsed:.2f}s",
+                        "candles": len(candles) if candles else 0
+                    }
+                except Exception as e:
+                    results[exchange["name"]] = {
+                        "status": "ERROR",
+                        "error": str(e)
+                    }
+        
+        return results
+
+
+# Test fonksiyonu
+async def test_price_fetcher():
+    """Test ve örnek kullanım"""
+    fetcher = PriceFetcher(max_cache_age=60)
     
-    @staticmethod
-    async def get_candles(symbol: str, interval: str = "1h", limit: int = 100) -> List[Dict]:
-        """Get candlestick data (real or simulated)"""
-        sym = symbol.upper().strip()
-        
-        # Try real data for crypto
-        if sym.endswith("USDT"):
-            real_data = await PriceFetcher.fetch_binance_klines(sym, interval, limit)
-            if real_data:
-                logger.info(f"✅ Real data fetched for {sym}: {len(real_data)} candles")
-                return real_data
-        
-        # Fallback: simulated data
-        logger.info(f"📊 Using simulated data for {sym}")
-        return PriceFetcher.generate_simulated_candles(sym, limit)
+    print("=" * 80)
+    print("PROFESYONEL FİYAT TOPLAYICI TEST")
+    print("=" * 80)
+    
+    # Sağlık kontrolü
+    print("\n1️⃣ Sağlık Kontrolü...")
+    health = await fetcher.health_check()
+    for exchange, status in health.items():
+        print(f"  {exchange}: {status}")
+    
+    # Tek sembol test
+    print("\n2️⃣ BTC/USDT - 1 Saatlik Test...")
+    candles = await fetcher.get_candles("BTCUSDT", "1h", 50)
+    if candles:
+        print(f"  ✅ {len(candles)} mum alındı")
+        print(f"  İlk mum: {datetime.fromtimestamp(candles[0]['timestamp']/1000)}")
+        print(f"  Son mum: {datetime.fromtimestamp(candles[-1]['timestamp']/1000)}")
+        print(f"  Son fiyat: ${candles[-1]['close']:.2f}")
+    
+    # Farklı timeframe'ler
+    print("\n3️⃣ Tüm Timeframe Testi...")
+    for tf in ["1m", "5m", "15m", "30m", "1h", "4h", "1D", "1W"]:
+        candles = await fetcher.get_candles("BTCUSDT", tf, 10)
+        status = f"✅ {len(candles)} mum" if candles else "❌ Başarısız"
+        print(f"  {tf:4s}: {status}")
+    
+    # Çoklu sembol
+    print("\n4️⃣ Çoklu Sembol Testi...")
+    multi = await fetcher.get_multiple_symbols(
+        ["BTCUSDT", "ETHUSDT", "SOLUSDT"],
+        "1h",
+        20
+    )
+    for sym, data in multi.items():
+        print(f"  {sym}: {len(data)} mum")
+    
+    # İstatistikler
+    print("\n5️⃣ İstatistikler:")
+    stats = fetcher.get_stats()
+    print(f"  Toplam istek: {stats['total_requests']}")
+    print(f"  Başarılı: {stats['successful_fetches']}")
+    print(f"  Başarısız: {stats['failed_fetches']}")
+    print(f"  Cache hit: {stats['cache_hits']}")
+    print(f"  Cache boyut: {stats['cache_size']}")
+    
+    # Test küçük coin (CoinGecko fallback testi)
+    print("\n6️⃣ Küçük Coin Testi (CoinGecko fallback)...")
+    small_coin = await fetcher.get_candles("AVAXUSDT", "1h", 10)
+    if small_coin:
+        print(f"  ✅ AVAX: {len(small_coin)} mum alındı")
+    
+    print("\n" + "=" * 80)
+    print("TEST TAMAMLANDI")
+    print("=" * 80)
+
+
+ 
+    
 
 # ========== TECHNICAL INDICATORS ==========
 class TechnicalIndicators:
@@ -3315,6 +4025,8 @@ if __name__ == "__main__":
     import signal
     import sys
     
+    # Test çalıştır
+    asyncio.run(test_price_fetcher())
     def signal_handler(sig, frame):
         logger.info("Shutdown signal received")
         sys.exit(0)
