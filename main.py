@@ -493,7 +493,7 @@ class AITradingEngine:
                 'model_details': {}
             }
 
-        df_features = self.create_features(df)
+df_features = self.create_features(df)
         if len(df_features) < 60 or not self.feature_columns:
             return {
                 'prediction': 'NEUTRAL',
