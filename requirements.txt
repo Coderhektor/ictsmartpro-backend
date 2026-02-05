@@ -29,6 +29,7 @@ loguru>=0.7.2
 aiocache>=0.12.1
 pydantic>=2.9.0
 psutil>=6.0.0
+lightgbm>=4.0.0
 
 # Opsiyonel ama faydalı
 redis>=5.0.1
