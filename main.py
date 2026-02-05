@@ -2750,6 +2750,7 @@ async def dashboard():
     </script>
 </body>
 </html>
+  """
 if __name__ == "__main__":
     import uvicorn
     import signal
