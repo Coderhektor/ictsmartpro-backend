@@ -2302,6 +2302,23 @@ async def dashboard():
                                         <h1 id="currentPrice" class="display-4 fw-bold">$45,231.50</h1>
                                         <p id="priceChange" class="fs-5"><i class="fas fa-arrow-up text-success"></i> +2.34% (24h)</p>
                                     </div>
+                                    <!-- Mevcut signal card'ın kapanışından hemen sonra ekle -->
+ 
+
+<div class="col-md-12 mb-4">
+    <div class="card">
+        <div class="card-body p-0">  <!-- padding'i sıfırladık ki grafik tam otursun -->
+            <div class="tradingview-widget-container" style="height: 500px; width: 100%;">
+                <div id="tradingview_chart"></div>
+                <div class="tradingview-widget-copyright">
+                    <a href="https://www.tradingview.com/" rel="noopener nofollow" target="_blank">
+                        <span class="blue-text">Track all markets on TradingView</span>
+                    </a>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
                                     <div class="col-md-4">
                                         <div class="p-4 rounded" id="signalIndicator">
                                             <h2 class="mb-3">NEUTRAL</h2>
@@ -2525,6 +2542,55 @@ async def dashboard():
                 document.getElementById('signalCard').classList.remove('pulse');
             }
         }
+        <!-- Script'i body sonuna veya head'e koy (bir kere olsun) -->
+<script type="text/javascript">
+function loadTradingViewWidget(symbol = "BTCUSDT", interval = "60") {
+    const container = document.getElementById("tradingview_chart");
+    if (!container) return;
+
+    // Eski widget varsa temizle
+    container.innerHTML = '';
+
+    const script = document.createElement("script");
+    script.type = "text/javascript";
+    script.src = "https://s3.tradingview.com/external-embedding/embed-widget-advanced-chart.js";
+    script.async = true;
+
+    const config = {
+        "autosize": true,
+        "symbol": `BINANCE:${symbol.replace('USDT', 'USDT')}`,
+        "interval": interval === "1h" ? "60" : interval === "4h" ? "240" : "D",
+        "timezone": "Etc/UTC",
+        "theme": "dark",
+        "style": "1",
+        "locale": "en",
+        "toolbar_bg": "#f1f3f6",
+        "enable_publishing": false,
+        "allow_symbol_change": true,
+        "calendar": false,
+        "support_host": "https://www.tradingview.com"
+    };
+
+    script.text = JSON.stringify(config);
+    container.appendChild(script);
+}
+
+// Sayfa yüklendiğinde ve sembol değiştiğinde çağır
+document.addEventListener('DOMContentLoaded', () => {
+    const symbol = document.getElementById('symbolSelect')?.value || "BTCUSDT";
+    const interval = document.getElementById('intervalSelect')?.value || "1h";
+    loadTradingViewWidget(symbol, interval === "1h" ? "60" : interval === "4h" ? "240" : "D");
+});
+
+// analyzeSymbol fonksiyonunun sonuna ekle
+// async function analyzeSymbol() { ... mevcut kod ...
+loadTradingViewWidget(symbol, interval === "1h" ? "60" : interval === "4h" ? "240" : "D");
+// }
+</script>
+
+ 
+
+
 
         // Update dashboard with analysis data
         function updateDashboard(data) {
