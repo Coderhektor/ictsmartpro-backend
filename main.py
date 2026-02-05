@@ -481,7 +481,7 @@ class AITradingEngine:
         except Exception as e:
             logger.error(f"Error training Transformer for {symbol}: {str(e)}")
     
-   def predict(self, symbol: str, df: pd.DataFrame) -> Dict:
+def predict(self, symbol: str, df: pd.DataFrame) -> Dict:
     """Generate predictions from all models - daha güvenli versiyon"""
     try:
         if df.empty or len(df) < 30:
