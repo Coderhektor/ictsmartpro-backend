@@ -2109,8 +2109,8 @@ def health():
     @app.get("/dashboard", response_class=HTMLResponse)
 
     async def dashboard():
-    """Trading Dashboard"""
-    return """
+        """Trading Dashboard"""
+        return """
     <!DOCTYPE html>
     <html>
     <head>
