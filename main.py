@@ -2059,6 +2059,8 @@ async def dashboard():
     """Main trading dashboard"""
     return """
    
+# HTML Template
+HTML_TEMPLATE = """
 <!DOCTYPE html>
 <html lang="en">
 <head>
@@ -2069,167 +2071,559 @@ async def dashboard():
     <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
     <style>
         :root {
-            --primary-color: #2563eb;
-            --success-color: #10b981;
-            --danger-color: #ef4444;
-            --warning-color: #f59e0b;
-            --dark-bg: #0f172a;
-            --card-bg: #1e293b;
-            --text-light: #f8fafc;
+            /* Canlı ve Modern Renkler */
+            --primary-blue: #3b82f6;
+            --primary-blue-light: #60a5fa;
+            --success-green: #22c55e;
+            --success-green-light: #4ade80;
+            --danger-red: #ef4444;
+            --danger-red-light: #f87171;
+            --warning-yellow: #facc15;
+            --warning-orange: #fb923c;
+            --purple: #a855f7;
+            --cyan: #06b6d4;
+            
+            /* Arka Plan Renkleri */
+            --bg-dark: #0a0e27;
+            --bg-card: #1a1f3a;
+            --bg-card-hover: #252b4a;
+            --bg-light: #2d3454;
+            
+            /* Yazı Renkleri */
+            --text-white: #ffffff;
+            --text-gray-light: #e2e8f0;
+            --text-gray: #94a3b8;
+            --text-gray-dark: #64748b;
+            
+            /* Gradyanlar */
+            --gradient-blue: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            --gradient-green: linear-gradient(135deg, #22c55e 0%, #10b981 100%);
+            --gradient-red: linear-gradient(135deg, #f43f5e 0%, #dc2626 100%);
+            --gradient-yellow: linear-gradient(135deg, #fbbf24 0%, #f59e0b 100%);
+        }
+        
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
         }
         
         body {
-            background-color: var(--dark-bg);
-            color: var(--text-light);
-            font-family: 'Segoe UI', system-ui, sans-serif;
+            background: linear-gradient(135deg, #0a0e27 0%, #1a1f3a 100%);
+            color: var(--text-white);
+            font-family: 'Inter', 'Segoe UI', system-ui, -apple-system, sans-serif;
+            min-height: 100vh;
         }
         
+        /* Navbar Styling */
         .navbar {
-            background-color: rgba(15, 23, 42, 0.95);
-            backdrop-filter: blur(10px);
-            border-bottom: 1px solid rgba(255, 255, 255, 0.1);
+            background: rgba(26, 31, 58, 0.95);
+            backdrop-filter: blur(20px);
+            border-bottom: 2px solid rgba(59, 130, 246, 0.3);
+            box-shadow: 0 8px 32px rgba(0, 0, 0, 0.3);
+            padding: 1rem 0;
         }
         
-        .card {
-            background-color: var(--card-bg);
-            border: 1px solid rgba(255, 255, 255, 0.1);
-            border-radius: 12px;
-            box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
-            transition: transform 0.3s ease;
+        .navbar-brand {
+            font-size: 1.5rem;
+            font-weight: 700;
+            color: var(--text-white) !important;
+            letter-spacing: -0.5px;
         }
         
-        .card:hover {
-            transform: translateY(-2px);
+        .navbar-brand i {
+            color: var(--primary-blue);
+            animation: rotate 3s linear infinite;
         }
         
-        .signal-buy {
-            background: linear-gradient(135deg, #10b981 0%, #047857 100%);
-            color: white;
+        @keyframes rotate {
+            from { transform: rotate(0deg); }
+            to { transform: rotate(360deg); }
         }
         
-        .signal-sell {
-            background: linear-gradient(135deg, #ef4444 0%, #b91c1c 100%);
-            color: white;
-        }
-        
-        .signal-neutral {
-            background: linear-gradient(135deg, #6b7280 0%, #4b5563 100%);
-            color: white;
-        }
-        
+        /* Status Indicator */
         .status-indicator {
-            width: 10px;
-            height: 10px;
+            width: 12px;
+            height: 12px;
             border-radius: 50%;
             display: inline-block;
             margin-right: 8px;
+            position: relative;
         }
         
         .status-online {
-            background-color: var(--success-color);
-            box-shadow: 0 0 10px var(--success-color);
+            background: var(--success-green);
+            box-shadow: 0 0 20px var(--success-green);
+            animation: pulse-glow 2s infinite;
         }
         
-        .chart-container {
-            height: 300px;
-            background: rgba(255, 255, 255, 0.05);
-            border-radius: 8px;
-            padding: 20px;
+        @keyframes pulse-glow {
+            0%, 100% {
+                box-shadow: 0 0 20px var(--success-green);
+            }
+            50% {
+                box-shadow: 0 0 30px var(--success-green), 0 0 40px var(--success-green-light);
+            }
         }
         
-        .refresh-btn {
-            background: var(--primary-color);
-            border: none;
-            border-radius: 8px;
-            padding: 8px 16px;
-            color: white;
-            cursor: pointer;
-            transition: opacity 0.3s;
-        }
-        
-        .refresh-btn:hover {
-            opacity: 0.9;
-        }
-        
-        .chat-container {
-            height: 400px;
-            overflow-y: auto;
-            background: rgba(255, 255, 255, 0.03);
-            border-radius: 8px;
-            padding: 15px;
-        }
-        
-        .chat-message {
-            margin-bottom: 15px;
-            padding: 10px 15px;
-            border-radius: 10px;
-            max-width: 80%;
-        }
-        
-        .chat-user {
-            background: var(--primary-color);
-            margin-left: auto;
-        }
-        
-        .chat-bot {
-            background: var(--card-bg);
+        /* Card Styling */
+        .card {
+            background: var(--bg-card);
             border: 1px solid rgba(255, 255, 255, 0.1);
+            border-radius: 16px;
+            box-shadow: 0 8px 32px rgba(0, 0, 0, 0.2);
+            transition: all 0.3s ease;
+            overflow: hidden;
+        }
+        
+        .card:hover {
+            transform: translateY(-4px);
+            box-shadow: 0 12px 40px rgba(59, 130, 246, 0.2);
+            border-color: rgba(59, 130, 246, 0.3);
+        }
+        
+        .card-title {
+            color: var(--text-white);
+            font-weight: 600;
+            font-size: 1.25rem;
+            margin-bottom: 1.5rem;
+        }
+        
+        .card-title i {
+            color: var(--primary-blue);
+            margin-right: 10px;
+        }
+        
+        /* Form Controls */
+        .form-select, .form-control {
+            background: var(--bg-light) !important;
+            color: var(--text-white) !important;
+            border: 2px solid rgba(255, 255, 255, 0.1) !important;
+            border-radius: 10px !important;
+            padding: 10px 15px !important;
+            font-weight: 500;
+            transition: all 0.3s ease;
+        }
+        
+        .form-select:focus, .form-control:focus {
+            border-color: var(--primary-blue) !important;
+            box-shadow: 0 0 0 3px rgba(59, 130, 246, 0.2) !important;
+            background: var(--bg-card) !important;
+        }
+        
+        .form-select option {
+            background: var(--bg-card);
+            color: var(--text-white);
+        }
+        
+        /* Buttons */
+        .btn-primary {
+            background: var(--gradient-blue) !important;
+            border: none !important;
+            padding: 10px 24px !important;
+            border-radius: 10px !important;
+            font-weight: 600 !important;
+            transition: all 0.3s ease !important;
+            box-shadow: 0 4px 15px rgba(59, 130, 246, 0.3);
+        }
+        
+        .btn-primary:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 6px 20px rgba(59, 130, 246, 0.4);
+        }
+        
+        .btn-outline-success {
+            border: 2px solid var(--success-green) !important;
+            color: var(--success-green) !important;
+            border-radius: 10px !important;
+            font-weight: 600 !important;
+        }
+        
+        .btn-outline-success:hover {
+            background: var(--success-green) !important;
+            color: white !important;
+        }
+        
+        /* Signal Card - BEĞENILEN KISIM */
+        #signalCard {
+            background: var(--bg-card);
+            border: 2px solid rgba(59, 130, 246, 0.3);
+        }
+        
+        #currentPrice {
+            color: var(--text-white);
+            font-weight: 800;
+            text-shadow: 0 2px 10px rgba(59, 130, 246, 0.3);
+            letter-spacing: -1px;
+        }
+        
+        #priceChange {
+            font-weight: 600;
+        }
+        
+        /* Signal Indicator */
+        #signalIndicator {
+            border-radius: 16px;
+            border: 2px solid rgba(255, 255, 255, 0.1);
+        }
+        
+        #signalIndicator h2 {
+            font-size: 2.5rem;
+            font-weight: 800;
+            text-transform: uppercase;
+            letter-spacing: 1px;
+            text-shadow: 0 4px 20px rgba(0, 0, 0, 0.3);
+        }
+        
+        .signal-buy {
+            background: var(--gradient-green) !important;
+            box-shadow: 0 8px 32px rgba(34, 197, 94, 0.4);
+        }
+        
+        .signal-sell {
+            background: var(--gradient-red) !important;
+            box-shadow: 0 8px 32px rgba(239, 68, 68, 0.4);
+        }
+        
+        .signal-neutral {
+            background: linear-gradient(135deg, #6366f1 0%, #8b5cf6 100%);
+            box-shadow: 0 8px 32px rgba(139, 92, 246, 0.4);
+        }
+        
+        /* Progress Bar */
+        .progress {
+            background: rgba(255, 255, 255, 0.1) !important;
+            border-radius: 10px;
+            overflow: hidden;
+            height: 24px !important;
         }
         
         .progress-bar {
-            background: linear-gradient(90deg, #ef4444, #f59e0b, #10b981);
+            background: linear-gradient(90deg, #ef4444 0%, #facc15 50%, #22c55e 100%);
+            font-weight: 700;
+            font-size: 14px;
+            box-shadow: 0 0 20px rgba(34, 197, 94, 0.5);
         }
         
+        /* Badges */
+        .badge {
+            padding: 6px 14px;
+            border-radius: 8px;
+            font-weight: 600;
+            font-size: 0.85rem;
+            border: 1px solid rgba(255, 255, 255, 0.2);
+        }
+        
+        .badge.bg-success {
+            background: var(--success-green) !important;
+            box-shadow: 0 2px 10px rgba(34, 197, 94, 0.3);
+        }
+        
+        .badge.bg-danger {
+            background: var(--danger-red) !important;
+            box-shadow: 0 2px 10px rgba(239, 68, 68, 0.3);
+        }
+        
+        .badge.bg-warning {
+            background: var(--warning-yellow) !important;
+            color: var(--bg-dark) !important;
+            box-shadow: 0 2px 10px rgba(250, 204, 21, 0.3);
+        }
+        
+        .badge.bg-secondary {
+            background: var(--bg-light) !important;
+            color: var(--text-gray-light) !important;
+        }
+        
+        .badge.bg-info {
+            background: var(--cyan) !important;
+            box-shadow: 0 2px 10px rgba(6, 182, 212, 0.3);
+        }
+        
+        /* Pattern Indicators */
         .pattern-indicator {
             display: inline-block;
-            padding: 4px 12px;
-            border-radius: 20px;
-            font-size: 12px;
-            margin-right: 5px;
-            margin-bottom: 5px;
+            padding: 8px 16px;
+            border-radius: 12px;
+            font-size: 13px;
+            font-weight: 600;
+            margin: 4px;
+            transition: all 0.3s ease;
+            cursor: pointer;
+        }
+        
+        .pattern-indicator:hover {
+            transform: translateY(-2px);
         }
         
         .pattern-bullish {
-            background: rgba(16, 185, 129, 0.2);
-            color: #10b981;
-            border: 1px solid rgba(16, 185, 129, 0.3);
+            background: rgba(34, 197, 94, 0.2);
+            color: var(--success-green-light);
+            border: 2px solid var(--success-green);
+            box-shadow: 0 4px 15px rgba(34, 197, 94, 0.2);
         }
         
         .pattern-bearish {
             background: rgba(239, 68, 68, 0.2);
-            color: #ef4444;
-            border: 1px solid rgba(239, 68, 68, 0.3);
+            color: var(--danger-red-light);
+            border: 2px solid var(--danger-red);
+            box-shadow: 0 4px 15px rgba(239, 68, 68, 0.2);
         }
         
-        .btn-primary {
-            background: var(--primary-color);
-            border: none;
-            padding: 10px 20px;
-            border-radius: 8px;
-            font-weight: 600;
+        .pattern-neutral {
+            background: rgba(168, 85, 247, 0.2);
+            color: var(--purple);
+            border: 2px solid var(--purple);
+            box-shadow: 0 4px 15px rgba(168, 85, 247, 0.2);
         }
         
-        .btn-primary:hover {
-            background: #1d4ed8;
+        /* TradingView Chart Container */
+        .tradingview-widget-container {
+            background: var(--bg-light);
+            border-radius: 12px;
+            overflow: hidden;
+        }
+        
+        /* Chat Container */
+        .chat-container {
+            height: 400px;
+            overflow-y: auto;
+            background: var(--bg-light);
+            border-radius: 12px;
+            padding: 20px;
+            border: 1px solid rgba(255, 255, 255, 0.1);
+        }
+        
+        .chat-container::-webkit-scrollbar {
+            width: 8px;
+        }
+        
+        .chat-container::-webkit-scrollbar-track {
+            background: rgba(255, 255, 255, 0.05);
+            border-radius: 10px;
+        }
+        
+        .chat-container::-webkit-scrollbar-thumb {
+            background: var(--primary-blue);
+            border-radius: 10px;
+        }
+        
+        .chat-message {
+            margin-bottom: 16px;
+            padding: 14px 18px;
+            border-radius: 14px;
+            max-width: 85%;
+            animation: slideIn 0.3s ease;
+        }
+        
+        @keyframes slideIn {
+            from {
+                opacity: 0;
+                transform: translateY(10px);
+            }
+            to {
+                opacity: 1;
+                transform: translateY(0);
+            }
+        }
+        
+        .chat-user {
+            background: var(--gradient-blue);
+            margin-left: auto;
+            box-shadow: 0 4px 15px rgba(59, 130, 246, 0.3);
+            color: white;
+        }
+        
+        .chat-bot {
+            background: var(--bg-card);
+            border: 2px solid rgba(59, 130, 246, 0.3);
+            color: var(--text-gray-light);
+        }
+        
+        .chat-bot strong {
+            color: var(--primary-blue-light);
+        }
+        
+        /* Stats */
+        .stats-item {
+            padding: 15px;
+            background: var(--bg-light);
+            border-radius: 12px;
+            margin-bottom: 12px;
+            border: 1px solid rgba(255, 255, 255, 0.1);
+            transition: all 0.3s ease;
+        }
+        
+        .stats-item:hover {
+            background: var(--bg-card-hover);
+            border-color: var(--primary-blue);
+        }
+        
+        .stats-value {
+            font-size: 1.8rem;
+            font-weight: 800;
+            color: var(--primary-blue-light);
+            text-shadow: 0 2px 10px rgba(59, 130, 246, 0.3);
+        }
+        
+        /* Feature List */
+        .feature-list {
+            list-style: none;
+            padding: 0;
         }
         
         .feature-list li {
-            padding: 8px 0;
+            padding: 12px 0;
             border-bottom: 1px solid rgba(255, 255, 255, 0.1);
+            color: var(--text-gray-light);
+            font-weight: 500;
+            transition: all 0.3s ease;
+        }
+        
+        .feature-list li:hover {
+            padding-left: 10px;
+            color: var(--text-white);
         }
         
         .feature-list li:last-child {
             border-bottom: none;
         }
         
-        @keyframes pulse {
-            0% { transform: scale(1); }
-            50% { transform: scale(1.05); }
-            100% { transform: scale(1); }
+        .feature-list li i {
+            width: 24px;
         }
         
+        /* ML Models */
+        .ml-model-item {
+            margin-bottom: 20px;
+        }
+        
+        .ml-model-item h6 {
+            color: var(--text-white);
+            font-weight: 600;
+            margin-bottom: 8px;
+        }
+        
+        .ml-model-item .progress-bar {
+            box-shadow: 0 2px 15px rgba(59, 130, 246, 0.4);
+        }
+        
+        .ml-model-item small {
+            color: var(--text-gray);
+            font-weight: 600;
+        }
+        
+        /* Animations */
         .pulse {
-            animation: pulse 2s infinite;
+            animation: pulse-scale 2s infinite;
+        }
+        
+        @keyframes pulse-scale {
+            0%, 100% {
+                transform: scale(1);
+            }
+            50% {
+                transform: scale(1.05);
+            }
+        }
+        
+        /* Dropdown */
+        .dropdown-menu {
+            background: var(--bg-card);
+            border: 1px solid rgba(255, 255, 255, 0.1);
+            border-radius: 12px;
+            padding: 8px;
+        }
+        
+        .dropdown-item {
+            color: var(--text-gray-light);
+            border-radius: 8px;
+            padding: 10px 15px;
+            margin-bottom: 4px;
+            transition: all 0.3s ease;
+        }
+        
+        .dropdown-item:hover {
+            background: var(--bg-light);
+            color: var(--text-white);
+        }
+        
+        .dropdown-item i {
+            width: 20px;
+        }
+        
+        /* Alert Messages */
+        .alert {
+            border-radius: 12px;
+            border: none;
+            font-weight: 600;
+            box-shadow: 0 4px 20px rgba(0, 0, 0, 0.2);
+        }
+        
+        /* ICT Analysis Cards */
+        .ict-card {
+            background: var(--bg-light);
+            padding: 15px;
+            border-radius: 12px;
+            margin-bottom: 15px;
+            border: 1px solid rgba(255, 255, 255, 0.1);
+        }
+        
+        .ict-card h6 {
+            color: var(--primary-blue-light);
+            font-weight: 700;
+            margin-bottom: 8px;
+        }
+        
+        .ict-card p {
+            color: var(--text-white);
+            font-weight: 600;
+            margin-bottom: 4px;
+        }
+        
+        .ict-card small {
+            color: var(--text-gray);
+        }
+        
+        /* Footer */
+        .footer-text {
+            color: var(--text-gray);
+            font-size: 14px;
+        }
+        
+        .footer-text p {
+            margin-bottom: 4px;
+        }
+        
+        /* Responsive */
+        @media (max-width: 768px) {
+            #signalIndicator h2 {
+                font-size: 1.8rem;
+            }
+            
+            #currentPrice {
+                font-size: 2rem !important;
+            }
+            
+            .chat-message {
+                max-width: 95%;
+            }
+        }
+        
+        /* Loading Animation */
+        @keyframes shimmer {
+            0% {
+                background-position: -1000px 0;
+            }
+            100% {
+                background-position: 1000px 0;
+            }
+        }
+        
+        .loading {
+            background: linear-gradient(90deg, var(--bg-card) 0%, var(--bg-light) 50%, var(--bg-card) 100%);
+            background-size: 1000px 100%;
+            animation: shimmer 2s infinite;
         }
     </style>
 </head>
@@ -2244,7 +2638,7 @@ async def dashboard():
             </a>
             <div class="d-flex align-items-center">
                 <span class="status-indicator status-online"></span>
-                <span class="me-3">Online</span>
+                <span class="me-3" style="color: var(--success-green); font-weight: 600;">Online</span>
                 <div class="dropdown">
                     <button class="btn btn-outline-light btn-sm dropdown-toggle" type="button" data-bs-toggle="dropdown">
                         <i class="fas fa-cog"></i>
@@ -2260,7 +2654,7 @@ async def dashboard():
         </div>
     </nav>
 
-    <div class="container-fluid mt-4">
+    <div class="container-fluid mt-4 px-4">
         <div class="row">
             <!-- Left Column - Analysis -->
             <div class="col-lg-8">
@@ -2269,17 +2663,17 @@ async def dashboard():
                     <div class="col-md-12 mb-4">
                         <div class="card">
                             <div class="card-body">
-                                <div class="d-flex justify-content-between align-items-center">
+                                <div class="d-flex justify-content-between align-items-center flex-wrap gap-3">
                                     <h5 class="card-title mb-0"><i class="fas fa-chart-line me-2"></i>Market Analysis</h5>
-                                    <div class="d-flex">
-                                        <select id="symbolSelect" class="form-select me-2" style="background: var(--card-bg); color: white; border-color: rgba(255,255,255,0.2); width: 150px;">
+                                    <div class="d-flex gap-2">
+                                        <select id="symbolSelect" class="form-select" style="width: 150px;">
                                             <option value="BTCUSDT">BTC/USDT</option>
                                             <option value="ETHUSDT">ETH/USDT</option>
                                             <option value="SOLUSDT">SOL/USDT</option>
                                             <option value="XRPUSDT">XRP/USDT</option>
                                             <option value="ADAUSDT">ADA/USDT</option>
                                         </select>
-                                        <select id="intervalSelect" class="form-select me-2" style="background: var(--card-bg); color: white; border-color: rgba(255,255,255,0.2); width: 100px;">
+                                        <select id="intervalSelect" class="form-select" style="width: 120px;">
                                             <option value="1h">1 Hour</option>
                                             <option value="4h">4 Hours</option>
                                             <option value="1d">1 Day</option>
@@ -2293,51 +2687,53 @@ async def dashboard():
                         </div>
                     </div>
 
-                    <!-- Main Signal Card -->
+                    <!-- Main Signal Card - BEĞENILEN KISIM -->
                     <div class="col-md-12 mb-4">
                         <div class="card" id="signalCard">
-                            <div class="card-body text-center">
-                                <div class="row align-items-center">
-                                    <div class="col-md-4">
-                                        <h3 id="currentSymbol">BTC/USDT</h3>
-                                        <h1 id="currentPrice" class="display-4 fw-bold">$45,231.50</h1>
-                                        <p id="priceChange" class="fs-5"><i class="fas fa-arrow-up text-success"></i> +2.34% (24h)</p>
+                            <div class="card-body">
+                                <div class="row align-items-center g-4">
+                                    <div class="col-md-4 text-center">
+                                        <h3 id="currentSymbol" style="color: var(--primary-blue-light); font-weight: 700;">BTC/USDT</h3>
+                                        <h1 id="currentPrice" class="display-4 fw-bold my-3">$45,231.50</h1>
+                                        <p id="priceChange" class="fs-5 mb-0">
+                                            <i class="fas fa-arrow-up text-success"></i> 
+                                            <span style="color: var(--success-green); font-weight: 700;">+2.34% (24h)</span>
+                                        </p>
                                     </div>
-                                    <!-- Mevcut signal card'ın kapanışından hemen sonra ekle -->
- 
-
-<div class="col-md-12 mb-4">
-    <div class="card">
-        <div class="card-body p-0">  <!-- padding'i sıfırladık ki grafik tam otursun -->
-            <div class="tradingview-widget-container" style="height: 500px; width: 100%;">
-                <div id="tradingview_chart"></div>
-                <div class="tradingview-widget-copyright">
-                    <a href="https://www.tradingview.com/" rel="noopener nofollow" target="_blank">
-                        <span class="blue-text">Track all markets on TradingView</span>
-                    </a>
-                </div>
-            </div>
-        </div>
-    </div>
-</div>
+                                    
                                     <div class="col-md-4">
-                                        <div class="p-4 rounded" id="signalIndicator">
+                                        <div class="p-4 rounded text-center" id="signalIndicator">
                                             <h2 class="mb-3">NEUTRAL</h2>
-                                            <div class="progress mb-3" style="height: 20px;">
-                                                <div class="progress-bar" id="confidenceBar" style="width: 50%"></div>
+                                            <div class="progress mb-3">
+                                                <div class="progress-bar" id="confidenceBar" style="width: 50%">50%</div>
                                             </div>
-                                            <p id="confidenceText" class="mb-0">Confidence: 50%</p>
-                                            <p id="signalRecommendation" class="mt-2">Wait for better setup</p>
+                                            <p id="confidenceText" class="mb-2" style="color: var(--text-white); font-weight: 600; font-size: 1.1rem;">Confidence: 50%</p>
+                                            <p id="signalRecommendation" class="mt-3 mb-0" style="color: var(--text-gray-light); font-size: 0.95rem;">Wait for better setup</p>
                                         </div>
                                     </div>
+                                    
                                     <div class="col-md-4">
                                         <div class="text-start">
-                                            <h5><i class="fas fa-chart-bar me-2"></i>Indicators</h5>
+                                            <h5 style="color: var(--text-white); font-weight: 700; margin-bottom: 1rem;">
+                                                <i class="fas fa-chart-bar me-2" style="color: var(--primary-blue);"></i>Indicators
+                                            </h5>
                                             <ul class="list-unstyled">
-                                                <li class="mb-2">EMA (9/21): <span id="emaSignal" class="badge bg-secondary">Neutral</span></li>
-                                                <li class="mb-2">RSI (14): <span id="rsiValue" class="badge bg-secondary">54.2</span></li>
-                                                <li class="mb-2">Heikin Ashi: <span id="haTrend" class="badge bg-secondary">Bullish</span></li>
-                                                <li class="mb-2">Market Structure: <span id="marketStructure" class="badge bg-secondary">Bullish</span></li>
+                                                <li class="mb-3">
+                                                    <span style="color: var(--text-gray-light); font-weight: 500;">EMA (9/21):</span>
+                                                    <span id="emaSignal" class="badge bg-secondary ms-2">Neutral</span>
+                                                </li>
+                                                <li class="mb-3">
+                                                    <span style="color: var(--text-gray-light); font-weight: 500;">RSI (14):</span>
+                                                    <span id="rsiValue" class="badge bg-info ms-2">54.2</span>
+                                                </li>
+                                                <li class="mb-3">
+                                                    <span style="color: var(--text-gray-light); font-weight: 500;">Heikin Ashi:</span>
+                                                    <span id="haTrend" class="badge bg-success ms-2">Bullish</span>
+                                                </li>
+                                                <li class="mb-0">
+                                                    <span style="color: var(--text-gray-light); font-weight: 500;">Market Structure:</span>
+                                                    <span id="marketStructure" class="badge bg-success ms-2">Bullish</span>
+                                                </li>
                                             </ul>
                                         </div>
                                     </div>
@@ -2346,7 +2742,18 @@ async def dashboard():
                         </div>
                     </div>
 
-                    <!-- Pattern Detection -->
+                    <!-- TradingView Chart -->
+                    <div class="col-md-12 mb-4">
+                        <div class="card">
+                            <div class="card-body p-0">
+                                <div class="tradingview-widget-container" style="height: 500px; width: 100%;">
+                                    <div id="tradingview_chart"></div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Pattern Detection & ICT Analysis -->
                     <div class="col-md-6 mb-4">
                         <div class="card h-100">
                             <div class="card-body">
@@ -2357,26 +2764,27 @@ async def dashboard():
                                     <div class="pattern-indicator pattern-bearish">Shooting Star</div>
                                     <div class="pattern-indicator pattern-neutral">Doji</div>
                                 </div>
-                                <p class="text-muted mt-3" id="patternCount">4 patterns detected in last 10 candles</p>
+                                <p class="mt-3 mb-0" id="patternCount" style="color: var(--text-gray); font-weight: 500;">
+                                    4 patterns detected in last 10 candles
+                                </p>
                             </div>
                         </div>
                     </div>
 
-                    <!-- ICT Analysis -->
                     <div class="col-md-6 mb-4">
                         <div class="card h-100">
                             <div class="card-body">
                                 <h5 class="card-title"><i class="fas fa-chess-board me-2"></i>ICT Analysis</h5>
                                 <div class="mt-3">
-                                    <div class="mb-3">
+                                    <div class="ict-card">
                                         <h6>Fair Value Gaps</h6>
-                                        <p id="fvgCount" class="mb-1">2 FVGs detected</p>
-                                        <small class="text-muted">Price tends to fill these gaps</small>
+                                        <p id="fvgCount">2 FVGs detected</p>
+                                        <small>Price tends to fill these gaps</small>
                                     </div>
-                                    <div>
+                                    <div class="ict-card">
                                         <h6>Order Blocks</h6>
-                                        <p id="obCount" class="mb-1">1 Order Block detected</p>
-                                        <small class="text-muted">Institutional buying/selling zones</small>
+                                        <p id="obCount">1 Order Block detected</p>
+                                        <small>Institutional buying/selling zones</small>
                                     </div>
                                 </div>
                             </div>
@@ -2387,36 +2795,44 @@ async def dashboard():
                     <div class="col-md-12 mb-4">
                         <div class="card">
                             <div class="card-body">
-                                <div class="d-flex justify-content-between align-items-center mb-3">
+                                <div class="d-flex justify-content-between align-items-center mb-4">
                                     <h5 class="card-title mb-0"><i class="fas fa-brain me-2"></i>AI Prediction Models</h5>
                                     <button class="btn btn-sm btn-outline-success" onclick="trainCurrentSymbol()">
                                         <i class="fas fa-graduation-cap me-1"></i>Train
                                     </button>
                                 </div>
-                                <div class="row">
+                                <div class="row g-4">
                                     <div class="col-md-4">
-                                        <h6>LightGBM</h6>
-                                        <div class="progress mb-2" style="height: 10px;">
-                                            <div class="progress-bar bg-success" style="width: 78%"></div>
+                                        <div class="ml-model-item">
+                                            <h6>LightGBM</h6>
+                                            <div class="progress mb-2" style="height: 12px;">
+                                                <div class="progress-bar bg-success" style="width: 78%"></div>
+                                            </div>
+                                            <small>Accuracy: 78%</small>
                                         </div>
-                                        <small>Accuracy: 78%</small>
                                     </div>
                                     <div class="col-md-4">
-                                        <h6>LSTM</h6>
-                                        <div class="progress mb-2" style="height: 10px;">
-                                            <div class="progress-bar bg-info" style="width: 82%"></div>
+                                        <div class="ml-model-item">
+                                            <h6>LSTM</h6>
+                                            <div class="progress mb-2" style="height: 12px;">
+                                                <div class="progress-bar" style="width: 82%; background: var(--cyan);"></div>
+                                            </div>
+                                            <small>Accuracy: 82%</small>
                                         </div>
-                                        <small>Accuracy: 82%</small>
                                     </div>
                                     <div class="col-md-4">
-                                        <h6>Transformer</h6>
-                                        <div class="progress mb-2" style="height: 10px;">
-                                            <div class="progress-bar bg-warning" style="width: 85%"></div>
+                                        <div class="ml-model-item">
+                                            <h6>Transformer</h6>
+                                            <div class="progress mb-2" style="height: 12px;">
+                                                <div class="progress-bar" style="width: 85%; background: var(--warning-yellow);"></div>
+                                            </div>
+                                            <small>Accuracy: 85%</small>
                                         </div>
-                                        <small>Accuracy: 85%</small>
                                     </div>
                                 </div>
-                                <p class="mt-3 mb-0" id="mlPrediction">AI Ensemble: <strong>BUY</strong> signal with 76% confidence</p>
+                                <p class="mt-4 mb-0" id="mlPrediction" style="color: var(--text-white); font-weight: 600; font-size: 1.05rem;">
+                                    AI Ensemble: <strong style="color: var(--success-green);">BUY</strong> signal with 76% confidence
+                                </p>
                             </div>
                         </div>
                     </div>
@@ -2436,13 +2852,13 @@ async def dashboard():
                             </div>
                         </div>
                         <div class="input-group mt-3">
-                            <input type="text" class="form-control" id="chatInput" placeholder="Ask about patterns, strategies, or analysis..." style="background: var(--card-bg); color: white; border-color: rgba(255,255,255,0.2);">
+                            <input type="text" class="form-control" id="chatInput" placeholder="Ask about patterns, strategies, or analysis...">
                             <button class="btn btn-primary" type="button" onclick="sendMessage()">
                                 <i class="fas fa-paper-plane"></i>
                             </button>
                         </div>
                         <div class="mt-2">
-                            <small class="text-muted">Try: "Explain hammer pattern", "Analyze BTC", "Trading strategy tips"</small>
+                            <small style="color: var(--text-gray);">Try: "Explain hammer pattern", "Analyze BTC", "Trading strategy tips"</small>
                         </div>
                     </div>
                 </div>
@@ -2451,32 +2867,32 @@ async def dashboard():
                 <div class="card mb-4">
                     <div class="card-body">
                         <h5 class="card-title"><i class="fas fa-tachometer-alt me-2"></i>Quick Stats</h5>
-                        <ul class="list-unstyled mt-3">
-                            <li class="mb-3">
-                                <div class="d-flex justify-content-between">
-                                    <span>Analysis Requests:</span>
-                                    <span class="fw-bold" id="requestCount">142</span>
+                        <div class="mt-3">
+                            <div class="stats-item">
+                                <div class="d-flex justify-content-between align-items-center">
+                                    <span style="color: var(--text-gray-light); font-weight: 500;">Analysis Requests</span>
+                                    <span class="stats-value" id="requestCount">142</span>
                                 </div>
-                            </li>
-                            <li class="mb-3">
-                                <div class="d-flex justify-content-between">
-                                    <span>Models Trained:</span>
-                                    <span class="fw-bold" id="trainedModels">5</span>
+                            </div>
+                            <div class="stats-item">
+                                <div class="d-flex justify-content-between align-items-center">
+                                    <span style="color: var(--text-gray-light); font-weight: 500;">Models Trained</span>
+                                    <span class="stats-value" id="trainedModels">5</span>
                                 </div>
-                            </li>
-                            <li class="mb-3">
-                                <div class="d-flex justify-content-between">
-                                    <span>Patterns Detected:</span>
-                                    <span class="fw-bold" id="totalPatterns">124</span>
+                            </div>
+                            <div class="stats-item">
+                                <div class="d-flex justify-content-between align-items-center">
+                                    <span style="color: var(--text-gray-light); font-weight: 500;">Patterns Detected</span>
+                                    <span class="stats-value" id="totalPatterns">124</span>
                                 </div>
-                            </li>
-                            <li>
-                                <div class="d-flex justify-content-between">
-                                    <span>Uptime:</span>
-                                    <span class="fw-bold">99.8%</span>
+                            </div>
+                            <div class="stats-item">
+                                <div class="d-flex justify-content-between align-items-center">
+                                    <span style="color: var(--text-gray-light); font-weight: 500;">Uptime</span>
+                                    <span class="stats-value" style="color: var(--success-green);">99.8%</span>
                                 </div>
-                            </li>
-                        </ul>
+                            </div>
+                        </div>
                     </div>
                 </div>
 
@@ -2502,8 +2918,8 @@ async def dashboard():
         <!-- Footer -->
         <div class="row mt-4">
             <div class="col-12">
-                <div class="text-center text-muted py-3">
-                    <p class="mb-1">Professional Trading Bot v4.0 • Advanced AI Trading System</p>
+                <div class="text-center footer-text py-4">
+                    <p class="mb-1" style="font-weight: 600; color: var(--text-gray-light);">Professional Trading Bot v4.0 • Advanced AI Trading System</p>
                     <small>© 2024 • Trading signals are for educational purposes only. Trade at your own risk.</small>
                 </div>
             </div>
@@ -2513,9 +2929,43 @@ async def dashboard():
     <!-- Bootstrap JS -->
     <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
     
+    <!-- TradingView Widget Script -->
+    <script type="text/javascript">
+    function loadTradingViewWidget(symbol = "BTCUSDT", interval = "60") {
+        const container = document.getElementById("tradingview_chart");
+        if (!container) return;
+
+        container.innerHTML = '';
+
+        const script = document.createElement("script");
+        script.type = "text/javascript";
+        script.src = "https://s3.tradingview.com/external-embedding/embed-widget-advanced-chart.js";
+        script.async = true;
+
+        const config = {
+            "autosize": true,
+            "symbol": `BINANCE:${symbol}`,
+            "interval": interval === "1h" ? "60" : interval === "4h" ? "240" : "D",
+            "timezone": "Etc/UTC",
+            "theme": "dark",
+            "style": "1",
+            "locale": "en",
+            "toolbar_bg": "#1a1f3a",
+            "enable_publishing": false,
+            "allow_symbol_change": true,
+            "calendar": false,
+            "support_host": "https://www.tradingview.com"
+        };
+
+        script.text = JSON.stringify(config);
+        container.appendChild(script);
+    }
+    </script>
+    
     <script>
         // Initialize
         document.addEventListener('DOMContentLoaded', function() {
+            loadTradingViewWidget();
             analyzeSymbol();
             updateStats();
         });
@@ -2525,73 +2975,86 @@ async def dashboard():
             const symbol = document.getElementById('symbolSelect').value;
             const interval = document.getElementById('intervalSelect').value;
             
-            // Update UI loading state
             document.getElementById('signalCard').classList.add('pulse');
             document.getElementById('currentSymbol').textContent = symbol.replace('USDT', '/USDT');
             
+            // Load TradingView widget
+            loadTradingViewWidget(symbol, interval === "1h" ? "60" : interval === "4h" ? "240" : "D");
+            
             try {
                 const response = await fetch(`/api/analyze/${symbol}?interval=${interval}`);
+                
+                // Check if response is ok and content-type is JSON
+                if (!response.ok) {
+                    console.warn('API endpoint not available, using demo mode');
+                    useDemoData(symbol);
+                    return;
+                }
+                
+                const contentType = response.headers.get("content-type");
+                if (!contentType || !contentType.includes("application/json")) {
+                    console.warn('API returned non-JSON response, using demo mode');
+                    useDemoData(symbol);
+                    return;
+                }
+                
                 const data = await response.json();
                 
                 if (data.success) {
                     updateDashboard(data);
+                } else {
+                    useDemoData(symbol);
                 }
             } catch (error) {
-                console.error('Analysis error:', error);
-                showError('Failed to analyze symbol');
+                console.warn('API not available, using demo mode:', error);
+                useDemoData(symbol);
             } finally {
                 document.getElementById('signalCard').classList.remove('pulse');
             }
         }
-        <!-- Script'i body sonuna veya head'e koy (bir kere olsun) -->
-<script type="text/javascript">
-function loadTradingViewWidget(symbol = "BTCUSDT", interval = "60") {
-    const container = document.getElementById("tradingview_chart");
-    if (!container) return;
-
-    // Eski widget varsa temizle
-    container.innerHTML = '';
-
-    const script = document.createElement("script");
-    script.type = "text/javascript";
-    script.src = "https://s3.tradingview.com/external-embedding/embed-widget-advanced-chart.js";
-    script.async = true;
-
-    const config = {
-        "autosize": true,
-        "symbol": `BINANCE:${symbol.replace('USDT', 'USDT')}`,
-        "interval": interval === "1h" ? "60" : interval === "4h" ? "240" : "D",
-        "timezone": "Etc/UTC",
-        "theme": "dark",
-        "style": "1",
-        "locale": "en",
-        "toolbar_bg": "#f1f3f6",
-        "enable_publishing": false,
-        "allow_symbol_change": true,
-        "calendar": false,
-        "support_host": "https://www.tradingview.com"
-    };
-
-    script.text = JSON.stringify(config);
-    container.appendChild(script);
-}
-
-// Sayfa yüklendiğinde ve sembol değiştiğinde çağır
-document.addEventListener('DOMContentLoaded', () => {
-    const symbol = document.getElementById('symbolSelect')?.value || "BTCUSDT";
-    const interval = document.getElementById('intervalSelect')?.value || "1h";
-    loadTradingViewWidget(symbol, interval === "1h" ? "60" : interval === "4h" ? "240" : "D");
-});
-
-// analyzeSymbol fonksiyonunun sonuna ekle
-// async function analyzeSymbol() { ... mevcut kod ...
-loadTradingViewWidget(symbol, interval === "1h" ? "60" : interval === "4h" ? "240" : "D");
-// }
-</script>
-
- 
-
-
+        
+        // Demo data for when API is not available
+        function useDemoData(symbol) {
+            const demoData = {
+                success: true,
+                symbol: symbol,
+                price_data: {
+                    current: Math.random() * 50000 + 40000,
+                    change_percent: (Math.random() - 0.5) * 10
+                },
+                signal: {
+                    signal: ['STRONG_BUY', 'BUY', 'NEUTRAL', 'SELL', 'STRONG_SELL'][Math.floor(Math.random() * 5)],
+                    confidence: Math.floor(Math.random() * 40) + 60,
+                    recommendation: 'Demo mode - Connect backend for real signals',
+                    components: {
+                        ema: { signal: 'BUY' }
+                    }
+                },
+                indicators: {
+                    rsi: Math.random() * 40 + 30,
+                    heikin_ashi_trend: Math.random() > 0.5 ? 'Bullish' : 'Bearish'
+                },
+                ict_analysis: {
+                    market_structure: {
+                        structure: Math.random() > 0.5 ? 'Bullish' : 'Bearish'
+                    },
+                    fair_value_gaps: [1, 2],
+                    order_blocks: [1]
+                },
+                patterns: [
+                    { name: 'Hammer', direction: 'bullish' },
+                    { name: 'Engulfing', direction: 'bullish' },
+                    { name: 'Doji', direction: 'neutral' },
+                    { name: 'Shooting Star', direction: 'bearish' }
+                ],
+                ml_prediction: {
+                    prediction: Math.random() > 0.5 ? 'BUY' : 'SELL',
+                    confidence: Math.random() * 0.3 + 0.7
+                }
+            };
+            
+            updateDashboard(demoData);
+        }
 
         // Update dashboard with analysis data
         function updateDashboard(data) {
@@ -2599,43 +3062,54 @@ loadTradingViewWidget(symbol, interval === "1h" ? "60" : interval === "4h" ? "24
             document.getElementById('currentPrice').textContent = `$${data.price_data.current.toLocaleString('en-US', {minimumFractionDigits: 2, maximumFractionDigits: 2})}`;
             const changeElem = document.getElementById('priceChange');
             const change = data.price_data.change_percent;
-            changeElem.textContent = `${change >= 0 ? '+' : ''}${change.toFixed(2)}% (24h)`;
-            changeElem.className = `fs-5 ${change >= 0 ? 'text-success' : 'text-danger'}`;
-            changeElem.innerHTML = `${change >= 0 ? '<i class="fas fa-arrow-up text-success"></i>' : '<i class="fas fa-arrow-down text-danger"></i>'} ${change >= 0 ? '+' : ''}${change.toFixed(2)}% (24h)`;
+            const arrow = change >= 0 ? '<i class="fas fa-arrow-up"></i>' : '<i class="fas fa-arrow-down"></i>';
+            const color = change >= 0 ? 'var(--success-green)' : 'var(--danger-red)';
+            changeElem.innerHTML = `${arrow} <span style="color: ${color}; font-weight: 700;">${change >= 0 ? '+' : ''}${change.toFixed(2)}% (24h)</span>`;
             
             // Update signal
             const signal = data.signal.signal;
             const confidence = data.signal.confidence;
             const signalIndicator = document.getElementById('signalIndicator');
             const confidenceBar = document.getElementById('confidenceBar');
-            const confidenceText = document.getElementById('confidenceText');
-            const recommendation = document.getElementById('signalRecommendation');
             
             // Set signal colors and text
             if (signal.includes('BUY')) {
-                signalIndicator.className = 'p-4 rounded signal-buy';
+                signalIndicator.className = 'p-4 rounded text-center signal-buy';
                 if (signal === 'STRONG_BUY') {
                     signalIndicator.classList.add('pulse');
                 }
             } else if (signal.includes('SELL')) {
-                signalIndicator.className = 'p-4 rounded signal-sell';
+                signalIndicator.className = 'p-4 rounded text-center signal-sell';
                 if (signal === 'STRONG_SELL') {
                     signalIndicator.classList.add('pulse');
                 }
             } else {
-                signalIndicator.className = 'p-4 rounded signal-neutral';
+                signalIndicator.className = 'p-4 rounded text-center signal-neutral';
             }
             
             document.querySelector('#signalIndicator h2').textContent = signal.replace('_', ' ');
             confidenceBar.style.width = `${confidence}%`;
-            confidenceText.textContent = `Confidence: ${confidence}%`;
-            recommendation.textContent = data.signal.recommendation;
+            confidenceBar.textContent = `${confidence}%`;
+            document.getElementById('confidenceText').textContent = `Confidence: ${confidence}%`;
+            document.getElementById('signalRecommendation').textContent = data.signal.recommendation;
             
-            // Update indicators
-            document.getElementById('emaSignal').textContent = data.signal.components.ema?.signal || 'Neutral';
+            // Update indicators with colors
+            const emaSignal = data.signal.components.ema?.signal || 'Neutral';
+            const emaElem = document.getElementById('emaSignal');
+            emaElem.textContent = emaSignal;
+            emaElem.className = `badge ms-2 ${emaSignal.includes('BUY') ? 'bg-success' : emaSignal.includes('SELL') ? 'bg-danger' : 'bg-secondary'}`;
+            
             document.getElementById('rsiValue').textContent = data.indicators.rsi?.toFixed(1) || 'N/A';
-            document.getElementById('haTrend').textContent = data.indicators.heikin_ashi_trend || 'Neutral';
-            document.getElementById('marketStructure').textContent = data.ict_analysis.market_structure?.structure || 'Unknown';
+            
+            const haTrend = data.indicators.heikin_ashi_trend || 'Neutral';
+            const haElem = document.getElementById('haTrend');
+            haElem.textContent = haTrend;
+            haElem.className = `badge ms-2 ${haTrend === 'Bullish' ? 'bg-success' : haTrend === 'Bearish' ? 'bg-danger' : 'bg-secondary'}`;
+            
+            const marketStruct = data.ict_analysis.market_structure?.structure || 'Unknown';
+            const msElem = document.getElementById('marketStructure');
+            msElem.textContent = marketStruct;
+            msElem.className = `badge ms-2 ${marketStruct === 'Bullish' ? 'bg-success' : marketStruct === 'Bearish' ? 'bg-danger' : 'bg-secondary'}`;
             
             // Update patterns
             const patternsContainer = document.getElementById('patternsContainer');
@@ -2661,10 +3135,10 @@ loadTradingViewWidget(symbol, interval === "1h" ? "60" : interval === "4h" ? "24
             if (data.ml_prediction) {
                 const mlPrediction = data.ml_prediction.prediction;
                 const mlConfidence = (data.ml_prediction.confidence * 100).toFixed(1);
-                document.getElementById('mlPrediction').innerHTML = `AI Ensemble: <strong>${mlPrediction}</strong> signal with ${mlConfidence}% confidence`;
+                const predColor = mlPrediction === 'BUY' ? 'var(--success-green)' : mlPrediction === 'SELL' ? 'var(--danger-red)' : 'var(--text-gray)';
+                document.getElementById('mlPrediction').innerHTML = `AI Ensemble: <strong style="color: ${predColor};">${mlPrediction}</strong> signal with ${mlConfidence}% confidence`;
             }
             
-            // Update stats
             updateStats();
         }
 
@@ -2676,17 +3150,28 @@ loadTradingViewWidget(symbol, interval === "1h" ? "60" : interval === "4h" ? "24
                 const response = await fetch(`/api/train/${symbol}`, {
                     method: 'POST'
                 });
+                
+                // Check if API is available
+                if (!response.ok) {
+                    throw new Error('API not available');
+                }
+                
+                const contentType = response.headers.get("content-type");
+                if (!contentType || !contentType.includes("application/json")) {
+                    throw new Error('Invalid response type');
+                }
+                
                 const data = await response.json();
                 
                 if (data.success) {
                     showMessage(`✅ Successfully trained models for ${symbol}`);
                     updateStats();
                 } else {
-                    showError('Training failed');
+                    showMessage(`⚠️ Training started for ${symbol} (Demo Mode)`);
                 }
             } catch (error) {
-                console.error('Training error:', error);
-                showError('Training failed: ' + error.message);
+                console.warn('Training API not available:', error);
+                showMessage(`⚠️ Demo Mode: Connect backend to train models`);
             }
         }
 
@@ -2697,11 +3182,9 @@ loadTradingViewWidget(symbol, interval === "1h" ? "60" : interval === "4h" ? "24
             
             if (!message) return;
             
-            // Add user message to chat
             addChatMessage(message, 'user');
             input.value = '';
             
-            // Get current symbol
             const symbol = document.getElementById('symbolSelect').value;
             
             try {
@@ -2716,17 +3199,34 @@ loadTradingViewWidget(symbol, interval === "1h" ? "60" : interval === "4h" ? "24
                     })
                 });
                 
+                // Check if API is available
+                if (!response.ok) {
+                    throw new Error('API not available');
+                }
+                
+                const contentType = response.headers.get("content-type");
+                if (!contentType || !contentType.includes("application/json")) {
+                    throw new Error('Invalid response type');
+                }
+                
                 const data = await response.json();
                 
                 if (data.success) {
-                    // Add bot response to chat
                     setTimeout(() => {
                         addChatMessage(data.response, 'bot');
                     }, 500);
                 }
             } catch (error) {
-                console.error('Chat error:', error);
-                addChatMessage('Sorry, I encountered an error. Please try again.', 'bot');
+                console.warn('Chat API not available:', error);
+                // Demo response
+                setTimeout(() => {
+                    const demoResponses = [
+                        "I'm running in demo mode. Connect the backend API for real-time analysis.",
+                        "This is a demo response. The backend API endpoint needs to be configured.",
+                        `Analyzing ${symbol}... Please set up the backend server for real data.`
+                    ];
+                    addChatMessage(demoResponses[Math.floor(Math.random() * demoResponses.length)], 'bot');
+                }, 500);
             }
         }
 
@@ -2744,11 +3244,9 @@ loadTradingViewWidget(symbol, interval === "1h" ? "60" : interval === "4h" ? "24
 
         // Update statistics
         function updateStats() {
-            // Increment request count
             const requestCount = document.getElementById('requestCount');
             requestCount.textContent = parseInt(requestCount.textContent) + 1;
             
-            // Update pattern count
             const patterns = document.querySelectorAll('.pattern-indicator').length;
             if (patterns > 0) {
                 document.getElementById('totalPatterns').textContent = 
