@@ -1681,13 +1681,13 @@ async def websocket_endpoint(websocket: WebSocket):
     except WebSocketDisconnect:
         websocket_manager.disconnect(websocket)
 
-@app.get("/dashboard", response_class=HTMLResponse)
-async def dashboard():
-    """Serve the trading dashboard HTML"""
-    # Read the HTML file we created earlier
-   
+ from fastapi.templating import Jinja2Templates
 
-return HTMLResponse(content=html_content)
+templates = Jinja2Templates(directory="templates")
+
+@app.get("/dashboard", response_class=HTMLResponse)
+async def dashboard(request: Request):
+    return templates.TemplateResponse("dashboard.html", {"request": request})
 
 # ========== MAIN ENTRY POINT ==========
 if __name__ == "__main__":
