@@ -1169,7 +1169,7 @@ async def root():
     <body>
         <h1>🚀 Trading Bot v5.1</h1>
         <p>Enterprise-Grade Trading System</p>
-        <a href="/dashboard">Go to Dashboard</a>
+        <a href="template/dashboard">Go to Dashboard</a>
     </body>
     </html>
     """
