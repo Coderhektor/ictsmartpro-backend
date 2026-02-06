@@ -35,6 +35,8 @@ from lightgbm import early_stopping
 from fastapi import FastAPI, Request, HTTPException, Query, WebSocket, WebSocketDisconnect
 from fastapi.responses import HTMLResponse, JSONResponse, PlainTextResponse
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.templating import Jinja2Templates
+templates = Jinja2Templates(directory="templates")
 
 # ========== LOGGING CONFIGURATION ==========
 logging.basicConfig(
@@ -1681,11 +1683,9 @@ async def websocket_endpoint(websocket: WebSocket):
     except WebSocketDisconnect:
         websocket_manager.disconnect(websocket)
 
- from fastapi.templating import Jinja2Templates
 
-templates = Jinja2Templates(directory="templates")
 
-@app.get("/dashboard", response_class=HTMLResponse)
+ @app.get("/dashboard", response_class=HTMLResponse)
 async def dashboard(request: Request):
     return templates.TemplateResponse("dashboard.html", {"request": request})
 
