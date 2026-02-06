@@ -1691,40 +1691,39 @@ async def websocket_endpoint(websocket: WebSocket, symbol: str):
         websocket_connections.remove(websocket)
         logger.error(f"WebSocket error for {symbol}: {str(e)}", exc_info=True)
         await websocket.close(code=status.WS_1011_INTERNAL_ERROR)
+ from fastapi import FastAPI, Request
+from fastapi.responses import HTMLResponse
+from fastapi.templating import Jinja2Templates
+from datetime import datetime
+
+app = FastAPI(title="Trading Bot Backend")
+
+# Template klasörünü belirt
+# → Proje kök dizininde "templates" klasörü olmalı ve içinde dashboard.html bulunmalı
+templates = Jinja2Templates(directory="templates")
 
 @app.get("/dashboard", response_class=HTMLResponse)
 async def dashboard(request: Request):
-    """Trading dashboard (frontend served separately in production)"""
-    return """
-    <!DOCTYPE html>
-    <html lang="en">
-    <head>
-        <meta charset="UTF-8">
-        <meta name="viewport" content="width=device-width, initial-scale=1.0">
-        <title>Trading Bot Dashboard</title>
-        <style>
-            body { font-family: Arial, sans-serif; padding: 20px; background: #0f172a; color: white; }
-            .container { max-width: 1200px; margin: 0 auto; }
-            h1 { color: #3b82f6; }
-            .status { padding: 10px; background: #1e293b; border-radius: 8px; margin: 20px 0; }
-            .status.healthy { border-left: 4px solid #10b981; }
-            .status.degraded { border-left: 4px solid #f59e0b; }
-            .status.unhealthy { border-left: 4px solid #ef4444; }
-        </style>
-    </head>
-    <body>
-        <div class="container">
-            <h1>🚀 Trading Bot v5.0 Dashboard</h1>
-            <div class="status healthy">
-                <h2>✅ System Status: HEALTHY</h2>
-                <p>All 11 exchanges operational • Real data streaming • ML models active</p>
-            </div>
-            <p>For full trading interface, deploy the frontend separately or access via your domain.</p>
-            <p>API Documentation: <code>/docs</code> (development only)</p>
-        </div>
-    </body>
-    </html>
     """
+    Trading Dashboard sayfası - Jinja2 template ile render edilir
+    """
+    current_time = datetime.utcnow().strftime("%Y-%m-%d %H:%M:%S UTC")
+    
+    # Template'e gönderebileceğin veriler (ileride genişletebilirsin)
+    context = {
+        "request": request,               # Jinja2 için zorunlu
+        "title": "ICT Smart Pro - Trading Dashboard",
+        "now": current_time,
+        "version": "5.0 Enterprise Edition",
+        "status": "Aktif",
+       
+    }
+    
+    return templates.TemplateResponse(
+        "dashboard.html",      # dosya adı (templates/ klasörü içinden)
+        context
+    )
+    
 
 # ========== STARTUP & SHUTDOWN HANDLERS ==========
 startup_time = time.time()
