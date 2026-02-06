@@ -458,7 +458,7 @@ class PriceFetcher:
         self.max_cache_age = max_cache_age
         self.exchange_stats = defaultdict(lambda: {"success": 0, "fail": 0, "last_success": 0.0})
         self.session: Optional[aiohttp.ClientSession] = None
-        self.connector = TCPConnector(limit=50, limit_per_host=10, ttl_dns=300)
+        self.connector = TCPConnector(limit=50, limit_per_host=10)
         logger.info(f"✅ PriceFetcher initialized with {len(self.EXCHANGES)} exchanges")
     
     async def __aenter__(self):
