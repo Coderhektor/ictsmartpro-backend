@@ -22,7 +22,7 @@ opencv-python>=4.10.0
 pillow>=10.4.0
 matplotlib>=3.9.0
 plotly>=5.24.0
-fastapi-limiter  
+  
 
 # Utils & Performance
 rich>=13.8.0
@@ -38,3 +38,5 @@ xgboost>=2.1.0
 scipy>=1.14.0
 jinja2>=3.1.4
 python-multipart==0.0.12
+fastapi-limiter==0.1.6
+aioredis==2.0.1          # genelde birlikte kullanılır
