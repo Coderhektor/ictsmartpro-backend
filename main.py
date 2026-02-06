@@ -1685,12 +1685,8 @@ async def websocket_endpoint(websocket: WebSocket):
 async def dashboard():
     """Serve the trading dashboard HTML"""
     # Read the HTML file we created earlier
-    try:
-
-        return HTMLResponse(content=html_content)
-    except FileNotFoundError:
-        return HTMLResponse(content="""
-        <!DOCTYPE html>
+   
+<!DOCTYPE html>
 <html lang="en">
 <head>
     <meta charset="UTF-8">
@@ -4052,7 +4048,8 @@ async def dashboard():
 </body>
 </html>
        
-  """ )
+  """ 
+
 return HTMLResponse(content=html_content)
 
 # ========== MAIN ENTRY POINT ==========
