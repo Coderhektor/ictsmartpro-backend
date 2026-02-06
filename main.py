@@ -1685,7 +1685,7 @@ async def websocket_endpoint(websocket: WebSocket):
 
 
 
- @app.get("/dashboard", response_class=HTMLResponse)
+@app.get("/dashboard", response_class=HTMLResponse)
 async def dashboard(request: Request):
     return templates.TemplateResponse("dashboard.html", {"request": request})
 
