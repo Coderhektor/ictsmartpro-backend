@@ -621,25 +621,54 @@ box-shadow: 0 4px 12px rgba(139, 92, 246, 0.2);
 }
 
 /* Chart Container */
- .chart-container {
+/* Chart Container - Yüksekliği sabitle ve esnet */
+.chart-container {
     background: var(--bg-secondary);
     border-radius: 16px;
     padding: 1.5rem;
     min-height: 600px;          /* 550'den 600'e çıkardım - daha ferah */
-    height: 800px;              /* Sabit yükseklik ver - responsive'da override edilecek */
+    height: 600px;              /* Sabit yükseklik ver - responsive'da override edilecek */
     border: 2px solid var(--border-color);
     position: relative;
     overflow: hidden;
 }
 
-.chart-container::before {
-content: '';
-position: absolute;
-top: 0;
-left: 0;
-right: 0;
-height: 4px;
-background: linear-gradient(90deg, var(--accent-blue), var(--accent-purple));
+/* TradingView widget container'ı tam doldursun */
+#tradingview-widget {
+    width: 100%;
+    height: 100% !important;    /* !important ekle - TradingView bazen override ediyor */
+    min-height: 550px;          /* Güvenlik için min-height */
+}
+
+/* Responsive'da yükseklik düşürme - ama çok düşürme */
+@media (max-width: 992px) {
+    .chart-container {
+        min-height: 500px;
+        height: 500px;
+    }
+    #tradingview-widget {
+        min-height: 450px;
+    }
+}
+
+@media (max-width: 768px) {
+    .chart-container {
+        min-height: 450px;
+        height: 450px;
+    }
+    #tradingview-widget {
+        min-height: 400px;
+    }
+}
+
+@media (max-width: 576px) {
+    .chart-container {
+        min-height: 350px;
+        height: 350px;
+    }
+    #tradingview-widget {
+        min-height: 300px;
+    }
 }
 
 /* Chat */
