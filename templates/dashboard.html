@@ -2651,6 +2651,27 @@ analyzeCurrentSymbol();
 setTimeout(() => {
 addChatMessage('💡 Pro tip: Click "Retrain Models" after major market events for updated predictions', 'bot');
 }, 2000);
+   // BURAYA EKLEYİN: (diğer fonksiyonlardan sonra, </script>'den önce)
+        window.addEventListener('load', function() {
+            // Token kontrolü
+            const token = localStorage.getItem('token');
+            if (!token) {
+                // Token yoksa ana sayfaya yönlendir
+                window.location.href = '/';
+                return;
+            }
+            
+            // Kullanıcı bilgilerini localStorage'dan al
+            const savedUser = localStorage.getItem('user');
+            if (savedUser) {
+                const user = JSON.parse(savedUser);
+                // Kullanıcı adını göster (navbar'da vs.)
+                document.getElementById('userDisplay').textContent = user.username;
+            }
+            
+            // Dashboard verilerini yükle
+            loadDashboardData();
+        });  
 </script>
 </body>
 </html>
