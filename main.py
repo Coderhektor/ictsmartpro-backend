@@ -1203,21 +1203,39 @@ startup_time = time.time()
 # ========================================================================================================
 @app.get("/", response_class=HTMLResponse)
 async def root():
-    """Serve dashboard HTML"""
-    html_path = os.path.join(os.path.dirname(__file__),"templates","index.html","dashboard.html")
+    """Serve index.html as homepage"""
+    html_path = os.path.join(os.path.dirname(__file__), "templates", "index.html")
     if os.path.exists(html_path):
         return FileResponse(html_path)
     return HTMLResponse("""
     <html>
-    <head><title>Trading Bot v6.0</title></head>
+    <head><title>QuantumTrade AI</title></head>
     <body>
-        <h1>🚀 Trading Bot v6.0</h1>
-        <p>Real-time analysis from 11+ exchanges</p>
-        <p>Dashboard HTML not found. Please ensure dashboard.html is in templates/</p>
+        <h1>🚀 ICTSMARTPRO  AI</h1>
+        <p>AI-Powered Crypto Trading Platform</p>
+        <p>index.html not found. Please ensure index.html is in templates/</p>
     </body>
     </html>
     """)
 
+
+@app.get("/dashboard", response_class=HTMLResponse)
+async def dashboard():
+    """Serve dashboard.html"""
+    html_path = os.path.join(os.path.dirname(__file__), "templates", "dashboard.html")
+    if os.path.exists(html_path):
+        return FileResponse(html_path)
+    return HTMLResponse("""
+    <html>
+    <head><title>Dashboard</title></head>
+    <body>
+        <h1>Dashboard</h1>
+        <p>Dashboard not found or you don't have permission to access it.</p>
+        <p><a href="/">Go back to homepage</a></p>
+    </body>
+    </html>
+    """)
+    #=========================================================================================================
 @app.get("/health")
 async def health_check():
     """Health check endpoint"""
