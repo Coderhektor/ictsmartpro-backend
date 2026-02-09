@@ -1,0 +1,2135 @@
+<!DOCTYPE html>
+<html lang="tr">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>🚀 QuantumTrade AI | AI-Powered Crypto Trading Platform</title>
+    
+    <!-- Bootstrap 5 -->
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
+    
+    <!-- Font Awesome -->
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    
+    <!-- Google Fonts -->
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&family=Manrope:wght@700;800&display=swap" rel="stylesheet">
+    
+    <style>
+        :root {
+            --primary: #6366f1;
+            --primary-dark: #4f46e5;
+            --secondary: #8b5cf6;
+            --accent: #ec4899;
+            --success: #10b981;
+            --warning: #f59e0b;
+            --danger: #ef4444;
+            --dark: #0f172a;
+            --darker: #0a0f1a;
+            --light: #f8fafc;
+            --gray: #94a3b8;
+            --card-bg: rgba(30, 41, 59, 0.8);
+            --border: rgba(255, 255, 255, 0.1);
+            --glass-bg: rgba(255, 255, 255, 0.05);
+            --gradient-primary: linear-gradient(135deg, #8b5cf6, #6366f1);
+            --gradient-secondary: linear-gradient(135deg, #ec4899, #a855f7);
+            --gradient-success: linear-gradient(135deg, #10b981, #06b6d4);
+        }
+        
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+        
+        body {
+            font-family: 'Inter', sans-serif;
+            background: var(--darker);
+            background-image: 
+                radial-gradient(circle at 10% 20%, rgba(99, 102, 241, 0.1) 0%, transparent 25%),
+                radial-gradient(circle at 90% 80%, rgba(139, 92, 246, 0.1) 0%, transparent 25%),
+                radial-gradient(circle at 50% 50%, rgba(236, 72, 153, 0.08) 0%, transparent 35%);
+            color: var(--light);
+            min-height: 100vh;
+            line-height: 1.6;
+            overflow-x: hidden;
+        }
+        
+        .container-fluid {
+            max-width: 1400px;
+            margin: 0 auto;
+            padding: 0 20px;
+        }
+        
+        /* Navbar */
+        .navbar {
+            background: rgba(15, 23, 42, 0.95);
+            backdrop-filter: blur(10px);
+            border-bottom: 1px solid rgba(99, 102, 241, 0.3);
+            padding: 1rem 0;
+            position: fixed;
+            width: 100%;
+            top: 0;
+            z-index: 1000;
+            box-shadow: 0 4px 20px rgba(0, 0, 0, 0.3);
+        }
+        
+        .navbar-brand {
+            font-family: 'Manrope', sans-serif;
+            font-weight: 800;
+            font-size: 1.8rem;
+            background: var(--gradient-primary);
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+            background-clip: text;
+            letter-spacing: -0.5px;
+        }
+        
+        .nav-link {
+            color: var(--gray) !important;
+            font-weight: 500;
+            margin: 0 8px;
+            transition: all 0.3s ease;
+            position: relative;
+            padding: 5px 0 !important;
+        }
+        
+        .nav-link:hover, .nav-link.active {
+            color: var(--primary) !important;
+        }
+        
+        .nav-link::after {
+            content: '';
+            position: absolute;
+            bottom: 0;
+            left: 0;
+            width: 0;
+            height: 2px;
+            background: var(--primary);
+            transition: width 0.3s ease;
+        }
+        
+        .nav-link:hover::after, .nav-link.active::after {
+            width: 100%;
+        }
+        
+        .btn-auth {
+            background: var(--glass-bg);
+            border: 1px solid var(--border);
+            color: var(--light);
+            padding: 8px 20px;
+            border-radius: 12px;
+            font-weight: 500;
+            transition: all 0.3s ease;
+        }
+        
+        .btn-auth:hover {
+            background: rgba(99, 102, 241, 0.15);
+            border-color: var(--primary);
+            transform: translateY(-1px);
+        }
+        
+        /* Hero Section */
+        .hero-section {
+            min-height: 100vh;
+            display: flex;
+            align-items: center;
+            padding: 150px 0 80px;
+            position: relative;
+        }
+        
+        .hero-title {
+            font-family: 'Manrope', sans-serif;
+            font-weight: 800;
+            font-size: 4.2rem;
+            line-height: 1.1;
+            margin-bottom: 1.5rem;
+            background: linear-gradient(120deg, var(--light), var(--primary), var(--secondary));
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+            background-clip: text;
+            letter-spacing: -1px;
+        }
+        
+        .hero-subtitle {
+            font-size: 1.4rem;
+            color: var(--gray);
+            margin-bottom: 2.5rem;
+            max-width: 700px;
+            font-weight: 300;
+            line-height: 1.7;
+        }
+        
+        .hero-cta {
+            display: flex;
+            gap: 15px;
+            flex-wrap: wrap;
+        }
+        
+        .btn-hero {
+            padding: 16px 45px;
+            border-radius: 16px;
+            font-weight: 700;
+            font-size: 1.2rem;
+            transition: all 0.3s ease;
+            display: inline-flex;
+            align-items: center;
+            gap: 10px;
+        }
+        
+        .btn-primary-hero {
+            background: var(--gradient-primary);
+            border: none;
+            color: white;
+            box-shadow: 0 8px 25px rgba(99, 102, 241, 0.4);
+        }
+        
+        .btn-primary-hero:hover {
+            transform: translateY(-3px);
+            box-shadow: 0 12px 35px rgba(99, 102, 241, 0.6);
+        }
+        
+        .btn-outline-hero {
+            background: transparent;
+            border: 2px solid var(--border);
+            color: var(--light);
+        }
+        
+        .btn-outline-hero:hover {
+            background: rgba(255, 255, 255, 0.05);
+            border-color: var(--primary);
+        }
+        
+        /* Auth Container */
+        .auth-container {
+            display: flex;
+            gap: 30px;
+            margin-top: 40px;
+            flex-wrap: wrap;
+        }
+        
+        .auth-card {
+            background: var(--card-bg);
+            border: 1px solid var(--border);
+            border-radius: 24px;
+            padding: 45px;
+            width: 100%;
+            max-width: 500px;
+            backdrop-filter: blur(10px);
+            transition: all 0.4s ease;
+            position: relative;
+            overflow: hidden;
+        }
+        
+        .auth-card::before {
+            content: '';
+            position: absolute;
+            top: -50%;
+            left: -50%;
+            width: 200%;
+            height: 200%;
+            background: radial-gradient(circle, rgba(99, 102, 241, 0.1) 0%, transparent 70%);
+            z-index: 0;
+        }
+        
+        .auth-card:hover {
+            transform: translateY(-8px);
+            border-color: var(--primary);
+            box-shadow: 0 20px 50px rgba(99, 102, 241, 0.3);
+        }
+        
+        .auth-card.active {
+            border-color: var(--primary);
+            background: rgba(30, 41, 59, 0.95);
+            box-shadow: 0 10px 40px rgba(99, 102, 241, 0.25);
+        }
+        
+        .auth-card-header {
+            position: relative;
+            z-index: 1;
+            margin-bottom: 30px;
+        }
+        
+        .auth-title {
+            font-family: 'Manrope', sans-serif;
+            font-size: 2rem;
+            margin-bottom: 10px;
+            font-weight: 800;
+            background: var(--gradient-primary);
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+            background-clip: text;
+        }
+        
+        .auth-description {
+            color: var(--gray);
+            margin-bottom: 30px;
+            font-size: 1.05rem;
+        }
+        
+        .form-group {
+            margin-bottom: 22px;
+            position: relative;
+            z-index: 1;
+        }
+        
+        .form-label {
+            display: block;
+            margin-bottom: 10px;
+            color: var(--light);
+            font-weight: 600;
+            font-size: 0.95rem;
+        }
+        
+        .form-control {
+            width: 100%;
+            padding: 14px 20px;
+            background: var(--glass-bg);
+            border: 1px solid var(--border);
+            border-radius: 14px;
+            color: var(--light);
+            font-size: 1rem;
+            transition: all 0.3s ease;
+        }
+        
+        .form-control:focus {
+            outline: none;
+            border-color: var(--primary);
+            background: rgba(255, 255, 255, 0.08);
+            box-shadow: 0 0 0 4px rgba(99, 102, 241, 0.15);
+        }
+        
+        .form-control::placeholder {
+            color: var(--gray);
+        }
+        
+        .btn-submit {
+            width: 100%;
+            padding: 16px;
+            background: var(--gradient-primary);
+            border: none;
+            border-radius: 14px;
+            color: white;
+            font-weight: 700;
+            font-size: 1.15rem;
+            cursor: pointer;
+            transition: all 0.3s ease;
+            margin-top: 10px;
+            position: relative;
+            overflow: hidden;
+        }
+        
+        .btn-submit::before {
+            content: '';
+            position: absolute;
+            top: 0;
+            left: -100%;
+            width: 100%;
+            height: 100%;
+            background: linear-gradient(90deg, transparent, rgba(255, 255, 255, 0.2), transparent);
+            transition: left 0.5s;
+        }
+        
+        .btn-submit:hover::before {
+            left: 100%;
+        }
+        
+        .btn-submit:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 8px 25px rgba(99, 102, 241, 0.5);
+        }
+        
+        .btn-submit:disabled {
+            opacity: 0.7;
+            cursor: not-allowed;
+        }
+        
+        .auth-switch {
+            text-align: center;
+            margin-top: 28px;
+            color: var(--gray);
+            position: relative;
+            z-index: 1;
+        }
+        
+        .auth-switch a {
+            color: var(--primary);
+            text-decoration: none;
+            font-weight: 700;
+            margin-left: 5px;
+            cursor: pointer;
+            transition: all 0.3s ease;
+        }
+        
+        .auth-switch a:hover {
+            color: var(--secondary);
+            text-decoration: underline;
+        }
+        
+        /* Alert Messages */
+        .alert {
+            padding: 16px 20px;
+            border-radius: 14px;
+            margin-bottom: 25px;
+            display: none;
+            position: relative;
+            z-index: 10;
+        }
+        
+        .alert-success {
+            background: rgba(16, 185, 129, 0.15);
+            border: 1px solid rgba(16, 185, 129, 0.3);
+            color: var(--success);
+        }
+        
+        .alert-error {
+            background: rgba(239, 68, 68, 0.15);
+            border: 1px solid rgba(239, 68, 68, 0.3);
+            color: #ef4444;
+        }
+        
+        .alert-warning {
+            background: rgba(245, 158, 11, 0.15);
+            border: 1px solid rgba(245, 158, 11, 0.3);
+            color: #f59e0b;
+        }
+        
+        .alert-info {
+            background: rgba(59, 130, 246, 0.15);
+            border: 1px solid rgba(59, 130, 246, 0.3);
+            color: #3b82f6;
+        }
+        
+        /* Admin Info */
+        .admin-info {
+            background: rgba(139, 92, 246, 0.1);
+            border: 1px solid rgba(139, 92, 246, 0.3);
+            border-radius: 18px;
+            padding: 25px;
+            margin-top: 40px;
+            backdrop-filter: blur(5px);
+        }
+        
+        .admin-info h4 {
+            color: var(--secondary);
+            margin-bottom: 15px;
+            font-size: 1.4rem;
+            display: flex;
+            align-items: center;
+            gap: 10px;
+        }
+        
+        .admin-info p {
+            color: var(--gray);
+            margin-bottom: 15px;
+            font-size: 0.95rem;
+        }
+        
+        .admin-credentials {
+            background: rgba(0, 0, 0, 0.25);
+            border-radius: 14px;
+            padding: 18px;
+            font-family: 'Courier New', monospace;
+            font-size: 1rem;
+            line-height: 1.6;
+            border: 1px solid var(--border);
+        }
+        
+        .admin-credentials div {
+            margin-bottom: 8px;
+        }
+        
+        .admin-credentials strong {
+            color: var(--primary);
+        }
+        
+        /* Stats */
+        .stats-container {
+            display: flex;
+            justify-content: space-between;
+            margin-top: 40px;
+            padding-top: 35px;
+            border-top: 1px solid var(--border);
+            flex-wrap: wrap;
+            gap: 20px;
+        }
+        
+        .stat-item {
+            text-align: center;
+            padding: 20px;
+            min-width: 120px;
+        }
+        
+        .stat-number {
+            font-family: 'Manrope', sans-serif;
+            font-size: 2.8rem;
+            font-weight: 800;
+            background: var(--gradient-primary);
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+            background-clip: text;
+            line-height: 1;
+        }
+        
+        .stat-label {
+            color: var(--gray);
+            font-weight: 600;
+            font-size: 1.15rem;
+            margin-top: 8px;
+        }
+        
+        /* Features Grid */
+        .features-section {
+            padding: 80px 0;
+        }
+        
+        .section-title {
+            font-family: 'Manrope', sans-serif;
+            font-weight: 800;
+            font-size: 3rem;
+            text-align: center;
+            margin-bottom: 20px;
+            background: linear-gradient(120deg, var(--light), var(--primary));
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+            background-clip: text;
+        }
+        
+        .section-subtitle {
+            text-align: center;
+            color: var(--gray);
+            max-width: 700px;
+            margin: 0 auto 60px;
+            font-size: 1.2rem;
+        }
+        
+        .features-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+            gap: 30px;
+            margin-top: 40px;
+        }
+        
+        .feature-card {
+            background: var(--card-bg);
+            border: 1px solid var(--border);
+            border-radius: 20px;
+            padding: 35px 30px;
+            text-align: center;
+            transition: all 0.4s ease;
+            position: relative;
+            overflow: hidden;
+        }
+        
+        .feature-card::before {
+            content: '';
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 5px;
+            background: var(--gradient-primary);
+        }
+        
+        .feature-card:hover {
+            transform: translateY(-10px);
+            border-color: var(--primary);
+            box-shadow: 0 15px 40px rgba(99, 102, 241, 0.3);
+        }
+        
+        .feature-icon {
+            width: 80px;
+            height: 80px;
+            background: var(--glass-bg);
+            border-radius: 24px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            margin: 0 auto 25px;
+            font-size: 2.2rem;
+            color: var(--primary);
+            border: 1px solid var(--border);
+        }
+        
+        .feature-title {
+            font-size: 1.6rem;
+            margin-bottom: 15px;
+            font-weight: 700;
+        }
+        
+        .feature-desc {
+            color: var(--gray);
+            font-size: 1.05rem;
+            line-height: 1.7;
+        }
+        
+        /* Payment Section */
+        .payment-section {
+            display: none;
+            padding: 80px 0;
+        }
+        
+        .payment-card {
+            background: var(--card-bg);
+            border: 1px solid var(--border);
+            border-radius: 24px;
+            padding: 40px;
+            max-width: 600px;
+            margin: 0 auto;
+        }
+        
+        .payment-header {
+            text-align: center;
+            margin-bottom: 30px;
+        }
+        
+        .payment-title {
+            font-family: 'Manrope', sans-serif;
+            font-size: 2.2rem;
+            font-weight: 800;
+            margin-bottom: 15px;
+            background: var(--gradient-success);
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+            background-clip: text;
+        }
+        
+        .usdt-price {
+            font-family: 'Manrope', sans-serif;
+            font-size: 4rem;
+            font-weight: 800;
+            margin: 20px 0;
+            background: var(--gradient-success);
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+            background-clip: text;
+            line-height: 1;
+        }
+        
+        .usdt-badge {
+            background: rgba(0, 209, 178, 0.2);
+            color: #00d1b2;
+            padding: 6px 16px;
+            border-radius: 20px;
+            font-weight: 600;
+            font-size: 0.9rem;
+            display: inline-flex;
+            align-items: center;
+            gap: 6px;
+            margin-bottom: 20px;
+        }
+        
+        .network-selector {
+            display: flex;
+            gap: 10px;
+            margin: 20px 0;
+            justify-content: center;
+        }
+        
+        .network-btn {
+            padding: 12px 24px;
+            background: var(--glass-bg);
+            border: 1px solid var(--border);
+            border-radius: 12px;
+            color: var(--gray);
+            font-weight: 600;
+            cursor: pointer;
+            transition: all 0.3s ease;
+        }
+        
+        .network-btn:hover {
+            background: rgba(255, 255, 255, 0.08);
+        }
+        
+        .network-btn.active {
+            background: var(--gradient-primary);
+            color: white;
+            border-color: var(--primary);
+        }
+        
+        .wallet-info {
+            background: rgba(0, 0, 0, 0.25);
+            border: 1px solid var(--border);
+            border-radius: 16px;
+            padding: 25px;
+            margin: 25px 0;
+        }
+        
+        .wallet-info h5 {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            margin-bottom: 15px;
+        }
+        
+        .wallet-address {
+            background: rgba(0, 0, 0, 0.3);
+            border-radius: 12px;
+            padding: 15px;
+            font-family: monospace;
+            font-size: 1.1rem;
+            margin: 15px 0;
+            word-break: break-all;
+            cursor: pointer;
+            transition: all 0.3s ease;
+            position: relative;
+        }
+        
+        .wallet-address:hover {
+            background: rgba(99, 102, 241, 0.1);
+            border: 1px solid var(--primary);
+        }
+        
+        .copy-btn {
+            position: absolute;
+            right: 10px;
+            top: 10px;
+            background: var(--glass-bg);
+            border: 1px solid var(--border);
+            border-radius: 8px;
+            padding: 6px 12px;
+            color: var(--gray);
+            font-size: 0.85rem;
+            cursor: pointer;
+            transition: all 0.3s ease;
+        }
+        
+        .copy-btn:hover {
+            background: var(--primary);
+            color: white;
+        }
+        
+        .qrcode-container {
+            text-align: center;
+            margin: 20px 0;
+            padding: 20px;
+            background: white;
+            border-radius: 12px;
+            display: inline-block;
+        }
+        
+        .qrcode-placeholder {
+            width: 200px;
+            height: 200px;
+            background: linear-gradient(45deg, #f0f0f0, #e0e0e0);
+            border-radius: 8px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            color: #666;
+            font-size: 0.9rem;
+            margin: 0 auto;
+        }
+        
+        /* Verification Section */
+        .verification-section {
+            display: none;
+            padding: 80px 0;
+        }
+        
+        .verification-card {
+            background: var(--card-bg);
+            border: 1px solid var(--border);
+            border-radius: 24px;
+            padding: 40px;
+            max-width: 600px;
+            margin: 0 auto;
+        }
+        
+        .verification-title {
+            font-family: 'Manrope', sans-serif;
+            font-size: 2rem;
+            font-weight: 800;
+            margin-bottom: 20px;
+            text-align: center;
+            background: var(--gradient-primary);
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+            background-clip: text;
+        }
+        
+        .verification-steps {
+            margin: 30px 0;
+        }
+        
+        .step {
+            display: flex;
+            align-items: flex-start;
+            margin-bottom: 25px;
+            padding: 15px;
+            background: rgba(255, 255, 255, 0.03);
+            border-radius: 12px;
+            border: 1px solid rgba(255, 255, 255, 0.05);
+        }
+        
+        .step-number {
+            width: 40px;
+            height: 40px;
+            background: var(--gradient-primary);
+            border-radius: 50%;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-weight: 800;
+            font-size: 1.2rem;
+            margin-right: 15px;
+            flex-shrink: 0;
+        }
+        
+        .step-content {
+            flex: 1;
+        }
+        
+        .step-title {
+            font-weight: 700;
+            margin-bottom: 5px;
+            color: var(--light);
+        }
+        
+        .step-desc {
+            color: var(--gray);
+            font-size: 0.95rem;
+            line-height: 1.5;
+        }
+        
+        .verification-loading {
+            text-align: center;
+            margin: 30px 0;
+            padding: 30px;
+        }
+        
+        .loading-spinner {
+            width: 60px;
+            height: 60px;
+            border: 4px solid rgba(99, 102, 241, 0.2);
+            border-top: 4px solid var(--primary);
+            border-radius: 50%;
+            animation: spin 1s linear infinite;
+            margin: 0 auto 20px;
+        }
+        
+        @keyframes spin {
+            0% { transform: rotate(0deg); }
+            100% { transform: rotate(360deg); }
+        }
+        
+        .loading-text {
+            color: var(--gray);
+            font-size: 1.1rem;
+        }
+        
+        /* Dashboard Section */
+        .dashboard-section {
+            display: none;
+            padding: 80px 0;
+        }
+        
+        .dashboard-header {
+            text-align: center;
+            margin-bottom: 50px;
+        }
+        
+        .dashboard-title {
+            font-family: 'Manrope', sans-serif;
+            font-size: 3.2rem;
+            font-weight: 800;
+            margin-bottom: 15px;
+            background: var(--gradient-success);
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+            background-clip: text;
+        }
+        
+        .dashboard-subtitle {
+            color: var(--gray);
+            font-size: 1.3rem;
+        }
+        
+        .dashboard-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
+            gap: 30px;
+            margin-top: 30px;
+        }
+        
+        .dashboard-card {
+            background: var(--card-bg);
+            border: 1px solid var(--border);
+            border-radius: 20px;
+            padding: 30px;
+            transition: all 0.3s ease;
+        }
+        
+        .dashboard-card:hover {
+            transform: translateY(-5px);
+            border-color: var(--primary);
+            box-shadow: 0 10px 30px rgba(99, 102, 241, 0.2);
+        }
+        
+        .dashboard-card-title {
+            font-size: 1.4rem;
+            font-weight: 700;
+            margin-bottom: 20px;
+            display: flex;
+            align-items: center;
+            gap: 10px;
+        }
+        
+        .dashboard-card-value {
+            font-family: 'Manrope', sans-serif;
+            font-size: 2.5rem;
+            font-weight: 800;
+            margin: 15px 0;
+        }
+        
+        .dashboard-card-label {
+            color: var(--gray);
+            font-size: 1.05rem;
+        }
+        
+        .user-info-card {
+            grid-column: span 2;
+        }
+        
+        .user-info-item {
+            display: flex;
+            justify-content: space-between;
+            padding: 12px 0;
+            border-bottom: 1px solid var(--border);
+        }
+        
+        .user-info-item:last-child {
+            border-bottom: none;
+        }
+        
+        .user-info-label {
+            color: var(--gray);
+            font-weight: 500;
+        }
+        
+        .user-info-value {
+            font-weight: 600;
+            color: var(--light);
+        }
+        
+        .signals-table {
+            width: 100%;
+            border-collapse: collapse;
+            margin-top: 15px;
+        }
+        
+        .signals-table th {
+            text-align: left;
+            padding: 12px 15px;
+            background: rgba(255, 255, 255, 0.05);
+            border-bottom: 2px solid var(--border);
+            color: var(--gray);
+            font-weight: 600;
+            font-size: 0.9rem;
+        }
+        
+        .signals-table td {
+            padding: 15px;
+            border-bottom: 1px solid rgba(255, 255, 255, 0.05);
+        }
+        
+        .signal-buy {
+            color: var(--success);
+            font-weight: 700;
+        }
+        
+        .signal-sell {
+            color: var(--danger);
+            font-weight: 700;
+        }
+        
+        .signal-confidence {
+            display: inline-block;
+            padding: 4px 12px;
+            background: rgba(16, 185, 129, 0.15);
+            border-radius: 20px;
+            font-size: 0.85rem;
+            font-weight: 600;
+        }
+        
+        /* Footer */
+        .footer {
+            text-align: center;
+            padding: 40px 0;
+            color: var(--gray);
+            border-top: 1px solid var(--border);
+            margin-top: 60px;
+            font-size: 0.95rem;
+        }
+        
+        .footer-links {
+            display: flex;
+            justify-content: center;
+            gap: 25px;
+            margin: 20px 0;
+        }
+        
+        .footer-links a {
+            color: var(--gray);
+            text-decoration: none;
+            transition: all 0.3s ease;
+        }
+        
+        .footer-links a:hover {
+            color: var(--primary);
+        }
+        
+        /* Animations */
+        @keyframes float {
+            0% { transform: translateY(0px); }
+            50% { transform: translateY(-10px); }
+            100% { transform: translateY(0px); }
+        }
+        
+        .floating {
+            animation: float 6s ease-in-out infinite;
+        }
+        
+        @keyframes pulse {
+            0% { box-shadow: 0 0 0 0 rgba(99, 102, 241, 0.4); }
+            70% { box-shadow: 0 0 0 12px rgba(99, 102, 241, 0); }
+            100% { box-shadow: 0 0 0 0 rgba(99, 102, 241, 0); }
+        }
+        
+        .pulse {
+            animation: pulse 2s infinite;
+        }
+        
+        /* Responsive */
+        @media (max-width: 992px) {
+            .hero-title {
+                font-size: 3.5rem;
+            }
+            
+            .auth-container {
+                flex-direction: column;
+                align-items: center;
+            }
+            
+            .auth-card {
+                max-width: 100%;
+            }
+            
+            .user-info-card {
+                grid-column: span 1;
+            }
+        }
+        
+        @media (max-width: 768px) {
+            .hero {
+                padding: 130px 0 60px;
+            }
+            
+            .hero-title {
+                font-size: 2.8rem;
+            }
+            
+            .hero-subtitle {
+                font-size: 1.2rem;
+            }
+            
+            .hero-cta {
+                flex-direction: column;
+            }
+            
+            .btn-hero {
+                width: 100%;
+                justify-content: center;
+            }
+            
+            .section-title {
+                font-size: 2.3rem;
+            }
+            
+            .stat-number {
+                font-size: 2.2rem;
+            }
+            
+            .usdt-price {
+                font-size: 3.2rem;
+            }
+            
+            .dashboard-grid {
+                grid-template-columns: 1fr;
+            }
+            
+            .network-selector {
+                flex-direction: column;
+            }
+        }
+        
+        @media (max-width: 480px) {
+            .hero-title {
+                font-size: 2.3rem;
+            }
+            
+            .auth-card {
+                padding: 30px 20px;
+            }
+            
+            .auth-title {
+                font-size: 1.6rem;
+            }
+            
+            .stat-number {
+                font-size: 1.8rem;
+            }
+            
+            .btn-submit, .btn-hero {
+                padding: 14px;
+                font-size: 1.05rem;
+            }
+            
+            .feature-icon {
+                width: 65px;
+                height: 65px;
+                font-size: 1.8rem;
+            }
+            
+            .usdt-price {
+                font-size: 2.8rem;
+            }
+        }
+    </style>
+</head>
+<body>
+    <!-- Navbar -->
+    <nav class="navbar navbar-expand-lg">
+        <div class="container-fluid">
+            <a class="navbar-brand" href="#">
+                <i class="fas fa-robot me-2"></i>QuantumTrade AI
+            </a>
+            
+            <button class="navbar-toggler" type="button" data-bs-toggle="collapse" data-bs-target="#navbarNav">
+                <i class="fas fa-bars text-white"></i>
+            </button>
+            
+            <div class="collapse navbar-collapse" id="navbarNav">
+                <ul class="navbar-nav ms-auto">
+                    <li class="nav-item">
+                        <a class="nav-link active" href="#home">Home</a>
+                    </li>
+                    <li class="nav-item">
+                        <a class="nav-link" href="#features">Features</a>
+                    </li>
+                    <li class="nav-item">
+                        <a class="nav-link" href="#pricing">Pricing</a>
+                    </li>
+                    <li class="nav-item">
+                        <a class="nav-link" id="dashboardLink" href="#" style="display: none;">Dashboard</a>
+                    </li>
+                    <li class="nav-item ms-2">
+                        <button class="btn-auth" id="authToggleBtn">
+                            <i class="fas fa-sign-in-alt me-2"></i> <span id="authToggleText">Login</span>
+                        </button>
+                    </li>
+                </ul>
+            </div>
+        </div>
+    </nav>
+
+    <!-- Hero Section -->
+    <section id="home" class="hero-section">
+        <div class="container-fluid">
+            <div class="row align-items-center">
+                <div class="col-lg-6">
+                    <h1 class="hero-title">
+                        AI-Powered Crypto Trading<br>with 99.7% Accuracy
+                    </h1>
+                    <p class="hero-subtitle">
+                        Advanced algorithmic trading powered by machine learning. Real-time market analysis from 11+ exchanges with WebSocket data streams for millisecond-level execution.
+                    </p>
+                    <div class="hero-cta">
+                        <button class="btn-hero btn-primary-hero" id="getStartedBtn">
+                            <i class="fas fa-rocket"></i> Get Started
+                        </button>
+                        <button class="btn-hero btn-outline-hero" onclick="document.getElementById('features').scrollIntoView({behavior: 'smooth'})">
+                            <i class="fas fa-compass"></i> Explore Features
+                        </button>
+                    </div>
+                    
+                    <!-- Stats -->
+                    <div class="stats-container">
+                        <div class="stat-item">
+                            <div class="stat-number">11+</div>
+                            <div class="stat-label">Exchanges</div>
+                        </div>
+                        <div class="stat-item">
+                            <div class="stat-number">99.7%</div>
+                            <div class="stat-label">Accuracy</div>
+                        </div>
+                        <div class="stat-item">
+                            <div class="stat-number">24/7</div>
+                            <div class="stat-label">Monitoring</div>
+                        </div>
+                    </div>
+                    
+                    <!-- Admin Info -->
+                    <div class="admin-info">
+                        <h4><i class="fas fa-user-shield me-2"></i>Admin Access</h4>
+                        <p>Use the following credentials for admin access:</p>
+                        <div class="admin-credentials">
+                            <div><strong>Username:</strong> ictsmartpro</div>
+                            <div><strong>Password:</strong> 123456</div>
+                            <div><strong>Email:</strong> ictsmartpro@gmail.com</div>
+                        </div>
+                        <p class="mt-3 small">Note: Admin users bypass payment verification and have full system access.</p>
+                    </div>
+                </div>
+                
+                <div class="col-lg-6">
+                    <!-- Auth Container -->
+                    <div class="auth-container">
+                        <!-- Login Card -->
+                        <div class="auth-card active" id="loginCard">
+                            <div class="auth-card-header">
+                                <h2 class="auth-title"><i class="fas fa-sign-in-alt me-2"></i>Login</h2>
+                                <p class="auth-description">Access your trading dashboard</p>
+                            </div>
+                            
+                            <div class="alert" id="loginAlert"></div>
+                            
+                            <form id="loginForm">
+                                <div class="form-group">
+                                    <label class="form-label">Username or Email</label>
+                                    <input type="text" class="form-control" id="loginIdentifier" 
+                                           placeholder="Enter username or email" required>
+                                </div>
+                                
+                                <div class="form-group">
+                                    <label class="form-label">Password</label>
+                                    <input type="password" class="form-control" id="loginPassword" 
+                                           placeholder="Enter password" required>
+                                </div>
+                                
+                                <button type="submit" class="btn-submit" id="loginBtn">
+                                    <i class="fas fa-sign-in-alt me-2"></i>Login
+                                </button>
+                            </form>
+                            
+                            <div class="auth-switch">
+                                Don't have an account? 
+                                <a onclick="showRegister()">Register here</a>
+                            </div>
+                        </div>
+                        
+                        <!-- Register Card -->
+                        <div class="auth-card" id="registerCard" style="display: none;">
+                            <div class="auth-card-header">
+                                <h2 class="auth-title"><i class="fas fa-user-plus me-2"></i>Register</h2>
+                                <p class="auth-description">Create your free account</p>
+                            </div>
+                            
+                            <div class="alert" id="registerAlert"></div>
+                            
+                            <form id="registerForm">
+                                <div class="form-group">
+                                    <label class="form-label">Username</label>
+                                    <input type="text" class="form-control" id="registerUsername" 
+                                           placeholder="Choose username" required>
+                                </div>
+                                
+                                <div class="form-group">
+                                    <label class="form-label">Email</label>
+                                    <input type="email" class="form-control" id="registerEmail" 
+                                           placeholder="Enter email" required>
+                                </div>
+                                
+                                <div class="form-group">
+                                    <label class="form-label">Password</label>
+                                    <input type="password" class="form-control" id="registerPassword" 
+                                           placeholder="Minimum 6 characters" required>
+                                </div>
+                                
+                                <div class="form-group">
+                                    <label class="form-label">Wallet Address (Optional)</label>
+                                    <input type="text" class="form-control" id="registerWallet" 
+                                           placeholder="0x..." value="">
+                                </div>
+                                
+                                <button type="submit" class="btn-submit" id="registerBtn">
+                                    <i class="fas fa-user-plus me-2"></i>Create Account
+                                </button>
+                            </form>
+                            
+                            <div class="auth-switch">
+                                Already have an account? 
+                                <a onclick="showLogin()">Login here</a>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </section>
+
+    <!-- Features Section -->
+    <section id="features" class="features-section">
+        <div class="container-fluid">
+            <h2 class="section-title">Powerful Trading Features</h2>
+            <p class="section-subtitle">
+                Advanced tools and real-time data analysis to maximize your trading performance
+            </p>
+            
+            <div class="features-grid">
+                <div class="feature-card">
+                    <div class="feature-icon">
+                        <i class="fas fa-bolt"></i>
+                    </div>
+                    <h3 class="feature-title">Real-Time WebSocket Data</h3>
+                    <p class="feature-desc">
+                        Millisecond-level market data from 11+ exchanges with zero latency. No API keys needed.
+                    </p>
+                </div>
+                
+                <div class="feature-card">
+                    <div class="feature-icon">
+                        <i class="fas fa-brain"></i>
+                    </div>
+                    <h3 class="feature-title">AI Prediction Engine</h3>
+                    <p class="feature-desc">
+                        Advanced machine learning models analyze market patterns and predict price movements with 99.7% accuracy.
+                    </p>
+                </div>
+                
+                <div class="feature-card">
+                    <div class="feature-icon">
+                        <i class="fas fa-shield-alt"></i>
+                    </div>
+                    <h3 class="feature-title">Secure & Reliable</h3>
+                    <p class="feature-desc">
+                        Enterprise-grade security with end-to-end encryption. Your funds and data are always protected.
+                    </p>
+                </div>
+            </div>
+        </div>
+    </section>
+
+    <!-- Payment Section -->
+    <section id="paymentSection" class="payment-section">
+        <div class="container-fluid">
+            <div class="payment-card">
+                <div class="payment-header">
+                    <div class="usdt-badge">
+                        <i class="fab fa-usdt"></i> USDT Payment
+                    </div>
+                    <h2 class="payment-title">Premium Subscription</h2>
+                    <div class="usdt-price">49 USDT</div>
+                    <p class="text-muted mb-4">per month • 7 day free trial included</p>
+                </div>
+                
+                <div class="network-selector">
+                    <div class="network-btn active" data-network="ERC20">ERC20</div>
+                    <div class="network-btn" data-network="TRC20">TRC20</div>
+                    <div class="network-btn" data-network="BEP20">BEP20</div>
+                </div>
+                
+                <div class="wallet-info">
+                    <h5><i class="fas fa-wallet me-2"></i>Payment Instructions</h5>
+                    <p class="text-muted mb-3">Send exactly <strong>49 USDT</strong> to our secure wallet address:</p>
+                    
+                    <div class="wallet-address" id="walletAddress">
+                        0x742d35Cc6634C0532925a3b844Bc9e8f43b8b8c3
+                        <div class="copy-btn" onclick="copyWallet()">
+                            <i class="fas fa-copy"></i> Copy
+                        </div>
+                    </div>
+                    
+                    <div class="text-center mt-4">
+                        <div class="qrcode-placeholder">
+                            QR Code would appear here
+                        </div>
+                    </div>
+                    
+                    <div class="alert alert-info mt-4" id="networkAlert">
+                        <i class="fas fa-info-circle me-2"></i>
+                        Make sure to select the correct network before sending funds
+                    </div>
+                </div>
+                
+                <div class="form-group">
+                    <label class="form-label">Transaction Hash (TxID)</label>
+                    <input type="text" class="form-control" id="txHash" 
+                           placeholder="0x..." required>
+                    <small class="text-muted d-block mt-2">
+                        After sending 49 USDT, enter your transaction hash to verify payment
+                    </small>
+                </div>
+                
+                <div class="alert" id="paymentAlert"></div>
+                
+                <button class="btn-submit" id="verifyPaymentBtn">
+                    <i class="fas fa-check-circle me-2"></i>Verify Payment
+                </button>
+                
+                <div class="auth-switch mt-3">
+                    <a onclick="cancelPayment()">
+                        <i class="fas fa-arrow-left me-1"></i> Back to Dashboard
+                    </a>
+                </div>
+            </div>
+        </div>
+    </section>
+
+    <!-- Verification Section -->
+    <section id="verificationSection" class="verification-section">
+        <div class="container-fluid">
+            <div class="verification-card">
+                <h2 class="verification-title">
+                    <i class="fas fa-spinner fa-spin me-2"></i> Payment Verification
+                </h2>
+                
+                <div class="verification-steps">
+                    <div class="step">
+                        <div class="step-number">1</div>
+                        <div class="step-content">
+                            <div class="step-title">Transaction Received</div>
+                            <div class="step-desc">We've received your transaction and it's being processed on the blockchain.</div>
+                        </div>
+                    </div>
+                    
+                    <div class="step">
+                        <div class="step-number">2</div>
+                        <div class="step-content">
+                            <div class="step-title">Confirming Transaction</div>
+                            <div class="step-desc">Waiting for blockchain confirmations (3 required for security).</div>
+                        </div>
+                    </div>
+                    
+                    <div class="step">
+                        <div class="step-number">3</div>
+                        <div class="step-content">
+                            <div class="step-title">Activating Subscription</div>
+                            <div class="step-desc">Once confirmed, your premium subscription will be activated automatically.</div>
+                        </div>
+                    </div>
+                </div>
+                
+                <div class="verification-loading">
+                    <div class="loading-spinner"></div>
+                    <div class="loading-text">Verifying your payment... This may take 2-5 minutes.</div>
+                </div>
+                
+                <div class="alert" id="verificationAlert"></div>
+                
+                <div class="text-center mt-4">
+                    <div class="transaction-info" id="transactionInfo" style="display: none;">
+                        <p class="text-muted mb-2">
+                            <strong>Transaction:</strong> 
+                            <span id="verificationTxHash" class="font-monospace small"></span>
+                        </p>
+                        <p class="text-muted mb-2">
+                            <strong>Status:</strong> 
+                            <span id="verificationStatus">Pending</span>
+                        </p>
+                        <p class="text-muted">
+                            <strong>Confirmations:</strong> 
+                            <span id="verificationConfirmations">0/3</span>
+                        </p>
+                    </div>
+                    
+                    <button class="btn-submit mt-4" id="checkVerificationBtn" style="display: none;">
+                        <i class="fas fa-sync-alt me-2"></i>Check Status
+                    </button>
+                    
+                    <button class="btn btn-outline-hero mt-3" id="cancelVerificationBtn">
+                        <i class="fas fa-times me-2"></i>Cancel Verification
+                    </button>
+                </div>
+            </div>
+        </div>
+    </section>
+
+    <!-- Dashboard Section -->
+    <section id="dashboardSection" class="dashboard-section">
+        <div class="container-fluid">
+            <div class="dashboard-header">
+                <h2 class="dashboard-title">
+                    <i class="fas fa-chart-line me-3"></i>Trading Dashboard
+                </h2>
+                <p class="dashboard-subtitle">Real-time trading analytics and market insights</p>
+            </div>
+            
+            <div class="dashboard-grid">
+                <div class="dashboard-card">
+                    <h4 class="dashboard-card-title">
+                        <i class="fas fa-user-circle"></i> Account Status
+                    </h4>
+                    <div class="dashboard-card-value" id="accountStatus">Active</div>
+                    <div class="dashboard-card-label" id="accountPlan">Premium Subscription</div>
+                </div>
+                
+                <div class="dashboard-card">
+                    <h4 class="dashboard-card-title">
+                        <i class="fas fa-chart-line"></i> Active Signals
+                    </h4>
+                    <div class="dashboard-card-value" id="activeSignals">12</div>
+                    <div class="dashboard-card-label">Trading Signals Today</div>
+                </div>
+                
+                <div class="dashboard-card">
+                    <h4 class="dashboard-card-title">
+                        <i class="fas fa-exchange-alt"></i> Exchanges
+                    </h4>
+                    <div class="dashboard-card-value">11+</div>
+                    <div class="dashboard-card-label">Connected Exchanges</div>
+                </div>
+                
+                <div class="dashboard-card">
+                    <h4 class="dashboard-card-title">
+                        <i class="fas fa-percentage"></i> Accuracy
+                    </h4>
+                    <div class="dashboard-card-value">99.7%</div>
+                    <div class="dashboard-card-label">Prediction Accuracy</div>
+                </div>
+                
+                <div class="dashboard-card user-info-card">
+                    <h4 class="dashboard-card-title">
+                        <i class="fas fa-info-circle"></i> User Information
+                    </h4>
+                    <div class="user-info-item">
+                        <span class="user-info-label">Username:</span>
+                        <span class="user-info-value" id="userInfoUsername">-</span>
+                    </div>
+                    <div class="user-info-item">
+                        <span class="user-info-label">Email:</span>
+                        <span class="user-info-value" id="userInfoEmail">-</span>
+                    </div>
+                    <div class="user-info-item">
+                        <span class="user-info-label">Wallet Address:</span>
+                        <span class="user-info-value" id="userInfoWallet">-</span>
+                    </div>
+                    <div class="user-info-item">
+                        <span class="user-info-label">Subscription Plan:</span>
+                        <span class="user-info-value" id="userInfoPlan">-</span>
+                    </div>
+                    <div class="user-info-item">
+                        <span class="user-info-label">Subscription End Date:</span>
+                        <span class="user-info-value" id="userInfoEndDate">-</span>
+                    </div>
+                    <div class="user-info-item">
+                        <span class="user-info-label">Account Status:</span>
+                        <span class="user-info-value" id="userInfoStatus" style="color: var(--success);">Active</span>
+                    </div>
+                </div>
+                
+                <div class="dashboard-card">
+                    <h4 class="dashboard-card-title">
+                        <i class="fas fa-signal"></i> Recent Signals
+                    </h4>
+                    <div class="table-responsive">
+                        <table class="signals-table">
+                            <thead>
+                                <tr>
+                                    <th>Symbol</th>
+                                    <th>Signal</th>
+                                    <th>Price</th>
+                                    <th>Target</th>
+                                    <th>Confidence</th>
+                                </tr>
+                            </thead>
+                            <tbody id="signalsTableBody">
+                                <tr>
+                                    <td colspan="5" class="text-center py-4">
+                                        <div class="loading-spinner" style="width: 30px; height: 30px; margin: 0 auto;"></div>
+                                        Loading signals...
+                                    </td>
+                                </tr>
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </section>
+
+    <!-- Footer -->
+    <footer class="footer">
+        <div class="container-fluid">
+            <div class="footer-links">
+                <a href="#home">Home</a>
+                <a href="#features">Features</a>
+                <a href="#">Privacy Policy</a>
+                <a href="#">Terms of Service</a>
+                <a href="#">Contact</a>
+            </div>
+            <p> 2026 ICTSMARTPRO AI. All rights reserved. Advanced Trading Solutions v2.0</p>
+        </div>
+    </footer>
+
+    <!-- Bootstrap JS -->
+    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
+
+    <script>
+        // Global variables
+        let currentUser = null;
+        let currentPlan = 'premium';
+        let selectedNetwork = 'ERC20';
+        let verificationInterval = null;
+
+        // Form switching
+        function showRegister() {
+            document.getElementById('loginCard').classList.remove('active');
+            document.getElementById('registerCard').classList.add('active');
+            document.getElementById('loginCard').style.display = 'none';
+            document.getElementById('registerCard').style.display = 'block';
+            document.getElementById('loginAlert').style.display = 'none';
+            document.getElementById('registerAlert').style.display = 'none';
+            document.getElementById('authToggleText').textContent = 'Register';
+        }
+        
+        function showLogin() {
+            document.getElementById('registerCard').classList.remove('active');
+            document.getElementById('loginCard').classList.add('active');
+            document.getElementById('registerCard').style.display = 'none';
+            document.getElementById('loginCard').style.display = 'block';
+            document.getElementById('loginAlert').style.display = 'none';
+            document.getElementById('registerAlert').style.display = 'none';
+            document.getElementById('authToggleText').textContent = 'Login';
+        }
+        
+        function showPayment() {
+            document.getElementById('paymentSection').style.display = 'block';
+            document.getElementById('verificationSection').style.display = 'none';
+            document.getElementById('dashboardSection').style.display = 'none';
+            document.getElementById('home').style.display = 'none';
+            document.getElementById('features').style.display = 'none';
+            document.getElementById('authToggleBtn').style.display = 'none';
+            document.getElementById('getStartedBtn').style.display = 'none';
+            document.getElementById('dashboardLink').style.display = 'none';
+        }
+        
+        function showVerification(txHash) {
+            document.getElementById('paymentSection').style.display = 'none';
+            document.getElementById('verificationSection').style.display = 'block';
+            document.getElementById('verificationTxHash').textContent = txHash.substring(0, 20) + '...' + txHash.substring(txHash.length - 10);
+            document.getElementById('transactionInfo').style.display = 'block';
+            
+            // Start verification check
+            startVerificationCheck(txHash);
+        }
+        
+        function showDashboard() {
+            // Hide other sections
+            document.getElementById('home').style.display = 'none';
+            document.getElementById('features').style.display = 'none';
+            document.getElementById('paymentSection').style.display = 'none';
+            document.getElementById('verificationSection').style.display = 'none';
+            
+            // Show dashboard
+            document.getElementById('dashboardSection').style.display = 'block';
+            
+            // Update dashboard with user data
+            if (currentUser) {
+                document.getElementById('userInfoUsername').textContent = currentUser.username;
+                document.getElementById('userInfoEmail').textContent = currentUser.email;
+                document.getElementById('userInfoWallet').textContent = currentUser.wallet_address || 'Not provided';
+                document.getElementById('userInfoPlan').textContent = currentUser.subscription_plan || 'Premium';
+                document.getElementById('userInfoEndDate').textContent = currentUser.subscription_end_date || '-';
+                document.getElementById('userInfoStatus').textContent = currentUser.is_verified ? 'Verified' : 'Unverified';
+                document.getElementById('userInfoStatus').style.color = currentUser.is_verified ? 'var(--success)' : 'var(--warning)';
+                
+                // Update account status
+                if (currentUser.has_subscription || currentUser.is_admin) {
+                    document.getElementById('accountStatus').textContent = 'Active';
+                    document.getElementById('accountStatus').style.color = 'var(--success)';
+                    document.getElementById('accountPlan').textContent = 'Premium Subscription';
+                } else {
+                    document.getElementById('accountStatus').textContent = 'Inactive';
+                    document.getElementById('accountStatus').style.color = 'var(--danger)';
+                    document.getElementById('accountPlan').textContent = 'No Active Subscription';
+                }
+                
+                // Load signals
+                loadTradeSignals();
+                
+                // Update UI
+                document.getElementById('dashboardLink').style.display = 'block';
+                document.getElementById('authToggleBtn').style.display = 'block';
+                document.getElementById('getStartedBtn').style.display = 'none';
+            }
+            
+            // Scroll to dashboard
+            document.getElementById('dashboardSection').scrollIntoView({behavior: 'smooth'});
+        }
+        
+        function cancelPayment() {
+            document.getElementById('paymentSection').style.display = 'none';
+            document.getElementById('home').style.display = 'block';
+            document.getElementById('features').style.display = 'block';
+            document.getElementById('authToggleBtn').style.display = 'block';
+            document.getElementById('getStartedBtn').style.display = 'block';
+            if (currentUser) {
+                document.getElementById('dashboardLink').style.display = 'block';
+            }
+        }
+        
+        function cancelVerification() {
+            if (verificationInterval) {
+                clearInterval(verificationInterval);
+            }
+            showDashboard();
+        }
+        
+        // Show alert function
+        function showAlert(elementId, message, type) {
+            const alert = document.getElementById(elementId);
+            alert.textContent = message;
+            alert.className = `alert alert-${type}`;
+            alert.style.display = 'block';
+            
+            // Auto hide after 5 seconds
+            setTimeout(() => {
+                alert.style.display = 'none';
+            }, 5000);
+        }
+        
+        // Copy wallet address
+        function copyWallet() {
+            const wallet = document.getElementById('walletAddress').textContent.replace(' Copy', '');
+            navigator.clipboard.writeText(wallet).then(() => {
+                showAlert('paymentAlert', 'Wallet address copied to clipboard!', 'success');
+            });
+        }
+        
+        // Start verification check
+        function startVerificationCheck(txHash) {
+            // Check immediately
+            checkSubscriptionStatus();
+            
+            // Set interval to check every 10 seconds
+            verificationInterval = setInterval(checkSubscriptionStatus, 10000);
+            
+            // Show check button after 30 seconds
+            setTimeout(() => {
+                document.getElementById('checkVerificationBtn').style.display = 'block';
+            }, 30000);
+        }
+        
+        // Check subscription status
+        async function checkSubscriptionStatus() {
+            try {
+                const token = localStorage.getItem('token');
+                const response = await fetch('/api/check-subscription', {
+                    method: 'GET',
+                    headers: {
+                        'Authorization': `Bearer ${token}`
+                    }
+                });
+                
+                const data = await response.json();
+                
+                if (data.has_subscription) {
+                    // Subscription active, show dashboard
+                    clearInterval(verificationInterval);
+                    showAlert('verificationAlert', 'Payment verified! Subscription activated.', 'success');
+                    
+                    // Update current user
+                    currentUser.has_subscription = true;
+                    currentUser.is_verified = true;
+                    localStorage.setItem('user', JSON.stringify(currentUser));
+                    
+                    // Show dashboard after delay
+                    setTimeout(() => {
+                        showDashboard();
+                    }, 2000);
+                } else {
+                    // Update verification status
+                    document.getElementById('verificationConfirmations').textContent = `${data.days_remaining || 0}/3`;
+                }
+            } catch (error) {
+                console.error('Subscription check error:', error);
+            }
+        }
+        
+        // Load trade signals
+        async function loadTradeSignals() {
+            try {
+                const token = localStorage.getItem('token');
+                const response = await fetch('/api/signals', {
+                    method: 'GET',
+                    headers: {
+                        'Authorization': `Bearer ${token}`
+                    }
+                });
+                
+                const data = await response.json();
+                
+                if (data.success) {
+                    const tbody = document.getElementById('signalsTableBody');
+                    tbody.innerHTML = '';
+                    
+                    data.signals.forEach(signal => {
+                        const row = document.createElement('tr');
+                        row.innerHTML = `
+                            <td><strong>${signal.symbol}</strong></td>
+                            <td><span class="${signal.signal_type === 'BUY' ? 'signal-buy' : 'signal-sell'}">${signal.signal_type}</span></td>
+                            <td>$${signal.price.toFixed(2)}</td>
+                            <td>$${signal.target_price.toFixed(2)}</td>
+                            <td><span class="signal-confidence">${signal.confidence.toFixed(1)}%</span></td>
+                        `;
+                        tbody.appendChild(row);
+                    });
+                    
+                    // Update active signals count
+                    document.getElementById('activeSignals').textContent = data.signals.length;
+                }
+            } catch (error) {
+                console.error('Error loading signals:', error);
+            }
+        }
+        
+        // Login form submission
+        document.getElementById('loginForm').addEventListener('submit', async function(e) {
+            e.preventDefault();
+            
+            const identifier = document.getElementById('loginIdentifier').value.trim();
+            const password = document.getElementById('loginPassword').value;
+            
+            if (!identifier || !password) {
+                showAlert('loginAlert', 'Please fill in all fields', 'error');
+                return;
+            }
+            
+            const loginBtn = document.getElementById('loginBtn');
+            loginBtn.innerHTML = '<i class="fas fa-spinner fa-spin me-2"></i>Logging in...';
+            loginBtn.disabled = true;
+            
+            try {
+                const response = await fetch('/api/login', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json'
+                    },
+                    body: JSON.stringify({
+                        identifier: identifier,
+                        password: password
+                    })
+                });
+                
+                const data = await response.json();
+                
+                if (data.access_token) {
+                    showAlert('loginAlert', 'Login successful! Welcome back!', 'success');
+                    
+                    // Store user data
+                    currentUser = data.user;
+                    localStorage.setItem('user', JSON.stringify(data.user));
+                    localStorage.setItem('token', data.access_token);
+                    
+                    // Update UI
+                    document.getElementById('authToggleText').textContent = currentUser.username;
+                    document.getElementById('authToggleBtn').innerHTML = `<i class="fas fa-user-circle me-2"></i>${currentUser.username}`;
+                    document.getElementById('dashboardLink').style.display = 'block';
+                    
+                    // Check if user has active subscription or is admin
+                    if (data.user.has_subscription || data.user.is_admin) {
+                        setTimeout(() => {
+                            showDashboard();
+                        }, 1000);
+                    } else {
+                        // Initiate payment
+                        setTimeout(() => {
+                            initiatePayment();
+                        }, 1000);
+                    }
+                    
+                } else {
+                    showAlert('loginAlert', data.error || 'Login failed', 'error');
+                }
+                
+                loginBtn.innerHTML = '<i class="fas fa-sign-in-alt me-2"></i>Login';
+                loginBtn.disabled = false;
+            } catch (error) {
+                showAlert('loginAlert', 'Network error. Please try again.', 'error');
+                loginBtn.innerHTML = '<i class="fas fa-sign-in-alt me-2"></i>Login';
+                loginBtn.disabled = false;
+            }
+        });
+        
+        // Register form submission
+        document.getElementById('registerForm').addEventListener('submit', async function(e) {
+            e.preventDefault();
+            
+            const username = document.getElementById('registerUsername').value.trim();
+            const email = document.getElementById('registerEmail').value.trim();
+            const password = document.getElementById('registerPassword').value;
+            const wallet = document.getElementById('registerWallet').value.trim();
+            
+            // Validation
+            if (!username || !email || !password) {
+                showAlert('registerAlert', 'Please fill in all required fields', 'error');
+                return;
+            }
+            
+            if (password.length < 6) {
+                showAlert('registerAlert', 'Password must be at least 6 characters', 'error');
+                return;
+            }
+            
+            const registerBtn = document.getElementById('registerBtn');
+            registerBtn.innerHTML = '<i class="fas fa-spinner fa-spin me-2"></i>Creating Account...';
+            registerBtn.disabled = true;
+            
+            try {
+                const response = await fetch('/api/register', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json'
+                    },
+                    body: JSON.stringify({
+                        username: username,
+                        email: email,
+                        password: password,
+                        wallet_address: wallet || null
+                    })
+                });
+                
+                const data = await response.json();
+                
+                if (data.access_token) {
+                    showAlert('registerAlert', 'Account created successfully! Welcome to QuantumTrade AI!', 'success');
+                    
+                    // Store user data
+                    currentUser = data.user;
+                    localStorage.setItem('user', JSON.stringify(data.user));
+                    localStorage.setItem('token', data.access_token);
+                    
+                    // Update UI
+                    document.getElementById('authToggleText').textContent = currentUser.username;
+                    document.getElementById('authToggleBtn').innerHTML = `<i class="fas fa-user-circle me-2"></i>${currentUser.username}`;
+                    document.getElementById('dashboardLink').style.display = 'block';
+                    
+                    // Clear form
+                    document.getElementById('registerForm').reset();
+                    
+                    // Initiate payment for non-admin users
+                    if (!data.user.is_admin) {
+                        setTimeout(() => {
+                            initiatePayment();
+                        }, 2000);
+                    } else {
+                        setTimeout(() => {
+                            showDashboard();
+                        }, 2000);
+                    }
+                } else {
+                    showAlert('registerAlert', data.error || 'Registration failed', 'error');
+                }
+                
+                registerBtn.innerHTML = '<i class="fas fa-user-plus me-2"></i>Create Account';
+                registerBtn.disabled = false;
+            } catch (error) {
+                showAlert('registerAlert', 'Network error. Please try again.', 'error');
+                registerBtn.innerHTML = '<i class="fas fa-user-plus me-2"></i>Create Account';
+                registerBtn.disabled = false;
+            }
+        });
+        
+        // Initiate payment
+        async function initiatePayment() {
+            try {
+                const token = localStorage.getItem('token');
+                const response = await fetch('/api/payment/initiate', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                        'Authorization': `Bearer ${token}`
+                    },
+                    body: JSON.stringify({
+                        plan_id: currentPlan,
+                        network: selectedNetwork
+                    })
+                });
+                
+                const data = await response.json();
+                
+                if (data.success) {
+                    if (data.payment_required) {
+                        showPayment();
+                    } else {
+                        // Admin or already has subscription
+                        showDashboard();
+                    }
+                } else {
+                    showAlert('loginAlert', data.error || 'Payment initiation failed', 'error');
+                }
+            } catch (error) {
+                console.error('Payment initiation error:', error);
+                showAlert('loginAlert', 'Network error. Please try again.', 'error');
+            }
+        }
+        
+        // Payment verification
+        document.getElementById('verifyPaymentBtn').addEventListener('click', async function() {
+            const txHash = document.getElementById('txHash').value.trim();
+            
+            if (!txHash || !txHash.startsWith('0x')) {
+                showAlert('paymentAlert', 'Please enter a valid transaction hash starting with 0x', 'error');
+                return;
+            }
+            
+            const verifyBtn = document.getElementById('verifyPaymentBtn');
+            verifyBtn.innerHTML = '<i class="fas fa-spinner fa-spin me-2"></i>Verifying...';
+            verifyBtn.disabled = true;
+            
+            try {
+                const token = localStorage.getItem('token');
+                
+                const response = await fetch('/api/payment/verify', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                        'Authorization': `Bearer ${token}`
+                    },
+                    body: JSON.stringify({
+                        transaction_hash: txHash
+                    })
+                });
+                
+                const data = await response.json();
+                
+                if (data.success) {
+                    showAlert('paymentAlert', 'Payment verification started! Please wait...', 'success');
+                    showVerification(txHash);
+                } else {
+                    showAlert('paymentAlert', data.error || 'Payment verification failed', 'error');
+                }
+                
+                verifyBtn.innerHTML = '<i class="fas fa-check-circle me-2"></i>Verify Payment';
+                verifyBtn.disabled = false;
+            } catch (error) {
+                showAlert('paymentAlert', 'Network error. Please try again.', 'error');
+                verifyBtn.innerHTML = '<i class="fas fa-check-circle me-2"></i>Verify Payment';
+                verifyBtn.disabled = false;
+            }
+        });
+        
+        // Network selection
+        document.querySelectorAll('.network-btn').forEach(btn => {
+            btn.addEventListener('click', function() {
+                // Remove active class from all buttons
+                document.querySelectorAll('.network-btn').forEach(b => {
+                    b.classList.remove('active');
+                });
+                
+                // Add active class to clicked button
+                this.classList.add('active');
+                selectedNetwork = this.dataset.network;
+                
+                // Update network alert
+                const alert = document.getElementById('networkAlert');
+                alert.innerHTML = `<i class="fas fa-info-circle me-2"></i> Make sure to send USDT using <strong>${selectedNetwork}</strong> network`;
+            });
+        });
+        
+        // Check verification button
+        document.getElementById('checkVerificationBtn').addEventListener('click', checkSubscriptionStatus);
+        
+        // Cancel verification button
+        document.getElementById('cancelVerificationBtn').addEventListener('click', cancelVerification);
+        
+        // Get Started button
+        document.getElementById('getStartedBtn').addEventListener('click', function() {
+            if (currentUser) {
+                // User is logged in, check subscription
+                if (currentUser.has_subscription || currentUser.is_admin) {
+                    showDashboard();
+                } else {
+                    initiatePayment();
+                }
+            } else {
+                // Not logged in, show register form
+                showRegister();
+                document.getElementById('registerCard').scrollIntoView({behavior: 'smooth'});
+            }
+        });
+        
+        // Auth toggle button
+        document.getElementById('authToggleBtn').addEventListener('click', function() {
+            if (currentUser) {
+                // Logout
+                localStorage.removeItem('user');
+                localStorage.removeItem('token');
+                currentUser = null;
+                document.getElementById('authToggleText').textContent = 'Login';
+                document.getElementById('authToggleBtn').innerHTML = '<i class="fas fa-sign-in-alt me-2"></i>Login';
+                document.getElementById('dashboardLink').style.display = 'none';
+                showAlert('loginAlert', 'Logged out successfully', 'info');
+                
+                // Show home section
+                document.getElementById('home').style.display = 'block';
+                document.getElementById('features').style.display = 'block';
+                document.getElementById('dashboardSection').style.display = 'none';
+                document.getElementById('paymentSection').style.display = 'none';
+                document.getElementById('verificationSection').style.display = 'none';
+                document.getElementById('getStartedBtn').style.display = 'block';
+            } else {
+                // Show login form
+                showLogin();
+                document.getElementById('loginCard').scrollIntoView({behavior: 'smooth'});
+            }
+        });
+        
+        // Dashboard link
+        document.getElementById('dashboardLink').addEventListener('click', function(e) {
+            e.preventDefault();
+            if (currentUser) {
+                showDashboard();
+            }
+        });
+        
+        // Auto-login with admin credentials on triple click
+        let clickCount = 0;
+        let clickTimer;
+        
+        document.addEventListener('click', function(e) {
+            if (e.target.tagName === 'BODY' || e.target.closest('.hero-section')) {
+                clickCount++;
+                
+                if (clickCount === 3) {
+                    clearTimeout(clickTimer);
+                    clickCount = 0;
+                    
+                    // Auto-fill admin credentials
+                    document.getElementById('loginIdentifier').value = 'ictsmartpro';
+                    document.getElementById('loginPassword').value = '123456';
+                    
+                    // Show notification
+                    showAlert('loginAlert', 'Admin credentials auto-filled. Click login to continue.', 'info');
+                }
+                
+                clearTimeout(clickTimer);
+                clickTimer = setTimeout(() => {
+                    clickCount = 0;
+                }, 1000);
+            }
+        });
+        
+        // Check if user is already logged in
+        document.addEventListener('DOMContentLoaded', function() {
+            const savedUser = localStorage.getItem('user');
+            const token = localStorage.getItem('token');
+            
+            if (savedUser && token) {
+                currentUser = JSON.parse(savedUser);
+                document.getElementById('authToggleText').textContent = currentUser.username;
+                document.getElementById('authToggleBtn').innerHTML = `<i class="fas fa-user-circle me-2"></i>${currentUser.username}`;
+                document.getElementById('dashboardLink').style.display = 'block';
+                
+                // Check subscription status
+                if (currentUser.has_subscription || currentUser.is_admin) {
+                    // Auto-show dashboard if on dashboard page
+                    if (window.location.hash === '#dashboard') {
+                        showDashboard();
+                    }
+                }
+            }
+        });
+    </script>
+</body>
+</html>
