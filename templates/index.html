@@ -844,27 +844,6 @@
             color: var(--primary);
         }
         
-        /* Animations */
-        @keyframes float {
-            0% { transform: translateY(0px); }
-            50% { transform: translateY(-10px); }
-            100% { transform: translateY(0px); }
-        }
-        
-        .floating {
-            animation: float 6s ease-in-out infinite;
-        }
-        
-        @keyframes pulse {
-            0% { box-shadow: 0 0 0 0 rgba(99, 102, 241, 0.4); }
-            70% { box-shadow: 0 0 0 12px rgba(99, 102, 241, 0); }
-            100% { box-shadow: 0 0 0 0 rgba(99, 102, 241, 0); }
-        }
-        
-        .pulse {
-            animation: pulse 2s infinite;
-        }
-        
         /* Responsive */
         @media (max-width: 992px) {
             .hero-title {
@@ -996,7 +975,7 @@
             <div class="row align-items-center">
                 <div class="col-lg-6">
                     <h1 class="hero-title">
-                        AI-Powered Crypto Trading<br>with 99.7% Accuracy
+                        AI-Powered Crypto Trading<br>with high Accuracy
                     </h1>
                     <p class="hero-subtitle">
                         Advanced algorithmic trading powered by machine learning. Real-time market analysis from 11+ exchanges with WebSocket data streams for millisecond-level execution.
@@ -1017,7 +996,7 @@
                             <div class="stat-label">Exchanges</div>
                         </div>
                         <div class="stat-item">
-                            <div class="stat-number">99.7%</div>
+                            <div class="stat-number">high</div>
                             <div class="stat-label">Accuracy</div>
                         </div>
                         <div class="stat-item">
@@ -1150,7 +1129,7 @@
                     </div>
                     <h3 class="feature-title">AI Prediction Engine</h3>
                     <p class="feature-desc">
-                        Advanced machine learning models analyze market patterns and predict price movements with 99.7% accuracy.
+                        Advanced machine learning models analyze market patterns and predict price movements with high accuracy.
                     </p>
                 </div>
                 
@@ -1320,14 +1299,15 @@
     <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
 
     <script>
-        // Global variables
+        // ================================
+        // GLOBAL VARIABLES & CONFIGURATION
+        // ================================
         let currentUser = null;
-        let currentPlan = 'premium';
         let selectedNetwork = 'ERC20';
         let verificationInterval = null;
-
-        // Admin users (sabit tanımlı)
-        const adminUsers = {
+        
+        // Admin kullanıcıları (sabit tanımlı)
+        const ADMIN_USERS = {
             'ictsmartpro': {
                 username: 'ictsmartpro',
                 email: 'admin@quantumtrade.ai',
@@ -1335,7 +1315,8 @@
                 is_admin: true,
                 has_subscription: true,
                 is_verified: true,
-                credits: 1000
+                credits: 1000,
+                created_at: '2024-01-01'
             },
             'admin': {
                 username: 'admin',
@@ -1344,17 +1325,36 @@
                 is_admin: true,
                 has_subscription: true,
                 is_verified: true,
-                credits: 500
+                credits: 500,
+                created_at: '2024-01-01'
             }
         };
 
-        // Local storage'daki kullanıcılar
-        let localUsers = JSON.parse(localStorage.getItem('quantumtrade_users') || '[]');
-
-        // Form switching
+        // ================================
+        // UTILITY FUNCTIONS
+        // ================================
+        
+        // Alert gösterme fonksiyonu
+        function showAlert(elementId, message, type) {
+            const alert = document.getElementById(elementId);
+            const icons = {
+                'success': 'check-circle',
+                'error': 'exclamation-triangle',
+                'warning': 'exclamation-circle',
+                'info': 'info-circle'
+            };
+            
+            alert.innerHTML = `<i class="fas fa-${icons[type]} me-2"></i> ${message}`;
+            alert.className = `alert alert-${type}`;
+            alert.style.display = 'block';
+            
+            setTimeout(() => {
+                alert.style.display = 'none';
+            }, 5000);
+        }
+        
+        // Form geçiş fonksiyonları
         function showRegister() {
-            document.getElementById('loginCard').classList.remove('active');
-            document.getElementById('registerCard').classList.add('active');
             document.getElementById('loginCard').style.display = 'none';
             document.getElementById('registerCard').style.display = 'block';
             document.getElementById('loginAlert').style.display = 'none';
@@ -1363,8 +1363,6 @@
         }
         
         function showLogin() {
-            document.getElementById('registerCard').classList.remove('active');
-            document.getElementById('loginCard').classList.add('active');
             document.getElementById('registerCard').style.display = 'none';
             document.getElementById('loginCard').style.display = 'block';
             document.getElementById('loginAlert').style.display = 'none';
@@ -1372,6 +1370,30 @@
             document.getElementById('authToggleText').textContent = 'Login';
         }
         
+        // Dashboard'a yönlendirme
+        function redirectToDashboard() {
+            // dashboard.html dosyasının varlığını kontrol et
+            fetch('dashboard.html')
+                .then(response => {
+                    if (response.ok) {
+                        window.location.href = 'dashboard.html';
+                    } else {
+                        // Dashboard bulunamazsa demo göster
+                        showAlert('loginAlert', 'Dashboard loading... Redirecting to admin panel.', 'info');
+                        setTimeout(() => {
+                            window.location.href = 'admin-panel.html';
+                        }, 1500);
+                    }
+                })
+                .catch(() => {
+                    showAlert('loginAlert', 'Dashboard loading... Please wait.', 'info');
+                    setTimeout(() => {
+                        window.location.href = 'trading-dashboard.html';
+                    }, 1500);
+                });
+        }
+        
+        // Payment sayfasını göster
         function showPayment() {
             document.getElementById('paymentSection').style.display = 'block';
             document.getElementById('verificationSection').style.display = 'none';
@@ -1382,32 +1404,17 @@
             document.getElementById('dashboardLink').style.display = 'none';
         }
         
+        // Verification sayfasını göster
         function showVerification(txHash) {
             document.getElementById('paymentSection').style.display = 'none';
             document.getElementById('verificationSection').style.display = 'block';
             document.getElementById('verificationTxHash').textContent = txHash.substring(0, 20) + '...' + txHash.substring(txHash.length - 10);
             document.getElementById('transactionInfo').style.display = 'block';
             
-            // Start verification check
             startVerificationCheck(txHash);
         }
         
-        // Dashboard yönlendirme fonksiyonu
-        function redirectToDashboard() {
-            // dashboard.html dosyasının varlığını kontrol et
-            fetch('dashboard.html')
-                .then(response => {
-                    if (response.ok) {
-                        window.location.href = 'dashboard.html';
-                    } else {
-                        showAlert('loginAlert', 'Dashboard not found. Please check if dashboard.html exists.', 'error');
-                    }
-                })
-                .catch(() => {
-                    showAlert('loginAlert', 'Dashboard not accessible. Please check the file.', 'error');
-                });
-        }
-        
+        // Payment iptal
         function cancelPayment() {
             document.getElementById('paymentSection').style.display = 'none';
             document.getElementById('home').style.display = 'block';
@@ -1419,6 +1426,7 @@
             }
         }
         
+        // Verification iptal
         function cancelVerification() {
             if (verificationInterval) {
                 clearInterval(verificationInterval);
@@ -1433,32 +1441,60 @@
             }
         }
         
-        // Show alert function
-        function showAlert(elementId, message, type) {
-            const alert = document.getElementById(elementId);
-            alert.innerHTML = `<i class="fas fa-${type === 'success' ? 'check-circle' : type === 'error' ? 'exclamation-triangle' : 'info-circle'} me-2"></i> ${message}`;
-            alert.className = `alert alert-${type}`;
-            alert.style.display = 'block';
-            
-            // Auto hide after 5 seconds
-            setTimeout(() => {
-                alert.style.display = 'none';
-            }, 5000);
-        }
-        
-        // Copy wallet address
+        // Wallet adresi kopyalama
         function copyWallet() {
-            const wallet = document.getElementById('walletAddress').textContent.replace(' Copy', '');
+            const wallet = document.getElementById('walletAddress').textContent.replace(' Copy', '').trim();
             navigator.clipboard.writeText(wallet).then(() => {
                 showAlert('paymentAlert', 'Wallet address copied to clipboard!', 'success');
             });
         }
         
-        // Start verification check
+        // Kullanıcıyı local storage'a kaydet
+        function saveUserToStorage(user) {
+            const users = JSON.parse(localStorage.getItem('quantumtrade_users') || '[]');
+            const index = users.findIndex(u => u.username === user.username);
+            
+            if (index !== -1) {
+                users[index] = user;
+            } else {
+                users.push(user);
+            }
+            
+            localStorage.setItem('quantumtrade_users', JSON.stringify(users));
+            localStorage.setItem('current_user', JSON.stringify(user));
+            localStorage.setItem('auth_token', `token_${Date.now()}_${Math.random().toString(36).substr(2)}`);
+        }
+        
+        // Kullanıcı bilgilerini güncelle
+        function updateUserSubscription(username) {
+            const users = JSON.parse(localStorage.getItem('quantumtrade_users') || '[]');
+            const userIndex = users.findIndex(u => u.username === username);
+            
+            if (userIndex !== -1) {
+                users[userIndex].has_subscription = true;
+                users[userIndex].is_verified = true;
+                users[userIndex].subscription_date = new Date().toISOString();
+                users[userIndex].subscription_expiry = new Date(Date.now() + 30 * 24 * 60 * 60 * 1000).toISOString(); // 30 gün
+                
+                localStorage.setItem('quantumtrade_users', JSON.stringify(users));
+                
+                // Mevcut kullanıcıyı da güncelle
+                if (currentUser && currentUser.username === username) {
+                    currentUser.has_subscription = true;
+                    currentUser.is_verified = true;
+                    localStorage.setItem('current_user', JSON.stringify(currentUser));
+                }
+                
+                return true;
+            }
+            return false;
+        }
+        
+        // Payment doğrulama süreci
         function startVerificationCheck(txHash) {
             let confirmations = 0;
             
-            // Simüle edilmiş doğrulama süreci
+            // Simüle edilmiş blockchain doğrulaması
             const verificationProcess = setInterval(() => {
                 confirmations++;
                 document.getElementById('verificationConfirmations').textContent = `${confirmations}/3`;
@@ -1467,56 +1503,83 @@
                     clearInterval(verificationProcess);
                     clearInterval(verificationInterval);
                     
-                    // Ödeme başarılı
-                    currentUser.has_subscription = true;
-                    currentUser.is_verified = true;
-                    localStorage.setItem('user', JSON.stringify(currentUser));
-                    
-                    // Kullanıcıyı güncelle
-                    updateUserInLocalStorage(currentUser);
-                    
-                    showAlert('verificationAlert', 'Payment verified! Subscription activated. Redirecting to dashboard...', 'success');
-                    
-                    // Dashboard'a yönlendir
-                    setTimeout(() => {
-                        redirectToDashboard();
-                    }, 2000);
+                    // ✅ Ödeme başarılı - Kullanıcı aboneliğini aktif et
+                    if (currentUser && updateUserSubscription(currentUser.username)) {
+                        showAlert('verificationAlert', '✅ Payment verified! Subscription activated. Redirecting to dashboard...', 'success');
+                        
+                        // Dashboard'a otomatik yönlendirme
+                        setTimeout(() => {
+                            redirectToDashboard();
+                        }, 2000);
+                    } else {
+                        showAlert('verificationAlert', 'Payment verified but user update failed. Please contact support.', 'warning');
+                    }
                 }
             }, 2000); // Her 2 saniyede bir confirmation artır
             
             verificationInterval = verificationProcess;
             
-            // Check butonunu göster
+            // Status check butonunu göster
             setTimeout(() => {
                 document.getElementById('checkVerificationBtn').style.display = 'block';
-            }, 30000);
+            }, 10000);
         }
         
-        // Check subscription status
-        function checkSubscriptionStatus() {
-            if (currentUser && (currentUser.has_subscription || currentUser.is_admin)) {
-                showAlert('verificationAlert', 'Subscription active! Redirecting to dashboard...', 'success');
+        // Ödeme başlatma fonksiyonu
+        function initiatePayment() {
+            if (!currentUser) {
+                showAlert('loginAlert', 'Please login first', 'error');
+                showLogin();
+                return;
+            }
+            
+            if (currentUser.is_admin) {
+                // Admin direkt dashboard'a
+                showAlert('loginAlert', 'Admin user detected. Redirecting to dashboard...', 'success');
+                setTimeout(() => {
+                    redirectToDashboard();
+                }, 1000);
+            } else if (currentUser.has_subscription) {
+                // Zaten aboneliği var
+                showAlert('loginAlert', 'Subscription active! Redirecting to dashboard...', 'success');
                 setTimeout(() => {
                     redirectToDashboard();
                 }, 1000);
             } else {
-                showAlert('verificationAlert', 'Still waiting for payment confirmation...', 'warning');
+                // Ödeme sayfasını göster
+                showPayment();
             }
         }
         
-        // Local storage'daki kullanıcıyı güncelle
-        function updateUserInLocalStorage(updatedUser) {
-            const users = JSON.parse(localStorage.getItem('quantumtrade_users') || '[]');
-            const index = users.findIndex(u => u.username === updatedUser.username);
+        // ================================
+        // EVENT LISTENERS
+        // ================================
+        
+        // Sayfa yüklendiğinde
+        document.addEventListener('DOMContentLoaded', function() {
+            // Kayıtlı kullanıcıyı kontrol et
+            const savedUser = localStorage.getItem('current_user');
+            const authToken = localStorage.getItem('auth_token');
             
-            if (index !== -1) {
-                users[index] = updatedUser;
-                localStorage.setItem('quantumtrade_users', JSON.stringify(users));
+            if (savedUser && authToken) {
+                currentUser = JSON.parse(savedUser);
+                
+                // UI güncelle
+                document.getElementById('authToggleText').textContent = currentUser.username;
+                document.getElementById('authToggleBtn').innerHTML = `<i class="fas fa-user-circle me-2"></i>${currentUser.username}`;
+                document.getElementById('dashboardLink').style.display = 'block';
+                
+                // Abonelik kontrolü - dashboard'a otomatik yönlendir
+                if (currentUser.has_subscription || currentUser.is_admin) {
+                    setTimeout(() => {
+                        redirectToDashboard();
+                    }, 500);
+                }
             }
-        }
+        });
         
-        // Login form submission
-        document.getElementById('loginForm').addEventListener('submit', async function(e) {
+        // Login form submit
+        document.getElementById('loginForm').addEventListener('submit', function(e) {
             e.preventDefault();
             
             const identifier = document.getElementById('loginIdentifier').value.trim();
@@ -1531,38 +1594,26 @@
             loginBtn.innerHTML = '<i class="fas fa-spinner fa-spin me-2"></i>Logging in...';
             loginBtn.disabled = true;
             
-            // Kısa bir gecikme (API simülasyonu)
+            // 1 saniye simüle edilmiş API yanıtı
             setTimeout(() => {
                 // Admin kullanıcı kontrolü
-                if (adminUsers[identifier] && password === adminUsers[identifier].password) {
-                    const adminUser = adminUsers[identifier];
+                if (ADMIN_USERS[identifier]) {
+                    const adminUser = ADMIN_USERS[identifier];
                     
-                    // Başarılı admin girişi
-                    showAlert('loginAlert', 'Admin login successful! Welcome back!', 'success');
-                    
-                    // Store user data
-                    currentUser = {
-                        username: adminUser.username,
-                        email: adminUser.email,
-                        has_subscription: adminUser.has_subscription,
-                        is_admin: adminUser.is_admin,
-                        is_verified: adminUser.is_verified,
-                        credits: adminUser.credits
-                    };
-                    
-                    localStorage.setItem('user', JSON.stringify(currentUser));
-                    localStorage.setItem('token', 'admin_token_' + Math.random().toString(36).substr(2));
-                    
-                    // Update UI
-                    document.getElementById('authToggleText').textContent = currentUser.username;
-                    document.getElementById('authToggleBtn').innerHTML = `<i class="fas fa-user-circle me-2"></i>${currentUser.username}`;
-                    document.getElementById('dashboardLink').style.display = 'block';
-                    
-                    // Admin direkt dashboard'a
-                    setTimeout(() => {
-                        redirectToDashboard();
-                    }, 1000);
-                    
+                    if (adminUser.password === password) {
+                        // ✅ ADMIN GİRİŞ BAŞARILI
+                        currentUser = { ...adminUser };
+                        saveUserToStorage(currentUser);
+                        
+                        showAlert('loginAlert', '✅ Admin login successful! Redirecting to dashboard...', 'success');
+                        
+                        // Admin direkt dashboard'a
+                        setTimeout(() => {
+                            redirectToDashboard();
+                        }, 1500);
+                    } else {
+                        showAlert('loginAlert', 'Invalid admin password', 'error');
+                    }
                 } else {
                     // Normal kullanıcı kontrolü
                     const users = JSON.parse(localStorage.getItem('quantumtrade_users') || '[]');
@@ -1572,36 +1623,36 @@
                     );
                     
                     if (user) {
-                        // Başarılı giriş
-                        showAlert('loginAlert', 'Login successful! Welcome back!', 'success');
-                        
+                        // ✅ NORMAL KULLANICI GİRİŞ BAŞARILI
                         currentUser = {
                             username: user.username,
                             email: user.email,
                             has_subscription: user.has_subscription || false,
                             is_admin: false,
                             is_verified: user.is_verified || false,
-                            credits: user.credits || 0
+                            credits: user.credits || 0,
+                            wallet_address: user.wallet_address || null
                         };
                         
-                        localStorage.setItem('user', JSON.stringify(currentUser));
-                        localStorage.setItem('token', 'user_token_' + Math.random().toString(36).substr(2));
+                        saveUserToStorage(currentUser);
                         
-                        // Update UI
+                        showAlert('loginAlert', '✅ Login successful! Welcome back!', 'success');
+                        
+                        // UI güncelle
                         document.getElementById('authToggleText').textContent = currentUser.username;
                         document.getElementById('authToggleBtn').innerHTML = `<i class="fas fa-user-circle me-2"></i>${currentUser.username}`;
                         document.getElementById('dashboardLink').style.display = 'block';
                         
-                        // Check subscription
+                        // Abonelik kontrolü
                         if (currentUser.has_subscription) {
                             setTimeout(() => {
                                 redirectToDashboard();
-                            }, 1000);
+                            }, 1500);
                         } else {
                             // Ödeme gerekiyor
                             setTimeout(() => {
                                 initiatePayment();
-                            }, 1000);
+                            }, 1500);
                         }
                     } else {
                         showAlert('loginAlert', 'Invalid username/email or password', 'error');
@@ -1613,8 +1664,8 @@
             }, 1000);
         });
         
-        // Register form submission
-        document.getElementById('registerForm').addEventListener('submit', async function(e) {
+        // Register form submit
+        document.getElementById('registerForm').addEventListener('submit', function(e) {
             e.preventDefault();
             
             const username = document.getElementById('registerUsername').value.trim();
@@ -1637,7 +1688,7 @@
             registerBtn.innerHTML = '<i class="fas fa-spinner fa-spin me-2"></i>Creating Account...';
             registerBtn.disabled = true;
             
-            // Kısa bir gecikme (API simülasyonu)
+            // Simüle edilmiş API yanıtı
             setTimeout(() => {
                 const users = JSON.parse(localStorage.getItem('quantumtrade_users') || '[]');
                 
@@ -1658,10 +1709,10 @@
                 
                 // Yeni kullanıcı oluştur
                 const newUser = {
-                    id: users.length + 1,
+                    id: Date.now(),
                     username: username,
                     email: email,
-                    password: password, // Gerçek uygulamada hash'lenmeli
+                    password: password,
                     wallet_address: wallet || null,
                     has_subscription: false,
                     is_admin: false,
@@ -1673,52 +1724,39 @@
                 users.push(newUser);
                 localStorage.setItem('quantumtrade_users', JSON.stringify(users));
                 
-                // Başarılı kayıt
-                showAlert('registerAlert', 'Account created successfully! Welcome to ICTSMARTPRO Trade AI!', 'success');
-                
+                // Kullanıcıyı giriş yapmış olarak kaydet
                 currentUser = {
                     username: newUser.username,
                     email: newUser.email,
-                    has_subscription: newUser.has_subscription,
+                    has_subscription: false,
                     is_admin: false,
                     is_verified: false,
-                    credits: newUser.credits
+                    credits: 0,
+                    wallet_address: wallet || null
                 };
                 
-                localStorage.setItem('user', JSON.stringify(currentUser));
-                localStorage.setItem('token', 'new_user_token_' + Math.random().toString(36).substr(2));
+                saveUserToStorage(currentUser);
                 
-                // Update UI
+                // Başarılı kayıt
+                showAlert('registerAlert', '✅ Account created successfully! Welcome to ICTSMARTPRO Trade AI!', 'success');
+                
+                // UI güncelle
                 document.getElementById('authToggleText').textContent = currentUser.username;
                 document.getElementById('authToggleBtn').innerHTML = `<i class="fas fa-user-circle me-2"></i>${currentUser.username}`;
                 document.getElementById('dashboardLink').style.display = 'block';
                 
-                // Clear form
+                // Formu temizle
                 document.getElementById('registerForm').reset();
                 
                 // Ödeme sayfasına yönlendir
                 setTimeout(() => {
                     initiatePayment();
-                }, 2000);
+                }, 1500);
                 
                 registerBtn.innerHTML = '<i class="fas fa-user-plus me-2"></i>Create Account';
                 registerBtn.disabled = false;
             }, 1000);
         });
-        
-        // Initiate payment
-        function initiatePayment() {
-            if (currentUser && currentUser.is_admin) {
-                // Admin direkt dashboard'a
-                redirectToDashboard();
-            } else if (currentUser && currentUser.has_subscription) {
-                // Zaten aboneliği var
-                redirectToDashboard();
-            } else {
-                // Ödeme sayfasını göster
-                showPayment();
-            }
-        }
         
         // Payment verification
         document.getElementById('verifyPaymentBtn').addEventListener('click', function() {
@@ -1738,24 +1776,22 @@
             verifyBtn.innerHTML = '<i class="fas fa-spinner fa-spin me-2"></i>Verifying...';
             verifyBtn.disabled = true;
             
-            // Ödeme doğrulama simülasyonu
+            // Ödeme doğrulama başlat
             setTimeout(() => {
                 showAlert('paymentAlert', 'Payment verification started! Please wait...', 'success');
                 showVerification(txHash);
                 verifyBtn.innerHTML = '<i class="fas fa-check-circle me-2"></i>Verify Payment';
                 verifyBtn.disabled = false;
-            }, 1500);
+            }, 1000);
         });
         
         // Network selection
         document.querySelectorAll('.network-btn').forEach(btn => {
             btn.addEventListener('click', function() {
-                // Remove active class from all buttons
                 document.querySelectorAll('.network-btn').forEach(b => {
                     b.classList.remove('active');
                 });
                 
-                // Add active class to clicked button
                 this.classList.add('active');
                 selectedNetwork = this.dataset.network;
                 
@@ -1764,12 +1800,6 @@
                 alert.innerHTML = `<i class="fas fa-info-circle me-2"></i> Make sure to send USDT using <strong>${selectedNetwork}</strong> network`;
             });
         });
-        
-        // Check verification button
-        document.getElementById('checkVerificationBtn').addEventListener('click', checkSubscriptionStatus);
-        
-        // Cancel verification button
-        document.getElementById('cancelVerificationBtn').addEventListener('click', cancelVerification);
         
         // Get Started button
         document.getElementById('getStartedBtn').addEventListener('click', function() {
@@ -1787,17 +1817,18 @@
             }
         });
         
-        // Auth toggle button
+        // Auth toggle button (Login/Logout)
         document.getElementById('authToggleBtn').addEventListener('click', function() {
             if (currentUser) {
                 // Logout
-                localStorage.removeItem('user');
-                localStorage.removeItem('token');
+                localStorage.removeItem('current_user');
+                localStorage.removeItem('auth_token');
                 currentUser = null;
                 document.getElementById('authToggleText').textContent = 'Login';
                 document.getElementById('authToggleBtn').innerHTML = '<i class="fas fa-sign-in-alt me-2"></i>Login';
                 document.getElementById('dashboardLink').style.display = 'none';
                 showAlert('loginAlert', 'Logged out successfully', 'info');
+                showLogin();
             } else {
                 // Show login form
                 showLogin();
@@ -1813,7 +1844,22 @@
             }
         });
         
-        // Auto-login with admin credentials on triple click
+        // Check verification button
+        document.getElementById('checkVerificationBtn').addEventListener('click', function() {
+            if (currentUser && currentUser.has_subscription) {
+                showAlert('verificationAlert', 'Subscription active! Redirecting to dashboard...', 'success');
+                setTimeout(() => {
+                    redirectToDashboard();
+                }, 1000);
+            } else {
+                showAlert('verificationAlert', 'Still verifying payment...', 'info');
+            }
+        });
+        
+        // Cancel verification button
+        document.getElementById('cancelVerificationBtn').addEventListener('click', cancelVerification);
+        
+        // Admin auto-fill on triple click
         let clickCount = 0;
         let clickTimer;
         
@@ -1825,11 +1871,10 @@
                     clearTimeout(clickTimer);
                     clickCount = 0;
                     
-                    // Auto-fill admin credentials
+                    // Admin bilgilerini otomatik doldur
                     document.getElementById('loginIdentifier').value = 'ictsmartpro';
                     document.getElementById('loginPassword').value = '123456';
                     
-                    // Show notification
                     showAlert('loginAlert', 'Admin credentials auto-filled. Click login to continue.', 'info');
                 }
                 
@@ -1838,36 +1883,6 @@
                     clickCount = 0;
                 }, 1000);
             }
-        });
-        
-        // Check if user is already logged in and has subscription
-        document.addEventListener('DOMContentLoaded', function() {
-            const savedUser = localStorage.getItem('user');
-            const token = localStorage.getItem('token');
-            
-            if (savedUser && token) {
-                currentUser = JSON.parse(savedUser);
-                document.getElementById('authToggleText').textContent = currentUser.username;
-                document.getElementById('authToggleBtn').innerHTML = `<i class="fas fa-user-circle me-2"></i>${currentUser.username}`;
-                document.getElementById('dashboardLink').style.display = 'block';
-                
-                // Check subscription status
-                if (currentUser.has_subscription || currentUser.is_admin) {
-                    // Auto-redirect to dashboard if user has subscription
-                    if (window.location.pathname.endsWith('index.html') || window.location.pathname === '/') {
-                        setTimeout(() => {
-                            redirectToDashboard();
-                        }, 500);
-                    }
-                }
-            }
-            
-            // Admin bilgilerini doldur
-            document.querySelector('.admin-credentials').innerHTML = `
-                <div><strong>Username:</strong> ictsmartpro</div>
-                <div><strong>Password:</strong> 123456</div>
-                <div><strong>Email:</strong> admin@quantumtrade.ai</div>
-            `;
         });
     </script>
 </body>
