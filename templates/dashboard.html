@@ -2652,26 +2652,60 @@ setTimeout(() => {
 addChatMessage('💡 Pro tip: Click "Retrain Models" after major market events for updated predictions', 'bot');
 }, 2000);
    // BURAYA EKLEYİN: (diğer fonksiyonlardan sonra, </script>'den önce)
-        window.addEventListener('load', function() {
-            // Token kontrolü
-            const token = localStorage.getItem('token');
-            if (!token) {
-                // Token yoksa ana sayfaya yönlendir
-                window.location.href = '/';
-                return;
+       // ============================================
+// TOKEN KONTROLÜ ve KULLANICI BİLGİLERİ
+// ============================================
+window.addEventListener('load', function() {
+    // Token kontrolü
+    const token = localStorage.getItem('token');
+    if (!token) {
+        // Token yoksa ana sayfaya yönlendir
+        alert('Please login first');
+        window.location.href = '/';
+        return;
+    }
+    
+    // Kullanıcı bilgilerini localStorage'dan al ve göster
+    const savedUser = localStorage.getItem('user');
+    if (savedUser) {
+        try {
+            const user = JSON.parse(savedUser);
+            console.log('👤 User logged in:', user.username);
+            
+            // Navbar'da kullanıcı bilgisini göster (isteğe bağlı)
+            const navbarBrand = document.querySelector('.navbar-brand');
+            if (navbarBrand) {
+                navbarBrand.innerHTML += 
+                    `<span class="ms-3 text-success fw-bold">
+                        <i class="fas fa-user me-1"></i>${user.username}
+                    </span>`;
             }
             
-            // Kullanıcı bilgilerini localStorage'dan al
-            const savedUser = localStorage.getItem('user');
-            if (savedUser) {
-                const user = JSON.parse(savedUser);
-                // Kullanıcı adını göster (navbar'da vs.)
-                document.getElementById('userDisplay').textContent = user.username;
+            // Admin kontrolü (isteğe bağlı)
+            if (user.is_admin) {
+                console.log('⭐ Admin user detected');
+                // Admin'e özel ekstralar
             }
-            
-            // Dashboard verilerini yükle
-            loadDashboardData();
-        });  
+        } catch (e) {
+            console.error('User data parse error:', e);
+        }
+    }
+    
+    // Dashboard'u başlat
+    console.log('🚀 Starting dashboard analysis...');
+    analyzeCurrentSymbol();
+});
+
+// ============================================
+// LOGOUT FONKSİYONU (navbar'a eklemek için)
+// ============================================
+function logout() {
+    if (confirm('Are you sure you want to logout?')) {
+        localStorage.removeItem('token');
+        localStorage.removeItem('user');
+        window.location.href = '/';
+    }
+}
 </script>
 </body>
 </html>
