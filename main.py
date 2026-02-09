@@ -1204,7 +1204,7 @@ startup_time = time.time()
 @app.get("/", response_class=HTMLResponse)
 async def root():
     """Serve dashboard HTML"""
-    html_path = os.path.join(os.path.dirname(__file__), "templates", "dashboard.html")
+    html_path = os.path.join(os.path.dirname(__file__), "templates", "index.html")
     if os.path.exists(html_path):
         return FileResponse(html_path)
     return HTMLResponse("""
