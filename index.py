@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """
-QuantumTrade AI - Complete Backend Solution v2.0
+ICTSMARTPRO Trade AI - Complete Backend Solution v2.0
 USDT Payment System with Blockchain Verification
 """
 
@@ -575,7 +575,7 @@ async def process_payment_verification(payment_id: uuid.UUID):
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     """Startup and shutdown events"""
-    print("🚀 QuantumTrade AI Backend Starting...")
+    print("🚀 ICSMARTPRO Trade AI Backend Starting...")
     print(f"📡 Database URL: {DATABASE_URL[:50]}...")
     print(f"💰 USDT Price: {USDT_PRICE} USDT")
     print(f"👛 Wallet: {USDT_WALLET_ADDRESS}")
@@ -588,7 +588,7 @@ async def lifespan(app: FastAPI):
     print("🛑 QuantumTrade AI Backend Shutting Down...")
 
 app = FastAPI(
-    title="QuantumTrade AI API v2.0",
+    title="ICTSMARTPRO Trade AI API v2.0",
     description="AI-Powered Crypto Trading Platform with USDT Payments",
     version="2.0.0",
     lifespan=lifespan
@@ -617,7 +617,7 @@ def get_db():
 async def root():
     """Root endpoint"""
     return {
-        "message": "Welcome to QuantumTrade AI API v2.0",
+        "message": "Welcome to ICTSMARTPRO Trade AI API v2.0",
         "status": "active",
         "version": "2.0.0",
         "payment_currency": "USDT",
@@ -631,7 +631,7 @@ async def health_check():
     return {
         "status": "healthy",
         "timestamp": datetime.utcnow().isoformat(),
-        "service": "QuantumTrade AI Backend v2.0",
+        "service": "ICSMARTPRO Trade AI Backend v2.0",
         "database": "connected"
     }
 
@@ -1081,7 +1081,7 @@ if __name__ == "__main__":
     # Get port from environment (Railway uses PORT)
     port = int(os.getenv("PORT", 8000))
     
-    print(f"🚀 Starting QuantumTrade AI Backend v2.0 on port {port}")
+    print(f"🚀 Starting ICTSMARTPRO Trade AI Backend v2.0 on port {port}")
     print(f"📡 Database: {DATABASE_URL[:50]}...")
     print(f"💰 Premium Price: {USDT_PRICE} USDT")
     print(f"👛 Wallet: {USDT_WALLET_ADDRESS}")
