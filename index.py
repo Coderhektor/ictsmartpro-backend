@@ -585,7 +585,7 @@ async def lifespan(app: FastAPI):
     
     yield
     
-    print("🛑 QuantumTrade AI Backend Shutting Down...")
+    print("🛑 ICTSMARTPRO Trade AI Backend Shutting Down...")
 
 app = FastAPI(
     title="ICTSMARTPRO Trade AI API v2.0",
