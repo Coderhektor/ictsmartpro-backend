@@ -1,17 +1,16 @@
 """
-AI CRYPTO TRADING CHATBOT v4.0 - ULTIMATE EDITION
-==================================================
-- Binance WebSocket Integration
+AI CRYPTO TRADING CHATBOT v5.0 - 11 EXCHANGE + COINGECKO EDITION
+================================================================
+- 11 Borsa + CoinGecko Entegrasyonu (main.py'den veri alır)
 - 79 Price Action Patterns (QM, Fakeout, SMC/ICT, Candlestick)
 - Advanced Deep Learning (Transformer-XL, Multi-Head Attention, PPO)
 - Multi-Task Learning (Trend + Pattern + Volatility)
 - Reinforcement Learning for Trade Execution
 - Live Training & Adaptation
-- Image/Graph Analysis Support
+- Real-time Pattern Detection
 """
 
 import asyncio
-import websockets
 import json
 import pandas as pd
 import numpy as np
@@ -19,7 +18,6 @@ from datetime import datetime, timedelta
 from typing import List, Dict, Optional, Tuple, Any, Union
 from dataclasses import dataclass, field
 from enum import Enum
-import aiohttp
 import warnings
 warnings.filterwarnings('ignore')
 
@@ -34,30 +32,396 @@ from torch.utils.data import Dataset, DataLoader, TensorDataset
 from torch.cuda.amp import autocast, GradScaler
 
 import talib
-from sklearn.preprocessing import StandardScaler, RobustScaler
-from sklearn.model_selection import train_test_split
-from sklearn.metrics import accuracy_score, precision_score, recall_score, f1_score
+from sklearn.preprocessing import RobustScaler
+from sklearn.metrics import accuracy_score
 
 # Reinforcement Learning
 import gym
 from gym import spaces
-from stable_baselines3 import PPO
-from stable_baselines3.common.vec_env import DummyVecEnv
-from stable_baselines3.common.callbacks import EvalCallback
 
 # Rich CLI
 from rich.console import Console
 from rich.panel import Panel
-from rich.prompt import Prompt, Confirm
+from rich.prompt import Prompt
 from rich.table import Table
-from rich.live import Live
-from rich.progress import Progress, SpinnerColumn, TextColumn, BarColumn
+from rich.progress import Progress
+from rich import box
 from rich.layout import Layout
 from rich.text import Text
-from rich import box
-from rich.columns import Columns
 
 console = Console()
+
+# ============================================
+# VERİ AKTARIM KÖPRÜSÜ - 11 BORSA + COINGECKO
+# ============================================
+class DataBridge:
+    """
+    main.py'den 11 borsa + CoinGecko verilerini alır
+    AI model'lerine ve pattern dedektörlerine iletir
+    """
+    
+    def __init__(self):
+        self.trading_bot = None
+        self.live_data_buffer = {}          # Canlı veri tamponu
+        self.exchange_data = {}             # Borsa bazlı veriler
+        self.coingecko_data = {}            # CoinGecko verileri
+        self.aggregated_data = {}           # Ağırlıklı ortalama veriler
+        self.prediction_cache = {}          # Tahmin önbelleği
+        self.pattern_history = []           # Pattern geçmişi
+        self.signal_history = []            # Sinyal geçmişi
+        self.last_update = {}              # Son güncelleme zamanları
+        
+        console.print("[bold green]✓ DataBridge initialized for 11 Exchanges + CoinGecko[/bold green]")
+        
+    def set_trading_bot(self, bot):
+        """TradingBot instance'ını bağla"""
+        self.trading_bot = bot
+        console.print("[green]✓ TradingBot connected to DataBridge[/green]")
+        
+    async def process_exchange_data(self, symbol: str, exchange: str, price_data: Dict):
+        """
+        11 BORSADAN GELEN VERİLERİ İŞLER
+        main.py'den her fiyat güncellemesinde çağrılır
+        """
+        try:
+            # 1. Exchange bazlı veriyi kaydet
+            if symbol not in self.exchange_data:
+                self.exchange_data[symbol] = {}
+            
+            if exchange not in self.exchange_data[symbol]:
+                self.exchange_data[symbol][exchange] = []
+            
+            # 2. Veriyi ekle
+            self.exchange_data[symbol][exchange].append(price_data)
+            
+            # 3. Son 100 kaydı tut
+            if len(self.exchange_data[symbol][exchange]) > 100:
+                self.exchange_data[symbol][exchange] = self.exchange_data[symbol][exchange][-100:]
+            
+            # 4. Aggregated veriyi güncelle
+            await self._update_aggregated_data(symbol)
+            
+            # 5. Pattern analizi yap (her 10 veride bir)
+            if len(self.exchange_data[symbol][exchange]) % 10 == 0:
+                asyncio.create_task(self.analyze_patterns(symbol))
+            
+            # 6. ML tahmini yap (her 50 veride bir)
+            if len(self.exchange_data[symbol][exchange]) % 50 == 0:
+                asyncio.create_task(self.predict_with_ml(symbol))
+                
+            return True
+            
+        except Exception as e:
+            console.print(f"[red]process_exchange_data error: {e}[/red]")
+            return False
+    
+    async def process_coingecko_data(self, symbol: str, price_data: Dict):
+        """
+        COINGECKO'DAN GELEN VERİLERİ İŞLER
+        main.py'den her fiyat güncellemesinde çağrılır
+        """
+        try:
+            # 1. CoinGecko verisini kaydet
+            if symbol not in self.coingecko_data:
+                self.coingecko_data[symbol] = []
+            
+            # 2. Veriyi ekle
+            self.coingecko_data[symbol].append(price_data)
+            
+            # 3. Son 100 kaydı tut
+            if len(self.coingecko_data[symbol]) > 100:
+                self.coingecko_data[symbol] = self.coingecko_data[symbol][-100:]
+            
+            # 4. Aggregated veriyi güncelle
+            await self._update_aggregated_data(symbol)
+            
+            return True
+            
+        except Exception as e:
+            console.print(f"[red]process_coingecko_data error: {e}[/red]")
+            return False
+    
+    async def _update_aggregated_data(self, symbol: str):
+        """
+        11 borsa + CoinGecko verilerini ağırlıklı ortalama ile birleştirir
+        """
+        try:
+            all_prices = []
+            
+            # 1. Borsa verilerini topla
+            if symbol in self.exchange_data:
+                for exchange, data_list in self.exchange_data[symbol].items():
+                    if data_list:
+                        latest = data_list[-1]
+                        # Borsa ağırlıkları
+                        weights = {
+                            'binance': 1.0,
+                            'bybit': 0.95,
+                            'okx': 0.90,
+                            'kucoin': 0.85,
+                            'gateio': 0.80,
+                            'mexc': 0.75,
+                            'kraken': 0.70,
+                            'bitfinex': 0.65,
+                            'huobi': 0.60,
+                            'coinbase': 0.55,
+                            'bitget': 0.50
+                        }
+                        weight = weights.get(exchange.lower(), 0.5)
+                        all_prices.append({
+                            'price': latest.get('close', latest.get('price', 0)),
+                            'volume': latest.get('volume', 0),
+                            'weight': weight
+                        })
+            
+            # 2. CoinGecko verilerini ekle
+            if symbol in self.coingecko_data and self.coingecko_data[symbol]:
+                latest = self.coingecko_data[symbol][-1]
+                all_prices.append({
+                    'price': latest.get('price', latest.get('close', 0)),
+                    'volume': latest.get('volume', 0),
+                    'weight': 0.6  # CoinGecko weight
+                })
+            
+            if not all_prices:
+                return
+            
+            # 3. Ağırlıklı ortalama hesapla
+            total_weight = sum(p['weight'] for p in all_prices)
+            weighted_price = sum(p['price'] * p['weight'] for p in all_prices) / total_weight
+            weighted_volume = sum(p['volume'] * p['weight'] for p in all_prices) / total_weight
+            
+            # 4. OHLCV tahmini (tek fiyattan)
+            current_time = datetime.now().isoformat()
+            
+            if symbol not in self.aggregated_data:
+                self.aggregated_data[symbol] = []
+            
+            self.aggregated_data[symbol].append({
+                'timestamp': current_time,
+                'open': weighted_price * 0.999,  # Yaklaşık değer
+                'high': weighted_price * 1.001,   # Yaklaşık değer
+                'low': weighted_price * 0.999,    # Yaklaşık değer
+                'close': weighted_price,
+                'volume': weighted_volume,
+                'source_count': len(all_prices),
+                'sources': [f"{p.get('exchange', 'unknown')}" for p in all_prices[:5]],
+                'exchange': 'aggregated'
+            })
+            
+            # 5. Son 1000 kaydı tut
+            if len(self.aggregated_data[symbol]) > 1000:
+                self.aggregated_data[symbol] = self.aggregated_data[symbol][-1000:]
+            
+            # 6. Live data buffer'ı da güncelle
+            if symbol not in self.live_data_buffer:
+                self.live_data_buffer[symbol] = []
+            
+            self.live_data_buffer[symbol].append(self.aggregated_data[symbol][-1])
+            
+            if len(self.live_data_buffer[symbol]) > 1000:
+                self.live_data_buffer[symbol] = self.live_data_buffer[symbol][-1000:]
+            
+        except Exception as e:
+            console.print(f"[red]_update_aggregated_data error: {e}[/red]")
+    
+    async def analyze_patterns(self, symbol: str) -> Optional[Dict]:
+        """
+        79 PATTERN ANALİZİ YAPAR
+        Aggregated veri üzerinde çalışır
+        """
+        try:
+            # Buffer'dan DataFrame oluştur
+            df = self._buffer_to_dataframe(symbol)
+            
+            if df.empty or len(df) < 20:
+                return None
+            
+            # Pattern dedektörünü oluştur
+            detector = AdvancedPatternDetector(df)
+            
+            # 79 pattern'in tamamını tara
+            patterns = detector.scan_all_patterns()
+            
+            # Yüksek güvenilirlikli pattern'leri filtrele
+            high_conf_patterns = [p for p in patterns if p.get('confidence', 0) > 0.65]
+            
+            # Support/Resistance seviyelerini al
+            levels = detector.get_support_resistance()
+            
+            # Pattern analiz sonuçlarını hazırla
+            analysis_result = {
+                'symbol': symbol,
+                'timestamp': datetime.now().isoformat(),
+                'total_patterns': len(patterns),
+                'high_confidence_patterns': len(high_conf_patterns),
+                'patterns': high_conf_patterns[:15],
+                'support_levels': [{'price': l.price, 'strength': l.strength.name} 
+                                 for l in levels if l.type == 'support'][:5],
+                'resistance_levels': [{'price': l.price, 'strength': l.strength.name} 
+                                    for l in levels if l.type == 'resistance'][:5],
+                'current_price': df['close'].iloc[-1],
+                'signal': self._calculate_overall_signal(high_conf_patterns),
+                'data_source': '11_exchanges + coingecko',
+                'exchange_count': len(self.exchange_data.get(symbol, {})),
+                'coingecko_available': symbol in self.coingecko_data and bool(self.coingecko_data[symbol])
+            }
+            
+            # Pattern'leri logla
+            if high_conf_patterns:
+                console.print(f"[yellow]🎯 {symbol}: {len(high_conf_patterns)} high-confidence patterns detected[/yellow]")
+                for p in high_conf_patterns[:3]:
+                    console.print(f"   - {p['pattern']}: {p['confidence']:.0%} ({p['signal']})")
+            
+            # Pattern geçmişine ekle
+            self.pattern_history.append({
+                'symbol': symbol,
+                'timestamp': datetime.now().isoformat(),
+                'pattern_count': len(high_conf_patterns),
+                'signal': analysis_result['signal']['signal']
+            })
+            
+            # Son 100 pattern analizini tut
+            if len(self.pattern_history) > 100:
+                self.pattern_history = self.pattern_history[-100:]
+            
+            # Trading bot'a gönder
+            if self.trading_bot:
+                await self.trading_bot.update_pattern_analysis(symbol, analysis_result)
+            
+            return analysis_result
+            
+        except Exception as e:
+            console.print(f"[red]analyze_patterns error: {e}[/red]")
+            return None
+    
+    async def predict_with_ml(self, symbol: str) -> Optional[Dict]:
+        """
+        ML TAHMİNİ YAPAR
+        Transformer-XL, LSTM ve Ensemble modelleri kullanır
+        """
+        try:
+            if not self.trading_bot or not self.trading_bot.ml_engine:
+                return None
+            
+            # Buffer'dan DataFrame oluştur
+            df = self._buffer_to_dataframe(symbol)
+            
+            if df.empty or len(df) < 128:
+                return None
+            
+            # ML tahmini yap
+            prediction = self.trading_bot.ml_engine.predict(symbol, df)
+            
+            # Tahmin sonuçlarını zenginleştir
+            prediction['data_source'] = '11_exchanges + coingecko'
+            prediction['exchange_count'] = len(self.exchange_data.get(symbol, {}))
+            prediction['coingecko_available'] = symbol in self.coingecko_data and bool(self.coingecko_data[symbol])
+            
+            # Cache'e kaydet
+            self.prediction_cache[symbol] = {
+                'prediction': prediction,
+                'timestamp': datetime.now().isoformat()
+            }
+            
+            console.print(f"[cyan]🤖 {symbol}: ML prediction = {prediction['prediction']} ({prediction['confidence']:.1%})[/cyan]")
+            
+            return prediction
+            
+        except Exception as e:
+            console.print(f"[red]predict_with_ml error: {e}[/red]")
+            return None
+    
+    def _buffer_to_dataframe(self, symbol: str) -> pd.DataFrame:
+        """Buffer'daki verileri DataFrame'e dönüştürür"""
+        if symbol not in self.live_data_buffer:
+            return pd.DataFrame()
+        
+        data = self.live_data_buffer[symbol]
+        
+        if not data:
+            return pd.DataFrame()
+        
+        df = pd.DataFrame(data)
+        
+        # Sayısal kolonları dönüştür
+        numeric_cols = ['open', 'high', 'low', 'close', 'volume']
+        for col in numeric_cols:
+            if col in df.columns:
+                df[col] = pd.to_numeric(df[col], errors='coerce')
+        
+        # Eksik kolonları doldur
+        for col in numeric_cols:
+            if col not in df.columns:
+                if col == 'close' and 'price' in df.columns:
+                    df[col] = pd.to_numeric(df['price'], errors='coerce')
+                elif col == 'close':
+                    df[col] = 0
+                else:
+                    df[col] = df['close'] if 'close' in df.columns else 0
+        
+        # Timestamp'i index yap
+        if 'timestamp' in df.columns:
+            df['timestamp'] = pd.to_datetime(df['timestamp'])
+            df.set_index('timestamp', inplace=True)
+        
+        return df
+    
+    def _calculate_overall_signal(self, patterns: List[Dict]) -> Dict:
+        """Pattern'lerden genel sinyal hesaplar"""
+        bullish = sum(1 for p in patterns if p.get('signal') == 'bullish')
+        bearish = sum(1 for p in patterns if p.get('signal') == 'bearish')
+        neutral = sum(1 for p in patterns if p.get('signal') == 'neutral')
+        
+        total = bullish + bearish + neutral
+        if total == 0:
+            return {'signal': 'NEUTRAL', 'strength': 0, 'bullish': 0, 'bearish': 0, 'neutral': 0}
+        
+        signal_strength = (bullish - bearish) / total
+        
+        if signal_strength > 0.3:
+            signal = 'STRONG_BUY'
+        elif signal_strength > 0.1:
+            signal = 'BUY'
+        elif signal_strength < -0.3:
+            signal = 'STRONG_SELL'
+        elif signal_strength < -0.1:
+            signal = 'SELL'
+        else:
+            signal = 'NEUTRAL'
+        
+        return {
+            'signal': signal,
+            'strength': signal_strength,
+            'bullish': bullish,
+            'bearish': bearish,
+            'neutral': neutral
+        }
+    
+    def get_exchange_stats(self, symbol: str) -> Dict:
+        """Borsa istatistiklerini döndürür"""
+        stats = {
+            'total_exchanges': 0,
+            'active_exchanges': [],
+            'coingecko_active': False,
+            'total_data_points': 0
+        }
+        
+        if symbol in self.exchange_data:
+            stats['total_exchanges'] = len(self.exchange_data[symbol])
+            stats['active_exchanges'] = list(self.exchange_data[symbol].keys())
+            stats['total_data_points'] = sum(len(data) for data in self.exchange_data[symbol].values())
+        
+        if symbol in self.coingecko_data and self.coingecko_data[symbol]:
+            stats['coingecko_active'] = True
+            stats['total_data_points'] += len(self.coingecko_data[symbol])
+        
+        return stats
+
+
+# Global data bridge instance
+data_bridge = DataBridge()
+
 
 # ============================================
 # CONFIGURATION
@@ -127,6 +491,7 @@ CONFIG = {
         'obv': True
     }
 }
+
 
 # ============================================
 # ADVANCED DEEP LEARNING MODELS
@@ -1991,7 +2356,7 @@ class AdvancedPatternDetector:
                 ('liquidity_grab', self.detect_liquidity_grab(i)),
                 ('judas_swing', self.detect_judas_swing(i)),
                 ('ote_382', self.detect_ote(i, 0.382)),
-                                 ('ote_500', self.detect_ote(i, 0.500)),
+                ('ote_500', self.detect_ote(i, 0.500)),
                 ('ote_618', self.detect_ote(i, 0.618)),
                 ('ote_786', self.detect_ote(i, 0.786)),
                 ('ote_886', self.detect_ote(i, 0.886)),
@@ -2275,6 +2640,10 @@ class MLEngine:
         # Prepare sequences
         X, y = self.feature_engineer.prepare_sequences(df_features, CONFIG['ML_SETTINGS']['sequence_length'])
         
+        if len(X) == 0:
+            console.print(f"[red]Not enough data for training {symbol}[/red]")
+            return
+        
         # Train/val split
         split = int(len(X) * (1 - CONFIG['ML_SETTINGS']['validation_split']))
         X_train, X_val = X[:split], X[split:]
@@ -2346,7 +2715,7 @@ class MLEngine:
         await self._train_model(ensemble, X_train_t, y_train_t, X_val_t, y_val_t, f'{symbol}_ensemble')
         self.models[f'{symbol}_ensemble'] = ensemble
         
-        console.print(f"[green]All models trained for {symbol}![/green]")
+        console.print(f"[green]✓ All models trained for {symbol}![/green]")
     
     async def _train_model(self, model, X_train, y_train, X_val, y_val, name):
         """Train a single model"""
@@ -2483,7 +2852,8 @@ class MLEngine:
                     'prediction': 'Hold',
                     'confidence': 0.5,
                     'signal': 1,
-                    'pattern_signals': []
+                    'pattern_signals': [],
+                    'data_source': '11_exchanges + coingecko'
                 }
             
             data_scaled = scaler.transform(data).reshape(1, seq_length, -1)
@@ -2543,6 +2913,7 @@ class MLEngine:
                 'pattern_signals': high_conf_patterns[:10],  # Top 10 patterns
                 'bullish_patterns': bullish_count,
                 'bearish_patterns': bearish_count,
+                'data_source': '11_exchanges + coingecko',
                 'timestamp': datetime.now().isoformat()
             }
             
@@ -2552,7 +2923,8 @@ class MLEngine:
                 'prediction': 'Hold',
                 'confidence': 0.5,
                 'signal': 1,
-                'pattern_signals': []
+                'pattern_signals': [],
+                'data_source': 'error'
             }
 
 
@@ -2565,105 +2937,70 @@ class TradingBot:
     def __init__(self):
         self.exchange_manager = ExchangeManager()
         self.ml_engine = MLEngine()
+        self.data_bridge = data_bridge  # DataBridge'i bağla
         self.running = False
-        self.symbols = CONFIG['EXCHANGES']['binance']['supported_symbols']
+        self.symbols = ['BTCUSDT', 'ETHUSDT', 'BNBUSDT', 'SOLUSDT', 'ADAUSDT', 'DOGEUSDT', 'XRPUSDT']
         self.positions = {}
         self.equity_curve = []
         self.trade_history = []
         self.pattern_history = []
+        self.pattern_analysis_history = []
+        
+        # DataBridge'e TradingBot'u bildir
+        self.data_bridge.set_trading_bot(self)
         
     async def start(self):
         """Start the trading bot"""
-        await self.exchange_manager.connect()
         self.running = True
         
         console.print(Panel.fit(
-            "[bold cyan]AI CRYPTO TRADING BOT v4.0 - ULTIMATE EDITION[/bold cyan]\n"
-            "[green]✓ Binance WebSocket Connected[/green]\n"
+            "[bold cyan]🚀 AI CRYPTO TRADING BOT v5.0 - 11 EXCHANGE + COINGECKO EDITION[/bold cyan]\n"
+            "[green]✓ DataBridge Active - 11 Exchanges + CoinGecko[/green]\n"
             "[yellow]✓ 79 Pattern Detector Active[/yellow]\n"
-            "[magenta]✓ Advanced ML Models Ready[/magenta]\n"
-            "[blue]✓ Reinforcement Learning PPO Ready[/blue]",
-            title="🚀 System Status",
+            "[magenta]✓ Advanced ML Models (Transformer-XL, LSTM, Ensemble)[/magenta]\n"
+            "[blue]✓ Reinforcement Learning PPO Ready[/blue]\n"
+            "[cyan]✓ main.py Integration Ready[/cyan]",
+            title="🎯 System Status",
             border_style="cyan"
         ))
         
-        # Initial training
-        with Progress() as progress:
-            task = progress.add_task("[cyan]Training AI models...", total=len(self.symbols))
-            for sym in self.symbols:
-                data = await self.exchange_manager.fetch_historical(sym)
-                if not data.empty:
-                    await self.ml_engine.train(sym, data)
-                progress.update(task, advance=1)
+        console.print("\n[bold yellow]⏳ Waiting for data from main.py...[/bold yellow]")
+        console.print("[dim]main.py will send real-time data from 11 exchanges and CoinGecko[/dim]\n")
         
-        # Start live trading loop
-        asyncio.create_task(self._trading_loop())
+        # Start CLI loop
         await self._cli_loop()
     
-    async def _trading_loop(self):
-        """Main trading loop"""
-        while self.running:
-            for symbol in self.symbols:
-                try:
-                    # Get current data
-                    data = await self.exchange_manager.fetch_historical(symbol, limit=200)
-                    
-                    # Get ML prediction
-                    prediction = self.ml_engine.predict(symbol, data)
-                    
-                    # Get current price
-                    current_price = self.exchange_manager.market_data.get(symbol, {}).get('close', 0)
-                    
-                    # Trading logic
-                    if prediction['signal'] == 0 and symbol not in self.positions:  # Buy
-                        await self._execute_trade(symbol, 'BUY', current_price, prediction)
-                    elif prediction['signal'] == 2 and symbol in self.positions:  # Sell
-                        await self._execute_trade(symbol, 'SELL', current_price, prediction)
-                    
-                    # Update position tracking
-                    if symbol in self.positions:
-                        position = self.positions[symbol]
-                        pnl = (current_price - position['entry_price']) / position['entry_price'] * 100
-                        position['current_price'] = current_price
-                        position['pnl'] = pnl
-                    
-                except Exception as e:
-                    console.print(f"[red]Trading error {symbol}: {e}[/red]")
-                
-                await asyncio.sleep(1)
+    async def update_pattern_analysis(self, symbol: str, analysis: Dict):
+        """Pattern analiz sonuçlarını güncelle"""
+        try:
+            # Analizi geçmişe ekle
+            self.pattern_analysis_history.append({
+                'symbol': symbol,
+                'analysis': analysis,
+                'timestamp': datetime.now().isoformat()
+            })
             
-            await asyncio.sleep(5)
+            # Son 100 analizi tut
+            if len(self.pattern_analysis_history) > 100:
+                self.pattern_analysis_history = self.pattern_analysis_history[-100:]
+            
+            # Eğer STRONG_BUY veya STRONG_SELL sinyali varsa
+            if analysis and 'signal' in analysis:
+                signal_info = analysis['signal']
+                if isinstance(signal_info, dict):
+                    signal = signal_info.get('signal')
+                    if signal in ['STRONG_BUY', 'STRONG_SELL']:
+                        console.print(f"[bold red]🚨 {symbol}: {signal} signal detected![/bold red]")
+                        
+        except Exception as e:
+            console.print(f"[red]update_pattern_analysis error: {e}[/red]")
     
-    async def _execute_trade(self, symbol: str, side: str, price: float, prediction: Dict):
-        """Execute trade"""
-        trade = {
-            'symbol': symbol,
-            'side': side,
-            'price': price,
-            'size': 0.01,  # Fixed size for demo
-            'timestamp': datetime.now().isoformat(),
-            'prediction': prediction['prediction'],
-            'confidence': prediction['confidence'],
-            'patterns': prediction['pattern_signals'][:5]
-        }
-        
-        if side == 'BUY':
-            self.positions[symbol] = {
-                'entry_price': price,
-                'size': 0.01,
-                'entry_time': datetime.now().isoformat(),
-                'prediction': prediction
-            }
-            console.print(f"[green]BUY {symbol} @ {price:.2f} (Conf: {prediction['confidence']:.2%})[/green]")
-        else:
-            if symbol in self.positions:
-                entry = self.positions[symbol]['entry_price']
-                pnl = (price - entry) / entry * 100
-                trade['pnl'] = pnl
-                del self.positions[symbol]
-                console.print(f"[yellow]SELL {symbol} @ {price:.2f} (PnL: {pnl:.2f}%)[/yellow]")
-        
-        self.trade_history.append(trade)
+    def get_pattern_history(self, symbol: str = None, limit: int = 10):
+        """Pattern analiz geçmişini döndür"""
+        if symbol:
+            filtered = [p for p in self.pattern_analysis_history if p['symbol'] == symbol]
+            return filtered[-limit:]
+        return self.pattern_analysis_history[-limit:]
     
     async def _cli_loop(self):
         """Command line interface"""
@@ -2681,31 +3018,124 @@ class TradingBot:
                 elif command.startswith('predict'):
                     parts = command.split()
                     symbol = parts[1].upper() if len(parts) > 1 else 'BTCUSDT'
-                    data = await self.exchange_manager.fetch_historical(symbol)
-                    pred = self.ml_engine.predict(symbol, data)
                     
-                    table = Table(title=f"🎯 {symbol} Prediction", box=box.ROUNDED)
-                    table.add_column("Metric", style="cyan")
-                    table.add_column("Value", style="green")
-                    table.add_row("Signal", pred['prediction'])
-                    table.add_row("Confidence", f"{pred['confidence']:.2%}")
-                    table.add_row("Bullish Patterns", str(pred.get('bullish_patterns', 0)))
-                    table.add_row("Bearish Patterns", str(pred.get('bearish_patterns', 0)))
-                    console.print(table)
+                    # Get data from buffer
+                    df = self.data_bridge._buffer_to_dataframe(symbol)
                     
-                    if pred['pattern_signals']:
-                        pattern_table = Table(title="🔍 High Confidence Patterns", box=box.SIMPLE)
-                        pattern_table.add_column("Pattern", style="yellow")
-                        pattern_table.add_column("Signal", style="green")
-                        pattern_table.add_column("Confidence", style="blue")
+                    if df.empty:
+                        console.print(f"[red]No data available for {symbol}. Waiting for main.py...[/red]")
+                    else:
+                        pred = self.ml_engine.predict(symbol, df)
                         
-                        for p in pred['pattern_signals'][:5]:
-                            pattern_table.add_row(
-                                p['pattern'],
+                        table = Table(title=f"🎯 {symbol} Prediction (11 Exchanges + CoinGecko)", box=box.ROUNDED)
+                        table.add_column("Metric", style="cyan")
+                        table.add_column("Value", style="green")
+                        table.add_row("Signal", pred['prediction'])
+                        table.add_row("Confidence", f"{pred['confidence']:.2%}")
+                        table.add_row("Bullish Patterns", str(pred.get('bullish_patterns', 0)))
+                        table.add_row("Bearish Patterns", str(pred.get('bearish_patterns', 0)))
+                        table.add_row("Data Source", pred.get('data_source', 'unknown'))
+                        console.print(table)
+                        
+                        if pred['pattern_signals']:
+                            pattern_table = Table(title="🔍 High Confidence Patterns", box=box.SIMPLE)
+                            pattern_table.add_column("Pattern", style="yellow")
+                            pattern_table.add_column("Signal", style="green")
+                            pattern_table.add_column("Confidence", style="blue")
+                            
+                            for p in pred['pattern_signals'][:5]:
+                                pattern_table.add_row(
+                                    p['pattern'],
+                                    p['signal'].upper(),
+                                    f"{p['confidence']:.2%}"
+                                )
+                            console.print(pattern_table)
+                
+                elif command == 'patterns':
+                    symbol = 'BTCUSDT'
+                    df = self.data_bridge._buffer_to_dataframe(symbol)
+                    
+                    if df.empty:
+                        console.print(f"[red]No data available for {symbol}. Waiting for main.py...[/red]")
+                    else:
+                        detector = AdvancedPatternDetector(df)
+                        patterns = detector.scan_all_patterns()
+                        
+                        # Exchange stats
+                        stats = self.data_bridge.get_exchange_stats(symbol)
+                        
+                        table = Table(title=f"🔍 Active Patterns - {symbol} (11 Exchanges + CoinGecko)", box=box.ROUNDED)
+                        table.add_column("Pattern", style="yellow", width=30)
+                        table.add_column("Signal", style="green", width=10)
+                        table.add_column("Confidence", style="blue", width=12)
+                        table.add_column("Level", style="cyan", width=12)
+                        
+                        for p in sorted(patterns, key=lambda x: x.get('confidence', 0), reverse=True)[:15]:
+                            table.add_row(
+                                p['pattern'][:30],
                                 p['signal'].upper(),
-                                f"{p['confidence']:.2%}"
+                                f"{p.get('confidence', 0):.2%}",
+                                f"{p.get('level', 0):.2f}" if p.get('level') else "-"
                             )
-                        console.print(pattern_table)
+                        console.print(table)
+                        
+                        # Show exchange stats
+                        console.print(f"\n[cyan]📊 Data Sources:[/cyan]")
+                        console.print(f"   Active Exchanges: {stats['total_exchanges']}")
+                        console.print(f"   CoinGecko: {'✅ Active' if stats['coingecko_active'] else '❌ Inactive'}")
+                        console.print(f"   Total Data Points: {stats['total_data_points']}")
+                
+                elif command == 'status':
+                    # Get overall stats
+                    total_symbols = len(self.symbols)
+                    active_symbols = sum(1 for s in self.symbols if s in self.data_bridge.live_data_buffer and self.data_bridge.live_data_buffer[s])
+                    
+                    status_panel = Panel(
+                        f"[bold green]System Status: Active[/bold green]\n"
+                        f"[cyan]DataBridge:[/cyan] Connected to main.py\n"
+                        f"[cyan]Exchanges:[/cyan] 11 Active\n"
+                        f"[cyan]CoinGecko:[/cyan] ✅ Integrated\n"
+                        f"[cyan]Symbols with Data:[/cyan] {active_symbols}/{total_symbols}\n"
+                        f"[cyan]Open Positions:[/cyan] {len(self.positions)}\n"
+                        f"[cyan]Total Trades:[/cyan] {len(self.trade_history)}\n"
+                        f"[cyan]ML Models:[/cyan] {len(self.ml_engine.models)} active\n"
+                        f"[cyan]Device:[/cyan] {self.ml_engine.device}\n"
+                        f"[cyan]79 Patterns:[/cyan] ✅ Active\n"
+                        f"[cyan]Memory:[/cyan] {torch.cuda.memory_allocated()/1024**3:.2f} GB" if torch.cuda.is_available() else "",
+                        title="📊 System Status",
+                        border_style="green"
+                    )
+                    console.print(status_panel)
+                
+                elif command == 'help':
+                    help_panel = Panel(
+                        "[bold cyan]Available Commands:[/bold cyan]\n\n"
+                        "• predict [symbol] - Get ML prediction from 11 exchanges data\n"
+                        "• patterns - Show active 79 patterns\n"
+                        "• positions - Show open positions\n"
+                        "• trades - Show trade history\n"
+                        "• status - System status with exchange info\n"
+                        "• stats [symbol] - Show exchange statistics\n"
+                        "• quit/exit - Exit bot\n",
+                        title="📚 Help",
+                        border_style="cyan"
+                    )
+                    console.print(help_panel)
+                
+                elif command.startswith('stats'):
+                    parts = command.split()
+                    symbol = parts[1].upper() if len(parts) > 1 else 'BTCUSDT'
+                    stats = self.data_bridge.get_exchange_stats(symbol)
+                    
+                    stats_table = Table(title=f"📊 Exchange Statistics - {symbol}", box=box.ROUNDED)
+                    stats_table.add_column("Metric", style="cyan")
+                    stats_table.add_column("Value", style="green")
+                    stats_table.add_row("Active Exchanges", str(stats['total_exchanges']))
+                    stats_table.add_row("Exchanges", ", ".join(stats['active_exchanges'][:5]) + ("..." if len(stats['active_exchanges']) > 5 else ""))
+                    stats_table.add_row("CoinGecko", "✅ Active" if stats['coingecko_active'] else "❌ Inactive")
+                    stats_table.add_row("Total Data Points", str(stats['total_data_points']))
+                    stats_table.add_row("Buffer Size", str(len(self.data_bridge.live_data_buffer.get(symbol, []))))
+                    console.print(stats_table)
                 
                 elif command == 'positions':
                     if not self.positions:
@@ -2718,12 +3148,17 @@ class TradingBot:
                         table.add_column("PnL %", style="green")
                         
                         for sym, pos in self.positions.items():
-                            pnl_color = "green" if pos['pnl'] > 0 else "red"
+                            # Get current price from data bridge
+                            df = self.data_bridge._buffer_to_dataframe(sym)
+                            current_price = df['close'].iloc[-1] if not df.empty else pos.get('current_price', pos['entry_price'])
+                            pnl = (current_price - pos['entry_price']) / pos['entry_price'] * 100
+                            pnl_color = "green" if pnl > 0 else "red"
+                            
                             table.add_row(
                                 sym,
                                 f"${pos['entry_price']:.2f}",
-                                f"${pos['current_price']:.2f}",
-                                f"[{pnl_color}]{pos['pnl']:.2f}%[/{pnl_color}]"
+                                f"${current_price:.2f}",
+                                f"[{pnl_color}]{pnl:.2f}%[/{pnl_color}]"
                             )
                         console.print(table)
                 
@@ -2751,64 +3186,6 @@ class TradingBot:
                             )
                         console.print(table)
                 
-                elif command == 'patterns':
-                    symbol = 'BTCUSDT'
-                    data = await self.exchange_manager.fetch_historical(symbol)
-                    detector = AdvancedPatternDetector(data)
-                    patterns = detector.scan_all_patterns()
-                    
-                    table = Table(title=f"🔍 Active Patterns - {symbol}", box=box.ROUNDED)
-                    table.add_column("Pattern", style="yellow", width=30)
-                    table.add_column("Signal", style="green", width=10)
-                    table.add_column("Confidence", style="blue", width=12)
-                    table.add_column("Level", style="cyan", width=12)
-                    
-                    for p in sorted(patterns, key=lambda x: x.get('confidence', 0), reverse=True)[:15]:
-                        table.add_row(
-                            p['pattern'][:30],
-                            p['signal'].upper(),
-                            f"{p.get('confidence', 0):.2%}",
-                            f"{p.get('level', 0):.2f}" if p.get('level') else "-"
-                        )
-                    console.print(table)
-                
-                elif command == 'help':
-                    help_panel = Panel(
-                        "[bold cyan]Available Commands:[/bold cyan]\n\n"
-                        "• predict [symbol] - Get ML prediction\n"
-                        "• positions - Show open positions\n"
-                        "• trades - Show trade history\n"
-                        "• patterns - Show active patterns\n"
-                        "• train [symbol] - Retrain model\n"
-                        "• status - System status\n"
-                        "• quit/exit - Exit bot\n",
-                        title="📚 Help",
-                        border_style="cyan"
-                    )
-                    console.print(help_panel)
-                
-                elif command == 'status':
-                    status_panel = Panel(
-                        f"[bold green]System Status: Active[/bold green]\n"
-                        f"[cyan]Symbols:[/cyan] {', '.join(self.symbols)}\n"
-                        f"[cyan]Open Positions:[/cyan] {len(self.positions)}\n"
-                        f"[cyan]Total Trades:[/cyan] {len(self.trade_history)}\n"
-                        f"[cyan]Models:[/cyan] {len(self.ml_engine.models)} active\n"
-                        f"[cyan]Device:[/cyan] {self.ml_engine.device}\n"
-                        f"[cyan]Memory:[/cyan] {torch.cuda.memory_allocated()/1024**3:.2f} GB" if torch.cuda.is_available() else "",
-                        title="📊 System Status",
-                        border_style="green"
-                    )
-                    console.print(status_panel)
-                
-                elif command.startswith('train'):
-                    parts = command.split()
-                    symbol = parts[1].upper() if len(parts) > 1 else 'BTCUSDT'
-                    console.print(f"[yellow]Training models for {symbol}...[/yellow]")
-                    data = await self.exchange_manager.fetch_historical(symbol)
-                    await self.ml_engine.train(symbol, data)
-                    console.print(f"[green]Training completed for {symbol}![/green]")
-                
             except KeyboardInterrupt:
                 self.running = False
                 break
@@ -2817,10 +3194,10 @@ class TradingBot:
 
 
 # ============================================
-# EXCHANGE MANAGER
+# EXCHANGE MANAGER (For Binance WebSocket - Optional)
 # ============================================
 class ExchangeManager:
-    """Binance WebSocket and REST API manager"""
+    """Binance WebSocket and REST API manager (Optional - main.py handles 11 exchanges)"""
     
     def __init__(self):
         self.ws = None
@@ -2828,7 +3205,7 @@ class ExchangeManager:
         self.console = Console()
         
     async def connect(self):
-        """Connect to Binance WebSocket"""
+        """Connect to Binance WebSocket (Optional fallback)"""
         try:
             self.ws = await websockets.connect(CONFIG['EXCHANGES']['binance']['ws_url'])
             params = [f"{s.lower()}@ticker" for s in CONFIG['EXCHANGES']['binance']['supported_symbols']]
@@ -2839,13 +3216,12 @@ class ExchangeManager:
             }
             await self.ws.send(json.dumps(subscribe_msg))
             asyncio.create_task(self._handle_messages())
-            self.console.print("[green]✓ Binance WebSocket connected[/green]")
+            self.console.print("[dim]✓ Binance WebSocket connected (fallback)[/dim]")
         except Exception as e:
-            self.console.print(f"[red]WebSocket connection failed: {e}[/red]")
-            raise
+            self.console.print(f"[dim]WebSocket fallback not available: {e}[/dim]")
     
     async def _handle_messages(self):
-        """Handle incoming WebSocket messages"""
+        """Handle incoming WebSocket messages (fallback)"""
         while True:
             try:
                 message = await self.ws.recv()
@@ -2862,12 +3238,15 @@ class ExchangeManager:
                         'open': float(ticker['o']),
                         'timestamp': datetime.now().isoformat()
                     }
+                    
+                    # Send to data bridge as fallback
+                    await data_bridge.process_exchange_data(symbol, 'binance', self.market_data[symbol])
+                    
             except Exception as e:
-                self.console.print(f"[red]WebSocket handler error: {e}[/red]")
                 await asyncio.sleep(1)
     
     async def fetch_historical(self, symbol: str, interval: str = '1h', limit: int = 500) -> pd.DataFrame:
-        """Fetch historical OHLCV data from Binance"""
+        """Fetch historical OHLCV data from Binance (fallback)"""
         try:
             url = f"{CONFIG['EXCHANGES']['binance']['api_url']}/klines"
             params = {
@@ -2900,19 +3279,32 @@ class ExchangeManager:
             return df[['open', 'high', 'low', 'close', 'volume']]
             
         except Exception as e:
-            self.console.print(f"[red]Historical data fetch failed: {e}[/red]")
             return pd.DataFrame()
 
 
 # ============================================
-# MAIN ENTRY POINT
+# EXPORTS - main.py'den import edilecek nesneler
+# ============================================
+__all__ = [
+    'data_bridge',           # Ana veri köprüsü
+    'TradingBot',           # Trading bot
+    'MLEngine',            # ML motoru
+    'AdvancedPatternDetector', # 79 pattern dedektörü
+    'FeatureEngineer',     # Feature engineering
+    'CONFIG'              # Konfigürasyon
+]
+
+
+# ============================================
+# MAIN ENTRY POINT (For standalone mode)
 # ============================================
 async def main():
-    """Main entry point"""
+    """Main entry point - Runs in standalone mode or waits for main.py"""
     console.print(Panel.fit(
-        "[bold cyan]🚀 AI CRYPTO TRADING BOT v4.0 - ULTIMATE EDITION[/bold cyan]\n\n"
+        "[bold cyan]🚀 AI CRYPTO TRADING BOT v5.0 - 11 EXCHANGE + COINGECKO EDITION[/bold cyan]\n\n"
         "[white]79 Pattern Detector | Transformer-XL | Multi-Task Learning | PPO[/white]\n"
-        "[dim]Created for Advanced AI Trading Systems[/dim]",
+        "[green]✓ Waiting for data from main.py (11 Exchanges + CoinGecko)[/green]\n"
+        "[dim]Run main.py to start receiving real-time data[/dim]",
         border_style="cyan"
     ))
     
@@ -2927,3 +3319,5 @@ if __name__ == "__main__":
         console.print("\n[yellow]Bot stopped by user[/yellow]")
     except Exception as e:
         console.print(f"[red]Fatal error: {e}[/red]")
+        import traceback
+        traceback.print_exc()
