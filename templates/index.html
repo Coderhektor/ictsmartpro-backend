@@ -33,6 +33,13 @@
             --gradient-primary: linear-gradient(135deg, #8b5cf6, #6366f1);
             --gradient-secondary: linear-gradient(135deg, #ec4899, #a855f7);
             --gradient-success: linear-gradient(135deg, #10b981, #06b6d4);
+            
+            /* Neon Colors */
+            --neon-blue: #00d4ff;
+            --neon-purple: #b820ff;
+            --neon-pink: #ff006e;
+            --neon-green: #00ff88;
+            --neon-cyan: #00fff5;
         }
         
         * {
@@ -45,9 +52,9 @@
             font-family: 'Inter', sans-serif;
             background: var(--darker);
             background-image: 
-                radial-gradient(circle at 10% 20%, rgba(99, 102, 241, 0.1) 0%, transparent 25%),
-                radial-gradient(circle at 90% 80%, rgba(139, 92, 246, 0.1) 0%, transparent 25%),
-                radial-gradient(circle at 50% 50%, rgba(236, 72, 153, 0.08) 0%, transparent 35%);
+                radial-gradient(circle at 10% 20%, rgba(99, 102, 241, 0.15) 0%, transparent 25%),
+                radial-gradient(circle at 90% 80%, rgba(139, 92, 246, 0.15) 0%, transparent 25%),
+                radial-gradient(circle at 50% 50%, rgba(236, 72, 153, 0.1) 0%, transparent 35%);
             color: var(--light);
             min-height: 100vh;
             line-height: 1.6;
@@ -60,28 +67,65 @@
             padding: 0 20px;
         }
         
-        /* Navbar */
+        /* Neon Glow Animation */
+        @keyframes neonGlow {
+            0%, 100% {
+                box-shadow: 
+                    0 0 5px var(--neon-blue),
+                    0 0 10px var(--neon-blue),
+                    0 0 20px var(--neon-blue),
+                    0 0 40px rgba(0, 212, 255, 0.3);
+            }
+            50% {
+                box-shadow: 
+                    0 0 10px var(--neon-blue),
+                    0 0 20px var(--neon-blue),
+                    0 0 30px var(--neon-blue),
+                    0 0 60px rgba(0, 212, 255, 0.5);
+            }
+        }
+        
+        @keyframes neonPulse {
+            0%, 100% {
+                border-color: var(--neon-purple);
+                box-shadow: 
+                    0 0 5px var(--neon-purple),
+                    inset 0 0 5px rgba(184, 32, 255, 0.2);
+            }
+            50% {
+                border-color: var(--neon-cyan);
+                box-shadow: 
+                    0 0 15px var(--neon-cyan),
+                    inset 0 0 10px rgba(0, 255, 245, 0.3);
+            }
+        }
+        
+        /* Navbar with Neon */
         .navbar {
             background: rgba(15, 23, 42, 0.95);
             backdrop-filter: blur(10px);
-            border-bottom: 1px solid rgba(99, 102, 241, 0.3);
+            border-bottom: 2px solid var(--neon-blue);
             padding: 1rem 0;
             position: fixed;
             width: 100%;
             top: 0;
             z-index: 1000;
-            box-shadow: 0 4px 20px rgba(0, 0, 0, 0.3);
+            box-shadow: 
+                0 4px 20px rgba(0, 0, 0, 0.3),
+                0 0 20px rgba(0, 212, 255, 0.3);
+            animation: neonPulse 3s ease-in-out infinite;
         }
         
         .navbar-brand {
             font-family: 'Manrope', sans-serif;
             font-weight: 800;
             font-size: 1.8rem;
-            background: var(--gradient-primary);
+            background: linear-gradient(90deg, var(--neon-blue), var(--neon-purple), var(--neon-pink));
             -webkit-background-clip: text;
             -webkit-text-fill-color: transparent;
             background-clip: text;
             letter-spacing: -0.5px;
+            filter: drop-shadow(0 0 10px rgba(0, 212, 255, 0.5));
         }
         
         .nav-link {
@@ -94,7 +138,8 @@
         }
         
         .nav-link:hover, .nav-link.active {
-            color: var(--primary) !important;
+            color: var(--neon-cyan) !important;
+            text-shadow: 0 0 10px var(--neon-cyan);
         }
         
         .nav-link::after {
@@ -104,8 +149,9 @@
             left: 0;
             width: 0;
             height: 2px;
-            background: var(--primary);
+            background: linear-gradient(90deg, var(--neon-blue), var(--neon-cyan));
             transition: width 0.3s ease;
+            box-shadow: 0 0 10px var(--neon-cyan);
         }
         
         .nav-link:hover::after, .nav-link.active::after {
@@ -114,18 +160,24 @@
         
         .btn-auth {
             background: var(--glass-bg);
-            border: 1px solid var(--border);
+            border: 2px solid var(--neon-purple);
             color: var(--light);
             padding: 8px 20px;
             border-radius: 12px;
             font-weight: 500;
             transition: all 0.3s ease;
+            box-shadow: 
+                0 0 10px rgba(184, 32, 255, 0.3),
+                inset 0 0 5px rgba(184, 32, 255, 0.1);
         }
         
         .btn-auth:hover {
-            background: rgba(99, 102, 241, 0.15);
-            border-color: var(--primary);
+            background: rgba(184, 32, 255, 0.15);
+            border-color: var(--neon-cyan);
             transform: translateY(-1px);
+            box-shadow: 
+                0 0 20px var(--neon-cyan),
+                inset 0 0 10px rgba(0, 255, 245, 0.2);
         }
         
         /* Hero Section */
@@ -143,11 +195,12 @@
             font-size: 4.2rem;
             line-height: 1.1;
             margin-bottom: 1.5rem;
-            background: linear-gradient(120deg, var(--light), var(--primary), var(--secondary));
+            background: linear-gradient(120deg, var(--neon-cyan), var(--neon-blue), var(--neon-purple));
             -webkit-background-clip: text;
             -webkit-text-fill-color: transparent;
             background-clip: text;
             letter-spacing: -1px;
+            filter: drop-shadow(0 0 20px rgba(0, 212, 255, 0.4));
         }
         
         .hero-subtitle {
@@ -177,29 +230,40 @@
         }
         
         .btn-primary-hero {
-            background: var(--gradient-primary);
-            border: none;
+            background: linear-gradient(135deg, var(--neon-purple), var(--neon-blue));
+            border: 2px solid var(--neon-cyan);
             color: white;
-            box-shadow: 0 8px 25px rgba(99, 102, 241, 0.4);
+            box-shadow: 
+                0 8px 25px rgba(99, 102, 241, 0.4),
+                0 0 20px var(--neon-purple);
         }
         
         .btn-primary-hero:hover {
             transform: translateY(-3px);
-            box-shadow: 0 12px 35px rgba(99, 102, 241, 0.6);
+            box-shadow: 
+                0 12px 35px rgba(99, 102, 241, 0.6),
+                0 0 30px var(--neon-cyan);
+            border-color: var(--neon-pink);
         }
         
         .btn-outline-hero {
             background: transparent;
-            border: 2px solid var(--border);
-            color: var(--light);
+            border: 2px solid var(--neon-blue);
+            color: var(--neon-cyan);
+            box-shadow: 
+                0 0 10px rgba(0, 212, 255, 0.3),
+                inset 0 0 10px rgba(0, 212, 255, 0.1);
         }
         
         .btn-outline-hero:hover {
-            background: rgba(255, 255, 255, 0.05);
-            border-color: var(--primary);
+            background: rgba(0, 212, 255, 0.1);
+            border-color: var(--neon-cyan);
+            box-shadow: 
+                0 0 20px var(--neon-cyan),
+                inset 0 0 15px rgba(0, 255, 245, 0.2);
         }
         
-        /* Auth Container */
+        /* Auth Container with Neon */
         .auth-container {
             display: flex;
             gap: 30px;
@@ -209,7 +273,7 @@
         
         .auth-card {
             background: var(--card-bg);
-            border: 1px solid var(--border);
+            border: 2px solid var(--neon-purple);
             border-radius: 24px;
             padding: 45px;
             width: 100%;
@@ -218,6 +282,10 @@
             transition: all 0.4s ease;
             position: relative;
             overflow: hidden;
+            box-shadow: 
+                0 10px 40px rgba(0, 0, 0, 0.3),
+                0 0 20px rgba(184, 32, 255, 0.3),
+                inset 0 0 20px rgba(184, 32, 255, 0.1);
         }
         
         .auth-card::before {
@@ -227,20 +295,28 @@
             left: -50%;
             width: 200%;
             height: 200%;
-            background: radial-gradient(circle, rgba(99, 102, 241, 0.1) 0%, transparent 70%);
+            background: radial-gradient(circle, rgba(99, 102, 241, 0.15) 0%, transparent 70%);
             z-index: 0;
+            animation: neonPulse 4s ease-in-out infinite;
         }
         
         .auth-card:hover {
             transform: translateY(-8px);
-            border-color: var(--primary);
-            box-shadow: 0 20px 50px rgba(99, 102, 241, 0.3);
+            border-color: var(--neon-cyan);
+            box-shadow: 
+                0 20px 50px rgba(99, 102, 241, 0.4),
+                0 0 40px var(--neon-cyan),
+                inset 0 0 30px rgba(0, 255, 245, 0.15);
         }
         
         .auth-card.active {
-            border-color: var(--primary);
+            border-color: var(--neon-blue);
             background: rgba(30, 41, 59, 0.95);
-            box-shadow: 0 10px 40px rgba(99, 102, 241, 0.25);
+            box-shadow: 
+                0 10px 40px rgba(99, 102, 241, 0.3),
+                0 0 30px var(--neon-blue),
+                inset 0 0 25px rgba(0, 212, 255, 0.15);
+            animation: neonGlow 2s ease-in-out infinite;
         }
         
         .auth-card-header {
@@ -254,10 +330,11 @@
             font-size: 2rem;
             margin-bottom: 10px;
             font-weight: 800;
-            background: var(--gradient-primary);
+            background: linear-gradient(90deg, var(--neon-blue), var(--neon-purple));
             -webkit-background-clip: text;
             -webkit-text-fill-color: transparent;
             background-clip: text;
+            filter: drop-shadow(0 0 10px rgba(0, 212, 255, 0.5));
         }
         
         .auth-description {
@@ -275,27 +352,33 @@
         .form-label {
             display: block;
             margin-bottom: 10px;
-            color: var(--light);
+            color: var(--neon-cyan);
             font-weight: 600;
             font-size: 0.95rem;
+            text-shadow: 0 0 5px rgba(0, 255, 245, 0.3);
         }
         
         .form-control {
             width: 100%;
             padding: 14px 20px;
             background: var(--glass-bg);
-            border: 1px solid var(--border);
+            border: 2px solid var(--neon-purple);
             border-radius: 14px;
             color: var(--light);
             font-size: 1rem;
             transition: all 0.3s ease;
+            box-shadow: 
+                0 0 10px rgba(184, 32, 255, 0.2),
+                inset 0 0 10px rgba(184, 32, 255, 0.1);
         }
         
         .form-control:focus {
             outline: none;
-            border-color: var(--primary);
+            border-color: var(--neon-cyan);
             background: rgba(255, 255, 255, 0.08);
-            box-shadow: 0 0 0 4px rgba(99, 102, 241, 0.15);
+            box-shadow: 
+                0 0 20px var(--neon-cyan),
+                inset 0 0 15px rgba(0, 255, 245, 0.15);
         }
         
         .form-control::placeholder {
@@ -305,8 +388,8 @@
         .btn-submit {
             width: 100%;
             padding: 16px;
-            background: var(--gradient-primary);
-            border: none;
+            background: linear-gradient(135deg, var(--neon-purple), var(--neon-blue));
+            border: 2px solid var(--neon-cyan);
             border-radius: 14px;
             color: white;
             font-weight: 700;
@@ -316,6 +399,9 @@
             margin-top: 10px;
             position: relative;
             overflow: hidden;
+            box-shadow: 
+                0 5px 20px rgba(99, 102, 241, 0.4),
+                0 0 20px var(--neon-purple);
         }
         
         .btn-submit::before {
@@ -325,7 +411,7 @@
             left: -100%;
             width: 100%;
             height: 100%;
-            background: linear-gradient(90deg, transparent, rgba(255, 255, 255, 0.2), transparent);
+            background: linear-gradient(90deg, transparent, rgba(255, 255, 255, 0.3), transparent);
             transition: left 0.5s;
         }
         
@@ -335,7 +421,10 @@
         
         .btn-submit:hover {
             transform: translateY(-2px);
-            box-shadow: 0 8px 25px rgba(99, 102, 241, 0.5);
+            box-shadow: 
+                0 8px 25px rgba(99, 102, 241, 0.6),
+                0 0 30px var(--neon-cyan);
+            border-color: var(--neon-pink);
         }
         
         .btn-submit:disabled {
@@ -352,20 +441,22 @@
         }
         
         .auth-switch a {
-            color: var(--primary);
+            color: var(--neon-cyan);
             text-decoration: none;
             font-weight: 700;
             margin-left: 5px;
             cursor: pointer;
             transition: all 0.3s ease;
+            text-shadow: 0 0 5px rgba(0, 255, 245, 0.3);
         }
         
         .auth-switch a:hover {
-            color: var(--secondary);
+            color: var(--neon-pink);
+            text-shadow: 0 0 10px var(--neon-pink);
             text-decoration: underline;
         }
         
-        /* Alert Messages */
+        /* Alert Messages with Neon */
         .alert {
             padding: 16px 20px;
             border-radius: 14px;
@@ -373,49 +464,67 @@
             display: none;
             position: relative;
             z-index: 10;
+            border: 2px solid;
         }
         
         .alert-success {
             background: rgba(16, 185, 129, 0.15);
-            border: 1px solid rgba(16, 185, 129, 0.3);
-            color: var(--success);
+            border-color: var(--neon-green);
+            color: var(--neon-green);
+            box-shadow: 
+                0 0 15px rgba(0, 255, 136, 0.3),
+                inset 0 0 10px rgba(0, 255, 136, 0.1);
         }
         
         .alert-error {
             background: rgba(239, 68, 68, 0.15);
-            border: 1px solid rgba(239, 68, 68, 0.3);
-            color: #ef4444;
+            border-color: var(--neon-pink);
+            color: var(--neon-pink);
+            box-shadow: 
+                0 0 15px rgba(255, 0, 110, 0.3),
+                inset 0 0 10px rgba(255, 0, 110, 0.1);
         }
         
         .alert-warning {
             background: rgba(245, 158, 11, 0.15);
-            border: 1px solid rgba(245, 158, 11, 0.3);
-            color: #f59e0b;
+            border-color: #ffa500;
+            color: #ffa500;
+            box-shadow: 
+                0 0 15px rgba(255, 165, 0, 0.3),
+                inset 0 0 10px rgba(255, 165, 0, 0.1);
         }
         
         .alert-info {
             background: rgba(59, 130, 246, 0.15);
-            border: 1px solid rgba(59, 130, 246, 0.3);
-            color: #3b82f6;
+            border-color: var(--neon-cyan);
+            color: var(--neon-cyan);
+            box-shadow: 
+                0 0 15px rgba(0, 255, 245, 0.3),
+                inset 0 0 10px rgba(0, 255, 245, 0.1);
         }
         
-        /* Admin Info */
+        /* Admin Info with Neon */
         .admin-info {
             background: rgba(139, 92, 246, 0.1);
-            border: 1px solid rgba(139, 92, 246, 0.3);
+            border: 2px solid var(--neon-purple);
             border-radius: 18px;
             padding: 25px;
             margin-top: 40px;
             backdrop-filter: blur(5px);
+            box-shadow: 
+                0 10px 30px rgba(0, 0, 0, 0.2),
+                0 0 20px rgba(184, 32, 255, 0.3),
+                inset 0 0 15px rgba(184, 32, 255, 0.1);
         }
         
         .admin-info h4 {
-            color: var(--secondary);
+            color: var(--neon-purple);
             margin-bottom: 15px;
             font-size: 1.4rem;
             display: flex;
             align-items: center;
             gap: 10px;
+            text-shadow: 0 0 10px var(--neon-purple);
         }
         
         .admin-info p {
@@ -425,13 +534,16 @@
         }
         
         .admin-credentials {
-            background: rgba(0, 0, 0, 0.25);
+            background: rgba(0, 0, 0, 0.4);
             border-radius: 14px;
             padding: 18px;
             font-family: 'Courier New', monospace;
             font-size: 1rem;
             line-height: 1.6;
-            border: 1px solid var(--border);
+            border: 2px solid var(--neon-blue);
+            box-shadow: 
+                0 0 15px rgba(0, 212, 255, 0.3),
+                inset 0 0 10px rgba(0, 212, 255, 0.1);
         }
         
         .admin-credentials div {
@@ -439,45 +551,63 @@
         }
         
         .admin-credentials strong {
-            color: var(--primary);
+            color: var(--neon-cyan);
+            text-shadow: 0 0 5px var(--neon-cyan);
         }
         
-        /* Stats */
+        /* Stats with Neon */
         .stats-container {
             display: flex;
             justify-content: space-between;
             margin-top: 40px;
             padding-top: 35px;
-            border-top: 1px solid var(--border);
+            border-top: 2px solid var(--neon-purple);
             flex-wrap: wrap;
             gap: 20px;
+            box-shadow: 0 -2px 15px rgba(184, 32, 255, 0.3);
         }
         
         .stat-item {
             text-align: center;
             padding: 20px;
             min-width: 120px;
+            border: 2px solid var(--neon-blue);
+            border-radius: 16px;
+            background: rgba(0, 212, 255, 0.05);
+            box-shadow: 
+                0 0 15px rgba(0, 212, 255, 0.2),
+                inset 0 0 10px rgba(0, 212, 255, 0.1);
+            transition: all 0.3s ease;
+        }
+        
+        .stat-item:hover {
+            transform: translateY(-5px);
+            box-shadow: 
+                0 0 25px var(--neon-cyan),
+                inset 0 0 15px rgba(0, 255, 245, 0.15);
         }
         
         .stat-number {
             font-family: 'Manrope', sans-serif;
             font-size: 2.8rem;
             font-weight: 800;
-            background: var(--gradient-primary);
+            background: linear-gradient(135deg, var(--neon-cyan), var(--neon-blue));
             -webkit-background-clip: text;
             -webkit-text-fill-color: transparent;
             background-clip: text;
             line-height: 1;
+            filter: drop-shadow(0 0 10px rgba(0, 212, 255, 0.5));
         }
         
         .stat-label {
-            color: var(--gray);
+            color: var(--neon-cyan);
             font-weight: 600;
             font-size: 1.15rem;
             margin-top: 8px;
+            text-shadow: 0 0 5px rgba(0, 255, 245, 0.3);
         }
         
-        /* Features Grid */
+        /* Features Grid with Neon */
         .features-section {
             padding: 80px 0;
         }
@@ -488,10 +618,11 @@
             font-size: 3rem;
             text-align: center;
             margin-bottom: 20px;
-            background: linear-gradient(120deg, var(--light), var(--primary));
+            background: linear-gradient(120deg, var(--neon-cyan), var(--neon-blue), var(--neon-purple));
             -webkit-background-clip: text;
             -webkit-text-fill-color: transparent;
             background-clip: text;
+            filter: drop-shadow(0 0 20px rgba(0, 212, 255, 0.5));
         }
         
         .section-subtitle {
@@ -511,13 +642,17 @@
         
         .feature-card {
             background: var(--card-bg);
-            border: 1px solid var(--border);
+            border: 2px solid var(--neon-purple);
             border-radius: 20px;
             padding: 35px 30px;
             text-align: center;
             transition: all 0.4s ease;
             position: relative;
             overflow: hidden;
+            box-shadow: 
+                0 10px 30px rgba(0, 0, 0, 0.2),
+                0 0 15px rgba(184, 32, 255, 0.3),
+                inset 0 0 15px rgba(184, 32, 255, 0.1);
         }
         
         .feature-card::before {
@@ -527,13 +662,17 @@
             left: 0;
             width: 100%;
             height: 5px;
-            background: var(--gradient-primary);
+            background: linear-gradient(90deg, var(--neon-blue), var(--neon-purple), var(--neon-pink));
+            box-shadow: 0 0 10px var(--neon-purple);
         }
         
         .feature-card:hover {
             transform: translateY(-10px);
-            border-color: var(--primary);
-            box-shadow: 0 15px 40px rgba(99, 102, 241, 0.3);
+            border-color: var(--neon-cyan);
+            box-shadow: 
+                0 15px 40px rgba(99, 102, 241, 0.4),
+                0 0 30px var(--neon-cyan),
+                inset 0 0 20px rgba(0, 255, 245, 0.15);
         }
         
         .feature-icon {
@@ -546,14 +685,27 @@
             justify-content: center;
             margin: 0 auto 25px;
             font-size: 2.2rem;
-            color: var(--primary);
-            border: 1px solid var(--border);
+            color: var(--neon-cyan);
+            border: 2px solid var(--neon-blue);
+            box-shadow: 
+                0 0 20px rgba(0, 212, 255, 0.3),
+                inset 0 0 15px rgba(0, 212, 255, 0.1);
+            transition: all 0.3s ease;
+        }
+        
+        .feature-card:hover .feature-icon {
+            box-shadow: 
+                0 0 30px var(--neon-cyan),
+                inset 0 0 20px rgba(0, 255, 245, 0.2);
+            transform: scale(1.1);
         }
         
         .feature-title {
             font-size: 1.6rem;
             margin-bottom: 15px;
             font-weight: 700;
+            color: var(--neon-cyan);
+            text-shadow: 0 0 10px rgba(0, 255, 245, 0.3);
         }
         
         .feature-desc {
@@ -562,7 +714,7 @@
             line-height: 1.7;
         }
         
-        /* Payment Section */
+        /* Payment Section with Neon */
         .payment-section {
             display: none;
             padding: 80px 0;
@@ -570,11 +722,16 @@
         
         .payment-card {
             background: var(--card-bg);
-            border: 1px solid var(--border);
+            border: 2px solid var(--neon-green);
             border-radius: 24px;
             padding: 40px;
             max-width: 600px;
             margin: 0 auto;
+            box-shadow: 
+                0 15px 40px rgba(0, 0, 0, 0.3),
+                0 0 25px rgba(0, 255, 136, 0.3),
+                inset 0 0 20px rgba(0, 255, 136, 0.1);
+            animation: neonPulse 4s ease-in-out infinite;
         }
         
         .payment-header {
@@ -587,10 +744,11 @@
             font-size: 2.2rem;
             font-weight: 800;
             margin-bottom: 15px;
-            background: var(--gradient-success);
+            background: linear-gradient(135deg, var(--neon-green), var(--neon-cyan));
             -webkit-background-clip: text;
             -webkit-text-fill-color: transparent;
             background-clip: text;
+            filter: drop-shadow(0 0 15px rgba(0, 255, 136, 0.5));
         }
         
         .usdt-price {
@@ -598,16 +756,17 @@
             font-size: 4rem;
             font-weight: 800;
             margin: 20px 0;
-            background: var(--gradient-success);
+            background: linear-gradient(135deg, var(--neon-green), var(--neon-cyan));
             -webkit-background-clip: text;
             -webkit-text-fill-color: transparent;
             background-clip: text;
             line-height: 1;
+            filter: drop-shadow(0 0 20px rgba(0, 255, 136, 0.6));
         }
         
         .usdt-badge {
-            background: rgba(0, 209, 178, 0.2);
-            color: #00d1b2;
+            background: rgba(0, 255, 136, 0.15);
+            color: var(--neon-green);
             padding: 6px 16px;
             border-radius: 20px;
             font-weight: 600;
@@ -616,6 +775,10 @@
             align-items: center;
             gap: 6px;
             margin-bottom: 20px;
+            border: 2px solid var(--neon-green);
+            box-shadow: 
+                0 0 15px rgba(0, 255, 136, 0.3),
+                inset 0 0 10px rgba(0, 255, 136, 0.1);
         }
         
         .network-selector {
@@ -628,30 +791,42 @@
         .network-btn {
             padding: 12px 24px;
             background: var(--glass-bg);
-            border: 1px solid var(--border);
+            border: 2px solid var(--neon-purple);
             border-radius: 12px;
             color: var(--gray);
             font-weight: 600;
             cursor: pointer;
             transition: all 0.3s ease;
+            box-shadow: 
+                0 0 10px rgba(184, 32, 255, 0.2),
+                inset 0 0 10px rgba(184, 32, 255, 0.1);
         }
         
         .network-btn:hover {
-            background: rgba(255, 255, 255, 0.08);
+            background: rgba(184, 32, 255, 0.1);
+            box-shadow: 
+                0 0 15px var(--neon-purple),
+                inset 0 0 12px rgba(184, 32, 255, 0.15);
         }
         
         .network-btn.active {
-            background: var(--gradient-primary);
+            background: linear-gradient(135deg, var(--neon-purple), var(--neon-blue));
             color: white;
-            border-color: var(--primary);
+            border-color: var(--neon-cyan);
+            box-shadow: 
+                0 0 20px var(--neon-cyan),
+                inset 0 0 15px rgba(0, 255, 245, 0.2);
         }
         
         .wallet-info {
-            background: rgba(0, 0, 0, 0.25);
-            border: 1px solid var(--border);
+            background: rgba(0, 0, 0, 0.4);
+            border: 2px solid var(--neon-cyan);
             border-radius: 16px;
             padding: 25px;
             margin: 25px 0;
+            box-shadow: 
+                0 0 20px rgba(0, 255, 245, 0.3),
+                inset 0 0 15px rgba(0, 255, 245, 0.1);
         }
         
         .wallet-info h5 {
@@ -659,12 +834,14 @@
             align-items: center;
             gap: 10px;
             margin-bottom: 15px;
+            color: var(--neon-cyan);
+            text-shadow: 0 0 10px var(--neon-cyan);
         }
         
         .wallet-address {
-            background: rgba(0, 0, 0, 0.3);
+            background: rgba(0, 0, 0, 0.5);
             border-radius: 12px;
-            padding: 15px;
+            padding: 15px 50px 15px 15px;
             font-family: monospace;
             font-size: 1.1rem;
             margin: 15px 0;
@@ -672,30 +849,40 @@
             cursor: pointer;
             transition: all 0.3s ease;
             position: relative;
+            border: 2px solid var(--neon-blue);
+            box-shadow: 
+                0 0 15px rgba(0, 212, 255, 0.3),
+                inset 0 0 10px rgba(0, 212, 255, 0.1);
+            color: var(--neon-cyan);
         }
         
         .wallet-address:hover {
-            background: rgba(99, 102, 241, 0.1);
-            border: 1px solid var(--primary);
+            background: rgba(0, 212, 255, 0.1);
+            border-color: var(--neon-cyan);
+            box-shadow: 
+                0 0 25px var(--neon-cyan),
+                inset 0 0 15px rgba(0, 255, 245, 0.15);
         }
         
         .copy-btn {
             position: absolute;
             right: 10px;
             top: 10px;
-            background: var(--glass-bg);
-            border: 1px solid var(--border);
+            background: linear-gradient(135deg, var(--neon-purple), var(--neon-blue));
+            border: 2px solid var(--neon-cyan);
             border-radius: 8px;
             padding: 6px 12px;
-            color: var(--gray);
+            color: white;
             font-size: 0.85rem;
             cursor: pointer;
             transition: all 0.3s ease;
+            box-shadow: 0 0 10px var(--neon-purple);
         }
         
         .copy-btn:hover {
-            background: var(--primary);
-            color: white;
+            background: linear-gradient(135deg, var(--neon-cyan), var(--neon-blue));
+            box-shadow: 0 0 20px var(--neon-cyan);
+            transform: scale(1.05);
         }
         
         .qrcode-container {
@@ -705,6 +892,8 @@
             background: white;
             border-radius: 12px;
             display: inline-block;
+            border: 3px solid var(--neon-purple);
+            box-shadow: 0 0 25px var(--neon-purple);
         }
         
         .qrcode-placeholder {
@@ -720,7 +909,7 @@
             margin: 0 auto;
         }
         
-        /* Verification Section */
+        /* Verification Section with Neon */
         .verification-section {
             display: none;
             padding: 80px 0;
@@ -728,11 +917,16 @@
         
         .verification-card {
             background: var(--card-bg);
-            border: 1px solid var(--border);
+            border: 2px solid var(--neon-blue);
             border-radius: 24px;
             padding: 40px;
             max-width: 600px;
             margin: 0 auto;
+            box-shadow: 
+                0 15px 40px rgba(0, 0, 0, 0.3),
+                0 0 25px rgba(0, 212, 255, 0.4),
+                inset 0 0 20px rgba(0, 212, 255, 0.1);
+            animation: neonGlow 3s ease-in-out infinite;
         }
         
         .verification-title {
@@ -741,10 +935,11 @@
             font-weight: 800;
             margin-bottom: 20px;
             text-align: center;
-            background: var(--gradient-primary);
+            background: linear-gradient(135deg, var(--neon-blue), var(--neon-cyan));
             -webkit-background-clip: text;
             -webkit-text-fill-color: transparent;
             background-clip: text;
+            filter: drop-shadow(0 0 15px rgba(0, 212, 255, 0.5));
         }
         
         .verification-steps {
@@ -756,15 +951,26 @@
             align-items: flex-start;
             margin-bottom: 25px;
             padding: 15px;
-            background: rgba(255, 255, 255, 0.03);
+            background: rgba(0, 212, 255, 0.05);
             border-radius: 12px;
-            border: 1px solid rgba(255, 255, 255, 0.05);
+            border: 2px solid var(--neon-purple);
+            box-shadow: 
+                0 0 10px rgba(184, 32, 255, 0.2),
+                inset 0 0 10px rgba(184, 32, 255, 0.1);
+            transition: all 0.3s ease;
+        }
+        
+        .step:hover {
+            border-color: var(--neon-cyan);
+            box-shadow: 
+                0 0 20px var(--neon-cyan),
+                inset 0 0 15px rgba(0, 255, 245, 0.15);
         }
         
         .step-number {
             width: 40px;
             height: 40px;
-            background: var(--gradient-primary);
+            background: linear-gradient(135deg, var(--neon-purple), var(--neon-blue));
             border-radius: 50%;
             display: flex;
             align-items: center;
@@ -773,6 +979,8 @@
             font-size: 1.2rem;
             margin-right: 15px;
             flex-shrink: 0;
+            border: 2px solid var(--neon-cyan);
+            box-shadow: 0 0 15px var(--neon-purple);
         }
         
         .step-content {
@@ -782,7 +990,8 @@
         .step-title {
             font-weight: 700;
             margin-bottom: 5px;
-            color: var(--light);
+            color: var(--neon-cyan);
+            text-shadow: 0 0 5px rgba(0, 255, 245, 0.3);
         }
         
         .step-desc {
@@ -800,11 +1009,12 @@
         .loading-spinner {
             width: 60px;
             height: 60px;
-            border: 4px solid rgba(99, 102, 241, 0.2);
-            border-top: 4px solid var(--primary);
+            border: 4px solid rgba(0, 212, 255, 0.2);
+            border-top: 4px solid var(--neon-cyan);
             border-radius: 50%;
             animation: spin 1s linear infinite;
             margin: 0 auto 20px;
+            box-shadow: 0 0 20px var(--neon-cyan);
         }
         
         @keyframes spin {
@@ -813,18 +1023,20 @@
         }
         
         .loading-text {
-            color: var(--gray);
+            color: var(--neon-cyan);
             font-size: 1.1rem;
+            text-shadow: 0 0 10px var(--neon-cyan);
         }
         
-        /* Footer */
+        /* Footer with Neon */
         .footer {
             text-align: center;
             padding: 40px 0;
             color: var(--gray);
-            border-top: 1px solid var(--border);
+            border-top: 2px solid var(--neon-purple);
             margin-top: 60px;
             font-size: 0.95rem;
+            box-shadow: 0 -2px 15px rgba(184, 32, 255, 0.3);
         }
         
         .footer-links {
@@ -841,7 +1053,29 @@
         }
         
         .footer-links a:hover {
-            color: var(--primary);
+            color: var(--neon-cyan);
+            text-shadow: 0 0 10px var(--neon-cyan);
+        }
+        
+        /* Transaction Info */
+        .transaction-info {
+            background: rgba(0, 0, 0, 0.4);
+            border: 2px solid var(--neon-cyan);
+            border-radius: 12px;
+            padding: 20px;
+            margin-top: 20px;
+            box-shadow: 
+                0 0 20px rgba(0, 255, 245, 0.3),
+                inset 0 0 15px rgba(0, 255, 245, 0.1);
+        }
+        
+        .transaction-info p {
+            margin: 10px 0;
+        }
+        
+        .transaction-info strong {
+            color: var(--neon-cyan);
+            text-shadow: 0 0 5px var(--neon-cyan);
         }
         
         /* Responsive */
@@ -861,7 +1095,7 @@
         }
         
         @media (max-width: 768px) {
-            .hero {
+            .hero-section {
                 padding: 130px 0 60px;
             }
             
@@ -1170,7 +1404,7 @@
                     <p class="text-muted mb-3">Send exactly <strong>49 USDT</strong> to our secure wallet address:</p>
                     
                     <div class="wallet-address" id="walletAddress">
-                        0x742d35Cc6634C0532925a3b844Bc9e8f43b8b8c3
+                        1234546abcde
                         <div class="copy-btn" onclick="copyWallet()">
                             <i class="fas fa-copy"></i> Copy
                         </div>
@@ -1291,7 +1525,7 @@
                 <a href="#">Terms of Service</a>
                 <a href="#">Contact</a>
             </div>
-            <p> 2026 ICTSMARTPRO AI. All rights reserved. Advanced Trading Solutions v2.0</p>
+            <p>© 2026 ICTSMARTPRO AI. All rights reserved. Advanced Trading Solutions v2.0</p>
         </div>
     </footer>
 
@@ -1357,6 +1591,8 @@
         function showRegister() {
             document.getElementById('loginCard').style.display = 'none';
             document.getElementById('registerCard').style.display = 'block';
+            document.getElementById('loginCard').classList.remove('active');
+            document.getElementById('registerCard').classList.add('active');
             document.getElementById('loginAlert').style.display = 'none';
             document.getElementById('registerAlert').style.display = 'none';
             document.getElementById('authToggleText').textContent = 'Register';
@@ -1365,6 +1601,8 @@
         function showLogin() {
             document.getElementById('registerCard').style.display = 'none';
             document.getElementById('loginCard').style.display = 'block';
+            document.getElementById('registerCard').classList.remove('active');
+            document.getElementById('loginCard').classList.add('active');
             document.getElementById('loginAlert').style.display = 'none';
             document.getElementById('registerAlert').style.display = 'none';
             document.getElementById('authToggleText').textContent = 'Login';
@@ -1373,24 +1611,7 @@
         // Dashboard'a yönlendirme
         function redirectToDashboard() {
             // dashboard.html dosyasının varlığını kontrol et
-            fetch('dashboard.html')
-                .then(response => {
-                    if (response.ok) {
-                        window.location.href = 'dashboard.html';
-                    } else {
-                        // Dashboard bulunamazsa demo göster
-                        showAlert('loginAlert', 'Dashboard loading... Redirecting to admin panel.', 'info');
-                        setTimeout(() => {
-                            window.location.href = 'admin-panel.html';
-                        }, 1500);
-                    }
-                })
-                .catch(() => {
-                    showAlert('loginAlert', 'Dashboard loading... Please wait.', 'info');
-                    setTimeout(() => {
-                        window.location.href = 'trading-dashboard.html';
-                    }, 1500);
-                });
+            window.location.href = 'dashboard.html';
         }
         
         // Payment sayfasını göster
@@ -1402,6 +1623,9 @@
             document.getElementById('authToggleBtn').style.display = 'none';
             document.getElementById('getStartedBtn').style.display = 'none';
             document.getElementById('dashboardLink').style.display = 'none';
+            
+            // Scroll to payment section
+            window.scrollTo({ top: 0, behavior: 'smooth' });
         }
         
         // Verification sayfasını göster
@@ -1410,6 +1634,9 @@
             document.getElementById('verificationSection').style.display = 'block';
             document.getElementById('verificationTxHash').textContent = txHash.substring(0, 20) + '...' + txHash.substring(txHash.length - 10);
             document.getElementById('transactionInfo').style.display = 'block';
+            
+            // Scroll to verification section
+            window.scrollTo({ top: 0, behavior: 'smooth' });
             
             startVerificationCheck(txHash);
         }
@@ -1424,6 +1651,7 @@
             if (currentUser) {
                 document.getElementById('dashboardLink').style.display = 'block';
             }
+            window.scrollTo({ top: 0, behavior: 'smooth' });
         }
         
         // Verification iptal
@@ -1439,13 +1667,14 @@
             if (currentUser) {
                 document.getElementById('dashboardLink').style.display = 'block';
             }
+            window.scrollTo({ top: 0, behavior: 'smooth' });
         }
         
         // Wallet adresi kopyalama
         function copyWallet() {
-            const wallet = document.getElementById('walletAddress').textContent.replace(' Copy', '').trim();
+            const wallet = document.getElementById('walletAddress').textContent.replace(/\s+Copy/g, '').trim();
             navigator.clipboard.writeText(wallet).then(() => {
-                showAlert('paymentAlert', 'Wallet address copied to clipboard!', 'success');
+                showAlert('paymentAlert', '✅ Wallet address copied to clipboard!', 'success');
             });
         }
         
@@ -1535,13 +1764,13 @@
             
             if (currentUser.is_admin) {
                 // Admin direkt dashboard'a
-                showAlert('loginAlert', 'Admin user detected. Redirecting to dashboard...', 'success');
+                showAlert('loginAlert', '✅ Admin user detected. Redirecting to dashboard...', 'success');
                 setTimeout(() => {
                     redirectToDashboard();
                 }, 1000);
             } else if (currentUser.has_subscription) {
                 // Zaten aboneliği var
-                showAlert('loginAlert', 'Subscription active! Redirecting to dashboard...', 'success');
+                showAlert('loginAlert', '✅ Subscription active! Redirecting to dashboard...', 'success');
                 setTimeout(() => {
                     redirectToDashboard();
                 }, 1000);
@@ -1778,7 +2007,7 @@
             
             // Ödeme doğrulama başlat
             setTimeout(() => {
-                showAlert('paymentAlert', 'Payment verification started! Please wait...', 'success');
+                showAlert('paymentAlert', '✅ Payment verification started! Please wait...', 'success');
                 showVerification(txHash);
                 verifyBtn.innerHTML = '<i class="fas fa-check-circle me-2"></i>Verify Payment';
                 verifyBtn.disabled = false;
@@ -1847,7 +2076,7 @@
         // Check verification button
         document.getElementById('checkVerificationBtn').addEventListener('click', function() {
             if (currentUser && currentUser.has_subscription) {
-                showAlert('verificationAlert', 'Subscription active! Redirecting to dashboard...', 'success');
+                showAlert('verificationAlert', '✅ Subscription active! Redirecting to dashboard...', 'success');
                 setTimeout(() => {
                     redirectToDashboard();
                 }, 1000);
