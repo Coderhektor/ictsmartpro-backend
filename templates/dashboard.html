@@ -1055,7 +1055,38 @@ async function analyze(showNotif = true) {
         showNoDataMessage(`Backend hatası: ${error.message}. Lütfen main.py'yi kontrol edin.`);
     }
 }
+//=========================================GOSTERRGE GAUGE=======================
+    // Gauge'ı güncelleyen fonksiyon
+function updateGaugeWidget() {
+    const symbol = document.getElementById('symbolSelect').value + 'USDT';
+    const interval = document.getElementById('intervalSelect').value;
 
+    // Widget konteynerini temizle
+    const container = document.getElementById('technical-gauge-widget');
+    if (!container) return;
+    container.innerHTML = '';
+
+    // TradingView Technical Analysis Widget
+    new TradingView.widget({
+        "container_id": "technical-gauge-widget",
+        "width": "100%",
+        "height": 420,
+        "symbol": `BINANCE:${symbol}`,
+        "interval": intervalMap[interval] || "60", // Mevcut intervalMap'ini kullan
+        "locale": "tr",
+        "colorTheme": "dark",
+        "isTransparent": false,
+        "show_interval_tabs": true,
+        "backgroundColor": "rgba(26, 33, 51, 1)",
+        "gridLineColor": "rgba(59, 130, 246, 0.1)",
+        "trendLineColor": "rgba(59, 130, 246, 1)",
+        "underLineColor": "rgba(16, 185, 129, 0.3)",
+        "underLineBottomColor": "rgba(16, 185, 129, 0.1)"
+    });
+}
+
+// updateDashboardWithRealData fonksiyonunun sonuna ekle:
+updateGaugeWidget();  // Veri geldiğinde gauge'ı da güncelle
 // ========== BACKEND'DEN GELEN GERÇEK VERİ İLE DASHBOARD GÜNCELLEME ==========
 function updateDashboardWithRealData(data) {
     if (!data) return;
@@ -1546,11 +1577,13 @@ function showNotification(text, type = 'info') {
 // ========== EVENT LISTENERS ==========
 document.getElementById('symbolSelect').addEventListener('change', function() {
     loadTradingView();
+    updateGaugeWidget();
     analyze();
 });
 
 document.getElementById('intervalSelect').addEventListener('change', function() {
     loadTradingView();
+    updateGaugeWidget();
     analyze();
 });
 
