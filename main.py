@@ -781,104 +781,92 @@ class MarketStructureAnalyzer:
 # SIGNAL GENERATOR
 # ========================================================================================================
 class SignalGenerator:
-    """Generate trading signals"""
-    
     @staticmethod
     def generate(
         technical: Dict[str, Any],
         market_structure: Dict[str, Any],
         ml_prediction: Optional[Dict[str, Any]] = None
     ) -> Dict[str, Any]:
-        """
-        Generate trading signal
-        
-        Args:
-            technical: Technical indicators
-            market_structure: Market structure analysis
-            ml_prediction: ML model prediction (optional)
-            
-        Returns:
-            Trading signal with confidence
-        """
         signals = []
         confidences = []
+        weights = []  # ← EKLE: Weight sistemi ekle
         
-        # ML prediction
+        # ML prediction (yüksek weight ver)
         if ml_prediction:
             ml_signal = ml_prediction.get('prediction', 'NEUTRAL')
             ml_conf = ml_prediction.get('confidence', 0.5)
             if ml_signal != 'NEUTRAL':
                 signals.append(ml_signal)
                 confidences.append(ml_conf)
+                weights.append(1.5)  # ML'e daha yüksek weight
         
-        # RSI signal
+        # RSI (weight 1.0)
         rsi = technical.get('rsi_value', 50)
         if rsi < 30:
             signals.append('BUY')
             confidences.append(0.75)
+            weights.append(1.0)
         elif rsi > 70:
             signals.append('SELL')
             confidences.append(0.75)
+            weights.append(1.0)
         
-        # MACD signal
+        # MACD (threshold'u BTC için ayarla, örneğin abs(hist) > 10)
         macd_hist = technical.get('macd_histogram', 0)
-        if macd_hist > 0.001:
-            signals.append('BUY')
-            confidences.append(0.70)
-        elif macd_hist < -0.001:
-            signals.append('SELL')
-            confidences.append(0.70)
+        if abs(macd_hist) > 10:  # ← DEĞİŞTİR: Küçük hist'leri ignore et (BTC için 49 büyük)
+            if macd_hist > 0:
+                signals.append('BUY')
+                confidences.append(0.70)
+                weights.append(1.2)
+            else:
+                signals.append('SELL')
+                confidences.append(0.70)
+                weights.append(1.2)
         
-        # Bollinger Bands signal
+        # BB (weight 0.8)
         bb_pos = technical.get('bb_position', 50)
         if bb_pos < 20:
             signals.append('BUY')
             confidences.append(0.65)
+            weights.append(0.8)
         elif bb_pos > 80:
             signals.append('SELL')
             confidences.append(0.65)
+            weights.append(0.8)
         
-        # Market structure signal
+        # Structure (yüksek weight)
         structure = market_structure.get('structure', 'Neutral')
         trend = market_structure.get('trend', 'Sideways')
-        
         if structure == 'Bullish' and trend == 'Uptrend':
             signals.append('BUY')
             confidences.append(0.80)
+            weights.append(1.5)
         elif structure == 'Bearish' and trend == 'Downtrend':
             signals.append('SELL')
             confidences.append(0.80)
+            weights.append(1.5)
         
-        # Ensemble voting
         if not signals:
-            return {
-                "signal": "NEUTRAL",
-                "confidence": 50.0,
-                "recommendation": "Insufficient signals - wait for clearer market direction"
-            }
+            return {"signal": "NEUTRAL", "confidence": 50.0, "recommendation": "No signals"}
         
-        # Count votes
-        signal_counts = Counter([s for s in signals if s in ['BUY', 'SELL']])
+        # Ağırlıklı voting (Counter yerine weighted score)
+        buy_score = sum(c * w for s, c, w in zip(signals, confidences, weights) if s == 'BUY')
+        sell_score = sum(c * w for s, c, w in zip(signals, confidences, weights) if s == 'SELL')
         
-        if len(signal_counts) == 0:
+        if buy_score > sell_score:
+            final_signal = "BUY"
+            avg_conf = (buy_score / (buy_score + sell_score) * 100) if (buy_score + sell_score) > 0 else 50
+        elif sell_score > buy_score:
+            final_signal = "SELL"
+            avg_conf = (sell_score / (buy_score + sell_score) * 100) if (buy_score + sell_score) > 0 else 50
+        else:
             final_signal = "NEUTRAL"
             avg_conf = 50.0
-        else:
-            final_signal = signal_counts.most_common(1)[0][0]
-            matching_confs = [c for s, c in zip(signals, confidences) if s == final_signal]
-            avg_conf = (sum(matching_confs) / len(matching_confs)) * 100
         
-        # Upgrade to strong signals
         if avg_conf > 75:
-            if final_signal == "BUY":
-                final_signal = "STRONG_BUY"
-            elif final_signal == "SELL":
-                final_signal = "STRONG_SELL"
+            final_signal = "STRONG_" + final_signal
         
-        # Generate recommendation
-        recommendation = SignalGenerator._generate_recommendation(
-            final_signal, avg_conf, technical, market_structure
-        )
+        recommendation = SignalGenerator._generate_recommendation(final_signal, avg_conf, technical, market_structure)
         
         return {
             "signal": final_signal,
