@@ -1,36 +1,25 @@
-# Core & Web
 fastapi>=0.115.0
 uvicorn[standard]>=0.30.0
 orjson>=3.10.0
 aiohttp>=3.10.0
 websockets>=13.0
 
-# Data & ML (önce normal PyPI'den çek, torch için ekstra index ekle)
 numpy>=2.0.0
 pandas>=2.2.3
 scikit-learn>=1.5.2
 scipy>=1.14.0
 
 --extra-index-url https://download.pytorch.org/whl/cpu
-torch==2.4.1+cpu
-torchvision==0.19.1+cpu
-
+torch==2.3.1+cpu
+torchvision==0.18.1+cpu
 transformers>=4.45.0
 
-lightgbm>=4.0.0
-xgboost>=2.1.0
+pandas-ta>=0.3.14b0   # numba'yı sevmiyorsan yorum yap
 
-# Technical Analysis
-pandas-ta>=0.3.14b0
-# ta-lib → Dockerfile ile kur (yorumda bırak)
-
-# Image / Viz
-opencv-python>=4.10.0
+opencv-python-headless>=4.10.0   # headless versiyon!
 pillow>=10.4.0
-matplotlib>=3.9.0
 plotly>=5.24.0
 
-# Utils
 pydantic>=2.9.0
 rich>=13.8.0
 loguru>=0.7.2
