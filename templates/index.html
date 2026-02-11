@@ -1892,100 +1892,139 @@
                 loginBtn.disabled = false;
             }, 1000);
         });
-        
         // Register form submit
-        document.getElementById('registerForm').addEventListener('submit', function(e) {
-            e.preventDefault();
-            
-            const username = document.getElementById('registerUsername').value.trim();
-            const email = document.getElementById('registerEmail').value.trim();
-            const password = document.getElementById('registerPassword').value;
-            const wallet = document.getElementById('registerWallet').value.trim();
-            
-            // Validation
-            if (!username || !email || !password) {
-                showAlert('registerAlert', 'Please fill in all required fields', 'error');
-                return;
-            }
-            
-            if (password.length < 6) {
-                showAlert('registerAlert', 'Password must be at least 6 characters', 'error');
-                return;
-            }
-            
-            const registerBtn = document.getElementById('registerBtn');
-            registerBtn.innerHTML = '<i class="fas fa-spinner fa-spin me-2"></i>Creating Account...';
-            registerBtn.disabled = true;
-            
-            // Simüle edilmiş API yanıtı
+document.getElementById('registerForm').addEventListener('submit', function(e) {
+    e.preventDefault();
+
+    const username = document.getElementById('registerUsername').value.trim();
+    const email    = document.getElementById('registerEmail').value.trim();
+    const password = document.getElementById('registerPassword').value;
+    const wallet   = document.getElementById('registerWallet').value.trim();
+
+    // Basit doğrulama
+    if (!username || !email || !password) {
+        showAlert('registerAlert', 'Lütfen tüm zorunlu alanları doldurun', 'error');
+        return;
+    }
+
+    if (password.length < 6) {
+        showAlert('registerAlert', 'Şifre en az 6 karakter olmalıdır', 'error');
+        return;
+    }
+
+    if (!email.includes('@') || !email.includes('.')) {
+        showAlert('registerAlert', 'Geçerli bir e-posta adresi girin', 'error');
+        return;
+    }
+
+    const registerBtn = document.getElementById('registerBtn');
+    registerBtn.innerHTML = '<i class="fas fa-spinner fa-spin me-2"></i>Hesap oluşturuluyor...';
+    registerBtn.disabled = true;
+
+    // Simüle edilmiş kayıt işlemi (1 saniye gecikme)
+    setTimeout(() => {
+        const users = JSON.parse(localStorage.getItem('quantumtrade_users') || '[]');
+
+        // Kullanıcı adı / e-posta kontrolü
+        if (users.some(u => u.username.toLowerCase() === username.toLowerCase())) {
+            showAlert('registerAlert', 'Bu kullanıcı adı zaten alınmış', 'error');
+            resetRegisterButton();
+            return;
+        }
+
+        if (users.some(u => u.email.toLowerCase() === email.toLowerCase())) {
+            showAlert('registerAlert', 'Bu e-posta adresi zaten kayıtlı', 'error');
+            resetRegisterButton();
+            return;
+        }
+
+        // Yeni kullanıcı oluştur
+        const newUser = {
+            id: Date.now(),
+            username: username,
+            email: email,
+            password: password,              // Gerçek projede hash'lenmeli!
+            wallet_address: wallet || null,
+            has_subscription: false,
+            is_admin: false,
+            is_verified: false,
+            credits: 0,
+            created_at: new Date().toISOString()
+        };
+
+        users.push(newUser);
+        localStorage.setItem('quantumtrade_users', JSON.stringify(users));
+
+        // Oturum açmış gibi kaydet
+        currentUser = {
+            username: newUser.username,
+            email: newUser.email,
+            has_subscription: false,
+            is_admin: false,
+            is_verified: false,
+            credits: 0,
+            wallet_address: wallet || null
+        };
+
+        saveUserToStorage(currentUser);
+
+        // Başarı ekranı
+        registerBtn.style.display = 'none';
+
+        const successHTML = `
+            <div class="text-center py-4">
+                <i class="fas fa-check-circle fa-4x text-success mb-3"></i>
+                <h4 class="mb-3" style="color: var(--neon-cyan);">Tebrikler!</h4>
+                <p class="mb-4" style="color: var(--light);">
+                    Hesabınız başarıyla oluşturuldu.<br>
+                    <strong>${username}</strong> kullanıcısı ile giriş yapabilirsiniz.
+                </p>
+                <p class="text-muted small mb-4">
+                    Premium özellikler için 49 USDT ödeme yapmanız gerekiyor.<br>
+                    İstediğiniz zaman "Get Started" butonuna tıklayabilirsiniz.
+                </p>
+                <button class="btn-submit" id="successContinueBtn" style="width: auto; padding: 12px 40px;">
+                    <i class="fas fa-arrow-right me-2"></i>Tamam, devam et
+                </button>
+            </div>
+        `;
+
+        document.getElementById('registerForm').innerHTML = successHTML;
+
+        showAlert('registerAlert', 'Hesap oluşturuldu! Artık giriş yapabilirsiniz.', 'success');
+
+        // UI güncelleme
+        document.getElementById('authToggleText').textContent = currentUser.username;
+        document.getElementById('authToggleBtn').innerHTML = `<i class="fas fa-user-circle me-2"></i>${currentUser.username}`;
+        document.getElementById('dashboardLink').style.display = 'block';
+
+        // "Tamam, devam et" butonuna tıklayınca ne yapılacağı
+        document.getElementById('successContinueBtn').addEventListener('click', function() {
+            // Buraya istediğiniz davranışı koyabilirsiniz:
+            // 1. Ödeme ekranına gitmek istiyorsanız:
+            // initiatePayment();
+
+            // 2. Login ekranına dönmek istiyorsanız:
+            showLogin();
+
+            // 3. Sadece ana sayfada kalmak istiyorsanız: hiçbir şey yapmayın
+            // (aşağıdaki satırları yorum satırına alın veya silin)
+
+            // En yaygın tercih: ödeme ekranına yönlendirme
             setTimeout(() => {
-                const users = JSON.parse(localStorage.getItem('quantumtrade_users') || '[]');
-                
-                // Kullanıcı adı/email kontrolü
-                if (users.some(u => u.username === username)) {
-                    showAlert('registerAlert', 'Username already exists', 'error');
-                    registerBtn.innerHTML = '<i class="fas fa-user-plus me-2"></i>Create Account';
-                    registerBtn.disabled = false;
-                    return;
-                }
-                
-                if (users.some(u => u.email === email)) {
-                    showAlert('registerAlert', 'Email already registered', 'error');
-                    registerBtn.innerHTML = '<i class="fas fa-user-plus me-2"></i>Create Account';
-                    registerBtn.disabled = false;
-                    return;
-                }
-                
-                // Yeni kullanıcı oluştur
-                const newUser = {
-                    id: Date.now(),
-                    username: username,
-                    email: email,
-                    password: password,
-                    wallet_address: wallet || null,
-                    has_subscription: false,
-                    is_admin: false,
-                    is_verified: false,
-                    credits: 0,
-                    created_at: new Date().toISOString()
-                };
-                
-                users.push(newUser);
-                localStorage.setItem('quantumtrade_users', JSON.stringify(users));
-                
-                // Kullanıcıyı giriş yapmış olarak kaydet
-                currentUser = {
-                    username: newUser.username,
-                    email: newUser.email,
-                    has_subscription: false,
-                    is_admin: false,
-                    is_verified: false,
-                    credits: 0,
-                    wallet_address: wallet || null
-                };
-                
-                saveUserToStorage(currentUser);
-                
-                // Başarılı kayıt
-                showAlert('registerAlert', '✅ Account created successfully! Welcome to ICTSMARTPRO Trade AI!', 'success');
-                
-                // UI güncelle
-                document.getElementById('authToggleText').textContent = currentUser.username;
-                document.getElementById('authToggleBtn').innerHTML = `<i class="fas fa-user-circle me-2"></i>${currentUser.username}`;
-                document.getElementById('dashboardLink').style.display = 'block';
-                
-                // Formu temizle
-                document.getElementById('registerForm').reset();
-                
-                // Ödeme sayfasına yönlendir
-                setTimeout(() => {
-                    initiatePayment();
-                }, 1500);
-                
-                registerBtn.innerHTML = '<i class="fas fa-user-plus me-2"></i>Create Account';
-                registerBtn.disabled = false;
-            }, 1000);
+                initiatePayment();
+            }, 600);
         });
+
+        function resetRegisterButton() {
+            registerBtn.innerHTML = '<i class="fas fa-user-plus me-2"></i>Create Account';
+            registerBtn.disabled = false;
+        }
+
+    }, 1000);  // Simülasyon süresi
+
+});
+       
         
         // Payment verification
         document.getElementById('verifyPaymentBtn').addEventListener('click', function() {
