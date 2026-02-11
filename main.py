@@ -1917,7 +1917,7 @@ async def serve_homepage():
 @app.get("/dashboard", response_class=HTMLResponse)
 async def serve_dashboard():
     """Dashboard sayfası - trading dashboard"""
-    dashboard_path = os.path.join(os.path.dirname(__file__), "dashboard.html")
+    dashboard_path = os.path.join(os.path.dirname(__file__), "index.html")
     
     if os.path.exists(dashboard_path):
         try:
@@ -1925,7 +1925,7 @@ async def serve_dashboard():
                 content = f.read()
             return HTMLResponse(content=content)
         except Exception as e:
-            logger.error(f"Error reading dashboard.html: {e}")
+            logger.error(f"Error reading index.html: {e}")
     
     # Dashboard yoksa basit dashboard göster
     return HTMLResponse("""
