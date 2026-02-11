@@ -1,24 +1,37 @@
+"""
+MAIN.PY - 11 EXCHANGE + COINGECKO ULTIMATE EDITION
+===================================================
+- 11 Borsa için Özel Parser'lar (Her borsaya özel)
+- CoinGecko Tam Entegrasyon
+- Akıllı Rate Limit Yönetimi
+- Gelişmiş Hata Yönetimi & Retry Mekanizması
+- Kusursuz Weighted Average Hesaplama
+- Asenkron & Paralel Veri Çekme
+"""
+
 import os
 import sys
 import json
 import time
 import asyncio
 import logging
-import secrets
-from datetime import datetime, timezone
-from typing import Dict, List, Optional, Any
-from collections import defaultdict, Counter
+import hashlib
+import hmac
+from datetime import datetime, timezone, timedelta
+from typing import Dict, List, Optional, Any, Tuple, Callable
+from collections import defaultdict, deque
+from dataclasses import dataclass, field
+from enum import Enum
 
 # FastAPI
 from fastapi import FastAPI, Request, HTTPException, Query, WebSocket, WebSocketDisconnect
-from fastapi.responses import HTMLResponse, JSONResponse, FileResponse
+from fastapi.responses import HTMLResponse, FileResponse
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.middleware.gzip import GZipMiddleware
-from fastapi.staticfiles import StaticFiles
 
 # HTTP Client
 import aiohttp
-from aiohttp import ClientTimeout, TCPConnector
+from aiohttp import ClientTimeout, TCPConnector, ClientResponseError
 
 # Data Processing
 import pandas as pd
@@ -34,64 +47,221 @@ except ImportError:
     pass
 
 # ========================================================================================================
-# LOGGING SETUP
+# ADVANCED LOGGING SETUP
 # ========================================================================================================
 def setup_logging():
-    """Configure logging system"""
+    """Configure advanced logging system"""
     logger = logging.getLogger("trading_bot")
     logger.setLevel(logging.INFO)
     logger.handlers.clear()
     
-    handler = logging.StreamHandler(sys.stdout)
-    handler.setLevel(logging.INFO)
+    # Console handler
+    console_handler = logging.StreamHandler(sys.stdout)
+    console_handler.setLevel(logging.INFO)
+    
+    # File handler
+    file_handler = logging.FileHandler('trading_bot.log')
+    file_handler.setLevel(logging.DEBUG)
+    
+    # Formatter
     formatter = logging.Formatter(
-        '%(asctime)s | %(levelname)-8s | %(message)s',
+        '%(asctime)s | %(levelname)-8s | [%(name)s] | %(message)s',
         datefmt='%Y-%m-%d %H:%M:%S'
     )
-    handler.setFormatter(formatter)
-    logger.addHandler(handler)
+    console_handler.setFormatter(formatter)
+    file_handler.setFormatter(formatter)
+    
+    logger.addHandler(console_handler)
+    logger.addHandler(file_handler)
     
     return logger
 
 logger = setup_logging()
 
 # ========================================================================================================
-# CONFIGURATION
+# ENHANCED CONFIGURATION
 # ========================================================================================================
 class Config:
-    """System configuration"""
+    """Advanced system configuration with dynamic settings"""
+    
     # Environment
     ENV = os.getenv("ENV", "production")
     DEBUG = os.getenv("DEBUG", "false").lower() == "true"
     
     # API Settings
-    API_TIMEOUT = 10
-    MAX_RETRIES = 3
+    API_TIMEOUT = 15
+    MAX_RETRIES = 5
+    RETRY_DELAY = 1
+    RETRY_BACKOFF = 2.0
     
     # Data Requirements
     MIN_CANDLES = 50
-    MIN_EXCHANGES = 2
+    MIN_EXCHANGES = 3
+    MAX_CANDLES = 1000
     
     # Cache
-    CACHE_TTL = 60
+    CACHE_TTL = 30  # seconds
+    CACHE_MAX_SIZE = 1000
+    
+    # Rate Limiting
+    RATE_LIMIT_CALLS = 1200
+    RATE_LIMIT_PERIOD = 60
+    RATE_LIMIT_PER_HOST = 20
+    
+    # Connection Pool
+    MAX_CONNECTIONS = 100
+    MAX_CONNECTIONS_PER_HOST = 10
     
     # ML
     ML_MIN_SAMPLES = 500
     ML_TRAIN_SPLIT = 0.8
     
-    # Rate Limiting
-    RATE_LIMIT_CALLS = 100
-    RATE_LIMIT_PERIOD = 60
+    # WebSocket
+    WS_PING_INTERVAL = 30
+    WS_PING_TIMEOUT = 10
+    
+    @classmethod
+    def get_rate_limit_delay(cls, exchange: str) -> float:
+        """Get rate limit delay for specific exchange"""
+        delays = {
+            'binance': 0.1,    # 10 requests/second
+            'bybit': 0.2,      # 5 requests/second
+            'okx': 0.2,        # 5 requests/second
+            'kucoin': 0.3,     # 3 requests/second
+            'gateio': 0.3,     # 3 requests/second
+            'mexc': 0.2,       # 5 requests/second
+            'kraken': 0.5,     # 2 requests/second
+            'bitfinex': 0.3,   # 3 requests/second
+            'huobi': 0.3,      # 3 requests/second
+            'coinbase': 0.2,   # 5 requests/second
+            'bitget': 0.3,     # 3 requests/second
+            'coingecko': 1.0,  # 1 request/second
+        }
+        return delays.get(exchange.lower(), 0.5)
 
 Config()
 
 # ========================================================================================================
-# EXCHANGE DATA FETCHER
+# ENHANCED DATA MODELS
+# ========================================================================================================
+
+@dataclass
+class OHLCV:
+    """OHLCV data model with validation"""
+    timestamp: int
+    open: float
+    high: float
+    low: float
+    close: float
+    volume: float
+    exchange: str
+    quality_score: float = 1.0
+    
+    def __post_init__(self):
+        """Validate data"""
+        if self.high < self.low:
+            self.high, self.low = self.low, self.high
+        if self.open < 0 or self.high < 0 or self.low < 0 or self.close < 0:
+            raise ValueError(f"Negative price in {self.exchange}")
+        if self.volume < 0:
+            self.volume = 0
+    
+    def to_dict(self) -> Dict:
+        """Convert to dictionary"""
+        return {
+            'timestamp': self.timestamp,
+            'open': self.open,
+            'high': self.high,
+            'low': self.low,
+            'close': self.close,
+            'volume': self.volume,
+            'exchange': self.exchange,
+            'quality_score': self.quality_score
+        }
+
+@dataclass
+class ExchangeStatus:
+    """Exchange health status"""
+    name: str
+    is_active: bool = True
+    last_success: Optional[datetime] = None
+    last_failure: Optional[datetime] = None
+    failure_count: int = 0
+    success_count: int = 0
+    avg_response_time: float = 0.0
+    weight: float = 1.0
+    
+    @property
+    def reliability_score(self) -> float:
+        """Calculate reliability score"""
+        total = self.success_count + self.failure_count
+        if total == 0:
+            return 0.5
+        return self.success_count / total
+    
+    @property
+    def dynamic_weight(self) -> float:
+        """Calculate dynamic weight based on reliability"""
+        base_weight = self.weight
+        reliability_bonus = self.reliability_score * 0.2
+        return base_weight * (0.8 + reliability_bonus)
+
+# ========================================================================================================
+# RATE LIMITER
+# ========================================================================================================
+class RateLimiter:
+    """Advanced rate limiter with per-exchange tracking"""
+    
+    def __init__(self):
+        self.request_times: Dict[str, deque] = defaultdict(lambda: deque(maxlen=1000))
+        self.daily_limits: Dict[str, int] = defaultdict(int)
+        self.last_reset = datetime.now()
+        
+    async def acquire(self, exchange: str) -> float:
+        """Acquire permission to make request, returns delay needed"""
+        now = datetime.now()
+        
+        # Reset daily limits
+        if (now - self.last_reset).days > 0:
+            self.daily_limits.clear()
+            self.last_reset = now
+        
+        # Check daily limit
+        if self.daily_limits[exchange] > Config.RATE_LIMIT_CALLS:
+            wait_time = 60 - (now - self.last_reset).seconds
+            if wait_time > 0:
+                logger.warning(f"⚠️ Daily limit reached for {exchange}, waiting {wait_time}s")
+                return wait_time
+        
+        # Check per-second rate
+        recent_requests = [t for t in self.request_times[exchange] 
+                          if (now - t).total_seconds() < Config.RATE_LIMIT_PERIOD]
+        
+        if len(recent_requests) >= Config.RATE_LIMIT_PER_HOST:
+            # Calculate delay needed
+            oldest = min(recent_requests) if recent_requests else now
+            wait_time = Config.RATE_LIMIT_PERIOD - (now - oldest).total_seconds()
+            if wait_time > 0:
+                return wait_time + 0.1
+        
+        # Record request
+        self.request_times[exchange].append(now)
+        self.daily_limits[exchange] += 1
+        
+        return 0.0
+
+# ========================================================================================================
+# EXCHANGE DATA FETCHER - ULTIMATE EDITION
 # ========================================================================================================
 class ExchangeDataFetcher:
     """
-    Fetches real-time price data from 11+ cryptocurrency exchanges
-    Aggregates data with weighted averages for maximum accuracy
+    ULTIMATE EXCHANGE DATA FETCHER
+    ===============================
+    - 11 Borsa + CoinGecko tam entegrasyon
+    - Her borsa için özel parser
+    - Akıllı rate limit yönetimi
+    - Dinamik weighted average
+    - Gelişmiş hata yönetimi
     """
     
     # Exchange configurations with endpoints and data parsing
@@ -101,103 +271,186 @@ class ExchangeDataFetcher:
             "weight": 1.0,
             "endpoint": "https://api.binance.com/api/v3/klines",
             "symbol_fmt": lambda s: s.replace("/", ""),
+            "needs_auth": False,
+            "rate_limit": 1200,
+            "timeout": 10
         },
         {
             "name": "Bybit",
             "weight": 0.95,
             "endpoint": "https://api.bybit.com/v5/market/kline",
             "symbol_fmt": lambda s: s.replace("/", ""),
+            "needs_auth": False,
+            "rate_limit": 600,
+            "timeout": 10
         },
         {
             "name": "OKX",
             "weight": 0.9,
             "endpoint": "https://www.okx.com/api/v5/market/candles",
             "symbol_fmt": lambda s: s.replace("/", "-"),
+            "needs_auth": False,
+            "rate_limit": 600,
+            "timeout": 10
         },
         {
             "name": "KuCoin",
             "weight": 0.85,
             "endpoint": "https://api.kucoin.com/api/v1/market/candles",
             "symbol_fmt": lambda s: s.replace("/", "-"),
+            "needs_auth": False,
+            "rate_limit": 300,
+            "timeout": 15
         },
         {
             "name": "Gate.io",
             "weight": 0.8,
             "endpoint": "https://api.gateio.ws/api/v4/spot/candlesticks",
             "symbol_fmt": lambda s: s.replace("/", "_"),
+            "needs_auth": False,
+            "rate_limit": 300,
+            "timeout": 15
         },
         {
             "name": "MEXC",
             "weight": 0.75,
             "endpoint": "https://api.mexc.com/api/v3/klines",
             "symbol_fmt": lambda s: s.replace("/", ""),
+            "needs_auth": False,
+            "rate_limit": 600,
+            "timeout": 10
         },
         {
             "name": "Kraken",
             "weight": 0.7,
             "endpoint": "https://api.kraken.com/0/public/OHLC",
             "symbol_fmt": lambda s: s.replace("/", "").replace("USDT", "USD"),
+            "needs_auth": False,
+            "rate_limit": 300,
+            "timeout": 15
         },
         {
             "name": "Bitfinex",
             "weight": 0.65,
             "endpoint": "https://api-pub.bitfinex.com/v2/candles/trade:{interval}:t{symbol}/hist",
             "symbol_fmt": lambda s: s.replace("/", "").replace("USDT", "UST"),
+            "needs_auth": False,
+            "rate_limit": 300,
+            "timeout": 15
         },
         {
             "name": "Huobi",
             "weight": 0.6,
             "endpoint": "https://api.huobi.pro/market/history/kline",
             "symbol_fmt": lambda s: s.replace("/", "").lower(),
+            "needs_auth": False,
+            "rate_limit": 300,
+            "timeout": 15
         },
         {
             "name": "Coinbase",
             "weight": 0.55,
             "endpoint": "https://api.exchange.coinbase.com/products/{symbol}/candles",
             "symbol_fmt": lambda s: s.replace("/", "-"),
+            "needs_auth": False,
+            "rate_limit": 600,
+            "timeout": 10
         },
         {
             "name": "Bitget",
             "weight": 0.5,
             "endpoint": "https://api.bitget.com/api/spot/v1/market/candles",
             "symbol_fmt": lambda s: s.replace("/", ""),
+            "needs_auth": False,
+            "rate_limit": 300,
+            "timeout": 15
+        },
+        {
+            "name": "CoinGecko",
+            "weight": 0.6,
+            "endpoint": "https://api.coingecko.com/api/v3/coins/{symbol}/market_chart",
+            "symbol_fmt": lambda s: s.replace("/", "").replace("USDT", "").lower(),
+            "needs_auth": False,
+            "rate_limit": 50,
+            "timeout": 20
         }
     ]
     
     # Interval mappings for each exchange
     INTERVAL_MAP = {
-        "1m": {"Binance": "1m", "Bybit": "1", "OKX": "1m", "KuCoin": "1min", "Gate.io": "1m", 
-               "MEXC": "1m", "Kraken": "1", "Bitfinex": "1m", "Huobi": "1min", "Coinbase": "60", "Bitget": "1m"},
-        "5m": {"Binance": "5m", "Bybit": "5", "OKX": "5m", "KuCoin": "5min", "Gate.io": "5m",
-               "MEXC": "5m", "Kraken": "5", "Bitfinex": "5m", "Huobi": "5min", "Coinbase": "300", "Bitget": "5m"},
-        "15m": {"Binance": "15m", "Bybit": "15", "OKX": "15m", "KuCoin": "15min", "Gate.io": "15m",
-                "MEXC": "15m", "Kraken": "15", "Bitfinex": "15m", "Huobi": "15min", "Coinbase": "900", "Bitget": "15m"},
-        "30m": {"Binance": "30m", "Bybit": "30", "OKX": "30m", "KuCoin": "30min", "Gate.io": "30m",
-                "MEXC": "30m", "Kraken": "30", "Bitfinex": "30m", "Huobi": "30min", "Coinbase": "1800", "Bitget": "30m"},
-        "1h": {"Binance": "1h", "Bybit": "60", "OKX": "1H", "KuCoin": "1hour", "Gate.io": "1h",
-               "MEXC": "1h", "Kraken": "60", "Bitfinex": "1h", "Huobi": "60min", "Coinbase": "3600", "Bitget": "1h"},
-        "4h": {"Binance": "4h", "Bybit": "240", "OKX": "4H", "KuCoin": "4hour", "Gate.io": "4h",
-               "MEXC": "4h", "Kraken": "240", "Bitfinex": "4h", "Huobi": "4hour", "Coinbase": "14400", "Bitget": "4h"},
-        "1d": {"Binance": "1d", "Bybit": "D", "OKX": "1D", "KuCoin": "1day", "Gate.io": "1d",
-               "MEXC": "1d", "Kraken": "1440", "Bitfinex": "1D", "Huobi": "1day", "Coinbase": "86400", "Bitget": "1d"},
-        "1w": {"Binance": "1w", "Bybit": "W", "OKX": "1W", "KuCoin": "1week", "Gate.io": "1w",
-               "MEXC": "1w", "Kraken": "10080", "Bitfinex": "1W", "Huobi": "1week", "Coinbase": "604800", "Bitget": "1w"}
+        "1m": {
+            "Binance": "1m", "Bybit": "1", "OKX": "1m", "KuCoin": "1min", 
+            "Gate.io": "1m", "MEXC": "1m", "Kraken": "1", "Bitfinex": "1m", 
+            "Huobi": "1min", "Coinbase": "60", "Bitget": "1m", "CoinGecko": "minutely"
+        },
+        "5m": {
+            "Binance": "5m", "Bybit": "5", "OKX": "5m", "KuCoin": "5min",
+            "Gate.io": "5m", "MEXC": "5m", "Kraken": "5", "Bitfinex": "5m",
+            "Huobi": "5min", "Coinbase": "300", "Bitget": "5m", "CoinGecko": "minutely"
+        },
+        "15m": {
+            "Binance": "15m", "Bybit": "15", "OKX": "15m", "KuCoin": "15min",
+            "Gate.io": "15m", "MEXC": "15m", "Kraken": "15", "Bitfinex": "15m",
+            "Huobi": "15min", "Coinbase": "900", "Bitget": "15m", "CoinGecko": "minutely"
+        },
+        "30m": {
+            "Binance": "30m", "Bybit": "30", "OKX": "30m", "KuCoin": "30min",
+            "Gate.io": "30m", "MEXC": "30m", "Kraken": "30", "Bitfinex": "30m",
+            "Huobi": "30min", "Coinbase": "1800", "Bitget": "30m", "CoinGecko": "minutely"
+        },
+        "1h": {
+            "Binance": "1h", "Bybit": "60", "OKX": "1H", "KuCoin": "1hour",
+            "Gate.io": "1h", "MEXC": "1h", "Kraken": "60", "Bitfinex": "1h",
+            "Huobi": "60min", "Coinbase": "3600", "Bitget": "1h", "CoinGecko": "hourly"
+        },
+        "4h": {
+            "Binance": "4h", "Bybit": "240", "OKX": "4H", "KuCoin": "4hour",
+            "Gate.io": "4h", "MEXC": "4h", "Kraken": "240", "Bitfinex": "4h",
+            "Huobi": "4hour", "Coinbase": "14400", "Bitget": "4h", "CoinGecko": "hourly"
+        },
+        "1d": {
+            "Binance": "1d", "Bybit": "D", "OKX": "1D", "KuCoin": "1day",
+            "Gate.io": "1d", "MEXC": "1d", "Kraken": "1440", "Bitfinex": "1D",
+            "Huobi": "1day", "Coinbase": "86400", "Bitget": "1d", "CoinGecko": "daily"
+        },
+        "1w": {
+            "Binance": "1w", "Bybit": "W", "OKX": "1W", "KuCoin": "1week",
+            "Gate.io": "1w", "MEXC": "1w", "Kraken": "10080", "Bitfinex": "1W",
+            "Huobi": "1week", "Coinbase": "604800", "Bitget": "1w", "CoinGecko": "daily"
+        }
     }
     
     def __init__(self):
         self.session: Optional[aiohttp.ClientSession] = None
         self.cache: Dict[str, Any] = {}
         self.cache_time: Dict[str, float] = {}
-        self.stats = defaultdict(lambda: {"success": 0, "fail": 0})
+        self.rate_limiter = RateLimiter()
+        self.exchange_status: Dict[str, ExchangeStatus] = {}
+        self.request_semaphore = asyncio.Semaphore(50)
+        self._init_exchange_status()
+        
+    def _init_exchange_status(self):
+        """Initialize exchange status tracking"""
+        for exchange in self.EXCHANGES:
+            self.exchange_status[exchange["name"]] = ExchangeStatus(
+                name=exchange["name"],
+                weight=exchange["weight"]
+            )
     
     async def __aenter__(self):
-        """Initialize HTTP session"""
+        """Initialize HTTP session with optimized settings"""
         timeout = ClientTimeout(total=Config.API_TIMEOUT)
-        connector = TCPConnector(limit=50, limit_per_host=10)
+        connector = TCPConnector(
+            limit=Config.MAX_CONNECTIONS,
+            limit_per_host=Config.MAX_CONNECTIONS_PER_HOST,
+            ttl_dns_cache=300,
+            use_dns_cache=True,
+            ssl=False
+        )
         self.session = aiohttp.ClientSession(
             connector=connector,
             timeout=timeout,
-            headers={"User-Agent": "TradingBot/v6.0"}
+            headers={"User-Agent": "TradingBot/v7.0-Ultimate"}
         )
         return self
     
@@ -206,32 +459,367 @@ class ExchangeDataFetcher:
         if self.session:
             await self.session.close()
     
-    def _get_cache_key(self, symbol: str, interval: str) -> str:
-        """Generate cache key"""
-        return f"{symbol}_{interval}"
+    # ========================================================================
+    # EXCHANGE-SPECIFIC PARSERS
+    # ========================================================================
     
-    def _is_cache_valid(self, key: str) -> bool:
-        """Check if cached data is still valid"""
-        if key not in self.cache_time:
-            return False
-        return (time.time() - self.cache_time[key]) < Config.CACHE_TTL
+    def _parse_binance(self, data: List) -> List[OHLCV]:
+        """Binance özel parser"""
+        candles = []
+        try:
+            for item in data:
+                if isinstance(item, list) and len(item) >= 6:
+                    candle = OHLCV(
+                        timestamp=int(item[0]),
+                        open=float(item[1]),
+                        high=float(item[2]),
+                        low=float(item[3]),
+                        close=float(item[4]),
+                        volume=float(item[5]),
+                        exchange="Binance",
+                        quality_score=1.0
+                    )
+                    candles.append(candle)
+        except Exception as e:
+            logger.error(f"Binance parse error: {e}")
+        return candles
     
-    async def _fetch_exchange(self, exchange: Dict, symbol: str, interval: str, limit: int) -> Optional[List[Dict]]:
-        """
-        Fetch data from a single exchange
+    def _parse_bybit(self, data: Dict) -> List[OHLCV]:
+        """Bybit özel parser"""
+        candles = []
+        try:
+            if data.get("result") and data["result"].get("list"):
+                for item in data["result"]["list"]:
+                    if len(item) >= 6:
+                        candle = OHLCV(
+                            timestamp=int(item[0]),
+                            open=float(item[1]),
+                            high=float(item[2]),
+                            low=float(item[3]),
+                            close=float(item[4]),
+                            volume=float(item[5]),
+                            exchange="Bybit",
+                            quality_score=1.0
+                        )
+                        candles.append(candle)
+        except Exception as e:
+            logger.error(f"Bybit parse error: {e}")
+        return candles
+    
+    def _parse_okx(self, data: Dict) -> List[OHLCV]:
+        """OKX özel parser"""
+        candles = []
+        try:
+            if data.get("data"):
+                for item in data["data"]:
+                    if len(item) >= 6:
+                        candle = OHLCV(
+                            timestamp=int(item[0]),
+                            open=float(item[1]),
+                            high=float(item[2]),
+                            low=float(item[3]),
+                            close=float(item[4]),
+                            volume=float(item[5]),
+                            exchange="OKX",
+                            quality_score=1.0
+                        )
+                        candles.append(candle)
+        except Exception as e:
+            logger.error(f"OKX parse error: {e}")
+        return candles
+    
+    def _parse_kucoin(self, data: Dict) -> List[OHLCV]:
+        """KuCoin özel parser"""
+        candles = []
+        try:
+            if data.get("data"):
+                for item in data["data"]:
+                    if isinstance(item, list) and len(item) >= 6:
+                        candle = OHLCV(
+                            timestamp=int(item[0]),
+                            open=float(item[1]),
+                            high=float(item[2]),
+                            low=float(item[3]),
+                            close=float(item[4]),
+                            volume=float(item[5]),
+                            exchange="KuCoin",
+                            quality_score=0.95
+                        )
+                        candles.append(candle)
+        except Exception as e:
+            logger.error(f"KuCoin parse error: {e}")
+        return candles
+    
+    def _parse_gateio(self, data: List) -> List[OHLCV]:
+        """Gate.io özel parser"""
+        candles = []
+        try:
+            for item in data:
+                if isinstance(item, dict):
+                    candle = OHLCV(
+                        timestamp=int(item.get('t', 0)) * 1000,
+                        open=float(item.get('o', 0)),
+                        high=float(item.get('h', 0)),
+                        low=float(item.get('l', 0)),
+                        close=float(item.get('c', 0)),
+                        volume=float(item.get('v', 0)),
+                        exchange="Gate.io",
+                        quality_score=0.95
+                    )
+                    candles.append(candle)
+        except Exception as e:
+            logger.error(f"Gate.io parse error: {e}")
+        return candles
+    
+    def _parse_mexc(self, data: List) -> List[OHLCV]:
+        """MEXC özel parser (Binance format)"""
+        return self._parse_binance(data)
+    
+    def _parse_kraken(self, data: Dict) -> List[OHLCV]:
+        """Kraken özel parser"""
+        candles = []
+        try:
+            if data.get("result"):
+                # Kraken returns pair as first key
+                pair_key = [k for k in data["result"].keys() if k != "last"][0]
+                for item in data["result"][pair_key]:
+                    if len(item) >= 6:
+                        candle = OHLCV(
+                            timestamp=int(item[0]) * 1000,  # Kraken uses seconds
+                            open=float(item[1]),
+                            high=float(item[2]),
+                            low=float(item[3]),
+                            close=float(item[4]),
+                            volume=float(item[6]),  # Volume is at index 6
+                            exchange="Kraken",
+                            quality_score=0.9
+                        )
+                        candles.append(candle)
+        except Exception as e:
+            logger.error(f"Kraken parse error: {e}")
+        return candles
+    
+    def _parse_bitfinex(self, data: List) -> List[OHLCV]:
+        """Bitfinex özel parser - OHLC sırası farklı!"""
+        candles = []
+        try:
+            for item in data:
+                if isinstance(item, list) and len(item) >= 6:
+                    # Bitfinex format: [timestamp, open, close, high, low, volume]
+                    candle = OHLCV(
+                        timestamp=int(item[0]),
+                        open=float(item[1]),
+                        high=float(item[3]),  # High is index 3
+                        low=float(item[4]),   # Low is index 4
+                        close=float(item[2]), # Close is index 2
+                        volume=float(item[5]),
+                        exchange="Bitfinex",
+                        quality_score=0.9
+                    )
+                    candles.append(candle)
+        except Exception as e:
+            logger.error(f"Bitfinex parse error: {e}")
+        return candles
+    
+    def _parse_huobi(self, data: Dict) -> List[OHLCV]:
+        """Huobi özel parser"""
+        candles = []
+        try:
+            if data.get("data"):
+                for item in data["data"]:
+                    if isinstance(item, dict):
+                        candle = OHLCV(
+                            timestamp=int(item.get('id', 0)) * 1000,
+                            open=float(item.get('open', 0)),
+                            high=float(item.get('high', 0)),
+                            low=float(item.get('low', 0)),
+                            close=float(item.get('close', 0)),
+                            volume=float(item.get('vol', 0)),
+                            exchange="Huobi",
+                            quality_score=0.9
+                        )
+                        candles.append(candle)
+        except Exception as e:
+            logger.error(f"Huobi parse error: {e}")
+        return candles
+    
+    def _parse_coinbase(self, data: List) -> List[OHLCV]:
+        """Coinbase özel parser - OHLC sırası farklı!"""
+        candles = []
+        try:
+            for item in data:
+                if isinstance(item, list) and len(item) >= 6:
+                    # Coinbase format: [timestamp, low, high, open, close, volume]
+                    candle = OHLCV(
+                        timestamp=int(item[0]) * 1000,
+                        open=float(item[3]),  # Open is index 3
+                        high=float(item[2]),  # High is index 2
+                        low=float(item[1]),   # Low is index 1
+                        close=float(item[4]), # Close is index 4
+                        volume=float(item[5]),
+                        exchange="Coinbase",
+                        quality_score=0.95
+                    )
+                    candles.append(candle)
+        except Exception as e:
+            logger.error(f"Coinbase parse error: {e}")
+        return candles
+    
+    def _parse_bitget(self, data: Dict) -> List[OHLCV]:
+        """Bitget özel parser"""
+        candles = []
+        try:
+            if data.get("data"):
+                for item in data["data"]:
+                    if isinstance(item, list) and len(item) >= 6:
+                        candle = OHLCV(
+                            timestamp=int(item[0]),
+                            open=float(item[1]),
+                            high=float(item[2]),
+                            low=float(item[3]),
+                            close=float(item[4]),
+                            volume=float(item[5]),
+                            exchange="Bitget",
+                            quality_score=0.9
+                        )
+                        candles.append(candle)
+        except Exception as e:
+            logger.error(f"Bitget parse error: {e}")
+        return candles
+    
+    def _parse_coingecko(self, data: Dict) -> List[OHLCV]:
+        """CoinGecko özel parser"""
+        candles = []
+        try:
+            if data.get("prices") and data.get("total_volumes"):
+                prices = data["prices"]
+                volumes = data["total_volumes"]
+                
+                for i, (timestamp, price) in enumerate(prices):
+                    if i < len(volumes):
+                        # CoinGecko only gives close price
+                        candle = OHLCV(
+                            timestamp=int(timestamp),
+                            open=float(price),
+                            high=float(price * 1.001),  # Estimate
+                            low=float(price * 0.999),   # Estimate
+                            close=float(price),
+                            volume=float(volumes[i][1]),
+                            exchange="CoinGecko",
+                            quality_score=0.8  # Lower quality due to estimation
+                        )
+                        candles.append(candle)
+        except Exception as e:
+            logger.error(f"CoinGecko parse error: {e}")
+        return candles
+    
+    def _get_parser(self, exchange_name: str) -> Callable:
+        """Get appropriate parser for exchange"""
+        parsers = {
+            "Binance": self._parse_binance,
+            "Bybit": self._parse_bybit,
+            "OKX": self._parse_okx,
+            "KuCoin": self._parse_kucoin,
+            "Gate.io": self._parse_gateio,
+            "MEXC": self._parse_mexc,
+            "Kraken": self._parse_kraken,
+            "Bitfinex": self._parse_bitfinex,
+            "Huobi": self._parse_huobi,
+            "Coinbase": self._parse_coinbase,
+            "Bitget": self._parse_bitget,
+            "CoinGecko": self._parse_coingecko,
+        }
+        return parsers.get(exchange_name, self._parse_binance)
+    
+    # ========================================================================
+    # ENHANCED FETCHING WITH RETRY MECHANISM
+    # ========================================================================
+    
+    async def _fetch_with_retry(
+        self, 
+        exchange: Dict, 
+        symbol: str, 
+        interval: str, 
+        limit: int
+    ) -> Optional[List[OHLCV]]:
+        """Fetch data with advanced retry logic"""
+        exchange_name = exchange["name"]
+        status = self.exchange_status[exchange_name]
         
-        Args:
-            exchange: Exchange configuration
-            symbol: Trading pair (e.g., BTC/USDT)
-            interval: Timeframe (e.g., 1h)
-            limit: Number of candles to fetch
-            
-        Returns:
-            List of OHLCV candles or None if failed
-        """
+        for attempt in range(Config.MAX_RETRIES):
+            try:
+                # Rate limiting
+                delay = await self.rate_limiter.acquire(exchange_name)
+                if delay > 0:
+                    await asyncio.sleep(delay)
+                
+                # Add jitter to avoid thundering herd
+                await asyncio.sleep(attempt * 0.1)
+                
+                # Fetch data
+                start_time = time.time()
+                candles = await self._fetch_exchange(exchange, symbol, interval, limit)
+                response_time = time.time() - start_time
+                
+                if candles and len(candles) >= 10:
+                    # Update success stats
+                    status.last_success = datetime.now()
+                    status.success_count += 1
+                    status.avg_response_time = (status.avg_response_time * 0.7 + response_time * 0.3)
+                    
+                    return candles
+                else:
+                    raise ValueError(f"Insufficient data: {len(candles) if candles else 0} candles")
+                    
+            except asyncio.TimeoutError:
+                logger.warning(f"⏱️ Timeout {exchange_name} (attempt {attempt + 1}/{Config.MAX_RETRIES})")
+                status.failure_count += 1
+                
+            except ClientResponseError as e:
+                if e.status == 429:  # Rate limit
+                    wait_time = Config.get_rate_limit_delay(exchange_name) * 10
+                    logger.warning(f"⏳ Rate limit {exchange_name}, waiting {wait_time}s")
+                    await asyncio.sleep(wait_time)
+                elif e.status >= 500:  # Server error
+                    logger.warning(f"🔧 Server error {exchange_name}: {e.status}")
+                    await asyncio.sleep(Config.RETRY_DELAY * (attempt + 1))
+                else:
+                    logger.error(f"❌ HTTP error {exchange_name}: {e.status}")
+                    status.failure_count += 1
+                    break
+                    
+            except Exception as e:
+                logger.debug(f"⚠️ {exchange_name} error: {str(e)[:100]}")
+                status.failure_count += 1
+                
+            # Exponential backoff
+            if attempt < Config.MAX_RETRIES - 1:
+                backoff = Config.RETRY_DELAY * (Config.RETRY_BACKOFF ** attempt)
+                await asyncio.sleep(backoff)
+        
+        # Mark as temporarily inactive after multiple failures
+        status.last_failure = datetime.now()
+        if status.failure_count > 10:
+            status.is_active = False
+            logger.warning(f"⚠️ {exchange_name} marked as inactive (10+ failures)")
+        
+        return None
+    
+    async def _fetch_exchange(
+        self, 
+        exchange: Dict, 
+        symbol: str, 
+        interval: str, 
+        limit: int
+    ) -> Optional[List[OHLCV]]:
+        """Fetch data from a single exchange"""
         exchange_name = exchange["name"]
         
         try:
+            # Special handling for CoinGecko
+            if exchange_name == "CoinGecko":
+                return await self._fetch_coingecko(symbol, interval, limit)
+            
             # Get exchange-specific interval format
             ex_interval = self.INTERVAL_MAP.get(interval, {}).get(exchange_name)
             if not ex_interval:
@@ -251,29 +839,72 @@ class ExchangeDataFetcher:
             params = self._build_params(exchange_name, formatted_symbol, ex_interval, limit)
             
             # Make request
-            async with self.session.get(endpoint, params=params) as response:
+            async with self.request_semaphore:
+                async with self.session.get(endpoint, params=params) as response:
+                    if response.status != 200:
+                        response.raise_for_status()
+                    
+                    data = await response.json()
+                    
+                    # Parse with exchange-specific parser
+                    parser = self._get_parser(exchange_name)
+                    candles = parser(data)
+                    
+                    if candles:
+                        logger.debug(f"✅ {exchange_name}: {len(candles)} candles")
+                    
+                    return candles
+                    
+        except Exception as e:
+            logger.debug(f"{exchange_name} fetch error: {str(e)[:100]}")
+            return None
+    
+    async def _fetch_coingecko(
+        self, 
+        symbol: str, 
+        interval: str, 
+        limit: int
+    ) -> Optional[List[OHLCV]]:
+        """Special fetcher for CoinGecko"""
+        try:
+            # CoinGecko has different endpoint structure
+            coin_id = symbol.replace("/", "").replace("USDT", "").lower()
+            
+            # Map interval to days
+            days_map = {
+                "1m": 1, "5m": 1, "15m": 1, "30m": 1,
+                "1h": 7, "4h": 30, "1d": 90, "1w": 365
+            }
+            days = days_map.get(interval, 7)
+            
+            # Get interval for CoinGecko
+            gecko_interval = self.INTERVAL_MAP.get(interval, {}).get("CoinGecko", "hourly")
+            
+            url = f"https://api.coingecko.com/api/v3/coins/{coin_id}/market_chart"
+            params = {
+                "vs_currency": "usd",
+                "days": days,
+                "interval": gecko_interval
+            }
+            
+            async with self.session.get(url, params=params) as response:
                 if response.status != 200:
-                    self.stats[exchange_name]["fail"] += 1
                     return None
                 
                 data = await response.json()
-                
-                # Parse exchange-specific response format
-                candles = self._parse_response(exchange_name, data)
-                
-                if not candles or len(candles) < 10:
-                    self.stats[exchange_name]["fail"] += 1
-                    return None
-                
-                self.stats[exchange_name]["success"] += 1
-                return candles
+                return self._parse_coingecko(data)
                 
         except Exception as e:
-            self.stats[exchange_name]["fail"] += 1
-            logger.debug(f"Exchange {exchange_name} error: {str(e)}")
+            logger.debug(f"CoinGecko fetch error: {e}")
             return None
     
-    def _build_params(self, exchange_name: str, symbol: str, interval: str, limit: int) -> Dict:
+    def _build_params(
+        self, 
+        exchange_name: str, 
+        symbol: str, 
+        interval: str, 
+        limit: int
+    ) -> Dict:
         """Build request parameters for specific exchange"""
         params_map = {
             "Binance": {"symbol": symbol, "interval": interval, "limit": limit},
@@ -283,126 +914,102 @@ class ExchangeDataFetcher:
             "Gate.io": {"currency_pair": symbol, "interval": interval, "limit": limit},
             "MEXC": {"symbol": symbol, "interval": interval, "limit": limit},
             "Kraken": {"pair": symbol, "interval": interval},
-            "Bitfinex": {"limit": limit},
+            "Bitfinex": {"limit": min(limit, 100)},  # Bitfinex max 100
             "Huobi": {"symbol": symbol, "period": interval, "size": limit},
             "Coinbase": {"granularity": interval},
-            "Bitget": {"symbol": symbol, "period": interval, "limit": limit}
+            "Bitget": {"symbol": symbol, "period": interval, "limit": limit},
         }
         return params_map.get(exchange_name, {})
     
-    def _parse_response(self, exchange_name: str, data: Any) -> List[Dict]:
-        """Parse exchange-specific response format into standard OHLCV format"""
-        candles = []
-        
-        try:
-            if exchange_name == "Binance":
-                # Binance format: [[timestamp, open, high, low, close, volume, ...], ...]
-                for item in data:
-                    candles.append({
-                        "timestamp": int(item[0]),
-                        "open": float(item[1]),
-                        "high": float(item[2]),
-                        "low": float(item[3]),
-                        "close": float(item[4]),
-                        "volume": float(item[5]),
-                        "exchange": exchange_name
-                    })
-            
-            elif exchange_name == "Bybit":
-                # Bybit format: {"result": {"list": [[timestamp, open, high, low, close, volume], ...]}}
-                if data.get("result") and data["result"].get("list"):
-                    for item in data["result"]["list"]:
-                        candles.append({
-                            "timestamp": int(item[0]),
-                            "open": float(item[1]),
-                            "high": float(item[2]),
-                            "low": float(item[3]),
-                            "close": float(item[4]),
-                            "volume": float(item[5]),
-                            "exchange": exchange_name
-                        })
-            
-            elif exchange_name == "OKX":
-                # OKX format: {"data": [[timestamp, open, high, low, close, volume], ...]}
-                if data.get("data"):
-                    for item in data["data"]:
-                        candles.append({
-                            "timestamp": int(item[0]),
-                            "open": float(item[1]),
-                            "high": float(item[2]),
-                            "low": float(item[3]),
-                            "close": float(item[4]),
-                            "volume": float(item[5]),
-                            "exchange": exchange_name
-                        })
-            
-            elif exchange_name in ["KuCoin", "Gate.io", "MEXC", "Kraken", "Bitfinex", "Huobi", "Coinbase", "Bitget"]:
-                # Generic parsing - most exchanges follow similar patterns
-                # This is simplified; in production, each would have specific parsing
-                if isinstance(data, list):
-                    for item in data:
-                        if isinstance(item, list) and len(item) >= 6:
-                            candles.append({
-                                "timestamp": int(item[0]) if isinstance(item[0], (int, float)) else int(float(item[0])),
-                                "open": float(item[1]),
-                                "high": float(item[2]),
-                                "low": float(item[3]),
-                                "close": float(item[4]),
-                                "volume": float(item[5]),
-                                "exchange": exchange_name
-                            })
-            
-            # Sort by timestamp
-            candles.sort(key=lambda x: x["timestamp"])
-            return candles
-            
-        except Exception as e:
-            logger.debug(f"Parse error for {exchange_name}: {str(e)}")
-            return []
+    # ========================================================================
+    # ADVANCED AGGREGATION
+    # ========================================================================
     
-    def _aggregate_candles(self, all_candles: List[List[Dict]]) -> List[Dict]:
+    def _aggregate_candles(self, all_candles: List[List[OHLCV]]) -> List[Dict]:
         """
-        Aggregate candles from multiple exchanges using weighted average
-        
-        Args:
-            all_candles: List of candle lists from different exchanges
-            
-        Returns:
-            Aggregated candle list
+        Kusursuz weighted average hesaplama
+        - Dinamik weight (reliability + base weight)
+        - Quality score
+        - Outlier elimination
+        - Timestamp alignment
         """
         if not all_candles:
             return []
         
-        # Group by timestamp
+        # Group by timestamp (1-minute precision)
         timestamp_map = defaultdict(list)
-        for exchange_data in all_candles:
-            for candle in exchange_data:
-                timestamp_map[candle["timestamp"]].append(candle)
+        
+        for exchange_candles in all_candles:
+            for candle in exchange_candles:
+                # Round timestamp to minute
+                rounded_ts = (candle.timestamp // 60000) * 60000
+                timestamp_map[rounded_ts].append(candle)
         
         # Aggregate each timestamp
         aggregated = []
+        
         for timestamp in sorted(timestamp_map.keys()):
             candles_at_ts = timestamp_map[timestamp]
             
             if len(candles_at_ts) == 1:
-                # Only one exchange data available
-                aggregated.append(candles_at_ts[0])
+                # Single source
+                candle = candles_at_ts[0]
+                aggregated.append({
+                    "timestamp": timestamp,
+                    "open": candle.open,
+                    "high": candle.high,
+                    "low": candle.low,
+                    "close": candle.close,
+                    "volume": candle.volume,
+                    "source_count": 1,
+                    "sources": [candle.exchange],
+                    "exchange": "aggregated",
+                    "quality_score": candle.quality_score
+                })
             else:
-                # Multiple exchanges - weighted average
+                # Multiple sources - remove outliers first
+                closes = [c.close for c in candles_at_ts]
+                q1, q3 = np.percentile(closes, [25, 75])
+                iqr = q3 - q1
+                lower_bound = q1 - 1.5 * iqr
+                upper_bound = q3 + 1.5 * iqr
+                
+                # Filter outliers
+                valid_candles = [
+                    c for c in candles_at_ts 
+                    if lower_bound <= c.close <= upper_bound
+                ]
+                
+                if not valid_candles:
+                    valid_candles = candles_at_ts  # Fallback to all
+                
+                # Calculate weights
                 weights = []
                 opens, highs, lows, closes, volumes = [], [], [], [], []
                 
-                for candle in candles_at_ts:
-                    # Get exchange weight
-                    ex_config = next((e for e in self.EXCHANGES if e["name"] == candle["exchange"]), None)
-                    weight = ex_config["weight"] if ex_config else 0.5
+                for candle in valid_candles:
+                    # Get dynamic weight from exchange status
+                    status = self.exchange_status.get(candle.exchange)
+                    base_weight = status.dynamic_weight if status else 0.5
                     
-                    weights.append(weight)
-                    opens.append(candle["open"] * weight)
-                    highs.append(candle["high"] * weight)
-                    lows.append(candle["low"] * weight)
-                    closes.append(candle["close"] * weight)
-                    volumes.append(candle["volume"] * weight)
+                    # Quality score adjustment
+                    quality_adjustment = candle.quality_score
+                    
+                    # Recent success bonus
+                    if status and status.last_success:
+                        time_since_success = (datetime.now() - status.last_success).total_seconds()
+                        recency_bonus = max(0, 1 - time_since_success / 3600) * 0.1
+                    else:
+                        recency_bonus = 0
+                    
+                    final_weight = base_weight * quality_adjustment * (1 + recency_bonus)
+                    weights.append(final_weight)
+                    
+                    opens.append(candle.open * final_weight)
+                    highs.append(candle.high * final_weight)
+                    lows.append(candle.low * final_weight)
+                    closes.append(candle.close * final_weight)
+                    volumes.append(candle.volume * final_weight)
                 
                 total_weight = sum(weights)
                 
@@ -415,13 +1022,24 @@ class ExchangeDataFetcher:
                         "close": sum(closes) / total_weight,
                         "volume": sum(volumes) / total_weight,
                         "source_count": len(candles_at_ts),
-                        "sources": [c["exchange"] for c in candles_at_ts],
-                        "exchange": "aggregated"
+                        "valid_source_count": len(valid_candles),
+                        "sources": [c.exchange for c in candles_at_ts[:5]],  # Top 5
+                        "exchange": "aggregated",
+                        "quality_score": np.mean([c.quality_score for c in valid_candles])
                     })
         
         return aggregated
     
-    async def get_candles(self, symbol: str, interval: str = "1h", limit: int = 100) -> List[Dict]:
+    # ========================================================================
+    # MAIN PUBLIC METHOD
+    # ========================================================================
+    
+    async def get_candles(
+        self, 
+        symbol: str, 
+        interval: str = "1h", 
+        limit: int = 100
+    ) -> List[Dict]:
         """
         Fetch and aggregate candle data from all exchanges
         
@@ -434,18 +1052,17 @@ class ExchangeDataFetcher:
             List of aggregated OHLCV candles
         """
         # Check cache
-        cache_key = self._get_cache_key(symbol, interval)
-        if self._is_cache_valid(cache_key):
-            cached = self.cache.get(cache_key, [])
-            if cached:
-                logger.info(f"📦 Cache hit for {symbol} ({interval})")
-                return cached[-limit:]
+        cache_key = f"{symbol}_{interval}_{limit}"
+        if cache_key in self.cache:
+            if time.time() - self.cache_time.get(cache_key, 0) < Config.CACHE_TTL:
+                logger.debug(f"📦 Cache hit for {symbol} ({interval})")
+                return self.cache[cache_key][-limit:]
         
         # Fetch from all exchanges in parallel
-        logger.info(f"🔄 Fetching {symbol} ({interval}) from {len(self.EXCHANGES)} exchanges...")
+        logger.info(f"🔄 Fetching {symbol} ({interval}) from {len(self.EXCHANGES)} sources...")
         
         tasks = [
-            self._fetch_exchange(exchange, symbol, interval, limit * 2)
+            self._fetch_with_retry(exchange, symbol, interval, limit * 2)
             for exchange in self.EXCHANGES
         ]
         
@@ -457,11 +1074,17 @@ class ExchangeDataFetcher:
             if isinstance(result, list) and len(result) >= 10
         ]
         
-        logger.info(f"✅ Got data from {len(valid_results)}/{len(self.EXCHANGES)} exchanges")
+        active_exchanges = len([r for r in results if isinstance(r, list)])
+        logger.info(f"✅ Got data from {active_exchanges}/{len(self.EXCHANGES)} sources")
         
         # Require minimum exchanges
-        if len(valid_results) < Config.MIN_EXCHANGES:
-            logger.warning(f"⚠️ Only {len(valid_results)} exchanges responded (need {Config.MIN_EXCHANGES})")
+        if active_exchanges < Config.MIN_EXCHANGES:
+            logger.warning(f"⚠️ Only {active_exchanges} sources responded (need {Config.MIN_EXCHANGES})")
+            
+            # Try to return cached data if available
+            if cache_key in self.cache:
+                logger.info(f"📦 Returning cached data for {symbol}")
+                return self.cache[cache_key][-limit:]
             return []
         
         # Aggregate data
@@ -469,21 +1092,86 @@ class ExchangeDataFetcher:
         
         if len(aggregated) < Config.MIN_CANDLES:
             logger.warning(f"⚠️ Only {len(aggregated)} candles (need {Config.MIN_CANDLES})")
+            
+            # Try to return cached data
+            if cache_key in self.cache:
+                return self.cache[cache_key][-limit:]
             return []
+        
+        # Sort by timestamp
+        aggregated.sort(key=lambda x: x["timestamp"])
         
         # Cache result
         self.cache[cache_key] = aggregated
         self.cache_time[cache_key] = time.time()
         
-        logger.info(f"📊 Aggregated {len(aggregated)} candles from {len(valid_results)} sources")
+        # Clean old cache
+        self._clean_cache()
+        
+        # Log exchange status
+        self._log_exchange_status()
+        
+        logger.info(f"📊 Aggregated {len(aggregated)} candles from {active_exchanges} sources")
         
         return aggregated[-limit:]
+    
+    def _clean_cache(self):
+        """Clean old cache entries"""
+        current_time = time.time()
+        keys_to_delete = []
+        
+        for key, cache_time in self.cache_time.items():
+            if current_time - cache_time > Config.CACHE_TTL * 10:
+                keys_to_delete.append(key)
+        
+        for key in keys_to_delete:
+            del self.cache[key]
+            del self.cache_time[key]
+    
+    def _log_exchange_status(self):
+        """Log exchange health status"""
+        active = [name for name, status in self.exchange_status.items() if status.is_active]
+        inactive = [name for name, status in self.exchange_status.items() if not status.is_active]
+        
+        if inactive:
+            logger.info(f"📡 Active sources: {len(active)}, Inactive: {len(inactive)}")
+        
+        # Log top performers
+        top_exchanges = sorted(
+            self.exchange_status.values(),
+            key=lambda x: x.reliability_score,
+            reverse=True
+        )[:3]
+        
+        if top_exchanges:
+            logger.debug(f"🏆 Top sources: " + 
+                        ", ".join([f"{e.name}({e.reliability_score:.1%})" for e in top_exchanges]))
+    
+    def get_exchange_stats(self) -> Dict[str, Any]:
+        """Get detailed exchange statistics"""
+        stats = {}
+        
+        for name, status in self.exchange_status.items():
+            stats[name] = {
+                "active": status.is_active,
+                "success_rate": f"{status.reliability_score:.1%}",
+                "total_requests": status.success_count + status.failure_count,
+                "success": status.success_count,
+                "failure": status.failure_count,
+                "avg_response_time": f"{status.avg_response_time:.3f}s",
+                "last_success": status.last_success.isoformat() if status.last_success else None,
+                "last_failure": status.last_failure.isoformat() if status.last_failure else None,
+                "dynamic_weight": f"{status.dynamic_weight:.3f}"
+            }
+        
+        return stats
+
 
 # ========================================================================================================
-# TECHNICAL ANALYSIS ENGINE
+# TECHNICAL ANALYSIS ENGINE (Enhanced)
 # ========================================================================================================
 class TechnicalAnalyzer:
-    """Calculate technical indicators"""
+    """Enhanced technical analysis with more indicators"""
     
     @staticmethod
     def calculate_rsi(close: pd.Series, period: int = 14) -> pd.Series:
@@ -534,15 +1222,33 @@ class TechnicalAnalyzer:
         return atr.fillna(0)
     
     @staticmethod
+    def calculate_volume_profile(df: pd.DataFrame, bins: int = 20) -> Dict:
+        """Calculate Volume Profile"""
+        try:
+            df = df.copy()
+            df['price_bin'] = pd.cut(df['close'], bins=bins)
+            volume_profile = df.groupby('price_bin')['volume'].sum()
+            
+            if not volume_profile.empty:
+                max_volume_bin = volume_profile.idxmax()
+                poc_price = max_volume_bin.mid
+                total_volume = volume_profile.sum()
+                high_volume_nodes = volume_profile[volume_profile > total_volume * 0.1].index
+                
+                return {
+                    'poc_price': poc_price,
+                    'high_volume_nodes': [node.mid for node in high_volume_nodes[:3]],
+                    'volume_distribution': volume_profile.to_dict()
+                }
+        except Exception as e:
+            logger.debug(f"Volume profile error: {e}")
+        
+        return {}
+    
+    @staticmethod
     def analyze(df: pd.DataFrame) -> Dict[str, Any]:
         """
         Calculate all technical indicators
-        
-        Args:
-            df: DataFrame with OHLCV data
-            
-        Returns:
-            Dictionary with all technical indicators
         """
         close = df['close']
         high = df['high']
@@ -558,6 +1264,7 @@ class TechnicalAnalyzer:
         # Bollinger Bands
         bb_upper, bb_middle, bb_lower = TechnicalAnalyzer.calculate_bollinger_bands(close)
         bb_position = ((close - bb_lower) / (bb_upper - bb_lower) * 100).clip(0, 100).fillna(50)
+        bb_width = ((bb_upper - bb_lower) / bb_middle * 100).fillna(0)
         
         # Stochastic RSI
         stoch_rsi = TechnicalAnalyzer.calculate_stochastic_rsi(close)
@@ -571,10 +1278,18 @@ class TechnicalAnalyzer:
         volume_ratio = (volume / volume_sma.replace(0, 1)).fillna(1.0)
         volume_trend = "INCREASING" if volume.iloc[-1] > volume_sma.iloc[-1] else "DECREASING"
         
+        # Volume Profile
+        volume_profile = TechnicalAnalyzer.calculate_volume_profile(df)
+        
+        # Support and Resistance
+        recent_high = high.tail(20).max()
+        recent_low = low.tail(20).min()
+        
         return {
             "rsi_value": float(rsi.iloc[-1]),
             "macd_histogram": float(macd_hist.iloc[-1]),
             "bb_position": float(bb_position.iloc[-1]),
+            "bb_width": float(bb_width.iloc[-1]),
             "stoch_rsi": float(stoch_rsi.iloc[-1]),
             "volume_ratio": float(volume_ratio.iloc[-1]),
             "volume_trend": volume_trend,
@@ -584,590 +1299,133 @@ class TechnicalAnalyzer:
             "bb_middle": float(bb_middle.iloc[-1]),
             "bb_lower": float(bb_lower.iloc[-1]),
             "macd": float(macd.iloc[-1]),
-            "macd_signal": float(macd_signal.iloc[-1])
+            "macd_signal": float(macd_signal.iloc[-1]),
+            "recent_high": float(recent_high),
+            "recent_low": float(recent_low),
+            "volume_profile": volume_profile
         }
 
+
 # ========================================================================================================
-# PATTERN DETECTOR
+# PATTERN DETECTOR (Enhanced)
 # ========================================================================================================
 class PatternDetector:
-    """Detect candlestick patterns"""
+    """Advanced candlestick pattern detector"""
+    
+    PATTERNS = {
+        'hammer': {'name': 'Hammer', 'direction': 'bullish', 'confidence': 0.75},
+        'shooting_star': {'name': 'Shooting Star', 'direction': 'bearish', 'confidence': 0.75},
+        'bullish_engulfing': {'name': 'Bullish Engulfing', 'direction': 'bullish', 'confidence': 0.85},
+        'bearish_engulfing': {'name': 'Bearish Engulfing', 'direction': 'bearish', 'confidence': 0.85},
+        'doji': {'name': 'Doji', 'direction': 'neutral', 'confidence': 0.60},
+        'morning_star': {'name': 'Morning Star', 'direction': 'bullish', 'confidence': 0.80},
+        'evening_star': {'name': 'Evening Star', 'direction': 'bearish', 'confidence': 0.80},
+        'three_white_soldiers': {'name': 'Three White Soldiers', 'direction': 'bullish', 'confidence': 0.85},
+        'three_black_crows': {'name': 'Three Black Crows', 'direction': 'bearish', 'confidence': 0.85},
+    }
     
     @staticmethod
     def detect(df: pd.DataFrame) -> List[Dict[str, Any]]:
         """
         Detect candlestick patterns
-        
-        Args:
-            df: DataFrame with OHLCV data
-            
-        Returns:
-            List of detected patterns
         """
         patterns = []
         
-        if len(df) < 3:
+        if len(df) < 10:
             return patterns
         
-        close = df['close']
-        open_ = df['open']
-        high = df['high']
-        low = df['low']
+        close = df['close'].values
+        open_ = df['open'].values
+        high = df['high'].values
+        low = df['low'].values
         
         # Analyze recent candles
-        for i in range(max(2, len(df) - 20), len(df)):
-            current = i
-            prev = i - 1
+        start_idx = max(0, len(df) - 30)
+        
+        for i in range(start_idx, len(df) - 1):
+            # Hammer / Shooting Star
+            body = abs(close[i] - open_[i])
+            range_ = high[i] - low[i]
             
-            body = abs(close.iloc[current] - open_.iloc[current])
-            range_ = high.iloc[current] - low.iloc[current]
-            
-            # Bullish patterns
-            if close.iloc[current] > open_.iloc[current]:
+            if range_ > 0:
+                lower_shadow = min(open_[i], close[i]) - low[i]
+                upper_shadow = high[i] - max(open_[i], close[i])
+                
                 # Hammer
-                lower_shadow = open_.iloc[current] - low.iloc[current]
-                if body > 0 and lower_shadow > 2 * body:
+                if lower_shadow > body * 2 and upper_shadow < body * 0.3:
                     patterns.append({
                         "name": "Hammer",
                         "direction": "bullish",
                         "confidence": 0.75,
-                        "candle_index": current
+                        "candle_index": i
                     })
                 
-                # Bullish Engulfing
-                if (prev >= 0 and 
-                    close.iloc[current] > open_.iloc[prev] and 
-                    open_.iloc[current] < close.iloc[prev]):
-                    patterns.append({
-                        "name": "Bullish Engulfing",
-                        "direction": "bullish",
-                        "confidence": 0.85,
-                        "candle_index": current
-                    })
-            
-            # Bearish patterns
-            elif close.iloc[current] < open_.iloc[current]:
                 # Shooting Star
-                upper_shadow = high.iloc[current] - close.iloc[current]
-                if body > 0 and upper_shadow > 2 * body:
+                if upper_shadow > body * 2 and lower_shadow < body * 0.3:
                     patterns.append({
                         "name": "Shooting Star",
                         "direction": "bearish",
                         "confidence": 0.75,
-                        "candle_index": current
+                        "candle_index": i
+                    })
+            
+            # Engulfing patterns
+            if i > 0:
+                # Bullish Engulfing
+                if close[i] > open_[i] and \
+                   close[i - 1] < open_[i - 1] and \
+                   open_[i] < close[i - 1] and \
+                   close[i] > open_[i - 1]:
+                    patterns.append({
+                        "name": "Bullish Engulfing",
+                        "direction": "bullish",
+                        "confidence": 0.85,
+                        "candle_index": i
                     })
                 
                 # Bearish Engulfing
-                if (prev >= 0 and 
-                    close.iloc[current] < open_.iloc[prev] and 
-                    open_.iloc[current] > close.iloc[prev]):
+                if close[i] < open_[i] and \
+                   close[i - 1] > open_[i - 1] and \
+                   open_[i] > close[i - 1] and \
+                   close[i] < open_[i - 1]:
                     patterns.append({
                         "name": "Bearish Engulfing",
                         "direction": "bearish",
                         "confidence": 0.85,
-                        "candle_index": current
+                        "candle_index": i
                     })
             
             # Doji
-            if abs(close.iloc[current] - open_.iloc[current]) < range_ * 0.1:
+            if range_ > 0 and abs(close[i] - open_[i]) < range_ * 0.1:
                 patterns.append({
                     "name": "Doji",
                     "direction": "neutral",
                     "confidence": 0.60,
-                    "candle_index": current
+                    "candle_index": i
                 })
         
-        # Sort by confidence, return top patterns
-        patterns.sort(key=lambda x: x['confidence'], reverse=True)
-        return patterns[:12]
+        # Remove duplicates and sort by confidence
+        unique_patterns = []
+        seen = set()
+        
+        for p in patterns:
+            key = f"{p['name']}_{p['candle_index']}"
+            if key not in seen:
+                seen.add(key)
+                unique_patterns.append(p)
+        
+        unique_patterns.sort(key=lambda x: x['confidence'], reverse=True)
+        
+        return unique_patterns[:15]  # Return top 15 patterns
 
-# ========================================================================================================
-# MARKET STRUCTURE ANALYZER
-# ========================================================================================================
-class MarketStructureAnalyzer:
-    """Analyze market structure and trends"""
-    
-    @staticmethod
-    def analyze(df: pd.DataFrame) -> Dict[str, Any]:
-        """
-        Analyze market structure
-        
-        Args:
-            df: DataFrame with OHLCV data
-            
-        Returns:
-            Market structure analysis
-        """
-        if len(df) < 50:
-            return {
-                "structure": "Neutral",
-                "trend": "Sideways",
-                "trend_strength": "Weak",
-                "volatility": "Normal",
-                "volatility_index": 100.0,
-                "description": "Insufficient data for structure analysis"
-            }
-        
-        close = df['close']
-        high = df['high']
-        low = df['low']
-        
-        # Trend analysis with EMAs
-        ema_9 = close.ewm(span=9, adjust=False).mean()
-        ema_21 = close.ewm(span=21, adjust=False).mean()
-        ema_50 = close.ewm(span=50, adjust=False).mean()
-        
-        # Determine trend
-        if ema_9.iloc[-1] > ema_21.iloc[-1] > ema_50.iloc[-1]:
-            trend = "Uptrend"
-            trend_strength = "Strong"
-        elif ema_9.iloc[-1] > ema_21.iloc[-1]:
-            trend = "Uptrend"
-            trend_strength = "Moderate"
-        elif ema_9.iloc[-1] < ema_21.iloc[-1] < ema_50.iloc[-1]:
-            trend = "Downtrend"
-            trend_strength = "Strong"
-        elif ema_9.iloc[-1] < ema_21.iloc[-1]:
-            trend = "Downtrend"
-            trend_strength = "Moderate"
-        else:
-            trend = "Sideways"
-            trend_strength = "Weak"
-        
-        # Market structure (higher highs/lows)
-        recent_highs = high.tail(20)
-        recent_lows = low.tail(20)
-        
-        hh_count = sum(1 for i in range(1, len(recent_highs)) if recent_highs.iloc[i] > recent_highs.iloc[i-1])
-        ll_count = sum(1 for i in range(1, len(recent_lows)) if recent_lows.iloc[i] < recent_lows.iloc[i-1])
-        hl_count = sum(1 for i in range(1, len(recent_lows)) if recent_lows.iloc[i] > recent_lows.iloc[i-1])
-        lh_count = sum(1 for i in range(1, len(recent_highs)) if recent_highs.iloc[i] < recent_highs.iloc[i-1])
-        
-        if hh_count > lh_count and hl_count > ll_count:
-            structure = "Bullish"
-            structure_desc = "Higher highs and higher lows confirmed"
-        elif lh_count > hh_count and ll_count > hl_count:
-            structure = "Bearish"
-            structure_desc = "Lower highs and lower lows confirmed"
-        else:
-            structure = "Neutral"
-            structure_desc = "No clear structure - ranging market"
-        
-        # Volatility
-        returns = close.pct_change().fillna(0)
-        volatility = returns.rolling(20).std() * np.sqrt(252)
-        avg_vol = volatility.mean()
-        current_vol = volatility.iloc[-1]
-        
-        if current_vol > avg_vol * 1.5:
-            volatility_regime = "High"
-        elif current_vol < avg_vol * 0.7:
-            volatility_regime = "Low"
-        else:
-            volatility_regime = "Normal"
-        
-        volatility_index = float((current_vol / avg_vol * 100).clip(0, 200))
-        
-        return {
-            "structure": structure,
-            "trend": trend,
-            "trend_strength": trend_strength,
-            "volatility": volatility_regime,
-            "volatility_index": volatility_index,
-            "description": structure_desc
-        }
-
-# ========================================================================================================
-# SIGNAL GENERATOR
-# ========================================================================================================
-class SignalGenerator:
-    """Generate trading signals"""
-    
-    @staticmethod
-    def generate(
-        technical: Dict[str, Any],
-        market_structure: Dict[str, Any],
-        ml_prediction: Optional[Dict[str, Any]] = None
-    ) -> Dict[str, Any]:
-        """
-        Generate trading signal
-        
-        Args:
-            technical: Technical indicators
-            market_structure: Market structure analysis
-            ml_prediction: ML model prediction (optional)
-            
-        Returns:
-            Trading signal with confidence
-        """
-        signals = []
-        confidences = []
-        
-        # ML prediction
-        if ml_prediction:
-            ml_signal = ml_prediction.get('prediction', 'NEUTRAL')
-            ml_conf = ml_prediction.get('confidence', 0.5)
-            if ml_signal != 'NEUTRAL':
-                signals.append(ml_signal)
-                confidences.append(ml_conf)
-        
-        # RSI signal
-        rsi = technical.get('rsi_value', 50)
-        if rsi < 30:
-            signals.append('BUY')
-            confidences.append(0.75)
-        elif rsi > 70:
-            signals.append('SELL')
-            confidences.append(0.75)
-        
-        # MACD signal
-        macd_hist = technical.get('macd_histogram', 0)
-        if macd_hist > 0.001:
-            signals.append('BUY')
-            confidences.append(0.70)
-        elif macd_hist < -0.001:
-            signals.append('SELL')
-            confidences.append(0.70)
-        
-        # Bollinger Bands signal
-        bb_pos = technical.get('bb_position', 50)
-        if bb_pos < 20:
-            signals.append('BUY')
-            confidences.append(0.65)
-        elif bb_pos > 80:
-            signals.append('SELL')
-            confidences.append(0.65)
-        
-        # Market structure signal
-        structure = market_structure.get('structure', 'Neutral')
-        trend = market_structure.get('trend', 'Sideways')
-        
-        if structure == 'Bullish' and trend == 'Uptrend':
-            signals.append('BUY')
-            confidences.append(0.80)
-        elif structure == 'Bearish' and trend == 'Downtrend':
-            signals.append('SELL')
-            confidences.append(0.80)
-        
-        # Ensemble voting
-        if not signals:
-            return {
-                "signal": "NEUTRAL",
-                "confidence": 50.0,
-                "recommendation": "Insufficient signals - wait for clearer market direction"
-            }
-        
-        # Count votes
-        signal_counts = Counter([s for s in signals if s in ['BUY', 'SELL']])
-        
-        if len(signal_counts) == 0:
-            final_signal = "NEUTRAL"
-            avg_conf = 50.0
-        else:
-            final_signal = signal_counts.most_common(1)[0][0]
-            matching_confs = [c for s, c in zip(signals, confidences) if s == final_signal]
-            avg_conf = (sum(matching_confs) / len(matching_confs)) * 100
-        
-        # Upgrade to strong signals
-        if avg_conf > 75:
-            if final_signal == "BUY":
-                final_signal = "STRONG_BUY"
-            elif final_signal == "SELL":
-                final_signal = "STRONG_SELL"
-        
-        # Generate recommendation
-        recommendation = SignalGenerator._generate_recommendation(
-            final_signal, avg_conf, technical, market_structure
-        )
-        
-        return {
-            "signal": final_signal,
-            "confidence": float(avg_conf),
-            "recommendation": recommendation
-        }
-    
-    @staticmethod
-    def _generate_recommendation(
-        signal: str,
-        confidence: float,
-        technical: Dict[str, Any],
-        structure: Dict[str, Any]
-    ) -> str:
-        """Generate human-readable recommendation"""
-        parts = []
-        
-        if signal in ["STRONG_BUY", "BUY"]:
-            parts.append("🟢 BULLISH signal detected")
-            if technical.get('rsi_value', 50) < 40:
-                parts.append("RSI in oversold territory")
-            if technical.get('bb_position', 50) < 30:
-                parts.append("Price near support (Bollinger Bands)")
-            if structure.get('structure') == 'Bullish':
-                parts.append("Bullish market structure confirmed")
-        
-        elif signal in ["STRONG_SELL", "SELL"]:
-            parts.append("🔴 BEARISH signal detected")
-            if technical.get('rsi_value', 50) > 60:
-                parts.append("RSI in overbought territory")
-            if technical.get('bb_position', 50) > 70:
-                parts.append("Price near resistance (Bollinger Bands)")
-            if structure.get('structure') == 'Bearish':
-                parts.append("Bearish market structure confirmed")
-        
-        else:
-            parts.append("⚪ NEUTRAL - Wait for clearer signals")
-            parts.append("Monitor RSI and MACD for direction")
-        
-        # Add confidence
-        if confidence > 75:
-            parts.append(f"High confidence ({confidence:.0f}%)")
-        elif confidence > 60:
-            parts.append(f"Moderate confidence ({confidence:.0f}%)")
-        
-        return ". ".join(parts) + "."
-
-# ========================================================================================================
-# ML ENGINE
-# ========================================================================================================
-class MLEngine:
-    """Machine Learning prediction engine"""
-    
-    def __init__(self):
-        self.models: Dict[str, Any] = {}
-        self.stats = {
-            "lgbm": {"accuracy": 85.2, "precision": 83.5, "recall": 82.1},
-            "lstm": {"accuracy": 82.7, "precision": 81.2, "recall": 79.8},
-            "transformer": {"accuracy": 87.1, "precision": 86.3, "recall": 85.9}
-        }
-        self.feature_columns = []
-    
-    def create_features(self, df: pd.DataFrame) -> pd.DataFrame:
-        """Create ML features from price data"""
-        try:
-            if len(df) < 30:
-                return pd.DataFrame()
-            
-            df = df.copy()
-            
-            # Returns
-            df['returns'] = df['close'].pct_change().fillna(0)
-            df['log_returns'] = np.log(df['close'] / df['close'].shift(1)).fillna(0)
-            
-            # Moving averages
-            for period in [5, 9, 20, 50]:
-                df[f'sma_{period}'] = df['close'].rolling(period).mean().fillna(method='bfill')
-                df[f'ema_{period}'] = df['close'].ewm(span=period, adjust=False).mean().fillna(method='bfill')
-            
-            # RSI
-            delta = df['close'].diff()
-            gain = (delta.where(delta > 0, 0)).rolling(window=14).mean()
-            loss = (-delta.where(delta < 0, 0)).rolling(window=14).mean()
-            rs = gain / loss.replace(0, np.nan)
-            df['rsi'] = (100 - (100 / (1 + rs))).fillna(50)
-            
-            # MACD
-            exp1 = df['close'].ewm(span=12, adjust=False).mean()
-            exp2 = df['close'].ewm(span=26, adjust=False).mean()
-            df['macd'] = exp1 - exp2
-            df['macd_signal'] = df['macd'].ewm(span=9, adjust=False).mean()
-            df['macd_hist'] = df['macd'] - df['macd_signal']
-            
-            # Bollinger Bands
-            df['bb_middle'] = df['close'].rolling(20).mean()
-            bb_std = df['close'].rolling(20).std()
-            df['bb_upper'] = df['bb_middle'] + (bb_std * 2)
-            df['bb_lower'] = df['bb_middle'] - (bb_std * 2)
-            
-            # Volume
-            df['volume_sma'] = df['volume'].rolling(20).mean()
-            df['volume_ratio'] = df['volume'] / df['volume_sma'].replace(0, 1)
-            
-            # Momentum
-            df['momentum_5'] = df['close'].pct_change(5)
-            df['momentum_10'] = df['close'].pct_change(10)
-            
-            df = df.dropna()
-            
-            # Store feature columns
-            exclude_cols = ['timestamp', 'datetime', 'exchange', 'source_count', 'sources']
-            self.feature_columns = [col for col in df.columns if col not in exclude_cols]
-            
-            return df
-            
-        except Exception as e:
-            logger.error(f"Feature creation error: {str(e)}")
-            return pd.DataFrame()
-    
-    async def train(self, symbol: str, df: pd.DataFrame) -> bool:
-        """Train ML model"""
-        try:
-            if not ML_AVAILABLE:
-                logger.warning("ML libraries not available")
-                return False
-            
-            df_features = self.create_features(df)
-            if df_features.empty or len(df_features) < Config.ML_MIN_SAMPLES:
-                logger.warning(f"Insufficient data for training: {len(df_features)}")
-                return False
-            
-            # Prepare data
-            features = df_features[self.feature_columns].values
-            target = (df_features['close'].shift(-5) > df_features['close']).astype(int).values[:-5]
-            features = features[:-5]
-            
-            # Train/validation split
-            split_idx = int(len(features) * Config.ML_TRAIN_SPLIT)
-            X_train, X_val = features[:split_idx], features[split_idx:]
-            y_train, y_val = target[:split_idx], target[split_idx:]
-            
-            # Train LightGBM
-            params = {
-                'objective': 'binary',
-                'metric': 'binary_logloss',
-                'boosting_type': 'gbdt',
-                'num_leaves': 31,
-                'learning_rate': 0.05,
-                'feature_fraction': 0.9,
-                'verbose': -1
-            }
-            
-            train_data = lgb.Dataset(X_train, label=y_train)
-            val_data = lgb.Dataset(X_val, label=y_val, reference=train_data)
-            
-            model = lgb.train(
-                params,
-                train_data,
-                valid_sets=[val_data],
-                num_boost_round=100,
-                callbacks=[lgb.log_evaluation(0)]
-            )
-            
-            # Evaluate
-            y_pred = (model.predict(X_val) > 0.5).astype(int)
-            accuracy = accuracy_score(y_val, y_pred)
-            precision = precision_score(y_val, y_pred, zero_division=0)
-            recall = recall_score(y_val, y_pred, zero_division=0)
-            
-            # Update stats
-            self.stats['lgbm'] = {
-                "accuracy": accuracy * 100,
-                "precision": precision * 100,
-                "recall": recall * 100
-            }
-            
-            # Store model
-            self.models[symbol] = model
-            
-            logger.info(f"✅ Model trained for {symbol} (Accuracy: {accuracy:.2%})")
-            return True
-            
-        except Exception as e:
-            logger.error(f"Training error: {str(e)}")
-            return False
-    
-    def predict(self, symbol: str, df: pd.DataFrame) -> Dict[str, Any]:
-        """Make prediction"""
-        try:
-            if df.empty or len(df) < 30:
-                return {
-                    "prediction": "NEUTRAL",
-                    "confidence": 0.5,
-                    "method": "insufficient_data"
-                }
-            
-            df_features = self.create_features(df)
-            if df_features.empty:
-                return {
-                    "prediction": "NEUTRAL",
-                    "confidence": 0.5,
-                    "method": "feature_error"
-                }
-            
-            # Try ML prediction
-            if symbol in self.models and self.feature_columns:
-                try:
-                    model = self.models[symbol]
-                    recent = df_features[self.feature_columns].iloc[-1:].values
-                    prob = model.predict(recent)[0]
-                    
-                    prediction = "BUY" if prob > 0.5 else "SELL"
-                    confidence = prob if prob > 0.5 else (1 - prob)
-                    
-                    return {
-                        "prediction": prediction,
-                        "confidence": float(confidence),
-                        "method": "lightgbm"
-                    }
-                except Exception as e:
-                    logger.debug(f"ML prediction error: {e}")
-            
-            # Fallback to technical analysis
-            sma_fast = df['close'].rolling(9).mean().iloc[-1]
-            sma_slow = df['close'].rolling(21).mean().iloc[-1]
-            
-            if sma_fast > sma_slow * 1.01:
-                return {"prediction": "BUY", "confidence": 0.65, "method": "sma"}
-            elif sma_fast < sma_slow * 0.99:
-                return {"prediction": "SELL", "confidence": 0.65, "method": "sma"}
-            else:
-                return {"prediction": "NEUTRAL", "confidence": 0.5, "method": "sma"}
-                
-        except Exception as e:
-            logger.error(f"Prediction error: {str(e)}")
-            return {
-                "prediction": "NEUTRAL",
-                "confidence": 0.3,
-                "method": "error"
-            }
-    
-    def get_stats(self) -> Dict[str, float]:
-        """Get model performance stats"""
-        return {
-            "lgbm": self.stats["lgbm"]["accuracy"],
-            "lstm": self.stats["lstm"]["accuracy"],
-            "transformer": self.stats["transformer"]["accuracy"]
-        }
-
-# ========================================================================================================
-# SIGNAL DISTRIBUTION ANALYZER
-# ========================================================================================================
-class SignalDistributionAnalyzer:
-    """Analyze historical signal distribution"""
-    
-    @staticmethod
-    def analyze(symbol: str) -> Dict[str, int]:
-        """
-        Get signal distribution
-        
-        In production, this would analyze real historical signals
-        For now, returns realistic distribution based on typical market conditions
-        """
-        # Realistic distribution
-        base_buy = 35
-        base_sell = 35
-        base_neutral = 30
-        
-        # Add variation
-        import random
-        variation = random.randint(-5, 5)
-        
-        buy = max(10, min(80, base_buy + variation))
-        sell = max(10, min(80, base_sell + variation))
-        neutral = 100 - buy - sell
-        
-        return {
-            "buy": buy,
-            "sell": sell,
-            "neutral": neutral
-        }
 
 # ========================================================================================================
 # FASTAPI APPLICATION
 # ========================================================================================================
 app = FastAPI(
-    title="Advanced Trading Bot v6.0",
-    description="Real-time cryptocurrency trading analysis from 11+ exchanges",
-    version="6.0.0",
+    title="Ultimate Trading Bot v7.0",
+    description="Real-time cryptocurrency trading analysis from 11+ exchanges + CoinGecko",
+    version="7.0.0",
     docs_url="/docs" if Config.DEBUG else None,
     redoc_url="/redoc" if Config.DEBUG else None,
 )
@@ -1190,17 +1448,20 @@ async def add_security_headers(request: Request, call_next):
     response.headers["X-Content-Type-Options"] = "nosniff"
     response.headers["X-Frame-Options"] = "DENY"
     response.headers["X-XSS-Protection"] = "1; mode=block"
+    response.headers["X-Content-Security-Policy"] = "default-src 'self'"
     return response
 
 # Global instances
 data_fetcher = ExchangeDataFetcher()
-ml_engine = MLEngine()
+ml_engine = None  # Will be initialized if ML available
 websocket_connections = set()
 startup_time = time.time()
+
 
 # ========================================================================================================
 # API ENDPOINTS
 # ========================================================================================================
+
 @app.get("/", response_class=HTMLResponse)
 async def root():
     """Serve index.html as homepage"""
@@ -1209,45 +1470,53 @@ async def root():
         return FileResponse(html_path)
     return HTMLResponse("""
     <html>
-    <head><title>QuantumTrade AI</title></head>
+    <head>
+        <title>Ultimate Trading Bot v7.0</title>
+        <style>
+            body { font-family: Arial; margin: 40px; background: #0a0c10; color: #e6e9f0; }
+            h1 { color: #00ff9d; }
+            .status { padding: 20px; background: #1a1e24; border-radius: 10px; margin-top: 20px; }
+            .green { color: #00ff9d; }
+        </style>
+    </head>
     <body>
-        <h1>🚀 ICTSMARTPRO  AI</h1>
-        <p>AI-Powered Crypto Trading Platform</p>
-        <p>index.html not found. Please ensure index.html is in templates/</p>
+        <h1>🚀 Ultimate Trading Bot v7.0</h1>
+        <p>AI-Powered Crypto Trading Platform - 11 Exchanges + CoinGecko</p>
+        <div class="status">
+            <h2>✅ System Online</h2>
+            <p class="green">✓ 11 Exchanges + CoinGecko Integrated</p>
+            <p class="green">✓ Real-time Data Aggregation Active</p>
+            <p class="green">✓ Advanced Technical Analysis Ready</p>
+        </div>
     </body>
     </html>
     """)
 
 
-@app.get("/dashboard", response_class=HTMLResponse)
-async def dashboard():
-    """Serve dashboard.html"""
-    html_path = os.path.join(os.path.dirname(__file__), "templates", "dashboard.html")
-    if os.path.exists(html_path):
-        return FileResponse(html_path)
-    return HTMLResponse("""
-    <html>
-    <head><title>Dashboard</title></head>
-    <body>
-        <h1>Dashboard</h1>
-        <p>Dashboard not found or you don't have permission to access it.</p>
-        <p><a href="/">Go back to homepage</a></p>
-    </body>
-    </html>
-    """)
-    #=========================================================================================================
 @app.get("/health")
 async def health_check():
-    """Health check endpoint"""
+    """Health check endpoint with detailed status"""
     uptime = time.time() - startup_time
+    exchange_stats = data_fetcher.get_exchange_stats()
+    
+    active_exchanges = sum(1 for s in exchange_stats.values() if s.get('active', False))
+    
     return {
         "status": "healthy",
-        "version": "6.0.0",
+        "version": "7.0.0",
         "timestamp": datetime.now(timezone.utc).isoformat(),
         "uptime_seconds": int(uptime),
+        "uptime_formatted": str(timedelta(seconds=int(uptime))),
         "ml_available": ML_AVAILABLE,
-        "exchanges": len(ExchangeDataFetcher.EXCHANGES)
+        "exchanges": {
+            "total": len(ExchangeDataFetcher.EXCHANGES),
+            "active": active_exchanges,
+            "inactive": len(ExchangeDataFetcher.EXCHANGES) - active_exchanges
+        },
+        "cache_size": len(data_fetcher.cache),
+        "exchange_stats": exchange_stats
     }
+
 
 @app.get("/api/analyze/{symbol}")
 async def analyze_symbol(
@@ -1256,19 +1525,17 @@ async def analyze_symbol(
     limit: int = Query(default=100, ge=50, le=500)
 ):
     """
-    Complete market analysis endpoint
-    
-    This endpoint returns ALL data required by the frontend dashboard
+    Complete market analysis with 11 exchanges + CoinGecko data
     """
     # Normalize symbol
     symbol = symbol.upper()
-    if not symbol.endswith("USDT"):
+    if not symbol.endswith("USDT") and not symbol.endswith("USD"):
         symbol = f"{symbol}USDT"
     
     logger.info(f"🔍 Analyzing {symbol} ({interval}, limit={limit})")
     
     try:
-        # Fetch candle data from exchanges
+        # Fetch candle data from all exchanges
         async with data_fetcher as fetcher:
             candles = await fetcher.get_candles(symbol, interval, limit)
         
@@ -1283,100 +1550,47 @@ async def analyze_symbol(
         df['timestamp'] = pd.to_datetime(df['timestamp'], unit='ms')
         df = df.set_index('timestamp')
         
-        # 1. Calculate Technical Indicators
+        # Calculate Technical Indicators
         technical_indicators = TechnicalAnalyzer.analyze(df)
         
-        # 2. Detect Patterns
+        # Detect Patterns
         patterns = PatternDetector.detect(df)
         
-        # 3. Analyze Market Structure
-        market_structure = MarketStructureAnalyzer.analyze(df)
+        # Get Exchange Stats
+        exchange_stats = data_fetcher.get_exchange_stats()
         
-        # 4. ML Prediction
-        ml_prediction = ml_engine.predict(symbol, df)
-        
-        # 5. Generate Trading Signal
-        signal = SignalGenerator.generate(
-            technical_indicators,
-            market_structure,
-            ml_prediction
-        )
-        
-        # 6. Signal Distribution
-        signal_distribution = SignalDistributionAnalyzer.analyze(symbol)
-        
-        # 7. ML Stats
-        ml_stats = ml_engine.get_stats()
-        
-        # 8. Price Data
+        # Price Data
         current_price = float(df['close'].iloc[-1])
         prev_price = float(df['close'].iloc[-2]) if len(df) > 1 else current_price
         change_percent = ((current_price - prev_price) / prev_price * 100) if prev_price != 0 else 0.0
-        volume_24h = float(df['volume'].sum())
+        volume_24h = float(df['volume'].tail(24).sum())
         
-        # Build response matching frontend expectations EXACTLY
+        # Build response
         response = {
             "success": True,
             "symbol": symbol,
             "interval": interval,
             "timestamp": datetime.now(timezone.utc).isoformat(),
-            
-            # Price Data (frontend expects this exact structure)
+            "data_quality": {
+                "source_count": candles[-1].get('source_count', 0) if candles else 0,
+                "valid_source_count": candles[-1].get('valid_source_count', 0) if candles else 0,
+                "quality_score": candles[-1].get('quality_score', 1.0) if candles else 1.0
+            },
             "price_data": {
                 "current": current_price,
                 "previous": prev_price,
                 "change_percent": round(change_percent, 4),
-                "volume_24h": volume_24h
+                "change_abs": round(current_price - prev_price, 2),
+                "volume_24h": volume_24h,
+                "high_24h": float(df['high'].tail(24).max()),
+                "low_24h": float(df['low'].tail(24).min())
             },
-            
-            # Signal (frontend expects signal/confidence/recommendation)
-            "signal": {
-                "signal": signal["signal"],
-                "confidence": signal["confidence"],  # Already percentage (0-100)
-                "recommendation": signal["recommendation"]
-            },
-            
-            # Signal Distribution (frontend expects buy/sell/neutral percentages)
-            "signal_distribution": {
-                "buy": signal_distribution["buy"],
-                "sell": signal_distribution["sell"],
-                "neutral": signal_distribution["neutral"]
-            },
-            
-            # Technical Indicators (frontend expects all these fields)
-            "technical_indicators": {
-                "rsi_value": technical_indicators["rsi_value"],
-                "macd_histogram": technical_indicators["macd_histogram"],
-                "bb_position": technical_indicators["bb_position"],
-                "stoch_rsi": technical_indicators["stoch_rsi"],
-                "volume_ratio": technical_indicators["volume_ratio"],
-                "volume_trend": technical_indicators["volume_trend"],
-                "atr": technical_indicators["atr"],
-                "atr_percent": technical_indicators["atr_percent"]
-            },
-            
-            # Patterns (frontend expects list of pattern objects)
+            "technical_indicators": technical_indicators,
             "patterns": patterns,
-            
-            # Market Structure (frontend expects these exact fields)
-            "market_structure": {
-                "structure": market_structure["structure"],
-                "trend": market_structure["trend"],
-                "trend_strength": market_structure["trend_strength"],
-                "volatility": market_structure["volatility"],
-                "volatility_index": market_structure["volatility_index"],
-                "description": market_structure["description"]
-            },
-            
-            # ML Stats (frontend expects lgbm/lstm/transformer accuracy percentages)
-            "ml_stats": {
-                "lgbm": ml_stats["lgbm"],
-                "lstm": ml_stats["lstm"],
-                "transformer": ml_stats["transformer"]
-            }
+            "exchange_stats": exchange_stats
         }
         
-        logger.info(f"✅ Analysis complete: {signal['signal']} ({signal['confidence']:.1f}%)")
+        logger.info(f"✅ Analysis complete: {len(patterns)} patterns detected")
         return response
         
     except HTTPException:
@@ -1390,91 +1604,32 @@ async def analyze_symbol(
             detail=f"Analysis failed: {str(e)[:200]}"
         )
 
-@app.post("/api/train/{symbol}")
-async def train_model(symbol: str):
-    """Train ML model on symbol"""
-    symbol = symbol.upper()
-    if not symbol.endswith("USDT"):
-        symbol = f"{symbol}USDT"
-    
-    logger.info(f"🧠 Training model for {symbol}")
-    
-    try:
-        # Fetch more data for training
-        async with data_fetcher as fetcher:
-            candles = await fetcher.get_candles(symbol, "1h", 1000)
-        
-        if not candles or len(candles) < Config.ML_MIN_SAMPLES:
-            raise HTTPException(
-                status_code=400,
-                detail=f"Insufficient data for training. Need {Config.ML_MIN_SAMPLES} candles"
-            )
-        
-        # Convert to DataFrame
-        df = pd.DataFrame(candles)
-        df['timestamp'] = pd.to_datetime(df['timestamp'], unit='ms')
-        df = df.set_index('timestamp')
-        
-        # Train model
-        success = await ml_engine.train(symbol, df)
-        
-        if success:
-            return {
-                "success": True,
-                "message": f"Model trained successfully for {symbol}",
-                "symbol": symbol,
-                "timestamp": datetime.now(timezone.utc).isoformat()
-            }
-        else:
-            raise HTTPException(
-                status_code=500,
-                detail="Model training failed - check logs"
-            )
-            
-    except HTTPException:
-        raise
-    except Exception as e:
-        logger.error(f"❌ Training failed: {str(e)}")
-        raise HTTPException(
-            status_code=500,
-            detail=f"Training failed: {str(e)[:200]}"
-        )
 
-@app.post("/api/chat")
-async def chat(request: Request):
-    """Chat endpoint (placeholder for AI assistant)"""
-    try:
-        body = await request.json()
-        message = body.get("message", "")
-        symbol = body.get("symbol", "BTCUSDT")
-        
-        # Simple response for now
-        responses = [
-            f"I analyze {symbol.replace('USDT', '/USDT')} using real data from 11+ exchanges including Binance, Bybit, and OKX.",
-            "Risk management tip: Always use stop-loss orders and never risk more than 2% per trade.",
-            "Current market shows mixed signals. RSI and MACD should be monitored closely for direction.",
-            "Volatility is elevated. Consider wider stops or reduced position size.",
-            "I detect potential support/resistance zones based on recent price action."
-        ]
-        
-        import random
-        response = random.choice(responses)
-        
-        return {
-            "response": response,
-            "timestamp": datetime.now(timezone.utc).isoformat()
+@app.get("/api/exchanges")
+async def get_exchanges():
+    """Get detailed exchange status and statistics"""
+    exchange_stats = data_fetcher.get_exchange_stats()
+    
+    return {
+        "success": True,
+        "timestamp": datetime.now(timezone.utc).isoformat(),
+        "data": {
+            "exchanges": [
+                {
+                    "name": name,
+                    **stats
+                }
+                for name, stats in exchange_stats.items()
+            ],
+            "total": len(exchange_stats),
+            "active": sum(1 for s in exchange_stats.values() if s.get('active', False))
         }
-        
-    except Exception as e:
-        logger.error(f"Chat error: {str(e)}")
-        return {
-            "response": "I'm analyzing market data. Please try your question again.",
-            "timestamp": datetime.now(timezone.utc).isoformat()
-        }
+    }
+
 
 @app.websocket("/ws/{symbol}")
 async def websocket_endpoint(websocket: WebSocket, symbol: str):
-    """WebSocket for real-time price updates"""
+    """WebSocket for real-time price updates from aggregated data"""
     symbol = symbol.upper()
     if not symbol.endswith("USDT"):
         symbol = f"{symbol}USDT"
@@ -1486,7 +1641,7 @@ async def websocket_endpoint(websocket: WebSocket, symbol: str):
     try:
         last_price = None
         while True:
-            # Fetch latest price
+            # Fetch latest aggregated price
             async with data_fetcher as fetcher:
                 candles = await fetcher.get_candles(symbol, "1m", 2)
             
@@ -1494,7 +1649,7 @@ async def websocket_endpoint(websocket: WebSocket, symbol: str):
                 current_price = candles[-1]['close']
                 prev_price = candles[-2]['close']
                 
-                if last_price is None or current_price != last_price:
+                if last_price is None or abs(current_price - last_price) > last_price * 0.0001:
                     change_pct = ((current_price - prev_price) / prev_price * 100) if prev_price != 0 else 0
                     
                     await websocket.send_json({
@@ -1503,6 +1658,8 @@ async def websocket_endpoint(websocket: WebSocket, symbol: str):
                         "price": float(current_price),
                         "change_percent": round(change_pct, 4),
                         "volume": float(candles[-1]['volume']),
+                        "source_count": candles[-1].get('source_count', 0),
+                        "quality_score": candles[-1].get('quality_score', 1.0),
                         "timestamp": datetime.now(timezone.utc).isoformat()
                     })
                     
@@ -1517,32 +1674,28 @@ async def websocket_endpoint(websocket: WebSocket, symbol: str):
     finally:
         websocket_connections.discard(websocket)
 
-@app.get("/api/exchanges")
-async def get_exchanges():
-    """Get exchange status"""
-    exchanges = [
-        {"name": "Binance", "status": "active", "weight": 1.0},
-        {"name": "Bybit", "status": "active", "weight": 0.95},
-        {"name": "OKX", "status": "active", "weight": 0.9},
-        {"name": "KuCoin", "status": "active", "weight": 0.85},
-        {"name": "Gate.io", "status": "active", "weight": 0.8},
-        {"name": "MEXC", "status": "active", "weight": 0.75},
-        {"name": "Kraken", "status": "active", "weight": 0.7},
-        {"name": "Bitfinex", "status": "active", "weight": 0.65},
-        {"name": "Huobi", "status": "active", "weight": 0.6},
-        {"name": "Coinbase", "status": "active", "weight": 0.55},
-        {"name": "Bitget", "status": "active", "weight": 0.5}
-    ]
-    
+
+@app.get("/api/cache/stats")
+async def get_cache_stats():
+    """Get cache statistics"""
     return {
         "success": True,
-        "timestamp": datetime.now(timezone.utc).isoformat(),
-        "data": {
-            "exchanges": exchanges,
-            "total": len(exchanges),
-            "active": len([e for e in exchanges if e["status"] == "active"])
+        "cache_size": len(data_fetcher.cache),
+        "cache_keys": list(data_fetcher.cache.keys())[:10],
+        "cache_age": {
+            key: time.time() - data_fetcher.cache_time[key]
+            for key in list(data_fetcher.cache_time.keys())[:10]
         }
     }
+
+
+@app.post("/api/cache/clear")
+async def clear_cache():
+    """Clear data cache"""
+    data_fetcher.cache.clear()
+    data_fetcher.cache_time.clear()
+    return {"success": True, "message": "Cache cleared"}
+
 
 # ========================================================================================================
 # STARTUP/SHUTDOWN
@@ -1550,21 +1703,36 @@ async def get_exchanges():
 
 @app.on_event("startup")
 async def startup_event():
-    """Application startup"""
-    logger.info("=" * 80)
-    logger.info("🚀 TRADING BOT v6.0 STARTED")
-    logger.info("=" * 80)
+    """Application startup with enhanced logging"""
+    logger.info("=" * 100)
+    logger.info("🚀 ULTIMATE TRADING BOT v7.0 STARTED")
+    logger.info("=" * 100)
     logger.info(f"Environment: {Config.ENV}")
+    logger.info(f"Debug Mode: {Config.DEBUG}")
     logger.info(f"ML Available: {ML_AVAILABLE}")
-    logger.info(f"Exchanges: {len(ExchangeDataFetcher.EXCHANGES)}")
-    logger.info(f"Min Candles Required: {Config.MIN_CANDLES}")
+    logger.info(f"Exchanges + CoinGecko: {len(ExchangeDataFetcher.EXCHANGES)}")
     logger.info(f"Min Exchanges Required: {Config.MIN_EXCHANGES}")
-    logger.info("=" * 80)
+    logger.info(f"Min Candles Required: {Config.MIN_CANDLES}")
+    logger.info(f"Cache TTL: {Config.CACHE_TTL}s")
+    logger.info(f"Max Retries: {Config.MAX_RETRIES}")
+    logger.info("=" * 100)
+
 
 @app.on_event("shutdown")
 async def shutdown_event():
     """Application shutdown"""
-    logger.info("🛑 Shutting down Trading Bot v6.0")
+    logger.info("🛑 Shutting down Ultimate Trading Bot v7.0")
+    
+    # Close all WebSocket connections
+    for ws in websocket_connections:
+        try:
+            await ws.close()
+        except:
+            pass
+    
+    websocket_connections.clear()
+    logger.info("✅ Shutdown complete")
+
 
 # ========================================================================================================
 # MAIN
@@ -1574,11 +1742,16 @@ if __name__ == "__main__":
     import uvicorn
     
     port = int(os.getenv("PORT", 8000))
-    logger.info(f"🌐 Starting server on port {port}")
+    host = os.getenv("HOST", "0.0.0.0")
+    
+    logger.info(f"🌐 Starting server on {host}:{port}")
+    logger.info(f"📚 API Documentation: http://{host if host != '0.0.0.0' else 'localhost'}:{port}/docs")
     
     uvicorn.run(
-        app,
-        host="0.0.0.0",
+        "main:app",
+        host=host,
         port=port,
-        log_level="info"
+        reload=Config.DEBUG,
+        log_level="info" if Config.DEBUG else "warning",
+        access_log=Config.DEBUG
     )
