@@ -1,23 +1,43 @@
-fastapi>=0.115.0
+# =====================================
+# Core & Web
+fastapi>=0.115.0,<0.129.0
 uvicorn[standard]>=0.30.0
 orjson>=3.10.0
+aiohttp>=3.10.0
+websockets>=13.0,<14.0
 
-numpy>=2.0.0
-pandas>=2.2.3
-scikit-learn>=1.5.2
+# =====================================
+# Data & ML
+--index-url https://download.pytorch.org/whl/cpu
+torch==2.4.1
+torchvision==0.19.1
+transformers>=4.45.0,<5.0.0
 
- 
-torch==2.4.1+cpu
-torchvision==0.19.1+cpu
-transformers>=4.45.0
+numpy>=2.0.0,<3.0.0
+pandas>=2.2.3,<3.0.0
+scikit-learn>=1.5.2,<1.6.0
+scipy>=1.14.0,<1.15.0
 
+lightgbm>=4.0.0,<4.6.0
+xgboost>=2.1.0,<3.0.0
+
+# Technical Analysis
 pandas-ta>=0.3.14b0
+# ta-lib yorumda – Dockerfile ile kurman lazım
 
-opencv-python>=4.10.0
-pillow>=10.4.0
-plotly>=5.24.0
+# Image / Viz
+opencv-python>=4.10.0,<4.11.0
+pillow>=10.4.0,<11.0.0
+matplotlib>=3.9.0,<3.10.0
+plotly>=5.24.0,<6.0.0
 
-pydantic>=2.9.0
+# Utils
+pydantic>=2.9.0,<3.0.0
 rich>=13.8.0
 loguru>=0.7.2
 psutil>=6.0.0
+aiocache>=0.12.1
+python-multipart==0.0.12
+jinja2>=3.1.4,<4.0.0
+fastapi-limiter==0.1.6
+redis>=5.0.1
