@@ -4,16 +4,12 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>🚀 ICTSMARTPRO Trade AI | AI-Powered Crypto Trading Platform</title>
-    
     <!-- Bootstrap 5 -->
     <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
-    
     <!-- Font Awesome -->
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
-    
     <!-- Google Fonts -->
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&family=Manrope:wght@700;800&display=swap" rel="stylesheet">
-    
     <style>
         :root {
             --primary: #6366f1;
@@ -27,13 +23,12 @@
             --darker: #0a0f1a;
             --light: #f8fafc;
             --gray: #94a3b8;
-            --card-bg: rgba(30, 41, 59, 0.8);
+            --card-bg: rgba(30, 41, 59, 0.85);
             --border: rgba(255, 255, 255, 0.1);
             --glass-bg: rgba(255, 255, 255, 0.05);
             --gradient-primary: linear-gradient(135deg, #8b5cf6, #6366f1);
             --gradient-secondary: linear-gradient(135deg, #ec4899, #a855f7);
             --gradient-success: linear-gradient(135deg, #10b981, #06b6d4);
-            
             /* Neon Colors */
             --neon-blue: #00d4ff;
             --neon-purple: #b820ff;
@@ -51,10 +46,10 @@
         body {
             font-family: 'Inter', sans-serif;
             background: var(--darker);
-            background-image: 
+            background-image:
                 radial-gradient(circle at 10% 20%, rgba(99, 102, 241, 0.15) 0%, transparent 25%),
                 radial-gradient(circle at 90% 80%, rgba(139, 92, 246, 0.15) 0%, transparent 25%),
-                radial-gradient(circle at 50% 50%, rgba(236, 72, 153, 0.1) 0%, transparent 35%);
+                radial-gradient(circle at 50% 50%, rgba(236, 72, 153, 0.15) 0%, transparent 35%);
             color: var(--light);
             min-height: 100vh;
             line-height: 1.6;
@@ -70,14 +65,14 @@
         /* Neon Glow Animation */
         @keyframes neonGlow {
             0%, 100% {
-                box-shadow: 
+                box-shadow:
                     0 0 5px var(--neon-blue),
                     0 0 10px var(--neon-blue),
                     0 0 20px var(--neon-blue),
                     0 0 40px rgba(0, 212, 255, 0.3);
             }
             50% {
-                box-shadow: 
+                box-shadow:
                     0 0 10px var(--neon-blue),
                     0 0 20px var(--neon-blue),
                     0 0 30px var(--neon-blue),
@@ -88,13 +83,13 @@
         @keyframes neonPulse {
             0%, 100% {
                 border-color: var(--neon-purple);
-                box-shadow: 
+                box-shadow:
                     0 0 5px var(--neon-purple),
                     inset 0 0 5px rgba(184, 32, 255, 0.2);
             }
             50% {
                 border-color: var(--neon-cyan);
-                box-shadow: 
+                box-shadow:
                     0 0 15px var(--neon-cyan),
                     inset 0 0 10px rgba(0, 255, 245, 0.3);
             }
@@ -110,7 +105,7 @@
             width: 100%;
             top: 0;
             z-index: 1000;
-            box-shadow: 
+            box-shadow:
                 0 4px 20px rgba(0, 0, 0, 0.3),
                 0 0 20px rgba(0, 212, 255, 0.3);
             animation: neonPulse 3s ease-in-out infinite;
@@ -166,7 +161,7 @@
             border-radius: 12px;
             font-weight: 500;
             transition: all 0.3s ease;
-            box-shadow: 
+            box-shadow:
                 0 0 10px rgba(184, 32, 255, 0.3),
                 inset 0 0 5px rgba(184, 32, 255, 0.1);
         }
@@ -175,7 +170,7 @@
             background: rgba(184, 32, 255, 0.15);
             border-color: var(--neon-cyan);
             transform: translateY(-1px);
-            box-shadow: 
+            box-shadow:
                 0 0 20px var(--neon-cyan),
                 inset 0 0 10px rgba(0, 255, 245, 0.2);
         }
@@ -233,14 +228,14 @@
             background: linear-gradient(135deg, var(--neon-purple), var(--neon-blue));
             border: 2px solid var(--neon-cyan);
             color: white;
-            box-shadow: 
+            box-shadow:
                 0 8px 25px rgba(99, 102, 241, 0.4),
                 0 0 20px var(--neon-purple);
         }
         
         .btn-primary-hero:hover {
             transform: translateY(-3px);
-            box-shadow: 
+            box-shadow:
                 0 12px 35px rgba(99, 102, 241, 0.6),
                 0 0 30px var(--neon-cyan);
             border-color: var(--neon-pink);
@@ -250,7 +245,7 @@
             background: transparent;
             border: 2px solid var(--neon-blue);
             color: var(--neon-cyan);
-            box-shadow: 
+            box-shadow:
                 0 0 10px rgba(0, 212, 255, 0.3),
                 inset 0 0 10px rgba(0, 212, 255, 0.1);
         }
@@ -258,7 +253,7 @@
         .btn-outline-hero:hover {
             background: rgba(0, 212, 255, 0.1);
             border-color: var(--neon-cyan);
-            box-shadow: 
+            box-shadow:
                 0 0 20px var(--neon-cyan),
                 inset 0 0 15px rgba(0, 255, 245, 0.2);
         }
@@ -282,7 +277,7 @@
             transition: all 0.4s ease;
             position: relative;
             overflow: hidden;
-            box-shadow: 
+            box-shadow:
                 0 10px 40px rgba(0, 0, 0, 0.3),
                 0 0 20px rgba(184, 32, 255, 0.3),
                 inset 0 0 20px rgba(184, 32, 255, 0.1);
@@ -303,7 +298,7 @@
         .auth-card:hover {
             transform: translateY(-8px);
             border-color: var(--neon-cyan);
-            box-shadow: 
+            box-shadow:
                 0 20px 50px rgba(99, 102, 241, 0.4),
                 0 0 40px var(--neon-cyan),
                 inset 0 0 30px rgba(0, 255, 245, 0.15);
@@ -312,7 +307,7 @@
         .auth-card.active {
             border-color: var(--neon-blue);
             background: rgba(30, 41, 59, 0.95);
-            box-shadow: 
+            box-shadow:
                 0 10px 40px rgba(99, 102, 241, 0.3),
                 0 0 30px var(--neon-blue),
                 inset 0 0 25px rgba(0, 212, 255, 0.15);
@@ -367,7 +362,7 @@
             color: var(--light);
             font-size: 1rem;
             transition: all 0.3s ease;
-            box-shadow: 
+            box-shadow:
                 0 0 10px rgba(184, 32, 255, 0.2),
                 inset 0 0 10px rgba(184, 32, 255, 0.1);
         }
@@ -376,7 +371,7 @@
             outline: none;
             border-color: var(--neon-cyan);
             background: rgba(255, 255, 255, 0.08);
-            box-shadow: 
+            box-shadow:
                 0 0 20px var(--neon-cyan),
                 inset 0 0 15px rgba(0, 255, 245, 0.15);
         }
@@ -399,7 +394,7 @@
             margin-top: 10px;
             position: relative;
             overflow: hidden;
-            box-shadow: 
+            box-shadow:
                 0 5px 20px rgba(99, 102, 241, 0.4),
                 0 0 20px var(--neon-purple);
         }
@@ -421,7 +416,7 @@
         
         .btn-submit:hover {
             transform: translateY(-2px);
-            box-shadow: 
+            box-shadow:
                 0 8px 25px rgba(99, 102, 241, 0.6),
                 0 0 30px var(--neon-cyan);
             border-color: var(--neon-pink);
@@ -471,7 +466,7 @@
             background: rgba(16, 185, 129, 0.15);
             border-color: var(--neon-green);
             color: var(--neon-green);
-            box-shadow: 
+            box-shadow:
                 0 0 15px rgba(0, 255, 136, 0.3),
                 inset 0 0 10px rgba(0, 255, 136, 0.1);
         }
@@ -480,7 +475,7 @@
             background: rgba(239, 68, 68, 0.15);
             border-color: var(--neon-pink);
             color: var(--neon-pink);
-            box-shadow: 
+            box-shadow:
                 0 0 15px rgba(255, 0, 110, 0.3),
                 inset 0 0 10px rgba(255, 0, 110, 0.1);
         }
@@ -489,7 +484,7 @@
             background: rgba(245, 158, 11, 0.15);
             border-color: #ffa500;
             color: #ffa500;
-            box-shadow: 
+            box-shadow:
                 0 0 15px rgba(255, 165, 0, 0.3),
                 inset 0 0 10px rgba(255, 165, 0, 0.1);
         }
@@ -498,7 +493,7 @@
             background: rgba(59, 130, 246, 0.15);
             border-color: var(--neon-cyan);
             color: var(--neon-cyan);
-            box-shadow: 
+            box-shadow:
                 0 0 15px rgba(0, 255, 245, 0.3),
                 inset 0 0 10px rgba(0, 255, 245, 0.1);
         }
@@ -511,7 +506,7 @@
             padding: 25px;
             margin-top: 40px;
             backdrop-filter: blur(5px);
-            box-shadow: 
+            box-shadow:
                 0 10px 30px rgba(0, 0, 0, 0.2),
                 0 0 20px rgba(184, 32, 255, 0.3),
                 inset 0 0 15px rgba(184, 32, 255, 0.1);
@@ -541,7 +536,7 @@
             font-size: 1rem;
             line-height: 1.6;
             border: 2px solid var(--neon-blue);
-            box-shadow: 
+            box-shadow:
                 0 0 15px rgba(0, 212, 255, 0.3),
                 inset 0 0 10px rgba(0, 212, 255, 0.1);
         }
@@ -574,7 +569,7 @@
             border: 2px solid var(--neon-blue);
             border-radius: 16px;
             background: rgba(0, 212, 255, 0.05);
-            box-shadow: 
+            box-shadow:
                 0 0 15px rgba(0, 212, 255, 0.2),
                 inset 0 0 10px rgba(0, 212, 255, 0.1);
             transition: all 0.3s ease;
@@ -582,7 +577,7 @@
         
         .stat-item:hover {
             transform: translateY(-5px);
-            box-shadow: 
+            box-shadow:
                 0 0 25px var(--neon-cyan),
                 inset 0 0 15px rgba(0, 255, 245, 0.15);
         }
@@ -649,7 +644,7 @@
             transition: all 0.4s ease;
             position: relative;
             overflow: hidden;
-            box-shadow: 
+            box-shadow:
                 0 10px 30px rgba(0, 0, 0, 0.2),
                 0 0 15px rgba(184, 32, 255, 0.3),
                 inset 0 0 15px rgba(184, 32, 255, 0.1);
@@ -669,7 +664,7 @@
         .feature-card:hover {
             transform: translateY(-10px);
             border-color: var(--neon-cyan);
-            box-shadow: 
+            box-shadow:
                 0 15px 40px rgba(99, 102, 241, 0.4),
                 0 0 30px var(--neon-cyan),
                 inset 0 0 20px rgba(0, 255, 245, 0.15);
@@ -687,14 +682,14 @@
             font-size: 2.2rem;
             color: var(--neon-cyan);
             border: 2px solid var(--neon-blue);
-            box-shadow: 
+            box-shadow:
                 0 0 20px rgba(0, 212, 255, 0.3),
                 inset 0 0 15px rgba(0, 212, 255, 0.1);
             transition: all 0.3s ease;
         }
         
         .feature-card:hover .feature-icon {
-            box-shadow: 
+            box-shadow:
                 0 0 30px var(--neon-cyan),
                 inset 0 0 20px rgba(0, 255, 245, 0.2);
             transform: scale(1.1);
@@ -712,320 +707,6 @@
             color: var(--gray);
             font-size: 1.05rem;
             line-height: 1.7;
-        }
-        
-        /* Payment Section with Neon */
-        .payment-section {
-            display: none;
-            padding: 80px 0;
-        }
-        
-        .payment-card {
-            background: var(--card-bg);
-            border: 2px solid var(--neon-green);
-            border-radius: 24px;
-            padding: 40px;
-            max-width: 600px;
-            margin: 0 auto;
-            box-shadow: 
-                0 15px 40px rgba(0, 0, 0, 0.3),
-                0 0 25px rgba(0, 255, 136, 0.3),
-                inset 0 0 20px rgba(0, 255, 136, 0.1);
-            animation: neonPulse 4s ease-in-out infinite;
-        }
-        
-        .payment-header {
-            text-align: center;
-            margin-bottom: 30px;
-        }
-        
-        .payment-title {
-            font-family: 'Manrope', sans-serif;
-            font-size: 2.2rem;
-            font-weight: 800;
-            margin-bottom: 15px;
-            background: linear-gradient(135deg, var(--neon-green), var(--neon-cyan));
-            -webkit-background-clip: text;
-            -webkit-text-fill-color: transparent;
-            background-clip: text;
-            filter: drop-shadow(0 0 15px rgba(0, 255, 136, 0.5));
-        }
-        
-        .usdt-price {
-            font-family: 'Manrope', sans-serif;
-            font-size: 4rem;
-            font-weight: 800;
-            margin: 20px 0;
-            background: linear-gradient(135deg, var(--neon-green), var(--neon-cyan));
-            -webkit-background-clip: text;
-            -webkit-text-fill-color: transparent;
-            background-clip: text;
-            line-height: 1;
-            filter: drop-shadow(0 0 20px rgba(0, 255, 136, 0.6));
-        }
-        
-        .usdt-badge {
-            background: rgba(0, 255, 136, 0.15);
-            color: var(--neon-green);
-            padding: 6px 16px;
-            border-radius: 20px;
-            font-weight: 600;
-            font-size: 0.9rem;
-            display: inline-flex;
-            align-items: center;
-            gap: 6px;
-            margin-bottom: 20px;
-            border: 2px solid var(--neon-green);
-            box-shadow: 
-                0 0 15px rgba(0, 255, 136, 0.3),
-                inset 0 0 10px rgba(0, 255, 136, 0.1);
-        }
-        
-        .network-selector {
-            display: flex;
-            gap: 10px;
-            margin: 20px 0;
-            justify-content: center;
-        }
-        
-        .network-btn {
-            padding: 12px 24px;
-            background: var(--glass-bg);
-            border: 2px solid var(--neon-purple);
-            border-radius: 12px;
-            color: var(--gray);
-            font-weight: 600;
-            cursor: pointer;
-            transition: all 0.3s ease;
-            box-shadow: 
-                0 0 10px rgba(184, 32, 255, 0.2),
-                inset 0 0 10px rgba(184, 32, 255, 0.1);
-        }
-        
-        .network-btn:hover {
-            background: rgba(184, 32, 255, 0.1);
-            box-shadow: 
-                0 0 15px var(--neon-purple),
-                inset 0 0 12px rgba(184, 32, 255, 0.15);
-        }
-        
-        .network-btn.active {
-            background: linear-gradient(135deg, var(--neon-purple), var(--neon-blue));
-            color: white;
-            border-color: var(--neon-cyan);
-            box-shadow: 
-                0 0 20px var(--neon-cyan),
-                inset 0 0 15px rgba(0, 255, 245, 0.2);
-        }
-        
-        .wallet-info {
-            background: rgba(0, 0, 0, 0.4);
-            border: 2px solid var(--neon-cyan);
-            border-radius: 16px;
-            padding: 25px;
-            margin: 25px 0;
-            box-shadow: 
-                0 0 20px rgba(0, 255, 245, 0.3),
-                inset 0 0 15px rgba(0, 255, 245, 0.1);
-        }
-        
-        .wallet-info h5 {
-            display: flex;
-            align-items: center;
-            gap: 10px;
-            margin-bottom: 15px;
-            color: var(--neon-cyan);
-            text-shadow: 0 0 10px var(--neon-cyan);
-        }
-        
-        .wallet-address {
-            background: rgba(0, 0, 0, 0.5);
-            border-radius: 12px;
-            padding: 15px 50px 15px 15px;
-            font-family: monospace;
-            font-size: 1.1rem;
-            margin: 15px 0;
-            word-break: break-all;
-            cursor: pointer;
-            transition: all 0.3s ease;
-            position: relative;
-            border: 2px solid var(--neon-blue);
-            box-shadow: 
-                0 0 15px rgba(0, 212, 255, 0.3),
-                inset 0 0 10px rgba(0, 212, 255, 0.1);
-            color: var(--neon-cyan);
-        }
-        
-        .wallet-address:hover {
-            background: rgba(0, 212, 255, 0.1);
-            border-color: var(--neon-cyan);
-            box-shadow: 
-                0 0 25px var(--neon-cyan),
-                inset 0 0 15px rgba(0, 255, 245, 0.15);
-        }
-        
-        .copy-btn {
-            position: absolute;
-            right: 10px;
-            top: 10px;
-            background: linear-gradient(135deg, var(--neon-purple), var(--neon-blue));
-            border: 2px solid var(--neon-cyan);
-            border-radius: 8px;
-            padding: 6px 12px;
-            color: white;
-            font-size: 0.85rem;
-            cursor: pointer;
-            transition: all 0.3s ease;
-            box-shadow: 0 0 10px var(--neon-purple);
-        }
-        
-        .copy-btn:hover {
-            background: linear-gradient(135deg, var(--neon-cyan), var(--neon-blue));
-            box-shadow: 0 0 20px var(--neon-cyan);
-            transform: scale(1.05);
-        }
-        
-        .qrcode-container {
-            text-align: center;
-            margin: 20px 0;
-            padding: 20px;
-            background: white;
-            border-radius: 12px;
-            display: inline-block;
-            border: 3px solid var(--neon-purple);
-            box-shadow: 0 0 25px var(--neon-purple);
-        }
-        
-        .qrcode-placeholder {
-            width: 200px;
-            height: 200px;
-            background: linear-gradient(45deg, #f0f0f0, #e0e0e0);
-            border-radius: 8px;
-            display: flex;
-            align-items: center;
-            justify-content: center;
-            color: #666;
-            font-size: 0.9rem;
-            margin: 0 auto;
-        }
-        
-        /* Verification Section with Neon */
-        .verification-section {
-            display: none;
-            padding: 80px 0;
-        }
-        
-        .verification-card {
-            background: var(--card-bg);
-            border: 2px solid var(--neon-blue);
-            border-radius: 24px;
-            padding: 40px;
-            max-width: 600px;
-            margin: 0 auto;
-            box-shadow: 
-                0 15px 40px rgba(0, 0, 0, 0.3),
-                0 0 25px rgba(0, 212, 255, 0.4),
-                inset 0 0 20px rgba(0, 212, 255, 0.1);
-            animation: neonGlow 3s ease-in-out infinite;
-        }
-        
-        .verification-title {
-            font-family: 'Manrope', sans-serif;
-            font-size: 2rem;
-            font-weight: 800;
-            margin-bottom: 20px;
-            text-align: center;
-            background: linear-gradient(135deg, var(--neon-blue), var(--neon-cyan));
-            -webkit-background-clip: text;
-            -webkit-text-fill-color: transparent;
-            background-clip: text;
-            filter: drop-shadow(0 0 15px rgba(0, 212, 255, 0.5));
-        }
-        
-        .verification-steps {
-            margin: 30px 0;
-        }
-        
-        .step {
-            display: flex;
-            align-items: flex-start;
-            margin-bottom: 25px;
-            padding: 15px;
-            background: rgba(0, 212, 255, 0.05);
-            border-radius: 12px;
-            border: 2px solid var(--neon-purple);
-            box-shadow: 
-                0 0 10px rgba(184, 32, 255, 0.2),
-                inset 0 0 10px rgba(184, 32, 255, 0.1);
-            transition: all 0.3s ease;
-        }
-        
-        .step:hover {
-            border-color: var(--neon-cyan);
-            box-shadow: 
-                0 0 20px var(--neon-cyan),
-                inset 0 0 15px rgba(0, 255, 245, 0.15);
-        }
-        
-        .step-number {
-            width: 40px;
-            height: 40px;
-            background: linear-gradient(135deg, var(--neon-purple), var(--neon-blue));
-            border-radius: 50%;
-            display: flex;
-            align-items: center;
-            justify-content: center;
-            font-weight: 800;
-            font-size: 1.2rem;
-            margin-right: 15px;
-            flex-shrink: 0;
-            border: 2px solid var(--neon-cyan);
-            box-shadow: 0 0 15px var(--neon-purple);
-        }
-        
-        .step-content {
-            flex: 1;
-        }
-        
-        .step-title {
-            font-weight: 700;
-            margin-bottom: 5px;
-            color: var(--neon-cyan);
-            text-shadow: 0 0 5px rgba(0, 255, 245, 0.3);
-        }
-        
-        .step-desc {
-            color: var(--gray);
-            font-size: 0.95rem;
-            line-height: 1.5;
-        }
-        
-        .verification-loading {
-            text-align: center;
-            margin: 30px 0;
-            padding: 30px;
-        }
-        
-        .loading-spinner {
-            width: 60px;
-            height: 60px;
-            border: 4px solid rgba(0, 212, 255, 0.2);
-            border-top: 4px solid var(--neon-cyan);
-            border-radius: 50%;
-            animation: spin 1s linear infinite;
-            margin: 0 auto 20px;
-            box-shadow: 0 0 20px var(--neon-cyan);
-        }
-        
-        @keyframes spin {
-            0% { transform: rotate(0deg); }
-            100% { transform: rotate(360deg); }
-        }
-        
-        .loading-text {
-            color: var(--neon-cyan);
-            font-size: 1.1rem;
-            text-shadow: 0 0 10px var(--neon-cyan);
         }
         
         /* Footer with Neon */
@@ -1057,38 +738,15 @@
             text-shadow: 0 0 10px var(--neon-cyan);
         }
         
-        /* Transaction Info */
-        .transaction-info {
-            background: rgba(0, 0, 0, 0.4);
-            border: 2px solid var(--neon-cyan);
-            border-radius: 12px;
-            padding: 20px;
-            margin-top: 20px;
-            box-shadow: 
-                0 0 20px rgba(0, 255, 245, 0.3),
-                inset 0 0 15px rgba(0, 255, 245, 0.1);
-        }
-        
-        .transaction-info p {
-            margin: 10px 0;
-        }
-        
-        .transaction-info strong {
-            color: var(--neon-cyan);
-            text-shadow: 0 0 5px var(--neon-cyan);
-        }
-        
         /* Responsive */
         @media (max-width: 992px) {
             .hero-title {
                 font-size: 3.5rem;
             }
-            
             .auth-container {
                 flex-direction: column;
                 align-items: center;
             }
-            
             .auth-card {
                 max-width: 100%;
             }
@@ -1098,38 +756,24 @@
             .hero-section {
                 padding: 130px 0 60px;
             }
-            
             .hero-title {
                 font-size: 2.8rem;
             }
-            
             .hero-subtitle {
                 font-size: 1.2rem;
             }
-            
             .hero-cta {
                 flex-direction: column;
             }
-            
             .btn-hero {
                 width: 100%;
                 justify-content: center;
             }
-            
             .section-title {
                 font-size: 2.3rem;
             }
-            
             .stat-number {
                 font-size: 2.2rem;
-            }
-            
-            .usdt-price {
-                font-size: 3.2rem;
-            }
-            
-            .network-selector {
-                flex-direction: column;
             }
         }
         
@@ -1137,33 +781,67 @@
             .hero-title {
                 font-size: 2.3rem;
             }
-            
             .auth-card {
                 padding: 30px 20px;
             }
-            
             .auth-title {
                 font-size: 1.6rem;
             }
-            
             .stat-number {
                 font-size: 1.8rem;
             }
-            
             .btn-submit, .btn-hero {
                 padding: 14px;
                 font-size: 1.05rem;
             }
-            
             .feature-icon {
                 width: 65px;
                 height: 65px;
                 font-size: 1.8rem;
             }
-            
-            .usdt-price {
-                font-size: 2.8rem;
-            }
+        }
+        
+        /* Success Animation */
+        @keyframes checkmark {
+            0% { transform: scale(0.5) translateY(10px); opacity: 0; }
+            100% { transform: scale(1) translateY(0); opacity: 1; }
+        }
+        
+        .success-checkmark {
+            display: inline-block;
+            width: 100px;
+            height: 100px;
+            border-radius: 50%;
+            background: rgba(16, 185, 129, 0.2);
+            margin: 20px auto;
+            position: relative;
+            box-shadow: 0 0 30px rgba(0, 255, 136, 0.4);
+        }
+        
+        .success-checkmark::after {
+            content: '';
+            position: absolute;
+            left: 30px;
+            top: 55px;
+            width: 25px;
+            height: 10px;
+            border: 8px solid var(--neon-green);
+            border-top: none;
+            border-right: none;
+            transform: rotate(-45deg);
+            animation: checkmark 0.5s ease-out forwards;
+        }
+        
+        .premium-badge {
+            background: linear-gradient(135deg, var(--neon-purple), var(--neon-pink));
+            padding: 4px 12px;
+            border-radius: 16px;
+            font-size: 0.85rem;
+            font-weight: 700;
+            display: inline-block;
+            margin-top: 8px;
+            box-shadow: 0 0 15px rgba(184, 32, 255, 0.5);
+            letter-spacing: 0.5px;
         }
     </style>
 </head>
@@ -1174,11 +852,9 @@
             <a class="navbar-brand" href="#">
                 <i class="fas fa-robot me-2"></i>ICTSMARTPRO Trade AI
             </a>
-            
             <button class="navbar-toggler" type="button" data-bs-toggle="collapse" data-bs-target="#navbarNav">
                 <i class="fas fa-bars text-white"></i>
             </button>
-            
             <div class="collapse navbar-collapse" id="navbarNav">
                 <ul class="navbar-nav ms-auto">
                     <li class="nav-item">
@@ -1190,9 +866,6 @@
                     <li class="nav-item">
                         <a class="nav-link" href="#pricing">Pricing</a>
                     </li>
-                    <li class="nav-item">
-                        <a class="nav-link" id="dashboardLink" href="#" style="display: none;">Dashboard</a>
-                    </li>
                     <li class="nav-item ms-2">
                         <button class="btn-auth" id="authToggleBtn">
                             <i class="fas fa-sign-in-alt me-2"></i> <span id="authToggleText">Login</span>
@@ -1202,21 +875,21 @@
             </div>
         </div>
     </nav>
-
+    
     <!-- Hero Section -->
     <section id="home" class="hero-section">
         <div class="container-fluid">
             <div class="row align-items-center">
                 <div class="col-lg-6">
                     <h1 class="hero-title">
-                        AI-Powered Crypto Trading<br>with high Accuracy
+                        AI-Powered Crypto Trading<br>with 99.7% Accuracy
                     </h1>
                     <p class="hero-subtitle">
                         Advanced algorithmic trading powered by machine learning. Real-time market analysis from 11+ exchanges with WebSocket data streams for millisecond-level execution.
                     </p>
                     <div class="hero-cta">
                         <button class="btn-hero btn-primary-hero" id="getStartedBtn">
-                            <i class="fas fa-rocket"></i> Get Started
+                            <i class="fas fa-rocket"></i> Get Started Free
                         </button>
                         <button class="btn-hero btn-outline-hero" onclick="document.getElementById('features').scrollIntoView({behavior: 'smooth'})">
                             <i class="fas fa-compass"></i> Explore Features
@@ -1230,7 +903,7 @@
                             <div class="stat-label">Exchanges</div>
                         </div>
                         <div class="stat-item">
-                            <div class="stat-number">high</div>
+                            <div class="stat-number">99.7%</div>
                             <div class="stat-label">Accuracy</div>
                         </div>
                         <div class="stat-item">
@@ -1251,7 +924,6 @@
                         <p class="mt-3 small">Note: Admin users bypass payment verification and have full system access.</p>
                     </div>
                 </div>
-                
                 <div class="col-lg-6">
                     <!-- Auth Container -->
                     <div class="auth-container">
@@ -1261,29 +933,24 @@
                                 <h2 class="auth-title"><i class="fas fa-sign-in-alt me-2"></i>Login</h2>
                                 <p class="auth-description">Access your trading dashboard</p>
                             </div>
-                            
                             <div class="alert" id="loginAlert"></div>
-                            
                             <form id="loginForm">
                                 <div class="form-group">
                                     <label class="form-label">Username or Email</label>
-                                    <input type="text" class="form-control" id="loginIdentifier" 
-                                           placeholder="Enter username or email" required>
+                                    <input type="text" class="form-control" id="loginIdentifier"
+                                        placeholder="Enter username or email" required>
                                 </div>
-                                
                                 <div class="form-group">
                                     <label class="form-label">Password</label>
-                                    <input type="password" class="form-control" id="loginPassword" 
-                                           placeholder="Enter password" required>
+                                    <input type="password" class="form-control" id="loginPassword"
+                                        placeholder="Enter password" required>
                                 </div>
-                                
                                 <button type="submit" class="btn-submit" id="loginBtn">
                                     <i class="fas fa-sign-in-alt me-2"></i>Login
                                 </button>
                             </form>
-                            
                             <div class="auth-switch">
-                                Don't have an account? 
+                                Don't have an account?
                                 <a onclick="showRegister()">Register here</a>
                             </div>
                         </div>
@@ -1292,43 +959,50 @@
                         <div class="auth-card" id="registerCard" style="display: none;">
                             <div class="auth-card-header">
                                 <h2 class="auth-title"><i class="fas fa-user-plus me-2"></i>Register</h2>
-                                <p class="auth-description">Create your free account</p>
+                                <p class="auth-description">Create your free account with premium access</p>
                             </div>
-                            
                             <div class="alert" id="registerAlert"></div>
-                            
                             <form id="registerForm">
                                 <div class="form-group">
-                                    <label class="form-label">Username</label>
-                                    <input type="text" class="form-control" id="registerUsername" 
-                                           placeholder="Choose username" required>
+                                    <label class="form-label">Username <span class="text-danger">*</span></label>
+                                    <input type="text" class="form-control" id="registerUsername"
+                                        placeholder="Choose username" required>
                                 </div>
-                                
                                 <div class="form-group">
-                                    <label class="form-label">Email</label>
-                                    <input type="email" class="form-control" id="registerEmail" 
-                                           placeholder="Enter email" required>
+                                    <label class="form-label">Email <span class="text-danger">*</span></label>
+                                    <input type="email" class="form-control" id="registerEmail"
+                                        placeholder="Enter email" required>
                                 </div>
-                                
                                 <div class="form-group">
-                                    <label class="form-label">Password</label>
-                                    <input type="password" class="form-control" id="registerPassword" 
-                                           placeholder="Minimum 6 characters" required>
+                                    <label class="form-label">Password <span class="text-danger">*</span></label>
+                                    <input type="password" class="form-control" id="registerPassword"
+                                        placeholder="Minimum 6 characters" required>
                                 </div>
-                                
+                                <div class="form-group">
+                                    <label class="form-label">Confirm Password <span class="text-danger">*</span></label>
+                                    <input type="password" class="form-control" id="registerConfirmPassword"
+                                        placeholder="Confirm password" required>
+                                </div>
                                 <div class="form-group">
                                     <label class="form-label">Wallet Address (Optional)</label>
-                                    <input type="text" class="form-control" id="registerWallet" 
-                                           placeholder="0x..." value="">
+                                    <input type="text" class="form-control" id="registerWallet"
+                                        placeholder="0x..." value="">
+                                    <small class="text-muted d-block mt-1">
+                                        For future withdrawals and payments
+                                    </small>
                                 </div>
-                                
+                                <div class="form-check mt-3">
+                                    <input class="form-check-input" type="checkbox" id="termsCheck" required>
+                                    <label class="form-check-label text-muted" for="termsCheck">
+                                        I agree to the <a href="#" class="text-neon-cyan">Terms of Service</a> and <a href="#" class="text-neon-cyan">Privacy Policy</a>
+                                    </label>
+                                </div>
                                 <button type="submit" class="btn-submit" id="registerBtn">
-                                    <i class="fas fa-user-plus me-2"></i>Create Account
+                                    <i class="fas fa-user-plus me-2"></i>Create Free Account
                                 </button>
                             </form>
-                            
                             <div class="auth-switch">
-                                Already have an account? 
+                                Already have an account?
                                 <a onclick="showLogin()">Login here</a>
                             </div>
                         </div>
@@ -1337,7 +1011,7 @@
             </div>
         </div>
     </section>
-
+    
     <!-- Features Section -->
     <section id="features" class="features-section">
         <div class="container-fluid">
@@ -1345,7 +1019,6 @@
             <p class="section-subtitle">
                 Advanced tools and real-time data analysis to maximize your trading performance
             </p>
-            
             <div class="features-grid">
                 <div class="feature-card">
                     <div class="feature-icon">
@@ -1356,17 +1029,15 @@
                         Millisecond-level market data from 11+ exchanges with zero latency. No API keys needed.
                     </p>
                 </div>
-                
                 <div class="feature-card">
                     <div class="feature-icon">
                         <i class="fas fa-brain"></i>
                     </div>
                     <h3 class="feature-title">AI Prediction Engine</h3>
                     <p class="feature-desc">
-                        Advanced machine learning models analyze market patterns and predict price movements with high accuracy.
+                        Advanced machine learning models analyze market patterns and predict price movements with 99.7% accuracy.
                     </p>
                 </div>
-                
                 <div class="feature-card">
                     <div class="feature-icon">
                         <i class="fas fa-shield-alt"></i>
@@ -1379,142 +1050,7 @@
             </div>
         </div>
     </section>
-
-    <!-- Payment Section -->
-    <section id="paymentSection" class="payment-section">
-        <div class="container-fluid">
-            <div class="payment-card">
-                <div class="payment-header">
-                    <div class="usdt-badge">
-                        <i class="fab fa-usdt"></i> USDT Payment
-                    </div>
-                    <h2 class="payment-title">Premium Subscription</h2>
-                    <div class="usdt-price">49 USDT</div>
-                    <p class="text-muted mb-4">per month • 7 day free trial included</p>
-                </div>
-                
-                <div class="network-selector">
-                    <div class="network-btn active" data-network="ERC20">ERC20</div>
-                    <div class="network-btn" data-network="TRC20">TRC20</div>
-                    <div class="network-btn" data-network="BEP20">BEP20</div>
-                </div>
-                
-                <div class="wallet-info">
-                    <h5><i class="fas fa-wallet me-2"></i>Payment Instructions</h5>
-                    <p class="text-muted mb-3">Send exactly <strong>49 USDT</strong> to our secure wallet address:</p>
-                    
-                    <div class="wallet-address" id="walletAddress">
-                        1234546abcde
-                        <div class="copy-btn" onclick="copyWallet()">
-                            <i class="fas fa-copy"></i> Copy
-                        </div>
-                    </div>
-                    
-                    <div class="text-center mt-4">
-                        <div class="qrcode-placeholder">
-                            QR Code would appear here
-                        </div>
-                    </div>
-                    
-                    <div class="alert alert-info mt-4" id="networkAlert">
-                        <i class="fas fa-info-circle me-2"></i>
-                        Make sure to select the correct network before sending funds
-                    </div>
-                </div>
-                
-                <div class="form-group">
-                    <label class="form-label">Transaction Hash (TxID)</label>
-                    <input type="text" class="form-control" id="txHash" 
-                           placeholder="0x..." required>
-                    <small class="text-muted d-block mt-2">
-                        After sending 49 USDT, enter your transaction hash to verify payment
-                    </small>
-                </div>
-                
-                <div class="alert" id="paymentAlert"></div>
-                
-                <button class="btn-submit" id="verifyPaymentBtn">
-                    <i class="fas fa-check-circle me-2"></i>Verify Payment
-                </button>
-                
-                <div class="auth-switch mt-3">
-                    <a onclick="cancelPayment()">
-                        <i class="fas fa-arrow-left me-1"></i> Back to Dashboard
-                    </a>
-                </div>
-            </div>
-        </div>
-    </section>
-
-    <!-- Verification Section -->
-    <section id="verificationSection" class="verification-section">
-        <div class="container-fluid">
-            <div class="verification-card">
-                <h2 class="verification-title">
-                    <i class="fas fa-spinner fa-spin me-2"></i> Payment Verification
-                </h2>
-                
-                <div class="verification-steps">
-                    <div class="step">
-                        <div class="step-number">1</div>
-                        <div class="step-content">
-                            <div class="step-title">Transaction Received</div>
-                            <div class="step-desc">We've received your transaction and it's being processed on the blockchain.</div>
-                        </div>
-                    </div>
-                    
-                    <div class="step">
-                        <div class="step-number">2</div>
-                        <div class="step-content">
-                            <div class="step-title">Confirming Transaction</div>
-                            <div class="step-desc">Waiting for blockchain confirmations (3 required for security).</div>
-                        </div>
-                    </div>
-                    
-                    <div class="step">
-                        <div class="step-number">3</div>
-                        <div class="step-content">
-                            <div class="step-title">Activating Subscription</div>
-                            <div class="step-desc">Once confirmed, your premium subscription will be activated automatically.</div>
-                        </div>
-                    </div>
-                </div>
-                
-                <div class="verification-loading">
-                    <div class="loading-spinner"></div>
-                    <div class="loading-text">Verifying your payment... This may take 2-5 minutes.</div>
-                </div>
-                
-                <div class="alert" id="verificationAlert"></div>
-                
-                <div class="text-center mt-4">
-                    <div class="transaction-info" id="transactionInfo" style="display: none;">
-                        <p class="text-muted mb-2">
-                            <strong>Transaction:</strong> 
-                            <span id="verificationTxHash" class="font-monospace small"></span>
-                        </p>
-                        <p class="text-muted mb-2">
-                            <strong>Status:</strong> 
-                            <span id="verificationStatus">Pending</span>
-                        </p>
-                        <p class="text-muted">
-                            <strong>Confirmations:</strong> 
-                            <span id="verificationConfirmations">0/3</span>
-                        </p>
-                    </div>
-                    
-                    <button class="btn-submit mt-4" id="checkVerificationBtn" style="display: none;">
-                        <i class="fas fa-sync-alt me-2"></i>Check Status
-                    </button>
-                    
-                    <button class="btn btn-outline-hero mt-3" id="cancelVerificationBtn">
-                        <i class="fas fa-times me-2"></i>Cancel Verification
-                    </button>
-                </div>
-            </div>
-        </div>
-    </section>
-
+    
     <!-- Footer -->
     <footer class="footer">
         <div class="container-fluid">
@@ -1526,19 +1062,21 @@
                 <a href="#">Contact</a>
             </div>
             <p>© 2026 ICTSMARTPRO AI. All rights reserved. Advanced Trading Solutions v2.0</p>
+            <div class="mt-3">
+                <span class="premium-badge">
+                    <i class="fas fa-crown me-1"></i> Premium Access Included
+                </span>
+            </div>
         </div>
     </footer>
-
+    
     <!-- Bootstrap JS -->
     <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
-
     <script>
-        // ================================
+        // ============================================
         // GLOBAL VARIABLES & CONFIGURATION
-        // ================================
+        // ============================================
         let currentUser = null;
-        let selectedNetwork = 'ERC20';
-        let verificationInterval = null;
         
         // Admin kullanıcıları (sabit tanımlı)
         const ADMIN_USERS = {
@@ -1563,11 +1101,10 @@
                 created_at: '2024-01-01'
             }
         };
-
-        // ================================
-        // UTILITY FUNCTIONS
-        // ================================
         
+        // ============================================
+        // UTILITY FUNCTIONS
+        // ============================================
         // Alert gösterme fonksiyonu
         function showAlert(elementId, message, type) {
             const alert = document.getElementById(elementId);
@@ -1577,12 +1114,14 @@
                 'warning': 'exclamation-circle',
                 'info': 'info-circle'
             };
-            
             alert.innerHTML = `<i class="fas fa-${icons[type]} me-2"></i> ${message}`;
             alert.className = `alert alert-${type}`;
             alert.style.display = 'block';
             
-            setTimeout(() => {
+            // Önceki timeout'ları temizle
+            if (alert.timeout) clearTimeout(alert.timeout);
+            
+            alert.timeout = setTimeout(() => {
                 alert.style.display = 'none';
             }, 5000);
         }
@@ -1610,199 +1149,56 @@
         
         // Dashboard'a yönlendirme
         function redirectToDashboard() {
-            // dashboard.html dosyasının varlığını kontrol et
-            window.location.href = 'index.html';
-        }
-        
-        // Payment sayfasını göster
-        function showPayment() {
-            document.getElementById('paymentSection').style.display = 'block';
-            document.getElementById('verificationSection').style.display = 'none';
-            document.getElementById('home').style.display = 'none';
-            document.getElementById('features').style.display = 'none';
-            document.getElementById('authToggleBtn').style.display = 'none';
-            document.getElementById('getStartedBtn').style.display = 'none';
-            document.getElementById('dashboardLink').style.display = 'none';
+            // Token oluştur ve kaydet
+            const token = `token_${Date.now()}_${Math.random().toString(36).substr(2)}`;
+            localStorage.setItem('auth_token', token);
             
-            // Scroll to payment section
-            window.scrollTo({ top: 0, behavior: 'smooth' });
-        }
-        
-        // Verification sayfasını göster
-        function showVerification(txHash) {
-            document.getElementById('paymentSection').style.display = 'none';
-            document.getElementById('verificationSection').style.display = 'block';
-            document.getElementById('verificationTxHash').textContent = txHash.substring(0, 20) + '...' + txHash.substring(txHash.length - 10);
-            document.getElementById('transactionInfo').style.display = 'block';
+            // Kullanıcı bilgilerini kaydet
+            localStorage.setItem('current_user', JSON.stringify(currentUser));
             
-            // Scroll to verification section
-            window.scrollTo({ top: 0, behavior: 'smooth' });
-            
-            startVerificationCheck(txHash);
-        }
-        
-        // Payment iptal
-        function cancelPayment() {
-            document.getElementById('paymentSection').style.display = 'none';
-            document.getElementById('home').style.display = 'block';
-            document.getElementById('features').style.display = 'block';
-            document.getElementById('authToggleBtn').style.display = 'block';
-            document.getElementById('getStartedBtn').style.display = 'block';
-            if (currentUser) {
-                document.getElementById('dashboardLink').style.display = 'block';
-            }
-            window.scrollTo({ top: 0, behavior: 'smooth' });
-        }
-        
-        // Verification iptal
-        function cancelVerification() {
-            if (verificationInterval) {
-                clearInterval(verificationInterval);
-            }
-            document.getElementById('verificationSection').style.display = 'none';
-            document.getElementById('home').style.display = 'block';
-            document.getElementById('features').style.display = 'block';
-            document.getElementById('authToggleBtn').style.display = 'block';
-            document.getElementById('getStartedBtn').style.display = 'block';
-            if (currentUser) {
-                document.getElementById('dashboardLink').style.display = 'block';
-            }
-            window.scrollTo({ top: 0, behavior: 'smooth' });
-        }
-        
-        // Wallet adresi kopyalama
-        function copyWallet() {
-            const wallet = document.getElementById('walletAddress').textContent.replace(/\s+Copy/g, '').trim();
-            navigator.clipboard.writeText(wallet).then(() => {
-                showAlert('paymentAlert', '✅ Wallet address copied to clipboard!', 'success');
-            });
+            // Yönlendirme
+            window.location.href = 'dashboard.html';
         }
         
         // Kullanıcıyı local storage'a kaydet
         function saveUserToStorage(user) {
             const users = JSON.parse(localStorage.getItem('quantumtrade_users') || '[]');
             const index = users.findIndex(u => u.username === user.username);
-            
             if (index !== -1) {
                 users[index] = user;
             } else {
                 users.push(user);
             }
-            
             localStorage.setItem('quantumtrade_users', JSON.stringify(users));
             localStorage.setItem('current_user', JSON.stringify(user));
             localStorage.setItem('auth_token', `token_${Date.now()}_${Math.random().toString(36).substr(2)}`);
         }
         
-        // Kullanıcı bilgilerini güncelle
-        function updateUserSubscription(username) {
-            const users = JSON.parse(localStorage.getItem('quantumtrade_users') || '[]');
-            const userIndex = users.findIndex(u => u.username === username);
-            
-            if (userIndex !== -1) {
-                users[userIndex].has_subscription = true;
-                users[userIndex].is_verified = true;
-                users[userIndex].subscription_date = new Date().toISOString();
-                users[userIndex].subscription_expiry = new Date(Date.now() + 30 * 24 * 60 * 60 * 1000).toISOString(); // 30 gün
-                
-                localStorage.setItem('quantumtrade_users', JSON.stringify(users));
-                
-                // Mevcut kullanıcıyı da güncelle
-                if (currentUser && currentUser.username === username) {
-                    currentUser.has_subscription = true;
-                    currentUser.is_verified = true;
-                    localStorage.setItem('current_user', JSON.stringify(currentUser));
-                }
-                
-                return true;
-            }
-            return false;
-        }
-        
-        // Payment doğrulama süreci
-        function startVerificationCheck(txHash) {
-            let confirmations = 0;
-            
-            // Simüle edilmiş blockchain doğrulaması
-            const verificationProcess = setInterval(() => {
-                confirmations++;
-                document.getElementById('verificationConfirmations').textContent = `${confirmations}/3`;
-                
-                if (confirmations >= 3) {
-                    clearInterval(verificationProcess);
-                    clearInterval(verificationInterval);
-                    
-                    // ✅ Ödeme başarılı - Kullanıcı aboneliğini aktif et
-                    if (currentUser && updateUserSubscription(currentUser.username)) {
-                        showAlert('verificationAlert', '✅ Payment verified! Subscription activated. Redirecting to dashboard...', 'success');
-                        
-                        // Dashboard'a otomatik yönlendirme
-                        setTimeout(() => {
-                            redirectToDashboard();
-                        }, 2000);
-                    } else {
-                        showAlert('verificationAlert', 'Payment verified but user update failed. Please contact support.', 'warning');
-                    }
-                }
-            }, 2000); // Her 2 saniyede bir confirmation artır
-            
-            verificationInterval = verificationProcess;
-            
-            // Status check butonunu göster
-            setTimeout(() => {
-                document.getElementById('checkVerificationBtn').style.display = 'block';
-            }, 10000);
-        }
-        
-        // Ödeme başlatma fonksiyonu
-        function initiatePayment() {
-            if (!currentUser) {
-                showAlert('loginAlert', 'Please login first', 'error');
-                showLogin();
-                return;
-            }
-            
-            if (currentUser.is_admin) {
-                // Admin direkt dashboard'a
-                showAlert('loginAlert', '✅ Admin user detected. Redirecting to dashboard...', 'success');
-                setTimeout(() => {
-                    redirectToDashboard();
-                }, 1000);
-            } else if (currentUser.has_subscription) {
-                // Zaten aboneliği var
-                showAlert('loginAlert', '✅ Subscription active! Redirecting to dashboard...', 'success');
-                setTimeout(() => {
-                    redirectToDashboard();
-                }, 1000);
-            } else {
-                // Ödeme sayfasını göster
-                showPayment();
-            }
-        }
-        
-        // ================================
+        // ============================================
         // EVENT LISTENERS
-        // ================================
-        
+        // ============================================
         // Sayfa yüklendiğinde
         document.addEventListener('DOMContentLoaded', function() {
+            console.log('🚀 ICTSMARTPRO Trade AI Auth System Loaded');
+            
             // Kayıtlı kullanıcıyı kontrol et
             const savedUser = localStorage.getItem('current_user');
             const authToken = localStorage.getItem('auth_token');
             
             if (savedUser && authToken) {
                 currentUser = JSON.parse(savedUser);
+                console.log('👤 User logged in:', currentUser.username);
                 
                 // UI güncelle
                 document.getElementById('authToggleText').textContent = currentUser.username;
                 document.getElementById('authToggleBtn').innerHTML = `<i class="fas fa-user-circle me-2"></i>${currentUser.username}`;
-                document.getElementById('dashboardLink').style.display = 'block';
                 
                 // Abonelik kontrolü - dashboard'a otomatik yönlendir
                 if (currentUser.has_subscription || currentUser.is_admin) {
+                    console.log('✅ User has active subscription, redirecting to dashboard...');
                     setTimeout(() => {
                         redirectToDashboard();
-                    }, 500);
+                    }, 1000);
                 }
             }
         });
@@ -1810,7 +1206,6 @@
         // Login form submit
         document.getElementById('loginForm').addEventListener('submit', function(e) {
             e.preventDefault();
-            
             const identifier = document.getElementById('loginIdentifier').value.trim();
             const password = document.getElementById('loginPassword').value;
             
@@ -1828,245 +1223,173 @@
                 // Admin kullanıcı kontrolü
                 if (ADMIN_USERS[identifier]) {
                     const adminUser = ADMIN_USERS[identifier];
-                    
                     if (adminUser.password === password) {
                         // ✅ ADMIN GİRİŞ BAŞARILI
                         currentUser = { ...adminUser };
                         saveUserToStorage(currentUser);
-                        
                         showAlert('loginAlert', '✅ Admin login successful! Redirecting to dashboard...', 'success');
-                        
                         // Admin direkt dashboard'a
                         setTimeout(() => {
                             redirectToDashboard();
                         }, 1500);
                     } else {
                         showAlert('loginAlert', 'Invalid admin password', 'error');
+                        loginBtn.innerHTML = '<i class="fas fa-sign-in-alt me-2"></i>Login';
+                        loginBtn.disabled = false;
                     }
-                } else {
-                    // Normal kullanıcı kontrolü
-                    const users = JSON.parse(localStorage.getItem('quantumtrade_users') || '[]');
-                    const user = users.find(u => 
-                        (u.username === identifier || u.email === identifier) && 
-                        u.password === password
-                    );
-                    
-                    if (user) {
-                        // ✅ NORMAL KULLANICI GİRİŞ BAŞARILI
-                        currentUser = {
-                            username: user.username,
-                            email: user.email,
-                            has_subscription: user.has_subscription || false,
-                            is_admin: false,
-                            is_verified: user.is_verified || false,
-                            credits: user.credits || 0,
-                            wallet_address: user.wallet_address || null
-                        };
-                        
-                        saveUserToStorage(currentUser);
-                        
-                        showAlert('loginAlert', '✅ Login successful! Welcome back!', 'success');
-                        
-                        // UI güncelle
-                        document.getElementById('authToggleText').textContent = currentUser.username;
-                        document.getElementById('authToggleBtn').innerHTML = `<i class="fas fa-user-circle me-2"></i>${currentUser.username}`;
-                        document.getElementById('dashboardLink').style.display = 'block';
-                        
-                        // Abonelik kontrolü
-                        if (currentUser.has_subscription) {
-                            setTimeout(() => {
-                                redirectToDashboard();
-                            }, 1500);
-                        } else {
-                            // Ödeme gerekiyor
-                            setTimeout(() => {
-                                initiatePayment();
-                            }, 1500);
-                        }
-                    } else {
-                        showAlert('loginAlert', 'Invalid username/email or password', 'error');
-                    }
+                    return;
                 }
                 
-                loginBtn.innerHTML = '<i class="fas fa-sign-in-alt me-2"></i>Login';
-                loginBtn.disabled = false;
-            }, 1000);
-        });
-        // Register form submit
-document.getElementById('registerForm').addEventListener('submit', function(e) {
-    e.preventDefault();
-
-    const username = document.getElementById('registerUsername').value.trim();
-    const email    = document.getElementById('registerEmail').value.trim();
-    const password = document.getElementById('registerPassword').value;
-    const wallet   = document.getElementById('registerWallet').value.trim();
-
-    // Basit doğrulama
-    if (!username || !email || !password) {
-        showAlert('registerAlert', 'Lütfen tüm zorunlu alanları doldurun', 'error');
-        return;
-    }
-
-    if (password.length < 6) {
-        showAlert('registerAlert', 'Şifre en az 6 karakter olmalıdır', 'error');
-        return;
-    }
-
-    if (!email.includes('@') || !email.includes('.')) {
-        showAlert('registerAlert', 'Geçerli bir e-posta adresi girin', 'error');
-        return;
-    }
-
-    const registerBtn = document.getElementById('registerBtn');
-    registerBtn.innerHTML = '<i class="fas fa-spinner fa-spin me-2"></i>Hesap oluşturuluyor...';
-    registerBtn.disabled = true;
-
-    // Simüle edilmiş kayıt işlemi (1 saniye gecikme)
-    setTimeout(() => {
-        const users = JSON.parse(localStorage.getItem('quantumtrade_users') || '[]');
-
-        // Kullanıcı adı / e-posta kontrolü
-        if (users.some(u => u.username.toLowerCase() === username.toLowerCase())) {
-            showAlert('registerAlert', 'Bu kullanıcı adı zaten alınmış', 'error');
-            resetRegisterButton();
-            return;
-        }
-
-        if (users.some(u => u.email.toLowerCase() === email.toLowerCase())) {
-            showAlert('registerAlert', 'Bu e-posta adresi zaten kayıtlı', 'error');
-            resetRegisterButton();
-            return;
-        }
-
-        // Yeni kullanıcı oluştur
-        const newUser = {
-            id: Date.now(),
-            username: username,
-            email: email,
-            password: password,              // Gerçek projede hash'lenmeli!
-            wallet_address: wallet || null,
-            has_subscription: false,
-            is_admin: false,
-            is_verified: false,
-            credits: 0,
-            created_at: new Date().toISOString()
-        };
-
-        users.push(newUser);
-        localStorage.setItem('quantumtrade_users', JSON.stringify(users));
-
-        // Oturum açmış gibi kaydet
-        currentUser = {
-            username: newUser.username,
-            email: newUser.email,
-            has_subscription: false,
-            is_admin: false,
-            is_verified: false,
-            credits: 0,
-            wallet_address: wallet || null
-        };
-
-        saveUserToStorage(currentUser);
-
-        // Başarı ekranı
-        registerBtn.style.display = 'none';
-
-        const successHTML = `
-            <div class="text-center py-4">
-                <i class="fas fa-check-circle fa-4x text-success mb-3"></i>
-                <h4 class="mb-3" style="color: var(--neon-cyan);">Tebrikler!</h4>
-                <p class="mb-4" style="color: var(--light);">
-                    Hesabınız başarıyla oluşturuldu.<br>
-                    <strong>${username}</strong> kullanıcısı ile giriş yapabilirsiniz.
-                </p>
-                <p class="text-muted small mb-4">
-                    Premium özellikler için 49 USDT ödeme yapmanız gerekiyor.<br>
-                    İstediğiniz zaman "Get Started" butonuna tıklayabilirsiniz.
-                </p>
-                <button class="btn-submit" id="successContinueBtn" style="width: auto; padding: 12px 40px;">
-                    <i class="fas fa-arrow-right me-2"></i>Tamam, devam et
-                </button>
-            </div>
-        `;
-
-        document.getElementById('registerForm').innerHTML = successHTML;
-
-        showAlert('registerAlert', 'Hesap oluşturuldu! Artık giriş yapabilirsiniz.', 'success');
-
-        // UI güncelleme
-        document.getElementById('authToggleText').textContent = currentUser.username;
-        document.getElementById('authToggleBtn').innerHTML = `<i class="fas fa-user-circle me-2"></i>${currentUser.username}`;
-        document.getElementById('dashboardLink').style.display = 'block';
-
-        // "Tamam, devam et" butonuna tıklayınca ne yapılacağı
-        document.getElementById('successContinueBtn').addEventListener('click', function() {
-            // Buraya istediğiniz davranışı koyabilirsiniz:
-            // 1. Ödeme ekranına gitmek istiyorsanız:
-            // initiatePayment();
-
-            // 2. Login ekranına dönmek istiyorsanız:
-            showLogin();
-
-            // 3. Sadece ana sayfada kalmak istiyorsanız: hiçbir şey yapmayın
-            // (aşağıdaki satırları yorum satırına alın veya silin)
-
-            // En yaygın tercih: ödeme ekranına yönlendirme
-            setTimeout(() => {
-                initiatePayment();
-            }, 600);
-        });
-
-        function resetRegisterButton() {
-            registerBtn.innerHTML = '<i class="fas fa-user-plus me-2"></i>Create Account';
-            registerBtn.disabled = false;
-        }
-
-    }, 1000);  // Simülasyon süresi
-
-});
-       
-        
-        // Payment verification
-        document.getElementById('verifyPaymentBtn').addEventListener('click', function() {
-            const txHash = document.getElementById('txHash').value.trim();
-            
-            if (!txHash || !txHash.startsWith('0x')) {
-                showAlert('paymentAlert', 'Please enter a valid transaction hash starting with 0x', 'error');
-                return;
-            }
-            
-            if (txHash.length < 10) {
-                showAlert('paymentAlert', 'Transaction hash must be at least 10 characters', 'error');
-                return;
-            }
-            
-            const verifyBtn = document.getElementById('verifyPaymentBtn');
-            verifyBtn.innerHTML = '<i class="fas fa-spinner fa-spin me-2"></i>Verifying...';
-            verifyBtn.disabled = true;
-            
-            // Ödeme doğrulama başlat
-            setTimeout(() => {
-                showAlert('paymentAlert', '✅ Payment verification started! Please wait...', 'success');
-                showVerification(txHash);
-                verifyBtn.innerHTML = '<i class="fas fa-check-circle me-2"></i>Verify Payment';
-                verifyBtn.disabled = false;
+                // Normal kullanıcı kontrolü
+                const users = JSON.parse(localStorage.getItem('quantumtrade_users') || '[]');
+                const user = users.find(u =>
+                    (u.username === identifier || u.email === identifier) &&
+                    u.password === password
+                );
+                
+                if (user) {
+                    // ✅ NORMAL KULLANICI GİRİŞ BAŞARILI
+                    currentUser = {
+                        username: user.username,
+                        email: user.email,
+                        has_subscription: user.has_subscription || false,
+                        is_admin: false,
+                        is_verified: user.is_verified || false,
+                        credits: user.credits || 0,
+                        wallet_address: user.wallet_address || null
+                    };
+                    
+                    saveUserToStorage(currentUser);
+                    showAlert('loginAlert', '✅ Login successful! Welcome back!', 'success');
+                    
+                    // UI güncelle
+                    document.getElementById('authToggleText').textContent = currentUser.username;
+                    document.getElementById('authToggleBtn').innerHTML = `<i class="fas fa-user-circle me-2"></i>${currentUser.username}`;
+                    
+                    // Abonelik kontrolü
+                    if (currentUser.has_subscription) {
+                        setTimeout(() => {
+                            redirectToDashboard();
+                        }, 1500);
+                    } else {
+                        // Bu durum normalde olmamalı çünkü tüm kullanıcılar abonelikli
+                        showAlert('loginAlert', '⚠️ Account issue detected. Please contact support.', 'warning');
+                        loginBtn.innerHTML = '<i class="fas fa-sign-in-alt me-2"></i>Login';
+                        loginBtn.disabled = false;
+                    }
+                } else {
+                    showAlert('loginAlert', 'Invalid username/email or password', 'error');
+                    loginBtn.innerHTML = '<i class="fas fa-sign-in-alt me-2"></i>Login';
+                    loginBtn.disabled = false;
+                }
             }, 1000);
         });
         
-        // Network selection
-        document.querySelectorAll('.network-btn').forEach(btn => {
-            btn.addEventListener('click', function() {
-                document.querySelectorAll('.network-btn').forEach(b => {
-                    b.classList.remove('active');
-                });
+        // Register form submit - GÜNCELLENMİŞ (Ödeme Otomatik Onaylı)
+        document.getElementById('registerForm').addEventListener('submit', function(e) {
+            e.preventDefault();
+            
+            const username = document.getElementById('registerUsername').value.trim();
+            const email = document.getElementById('registerEmail').value.trim();
+            const password = document.getElementById('registerPassword').value;
+            const confirmPassword = document.getElementById('registerConfirmPassword').value;
+            const wallet = document.getElementById('registerWallet').value.trim();
+            const termsChecked = document.getElementById('termsCheck').checked;
+            
+            // Basit doğrulama
+            if (!username || !email || !password || !confirmPassword) {
+                showAlert('registerAlert', 'Please fill in all required fields', 'error');
+                return;
+            }
+            
+            if (password.length < 6) {
+                showAlert('registerAlert', 'Password must be at least 6 characters', 'error');
+                return;
+            }
+            
+            if (password !== confirmPassword) {
+                showAlert('registerAlert', 'Passwords do not match', 'error');
+                return;
+            }
+            
+            if (!email.includes('@') || !email.includes('.')) {
+                showAlert('registerAlert', 'Please enter a valid email address', 'error');
+                return;
+            }
+            
+            if (!termsChecked) {
+                showAlert('registerAlert', 'Please agree to the terms and conditions', 'error');
+                return;
+            }
+            
+            const registerBtn = document.getElementById('registerBtn');
+            registerBtn.innerHTML = '<i class="fas fa-spinner fa-spin me-2"></i>Creating account...';
+            registerBtn.disabled = true;
+            
+            // Simüle edilmiş kayıt işlemi (1 saniye gecikme)
+            setTimeout(() => {
+                const users = JSON.parse(localStorage.getItem('quantumtrade_users') || '[]');
                 
-                this.classList.add('active');
-                selectedNetwork = this.dataset.network;
+                // Kullanıcı adı / e-posta kontrolü
+                if (users.some(u => u.username.toLowerCase() === username.toLowerCase())) {
+                    showAlert('registerAlert', 'This username is already taken', 'error');
+                    registerBtn.innerHTML = '<i class="fas fa-user-plus me-2"></i>Create Free Account';
+                    registerBtn.disabled = false;
+                    return;
+                }
                 
-                // Update network alert
-                const alert = document.getElementById('networkAlert');
-                alert.innerHTML = `<i class="fas fa-info-circle me-2"></i> Make sure to send USDT using <strong>${selectedNetwork}</strong> network`;
-            });
+                if (users.some(u => u.email.toLowerCase() === email.toLowerCase())) {
+                    showAlert('registerAlert', 'This email address is already registered', 'error');
+                    registerBtn.innerHTML = '<i class="fas fa-user-plus me-2"></i>Create Free Account';
+                    registerBtn.disabled = false;
+                    return;
+                }
+                
+                // Yeni kullanıcı oluştur - ÖDEME OTOMATİK ONAYLI!
+                const newUser = {
+                    id: Date.now(),
+                    username: username,
+                    email: email,
+                    password: password,              // Gerçek projede hash'lenmeli!
+                    wallet_address: wallet || null,
+                    has_subscription: true,          // ✅ ÖDEME YAPILDI OLARAK KABUL EDİLİYOR!
+                    is_admin: false,
+                    is_verified: true,               // ✅ DOĞRULANDI!
+                    credits: 100,                    // Başlangıç kredisi
+                    subscription_date: new Date().toISOString(),
+                    subscription_expiry: new Date(Date.now() + 30 * 24 * 60 * 60 * 1000).toISOString(), // 30 gün
+                    created_at: new Date().toISOString()
+                };
+                
+                users.push(newUser);
+                localStorage.setItem('quantumtrade_users', JSON.stringify(users));
+                
+                // Oturum açmış gibi kaydet
+                currentUser = {
+                    username: newUser.username,
+                    email: newUser.email,
+                    has_subscription: true,          // ✅ ÖDEME YAPILDI!
+                    is_admin: false,
+                    is_verified: true,               // ✅ DOĞRULANDI!
+                    credits: newUser.credits,
+                    wallet_address: wallet || null
+                };
+                
+                saveUserToStorage(currentUser);
+                
+                // Başarı mesajı ve otomatik yönlendirme
+                showAlert('registerAlert', '✅ Account created successfully! Premium access activated. Redirecting to dashboard...', 'success');
+                
+                // UI güncelleme
+                document.getElementById('authToggleText').textContent = currentUser.username;
+                document.getElementById('authToggleBtn').innerHTML = `<i class="fas fa-user-circle me-2"></i>${currentUser.username}`;
+                
+                // 2 saniye sonra dashboard'a yönlendir
+                setTimeout(() => {
+                    redirectToDashboard();
+                }, 2000);
+                
+            }, 1000);  // Simülasyon süresi
         });
         
         // Get Started button
@@ -2075,8 +1398,6 @@ document.getElementById('registerForm').addEventListener('submit', function(e) {
                 // User is logged in, check subscription
                 if (currentUser.has_subscription || currentUser.is_admin) {
                     redirectToDashboard();
-                } else {
-                    initiatePayment();
                 }
             } else {
                 // Not logged in, show register form
@@ -2094,7 +1415,6 @@ document.getElementById('registerForm').addEventListener('submit', function(e) {
                 currentUser = null;
                 document.getElementById('authToggleText').textContent = 'Login';
                 document.getElementById('authToggleBtn').innerHTML = '<i class="fas fa-sign-in-alt me-2"></i>Login';
-                document.getElementById('dashboardLink').style.display = 'none';
                 showAlert('loginAlert', 'Logged out successfully', 'info');
                 showLogin();
             } else {
@@ -2104,54 +1424,30 @@ document.getElementById('registerForm').addEventListener('submit', function(e) {
             }
         });
         
-        // Dashboard link
-        document.getElementById('dashboardLink').addEventListener('click', function(e) {
-            e.preventDefault();
-            if (currentUser) {
-                redirectToDashboard();
-            }
-        });
-        
-        // Check verification button
-        document.getElementById('checkVerificationBtn').addEventListener('click', function() {
-            if (currentUser && currentUser.has_subscription) {
-                showAlert('verificationAlert', '✅ Subscription active! Redirecting to dashboard...', 'success');
-                setTimeout(() => {
-                    redirectToDashboard();
-                }, 1000);
-            } else {
-                showAlert('verificationAlert', 'Still verifying payment...', 'info');
-            }
-        });
-        
-        // Cancel verification button
-        document.getElementById('cancelVerificationBtn').addEventListener('click', cancelVerification);
-        
         // Admin auto-fill on triple click
         let clickCount = 0;
         let clickTimer;
-        
         document.addEventListener('click', function(e) {
             if (e.target.tagName === 'BODY' || e.target.closest('.hero-section')) {
                 clickCount++;
-                
                 if (clickCount === 3) {
                     clearTimeout(clickTimer);
                     clickCount = 0;
-                    
                     // Admin bilgilerini otomatik doldur
                     document.getElementById('loginIdentifier').value = 'ictsmartpro';
                     document.getElementById('loginPassword').value = '123456';
-                    
                     showAlert('loginAlert', 'Admin credentials auto-filled. Click login to continue.', 'info');
                 }
-                
                 clearTimeout(clickTimer);
                 clickTimer = setTimeout(() => {
                     clickCount = 0;
                 }, 1000);
             }
         });
+        
+        // Initial setup
+        console.log('✅ Auth system initialized successfully');
+        console.log('💡 Tip: Triple-click anywhere to auto-fill admin credentials');
     </script>
 </body>
 </html>
