@@ -1581,4 +1581,4 @@ if __name__ == "__main__":
         host="0.0.0.0",
         port=port,
         log_level="info"
-    )bu dosyada 11 borsa ve coingeckodan sağlıklı veri çekilip işleniyor mu? bunu mükemmel şekilde işliyor mu?
+    ) 
