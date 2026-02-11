@@ -1389,7 +1389,41 @@ async def analyze_symbol(
             status_code=500,
             detail=f"Analysis failed: {str(e)[:200]}"
         )
-
+               # Build response matching frontend expectations EXACTLY
+        response = {
+            "success": True,
+            "symbol": symbol,
+            "interval": interval,
+            "timestamp": datetime.now(timezone.utc).isoformat(),
+            
+            "price_data": {
+                "current": current_price,
+                "previous": prev_price,
+                "change_percent": round(change_percent, 4),
+                "volume_24h": volume_24h,
+                "source_count": len(df['exchange'].unique()) if 'exchange' in df.columns else 0
+            },
+            
+            "signal": {
+                "signal": signal["signal"],
+                "confidence": signal["confidence"],
+                "recommendation": signal["recommendation"]
+            },
+            
+            "signal_distribution": signal_distribution,
+            
+            "technical_indicators": technical_indicators,   # zaten dict, direkt verebilirsin
+            
+            "patterns": patterns,
+            
+            "market_structure": market_structure,
+            
+            "ml_stats": ml_stats
+        }
+        
+        logger.info(f"✅ Analysis complete: {signal['signal']} ({signal['confidence']:.1f}%)")
+        return response
+        
 @app.post("/api/train/{symbol}")
 async def train_model(symbol: str):
     """Train ML model on symbol"""
