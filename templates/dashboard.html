@@ -1,2711 +1,1078 @@
 <!DOCTYPE html>
-<html lang="en">
+<html lang="tr">
 <head>
-<meta charset="UTF-8">
-<meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>🚀 Advanced Trading Bot v5.1 - Real-Time Market Analysis</title>
-<!-- Bootstrap 5 -->
-<link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
-<!-- Font Awesome -->
-<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
-<!-- Inter Font -->
-<link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800;900&display=swap" rel="stylesheet">
-<!-- TradingView Widget - KRİTİK SCRIPT (head içinde) -->
-<script type="text/javascript" src="https://s3.tradingview.com/tv.js"></script>
-<style>
-:root {
---bg-primary: #0a0f1a;
---bg-secondary: #141a27;
---bg-card: #1a2133;
---accent-blue: #3b82f6;
---accent-blue-light: #60a5fa;
---accent-green: #10b981;
---accent-green-light: #34d399;
---accent-red: #ef4444;
---accent-red-light: #f87171;
---accent-purple: #8b5cf6;
---accent-purple-light: #a78bfa;
---accent-yellow: #f59e0b;
---accent-orange: #f97316;
---accent-cyan: #06b6d4;
---text-primary: #ffffff;
---text-secondary: #9ca3af;
---text-muted: #6b7280;
---border-color: rgba(255, 255, 255, 0.1);
---border-radius: 16px;
---shadow-sm: 0 2px 8px rgba(0, 0, 0, 0.2);
---shadow-md: 0 4px 16px rgba(0, 0, 0, 0.3);
---shadow-lg: 0 8px 32px rgba(0, 0, 0, 0.4);
---transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
-}
-
-* {
-margin: 0;
-padding: 0;
-box-sizing: border-box;
-}
-
-body {
-background: linear-gradient(135deg, var(--bg-primary) 0%, #0f1423 100%);
-color: var(--text-primary);
-font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
-min-height: 100vh;
-overflow-x: hidden;
-line-height: 1.6;
-}
-
-/* Animated Background */
-body::before {
-content: '';
-position: fixed;
-top: 0;
-left: 0;
-width: 100%;
-height: 100%;
-background:
-radial-gradient(circle at 20% 30%, rgba(59, 130, 246, 0.08) 0%, transparent 50%),
-radial-gradient(circle at 80% 70%, rgba(139, 92, 246, 0.08) 0%, transparent 50%),
-radial-gradient(circle at 50% 50%, rgba(16, 185, 129, 0.05) 0%, transparent 50%);
-pointer-events: none;
-z-index: 0;
-}
-
-.container-fluid {
-position: relative;
-z-index: 1;
-max-width: 1800px;
-margin: 0 auto;
-padding: 0 1.5rem;
-}
-
-/* Navbar */
-.navbar {
-background: rgba(26, 33, 51, 0.95);
-backdrop-filter: blur(20px);
-border-bottom: 2px solid var(--accent-blue);
-padding: 1rem 0;
-box-shadow: var(--shadow-lg);
-position: sticky;
-top: 0;
-z-index: 1000;
-}
-
-.navbar-brand {
-font-weight: 800;
-font-size: 1.5rem;
-letter-spacing: -0.5px;
-color: var(--text-primary);
-text-shadow: 0 0 20px rgba(59, 130, 246, 0.3);
-}
-
-.navbar-brand i {
-color: var(--accent-blue);
-margin-right: 8px;
-}
-
-.status-badge {
-background: linear-gradient(135deg, var(--accent-green), #0ea5e9);
-padding: 8px 20px;
-border-radius: 24px;
-font-size: 0.9rem;
-font-weight: 700;
-box-shadow: 0 0 25px rgba(16, 185, 129, 0.4);
-animation: pulse 2s ease-in-out infinite;
-display: inline-flex;
-align-items: center;
-gap: 8px;
-}
-
-@keyframes pulse {
-0%, 100% { box-shadow: 0 0 25px rgba(16, 185, 129, 0.4); }
-50% { box-shadow: 0 0 35px rgba(16, 185, 129, 0.6); }
-}
-
-/* Cards */
-.card {
-background: var(--bg-card);
-border: 2px solid var(--border-color);
-border-radius: var(--border-radius);
-box-shadow: var(--shadow-md);
-transition: var(--transition);
-overflow: hidden;
-position: relative;
-}
-
-.card::before {
-content: '';
-position: absolute;
-top: 0;
-left: 0;
-right: 0;
-height: 3px;
-background: linear-gradient(90deg, var(--accent-blue), var(--accent-purple));
-opacity: 0;
-transition: var(--transition);
-}
-
-.card:hover {
-transform: translateY(-6px);
-box-shadow: var(--shadow-lg);
-border-color: rgba(59, 130, 246, 0.4);
-}
-
-.card:hover::before {
-opacity: 1;
-}
-
-.card-header {
-background: rgba(0, 0, 0, 0.2);
-border-bottom: 2px solid var(--border-color);
-padding: 1rem 1.5rem;
-font-weight: 700;
-font-size: 1.1rem;
-color: var(--accent-blue-light);
-}
-
-.card-body {
-padding: 1.5rem;
-}
-
-.card-title {
-font-weight: 800;
-font-size: 1.2rem;
-letter-spacing: -0.3px;
-margin-bottom: 1rem;
-color: var(--text-primary);
-display: flex;
-align-items: center;
-gap: 10px;
-}
-
-.card-title i {
-color: var(--accent-blue);
-font-size: 1.3rem;
-}
-
-/* Price Display */
-.price-container {
-text-align: center;
-padding: 2rem 1.5rem;
-}
-
-.symbol-name {
-font-size: 1.5rem;
-font-weight: 800;
-color: var(--accent-blue-light);
-margin-bottom: 1rem;
-letter-spacing: -0.5px;
-}
-
-.current-price {
-font-size: 3.8rem;
-font-weight: 900;
-letter-spacing: -2px;
-background: linear-gradient(135deg, #ffffff, var(--accent-blue-light));
--webkit-background-clip: text;
--webkit-text-fill-color: transparent;
-background-clip: text;
-line-height: 1.1;
-margin: 1rem 0;
-text-shadow: 0 2px 10px rgba(59, 130, 246, 0.2);
-}
-
-.price-change {
-font-size: 1.3rem;
-font-weight: 700;
-margin-top: 1rem;
-display: inline-flex;
-align-items: center;
-gap: 8px;
-}
-
-.price-up {
-color: var(--accent-green);
-background: rgba(16, 185, 129, 0.1);
-padding: 8px 16px;
-border-radius: 12px;
-box-shadow: 0 0 20px rgba(16, 185, 129, 0.3);
-}
-
-.price-down {
-color: var(--accent-red);
-background: rgba(239, 68, 68, 0.1);
-padding: 8px 16px;
-border-radius: 12px;
-box-shadow: 0 0 20px rgba(239, 68, 68, 0.3);
-}
-
-/* Signal Cards */
-.signal-container {
-text-align: center;
-padding: 2rem 1.5rem;
-}
-
-.signal-badge {
-padding: 2.5rem 2rem;
-border-radius: var(--border-radius);
-font-size: 2.2rem;
-font-weight: 900;
-letter-spacing: -0.5px;
-margin-bottom: 1.5rem;
-position: relative;
-overflow: hidden;
-box-shadow: var(--shadow-lg);
-border: 3px solid transparent;
-background-clip: padding-box;
-}
-
-.signal-badge::before {
-content: '';
-position: absolute;
-top: 0;
-left: 0;
-right: 0;
-bottom: 0;
-background: linear-gradient(45deg, transparent, rgba(255, 255, 255, 0.1), transparent);
-animation: shine 3s infinite;
-z-index: 1;
-}
-
-.signal-badge::after {
-content: '';
-position: absolute;
-top: 3px;
-left: 3px;
-right: 3px;
-bottom: 3px;
-border-radius: calc(var(--border-radius) - 3px);
-background: var(--bg-card);
-z-index: 0;
-}
-
-.signal-text {
-position: relative;
-z-index: 2;
-}
-
-@keyframes shine {
-0% { transform: translateX(-100%) translateY(-100%) rotate(45deg); }
-100% { transform: translateX(100%) translateY(100%) rotate(45deg); }
-}
-
-.signal-buy {
-background: linear-gradient(135deg, var(--accent-green), #0ea5e9);
-color: white;
-}
-
-.signal-sell {
-background: linear-gradient(135deg, var(--accent-red), #f97316);
-color: white;
-}
-
-.signal-neutral {
-background: linear-gradient(135deg, var(--accent-purple), #ec4899);
-color: white;
-}
-
-/* Signal Histogram */
-.signal-histogram {
-background: var(--bg-secondary);
-border-radius: 16px;
-padding: 1.5rem;
-margin-top: 1.5rem;
-border: 2px solid var(--border-color);
-}
-
-.histogram-title {
-font-weight: 700;
-font-size: 1.1rem;
-margin-bottom: 1.2rem;
-color: var(--accent-blue-light);
-display: flex;
-align-items: center;
-gap: 8px;
-}
-
-.histogram-row {
-display: flex;
-align-items: center;
-margin-bottom: 1.2rem;
-gap: 12px;
-}
-
-.histogram-label {
-width: 140px;
-font-weight: 600;
-font-size: 0.95rem;
-color: var(--text-secondary);
-}
-
-.histogram-bar-container {
-flex: 1;
-height: 10px;
-background: rgba(255, 255, 255, 0.08);
-border-radius: 12px;
-overflow: hidden;
-position: relative;
-border: 2px solid var(--border-color);
-}
-
-.histogram-bar {
-height: 100%;
-border-radius: 12px;
-transition: width 0.6s cubic-bezier(0.4, 0, 0.2, 1);
-position: relative;
-overflow: hidden;
-box-shadow: 0 0 10px rgba(0, 0, 0, 0.3);
-}
-
-.histogram-bar::after {
-content: '';
-position: absolute;
-top: 0;
-left: -100%;
-width: 100%;
-height: 100%;
-background: linear-gradient(90deg, transparent, rgba(255, 255, 255, 0.3), transparent);
-animation: shimmer 2s infinite;
-}
-
-@keyframes shimmer {
-0% { left: -100%; }
-100% { left: 100%; }
-}
-
-.histogram-bar-buy {
-background: linear-gradient(90deg, var(--accent-green), #0ea5e9);
-}
-
-.histogram-bar-sell {
-background: linear-gradient(90deg, var(--accent-red), #f97316);
-}
-
-.histogram-bar-neutral {
-background: linear-gradient(90deg, var(--accent-purple), #ec4899);
-}
-
-.histogram-value {
-width: 60px;
-font-weight: 800;
-font-size: 0.95rem;
-text-align: right;
-}
-
-.histogram-value.buy {
-color: var(--accent-green);
-}
-
-.histogram-value.sell {
-color: var(--accent-red);
-}
-
-.histogram-value.neutral {
-color: var(--accent-purple);
-}
-
-/* Progress Bars */
-.confidence-bar {
-height: 14px;
-background: rgba(255, 255, 255, 0.08);
-border-radius: 12px;
-overflow: hidden;
-margin: 1.2rem 0;
-border: 2px solid var(--border-color);
-}
-
-.confidence-fill {
-height: 100%;
-background: linear-gradient(90deg, var(--accent-red), var(--accent-yellow), var(--accent-green));
-border-radius: 12px;
-transition: width 0.6s cubic-bezier(0.4, 0, 0.2, 1);
-box-shadow: 0 0 15px rgba(16, 185, 129, 0.4);
-position: relative;
-overflow: hidden;
-}
-
-.confidence-fill::after {
-content: '';
-position: absolute;
-top: 0;
-left: -100%;
-width: 100%;
-height: 100%;
-background: linear-gradient(90deg, transparent, rgba(255, 255, 255, 0.3), transparent);
-animation: shimmer 2s infinite;
-}
-
-.confidence-text {
-font-size: 1.2rem;
-font-weight: 800;
-margin-top: 0.5rem;
-}
-
-.confidence-high {
-color: var(--accent-green);
-text-shadow: 0 0 15px rgba(16, 185, 129, 0.5);
-}
-
-.confidence-medium {
-color: var(--accent-yellow);
-text-shadow: 0 0 15px rgba(245, 158, 11, 0.4);
-}
-
-.confidence-low {
-color: var(--accent-red);
-text-shadow: 0 0 15px rgba(239, 68, 68, 0.4);
-}
-
-/* Detailed Indicators */
-.indicator-detail-card {
-background: var(--bg-secondary);
-border-radius: 12px;
-padding: 1rem;
-margin-bottom: 1rem;
-border-left: 4px solid var(--accent-blue);
-transition: var(--transition);
-}
-
-.indicator-detail-card:hover {
-background: rgba(255, 255, 255, 0.05);
-transform: translateX(5px);
-}
-
-.indicator-detail-card.buy {
-border-left-color: var(--accent-green);
-}
-
-.indicator-detail-card.sell {
-border-left-color: var(--accent-red);
-}
-
-.indicator-detail-card.neutral {
-border-left-color: var(--accent-purple);
-}
-
-.indicator-header {
-display: flex;
-justify-content: space-between;
-align-items: center;
-margin-bottom: 0.8rem;
-padding-bottom: 0.8rem;
-border-bottom: 1px solid var(--border-color);
-}
-
-.indicator-name {
-font-weight: 700;
-font-size: 1.05rem;
-display: flex;
-align-items: center;
-gap: 8px;
-}
-
-.indicator-signal {
-font-weight: 800;
-padding: 6px 14px;
-border-radius: 12px;
-font-size: 0.9rem;
-}
-
-.indicator-signal-buy {
-background: rgba(16, 185, 129, 0.2);
-color: var(--accent-green-light);
-border: 2px solid var(--accent-green);
-}
-
-.indicator-signal-sell {
-background: rgba(239, 68, 68, 0.2);
-color: var(--accent-red-light);
-border: 2px solid var(--accent-red);
-}
-
-.indicator-signal-neutral {
-background: rgba(139, 92, 246, 0.2);
-color: var(--accent-purple-light);
-border: 2px solid var(--accent-purple);
-}
-
-.indicator-value {
-font-size: 1.8rem;
-font-weight: 800;
-margin: 0.5rem 0;
-background: linear-gradient(135deg, var(--accent-blue), var(--accent-cyan));
--webkit-background-clip: text;
--webkit-text-fill-color: transparent;
-}
-
-.indicator-value.green {
-background: linear-gradient(135deg, var(--accent-green), #0ea5e9);
-}
-
-.indicator-value.red {
-background: linear-gradient(135deg, var(--accent-red), #f97316);
-}
-
-.indicator-description {
-font-size: 0.9rem;
-color: var(--text-muted);
-margin-top: 0.5rem;
-line-height: 1.5;
-}
-
-.indicator-recommendation {
-background: rgba(255, 255, 255, 0.05);
-padding: 0.8rem;
-border-radius: 8px;
-margin-top: 0.8rem;
-font-size: 0.9rem;
-}
-
-.indicator-recommendation.buy {
-border-left: 3px solid var(--accent-green);
-}
-
-.indicator-recommendation.sell {
-border-left: 3px solid var(--accent-red);
-}
-
-.indicator-recommendation.neutral {
-border-left: 3px solid var(--accent-purple);
-}
-
-/* Patterns */
-.pattern-tag {
-display: inline-block;
-padding: 10px 18px;
-margin: 6px 4px;
-border-radius: 24px;
-font-size: 0.9rem;
-font-weight: 700;
-transition: var(--transition);
-cursor: pointer;
-border: 2px solid transparent;
-position: relative;
-overflow: hidden;
-}
-
-.pattern-tag::before {
-content: '';
-position: absolute;
-top: 0;
-left: 0;
-right: 0;
-bottom: 0;
-background: rgba(255, 255, 255, 0.1);
-opacity: 0;
-transition: var(--transition);
-}
-
-.pattern-tag:hover::before {
-opacity: 1;
-}
-
-.pattern-bullish {
-background: rgba(16, 185, 129, 0.15);
-color: var(--accent-green-light);
-border-color: var(--accent-green);
-box-shadow: 0 4px 12px rgba(16, 185, 129, 0.2);
-}
-
-.pattern-bearish {
-background: rgba(239, 68, 68, 0.15);
-color: var(--accent-red-light);
-border-color: var(--accent-red);
-box-shadow: 0 4px 12px rgba(239, 68, 68, 0.2);
-}
-
-.pattern-neutral {
-background: rgba(139, 92, 246, 0.15);
-color: var(--accent-purple-light);
-border-color: var(--accent-purple);
-box-shadow: 0 4px 12px rgba(139, 92, 246, 0.2);
-}
-
-/* Chart Container */
-/* Chart Container - OPTİMİZE EDİLMİŞ YÜKSEKLİK */
-.chart-container {
-    background: var(--bg-secondary);
-    border-radius: 16px;
-    padding: 1.5rem;
-    min-height: 650px;          /* 🚀 Önemli: Asgari yükseklik */
-    height: 650px;              /* 🚀 Sabit yükseklik */
-    border: 2px solid var(--border-color);
-    position: relative;
-    overflow: hidden;
-    display: flex;
-    flex-direction: column;
-}
-.chart-container::before {
-    content: '';
-    position: absolute;
-    top: 0;
-    left: 0;
-    right: 0;
-    height: 4px;
-    background: linear-gradient(90deg, var(--accent-blue), var(--accent-purple));
-}
-
-/* TradingView widget container'ı tam doldursun */
-#tradingview-widget {
-    width: 100%;
-    height: 100% !important;    /* !important kritik - widget'ı genişletir */
-    min-height: 600px;          /* Güvenlik için minimum */
-    flex: 1;                    /* Kalan tüm alanı kaplar */
-}
-
-/* Responsive adjustments - Farklı ekran boyutları için */
-@media (max-width: 1400px) {
-    .chart-container {
-        min-height: 600px;
-        height: 600px;
-    }
-    #tradingview-widget {
-        min-height: 550px;
-    }
-}
-
-@media (max-width: 1200px) {
-    .chart-container {
-        min-height: 550px;
-        height: 550px;
-    }
-    #tradingview-widget {
-        min-height: 500px;
-    }
-}
-
-@media (max-width: 992px) {
-    .chart-container {
-        min-height: 500px;
-        height: 500px;
-    }
-    #tradingview-widget {
-        min-height: 450px;
-    }
-}
-
-@media (max-width: 768px) {
-    .chart-container {
-        min-height: 450px;
-        height: 450px;
-        padding: 1rem;
-    }
-    #tradingview-widget {
-        min-height: 400px;
-    }
-}
-
-@media (max-width: 576px) {
-    .chart-container {
-        min-height: 400px;
-        height: 400px;
-        padding: 0.75rem;
-    }
-    #tradingview-widget {
-        min-height: 350px;
-    }
-}
-
-/* Çok küçük ekranlar için */
-@media (max-width: 400px) {
-    .chart-container {
-        min-height: 350px;
-        height: 350px;
-    }
-    #tradingview-widget {
-        min-height: 300px;
-    }
-}
-/* Chat */
-.chat-container {
-height: 480px;
-overflow-y: auto;
-background: var(--bg-secondary);
-border-radius: 16px;
-padding: 1.5rem;
-border: 2px solid var(--border-color);
-position: relative;
-}
-
-.chat-container::-webkit-scrollbar {
-width: 8px;
-}
-
-.chat-container::-webkit-scrollbar-track {
-background: rgba(255, 255, 255, 0.05);
-border-radius: 10px;
-}
-
-.chat-container::-webkit-scrollbar-thumb {
-background: var(--accent-blue);
-border-radius: 10px;
-transition: var(--transition);
-}
-
-.chat-container::-webkit-scrollbar-thumb:hover {
-background: var(--accent-blue-light);
-}
-
-.chat-message {
-margin-bottom: 1.2rem;
-padding: 1.2rem;
-border-radius: 16px;
-animation: slideIn 0.4s ease;
-position: relative;
-max-width: 90%;
-}
-
-@keyframes slideIn {
-from {
-opacity: 0;
-transform: translateY(15px);
-}
-to {
-opacity: 1;
-transform: translateY(0);
-}
-}
-
-.chat-bot {
-background: linear-gradient(135deg, rgba(59, 130, 246, 0.15), rgba(139, 92, 246, 0.15));
-border-left: 4px solid var(--accent-blue);
-align-self: flex-start;
-}
-
-.chat-user {
-background: linear-gradient(135deg, rgba(16, 185, 129, 0.15), rgba(14, 165, 233, 0.15));
-border-right: 4px solid var(--accent-green);
-margin-left: auto;
-align-self: flex-end;
-}
-
-.chat-input-group {
-background: var(--bg-secondary);
-border: 2px solid var(--border-color);
-border-radius: 16px;
-padding: 4px;
-transition: var(--transition);
-}
-
-.chat-input-group:focus-within {
-border-color: var(--accent-blue);
-box-shadow: 0 0 25px rgba(59, 130, 246, 0.3);
-}
-
-.chat-input {
-background: transparent;
-border: none;
-color: var(--text-primary);
-font-size: 1rem;
-padding: 1rem;
-font-family: 'Inter', sans-serif;
-}
-
-.chat-input:focus {
-outline: none;
-box-shadow: none;
-}
-
-.chat-input::placeholder {
-color: var(--text-muted);
-}
-
-/* Buttons */
-.btn {
-font-weight: 700;
-border-radius: 12px;
-padding: 0.75rem 1.5rem;
-transition: var(--transition);
-display: inline-flex;
-align-items: center;
-justify-content: center;
-gap: 8px;
-position: relative;
-overflow: hidden;
-}
-
-.btn::before {
-content: '';
-position: absolute;
-top: 0;
-left: -100%;
-width: 100%;
-height: 100%;
-background: linear-gradient(90deg, transparent, rgba(255, 255, 255, 0.2), transparent);
-transition: left 0.5s;
-}
-
-.btn:hover::before {
-left: 100%;
-}
-
-.btn-primary {
-background: linear-gradient(135deg, var(--accent-blue), #0ea5e9);
-border: none;
-color: white;
-box-shadow: 0 4px 20px rgba(59, 130, 246, 0.4);
-}
-
-.btn-primary:hover {
-background: linear-gradient(135deg, #0ea5e9, var(--accent-blue));
-transform: translateY(-3px);
-box-shadow: 0 6px 25px rgba(59, 130, 246, 0.6);
-}
-
-.btn-outline-success {
-border: 2px solid var(--accent-green);
-color: var(--accent-green);
-font-weight: 700;
-background: transparent;
-}
-
-.btn-outline-success:hover {
-background: var(--accent-green);
-color: white;
-box-shadow: 0 0 25px rgba(16, 185, 129, 0.5);
-}
-
-.btn-outline-danger {
-border: 2px solid var(--accent-red);
-color: var(--accent-red);
-font-weight: 700;
-background: transparent;
-}
-
-.btn-outline-danger:hover {
-background: var(--accent-red);
-color: white;
-box-shadow: 0 0 25px rgba(239, 68, 68, 0.5);
-}
-
-/* Form Controls */
-.form-select {
-background: var(--bg-secondary);
-border: 2px solid var(--border-color);
-color: var(--text-primary);
-border-radius: 12px;
-font-weight: 600;
-padding: 0.75rem 1.25rem;
-transition: var(--transition);
-font-family: 'Inter', sans-serif;
-font-size: 0.95rem;
-}
-
-.form-select:focus {
-background: var(--bg-card);
-border-color: var(--accent-blue);
-box-shadow: 0 0 20px rgba(59, 130, 246, 0.3);
-color: var(--text-primary);
-}
-
-.form-select option {
-background: var(--bg-card);
-color: var(--text-primary);
-}
-
-/* Exchange Status */
-.exchange-item {
-display: flex;
-justify-content: space-between;
-align-items: center;
-padding: 1rem 0;
-border-bottom: 1px solid var(--border-color);
-transition: var(--transition);
-}
-
-.exchange-item:hover {
-background: rgba(255, 255, 255, 0.03);
-}
-
-.exchange-item:last-child {
-border-bottom: none;
-}
-
-.exchange-name {
-font-weight: 600;
-color: var(--text-primary);
-font-size: 1.05rem;
-display: flex;
-align-items: center;
-gap: 10px;
-}
-
-.exchange-name i {
-font-size: 1.2rem;
-}
-
-.status-online {
-color: var(--accent-green);
-font-size: 1.1rem;
-animation: pulseStatus 2s ease-in-out infinite;
-}
-
-@keyframes pulseStatus {
-0%, 100% { opacity: 1; transform: scale(1); }
-50% { opacity: 0.7; transform: scale(1.1); }
-}
-
-.status-offline {
-color: var(--accent-red);
-font-size: 1.1rem;
-}
-
-/* Model Stats */
-.model-stat {
-margin-bottom: 1.8rem;
-position: relative;
-padding-left: 10px;
-}
-
-.model-stat::before {
-content: '';
-position: absolute;
-left: 0;
-top: 0;
-bottom: 0;
-width: 4px;
-background: linear-gradient(135deg, var(--accent-blue), var(--accent-purple));
-border-radius: 2px;
-}
-
-.model-name {
-display: flex;
-justify-content: space-between;
-margin-bottom: 0.8rem;
-font-weight: 700;
-font-size: 1.05rem;
-}
-
-.model-bar {
-height: 12px;
-background: rgba(255, 255, 255, 0.08);
-border-radius: 12px;
-overflow: hidden;
-border: 2px solid var(--border-color);
-}
-
-.model-fill {
-height: 100%;
-border-radius: 12px;
-transition: width 0.6s cubic-bezier(0.4, 0, 0.2, 1);
-position: relative;
-overflow: hidden;
-}
-
-.model-fill::after {
-content: '';
-position: absolute;
-top: 0;
-left: -100%;
-width: 100%;
-height: 100%;
-background: linear-gradient(90deg, transparent, rgba(255, 255, 255, 0.3), transparent);
-animation: shimmer 2s infinite;
-}
-
-.model-lgbm {
-background: linear-gradient(90deg, var(--accent-green), #0ea5e9);
-box-shadow: 0 0 15px rgba(16, 185, 129, 0.4);
-}
-
-.model-lstm {
-background: linear-gradient(90deg, var(--accent-blue), #0ea5e9);
-box-shadow: 0 0 15px rgba(59, 130, 246, 0.4);
-}
-
-.model-transformer {
-background: linear-gradient(90deg, var(--accent-purple), #ec4899);
-box-shadow: 0 0 15px rgba(139, 92, 246, 0.4);
-}
-
-/* Loading Animation - Modern Spinner */
-.spinner {
-display: inline-block;
-width: 40px;
-height: 40px;
-border: 5px solid rgba(255, 255, 255, 0.12);
-border-top: 5px solid var(--accent-blue);
-border-radius: 50%;
-animation: spin 1s linear infinite;
-margin: 20px auto;
-}
-
-@keyframes spin {
-to { transform: rotate(360deg); }
-}
-
-/* Notification */
-.notification {
-position: fixed;
-top: 20px;
-right: 20px;
-background: var(--bg-card);
-color: white;
-padding: 1.2rem 2rem;
-border-radius: 16px;
-border-left: 4px solid;
-box-shadow: var(--shadow-lg);
-z-index: 9999;
-animation: slideInRight 0.3s ease, fadeOut 0.5s 2.5s ease;
-min-width: 300px;
-font-weight: 600;
-}
-
-@keyframes slideInRight {
-from {
-transform: translateX(400px);
-opacity: 0;
-}
-to {
-transform: translateX(0);
-opacity: 1;
-}
-}
-
-@keyframes fadeOut {
-from { opacity: 1; }
-to { opacity: 0; }
-}
-
-.notification.success {
-border-left-color: var(--accent-green);
-}
-
-.notification.error {
-border-left-color: var(--accent-red);
-}
-
-.notification.info {
-border-left-color: var(--accent-blue);
-}
-
-/* Volume Info */
-.volume-info {
-background: rgba(255, 255, 255, 0.05);
-padding: 12px;
-border-radius: 12px;
-margin-top: 1rem;
-text-align: center;
-}
-
-.volume-label {
-font-size: 0.9rem;
-color: var(--text-muted);
-margin-bottom: 4px;
-}
-
-.volume-value {
-font-size: 1.3rem;
-font-weight: 800;
-color: var(--accent-blue-light);
-}
-
-/* Responsive */
-@media (max-width: 1200px) {
-.container-fluid {
-padding: 0 1rem;
-}
-.histogram-label {
-width: 110px;
-font-size: 0.85rem;
-}
-.histogram-value {
-width: 50px;
-font-size: 0.85rem;
-}
-}
-
-@media (max-width: 992px) {
-.current-price {
-font-size: 3rem;
-}
-.signal-badge {
-font-size: 1.8rem;
-padding: 2rem 1.5rem;
-}
-.chart-container {
-min-height: 450px;
-}
-.chat-container {
-height: 400px;
-}
-.indicator-value {
-font-size: 1.5rem;
-}
-}
-
-@media (max-width: 768px) {
-.current-price {
-font-size: 2.5rem;
-}
-.signal-badge {
-font-size: 1.6rem;
-padding: 1.8rem 1.2rem;
-}
-.card-body {
-padding: 1.2rem;
-}
-.chart-container {
-min-height: 350px;
-}
-.chat-container {
-height: 350px;
-}
-.navbar {
-padding: 0.8rem 0;
-}
-.navbar-brand {
-font-size: 1.3rem;
-}
-.histogram-label {
-width: 90px;
-font-size: 0.8rem;
-}
-.histogram-bar-container {
-display: none;
-}
-.histogram-value {
-width: 45px;
-font-size: 0.8rem;
-}
-}
-
-@media (max-width: 576px) {
-.current-price {
-font-size: 2rem;
-}
-.symbol-name {
-font-size: 1.2rem;
-}
-.price-change {
-font-size: 1.1rem;
-}
-.signal-badge {
-font-size: 1.4rem;
-padding: 1.5rem 1rem;
-}
-.chart-container {
-min-height: 300px;
-}
-.chat-container {
-height: 300px;
-}
-.btn {
-padding: 0.6rem 1.2rem;
-font-size: 0.9rem;
-}
-.form-select {
-font-size: 0.9rem;
-padding: 0.6rem 1rem;
-}
-.indicator-value {
-font-size: 1.3rem;
-}
-}
-
-/* Futures Info Badge */
-.futures-badge {
-background: linear-gradient(135deg, var(--accent-orange), #f59e0b);
-padding: 6px 16px;
-border-radius: 16px;
-font-size: 0.85rem;
-font-weight: 700;
-box-shadow: 0 0 15px rgba(249, 115, 22, 0.4);
-display: inline-block;
-margin-top: 8px;
-}
-
-/* TradingView Widget Container */
-#tradingview-widget {
-width: 100%;
-height: 100%;
-min-height: 500px;
-}
-
-/* Connection Status Badge */
-.connection-status {
-display: inline-flex;
-align-items: center;
-gap: 6px;
-padding: 6px 14px;
-border-radius: 12px;
-font-size: 0.85rem;
-font-weight: 600;
-margin-left: 12px;
-}
-
-.status-connected {
-background: rgba(16, 185, 129, 0.15);
-color: var(--accent-green-light);
-border: 2px solid var(--accent-green);
-}
-
-.status-disconnected {
-background: rgba(239, 68, 68, 0.15);
-color: var(--accent-red-light);
-border: 2px solid var(--accent-red);
-}
-
-/* AI Assistant Badge */
-.ai-assistant-badge {
-background: linear-gradient(135deg, var(--accent-purple), #ec4899);
-padding: 6px 16px;
-border-radius: 16px;
-font-size: 0.8rem;
-font-weight: 700;
-box-shadow: 0 0 15px rgba(139, 92, 246, 0.4);
-display: inline-block;
-margin-top: 8px;
-letter-spacing: 0.5px;
-}
-
-/* Real-Time Badge */
-.real-time-badge {
-background: linear-gradient(135deg, var(--accent-cyan), #0ea5e9);
-padding: 4px 12px;
-border-radius: 12px;
-font-size: 0.75rem;
-font-weight: 700;
-box-shadow: 0 0 12px rgba(6, 182, 212, 0.4);
-display: inline-block;
-margin-left: 8px;
-animation: pulse 2s ease-in-out infinite;
-}
-
-/* Data Source Badge */
-.data-source-badge {
-background: rgba(59, 130, 246, 0.15);
-color: var(--accent-blue-light);
-border: 2px solid var(--accent-blue);
-padding: 4px 12px;
-border-radius: 12px;
-font-size: 0.8rem;
-font-weight: 600;
-display: inline-block;
-margin-top: 6px;
-}
-
-/* Error State */
-.error-state {
-text-align: center;
-padding: 2rem;
-color: var(--accent-red);
-background: rgba(239, 68, 68, 0.05);
-border-radius: 12px;
-border: 2px solid rgba(239, 68, 68, 0.2);
-}
-
-.error-state i {
-font-size: 2.5rem;
-margin-bottom: 1rem;
-}
-
-.error-state p {
-margin: 0.5rem 0;
-font-size: 0.95rem;
-}
-
-/* Exchange Grid */
-.exchange-grid {
-display: grid;
-grid-template-columns: repeat(auto-fill, minmax(220px, 1fr));
-gap: 1rem;
-margin-top: 1rem;
-}
-
-.exchange-card {
-background: var(--bg-secondary);
-border-radius: 12px;
-padding: 1rem;
-text-align: center;
-border: 2px solid var(--border-color);
-transition: var(--transition);
-}
-
-.exchange-card:hover {
-transform: translateY(-3px);
-border-color: var(--accent-blue);
-background: rgba(59, 130, 246, 0.05);
-}
-
-.exchange-logo {
-font-size: 2rem;
-margin-bottom: 0.5rem;
-}
-
-.exchange-name-small {
-font-weight: 700;
-font-size: 0.95rem;
-}
-
-.exchange-status {
-font-size: 0.85rem;
-padding: 4px 10px;
-border-radius: 10px;
-margin-top: 0.5rem;
-}
-
-.status-active {
-background: rgba(16, 185, 129, 0.2);
-color: var(--accent-green);
-}
-
-.status-maintenance {
-background: rgba(245, 158, 11, 0.2);
-color: var(--accent-yellow);
-}
-</style>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>ICTSMARTPRO Trade  - Login & Register</title>
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <style>
+        :root {
+            --primary: #6366f1;
+            --secondary: #8b5cf6;
+            --success: #10b981;
+            --danger: #ef4444;
+            --warning: #f59e0b;
+            --info: #3b82f6;
+            --dark: #1e293b;
+            --light: #f8fafc;
+            --neon-cyan: #00f5ff;
+            --neon-purple: #b72aff;
+            --neon-pink: #ff00ff;
+            --gradient-primary: linear-gradient(135deg, var(--primary), var(--secondary));
+            --gradient-neon: linear-gradient(135deg, var(--neon-cyan), var(--neon-purple));
+        }
+
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            background: linear-gradient(135deg, #0f172a 0%, #1e293b 100%);
+            color: var(--light);
+            min-height: 100vh;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            padding: 20px;
+        }
+
+        .container {
+            max-width: 1200px;
+            width: 100%;
+        }
+
+        .auth-container {
+            background: rgba(30, 41, 59, 0.9);
+            border-radius: 20px;
+            box-shadow: 0 20px 60px rgba(0, 0, 0, 0.5),
+                        0 0 30px rgba(0, 245, 255, 0.1),
+                        0 0 50px rgba(183, 42, 255, 0.1);
+            overflow: hidden;
+            position: relative;
+        }
+
+        .auth-container::before {
+            content: '';
+            position: absolute;
+            top: 0;
+            left: 0;
+            right: 0;
+            height: 4px;
+            background: var(--gradient-neon);
+            box-shadow: 0 0 20px var(--neon-cyan);
+        }
+
+        .auth-header {
+            text-align: center;
+            padding: 40px 20px 20px;
+            position: relative;
+        }
+
+        .auth-header h1 {
+            font-size: 2.5rem;
+            margin-bottom: 10px;
+            background: var(--gradient-neon);
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+            background-clip: text;
+            text-shadow: 0 0 20px rgba(0, 245, 255, 0.3);
+        }
+
+        .auth-header p {
+            color: #94a3b8;
+            font-size: 1.1rem;
+        }
+
+        .auth-tabs {
+            display: flex;
+            justify-content: center;
+            gap: 20px;
+            margin-bottom: 30px;
+            position: relative;
+        }
+
+        .auth-tabs::after {
+            content: '';
+            position: absolute;
+            bottom: 0;
+            left: 50%;
+            transform: translateX(-50%);
+            width: 100px;
+            height: 3px;
+            background: var(--gradient-neon);
+            border-radius: 3px;
+            transition: all 0.3s ease;
+        }
+
+        .tab-btn {
+            padding: 12px 30px;
+            background: transparent;
+            border: none;
+            color: #94a3b8;
+            font-size: 1.1rem;
+            font-weight: 600;
+            cursor: pointer;
+            position: relative;
+            transition: all 0.3s ease;
+            border-radius: 8px;
+        }
+
+        .tab-btn.active {
+            color: var(--neon-cyan);
+            background: rgba(0, 245, 255, 0.1);
+        }
+
+        .tab-btn:hover:not(.active) {
+            color: var(--light);
+            background: rgba(255, 255, 255, 0.05);
+        }
+
+        .auth-content {
+            padding: 0 40px 40px;
+        }
+
+        .auth-form {
+            display: none;
+        }
+
+        .auth-form.active {
+            display: block;
+            animation: fadeIn 0.5s ease;
+        }
+
+        @keyframes fadeIn {
+            from {
+                opacity: 0;
+                transform: translateY(20px);
+            }
+            to {
+                opacity: 1;
+                transform: translateY(0);
+            }
+        }
+
+        .form-group {
+            margin-bottom: 20px;
+        }
+
+        .form-label {
+            display: block;
+            margin-bottom: 8px;
+            color: var(--light);
+            font-weight: 600;
+            font-size: 0.95rem;
+        }
+
+        .form-control {
+            width: 100%;
+            padding: 14px 16px;
+            background: rgba(56, 70, 89, 0.5);
+            border: 2px solid rgba(96, 165, 250, 0.3);
+            border-radius: 10px;
+            color: var(--light);
+            font-size: 1rem;
+            transition: all 0.3s ease;
+        }
+
+        .form-control:focus {
+            outline: none;
+            border-color: var(--neon-cyan);
+            box-shadow: 0 0 15px rgba(0, 245, 255, 0.3);
+            background: rgba(56, 70, 89, 0.7);
+        }
+
+        .form-control::placeholder {
+            color: #64748b;
+        }
+
+        .btn-submit {
+            width: 100%;
+            padding: 16px;
+            background: var(--gradient-primary);
+            color: white;
+            border: none;
+            border-radius: 12px;
+            font-size: 1.1rem;
+            font-weight: 700;
+            cursor: pointer;
+            transition: all 0.3s ease;
+            position: relative;
+            overflow: hidden;
+            box-shadow: 0 8px 20px rgba(99, 102, 241, 0.4);
+        }
+
+        .btn-submit::before {
+            content: '';
+            position: absolute;
+            top: 0;
+            left: -100%;
+            width: 100%;
+            height: 100%;
+            background: linear-gradient(90deg, transparent, rgba(255, 255, 255, 0.3), transparent);
+            transition: left 0.5s ease;
+        }
+
+        .btn-submit:hover::before {
+            left: 100%;
+        }
+
+        .btn-submit:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 12px 30px rgba(99, 102, 241, 0.6);
+        }
+
+        .btn-submit:disabled {
+            opacity: 0.6;
+            cursor: not-allowed;
+            transform: none;
+        }
+
+        .alert {
+            padding: 15px;
+            border-radius: 10px;
+            margin-bottom: 20px;
+            display: none;
+            animation: slideDown 0.3s ease;
+        }
+
+        @keyframes slideDown {
+            from {
+                opacity: 0;
+                transform: translateY(-10px);
+            }
+            to {
+                opacity: 1;
+                transform: translateY(0);
+            }
+        }
+
+        .alert.show {
+            display: block;
+        }
+
+        .alert-success {
+            background: rgba(16, 185, 129, 0.15);
+            border: 2px solid var(--success);
+            color: var(--success);
+        }
+
+        .alert-error {
+            background: rgba(239, 68, 68, 0.15);
+            border: 2px solid var(--danger);
+            color: var(--danger);
+        }
+
+        .alert-info {
+            background: rgba(59, 130, 246, 0.15);
+            border: 2px solid var(--info);
+            color: var(--info);
+        }
+
+        .alert-warning {
+            background: rgba(245, 158, 11, 0.15);
+            border: 2px solid var(--warning);
+            color: var(--warning);
+        }
+
+        .form-footer {
+            text-align: center;
+            margin-top: 20px;
+            color: #94a3b8;
+            font-size: 0.95rem;
+        }
+
+        .form-footer a {
+            color: var(--neon-cyan);
+            text-decoration: none;
+            font-weight: 600;
+            transition: color 0.3s ease;
+        }
+
+        .form-footer a:hover {
+            color: var(--neon-purple);
+            text-decoration: underline;
+        }
+
+        .membership-options {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 15px;
+            margin-bottom: 20px;
+        }
+
+        .membership-card {
+            background: rgba(56, 70, 89, 0.5);
+            border: 2px solid rgba(96, 165, 250, 0.3);
+            border-radius: 12px;
+            padding: 20px;
+            cursor: pointer;
+            transition: all 0.3s ease;
+            position: relative;
+        }
+
+        .membership-card:hover {
+            border-color: var(--neon-cyan);
+            transform: translateY(-5px);
+            box-shadow: 0 10px 25px rgba(0, 245, 255, 0.2);
+        }
+
+        .membership-card.selected {
+            border-color: var(--neon-cyan);
+            background: rgba(0, 245, 255, 0.1);
+            box-shadow: 0 0 20px rgba(0, 245, 255, 0.3);
+        }
+
+        .membership-card.selected::before {
+            content: '✓';
+            position: absolute;
+            top: 10px;
+            right: 10px;
+            width: 24px;
+            height: 24px;
+            background: var(--success);
+            border-radius: 50%;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-weight: bold;
+            color: white;
+        }
+
+        .membership-card h4 {
+            color: var(--light);
+            margin-bottom: 10px;
+            font-size: 1.2rem;
+        }
+
+        .membership-card .price {
+            font-size: 1.8rem;
+            font-weight: 700;
+            color: var(--neon-cyan);
+            margin: 10px 0;
+        }
+
+        .membership-card .price span {
+            font-size: 0.9rem;
+            color: #94a3b8;
+            font-weight: 400;
+        }
+
+        .membership-card .features {
+            margin-top: 15px;
+            color: #94a3b8;
+            font-size: 0.9rem;
+            line-height: 1.6;
+        }
+
+        .form-check {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            margin: 15px 0;
+        }
+
+        .form-check-input {
+            width: 20px;
+            height: 20px;
+            cursor: pointer;
+        }
+
+        .form-check-label {
+            color: #94a3b8;
+            font-size: 0.95rem;
+        }
+
+        .form-check-label a {
+            color: var(--neon-cyan);
+            text-decoration: none;
+        }
+
+        .form-check-label a:hover {
+            text-decoration: underline;
+        }
+
+        .payment-info {
+            background: rgba(56, 70, 89, 0.5);
+            border-left: 4px solid var(--neon-cyan);
+            padding: 15px;
+            margin: 20px 0;
+            border-radius: 8px;
+        }
+
+        .payment-info h5 {
+            color: var(--neon-cyan);
+            margin-bottom: 10px;
+            font-size: 1.1rem;
+        }
+
+        .payment-info p {
+            color: #94a3b8;
+            font-size: 0.9rem;
+            line-height: 1.6;
+        }
+
+        .success-screen {
+            text-align: center;
+            padding: 40px 20px;
+        }
+
+        .success-icon {
+            font-size: 5rem;
+            color: var(--success);
+            margin-bottom: 20px;
+            animation: pulse 2s infinite;
+        }
+
+        @keyframes pulse {
+            0%, 100% {
+                transform: scale(1);
+                opacity: 1;
+            }
+            50% {
+                transform: scale(1.1);
+                opacity: 0.8;
+            }
+        }
+
+        .success-title {
+            font-size: 2rem;
+            color: var(--neon-cyan);
+            margin-bottom: 15px;
+        }
+
+        .success-message {
+            color: #94a3b8;
+            font-size: 1.1rem;
+            margin-bottom: 25px;
+            line-height: 1.6;
+        }
+
+        .payment-status {
+            background: rgba(16, 185, 129, 0.15);
+            border: 2px solid var(--success);
+            border-radius: 12px;
+            padding: 20px;
+            margin: 20px 0;
+        }
+
+        .payment-status h5 {
+            color: var(--success);
+            margin-bottom: 10px;
+            font-size: 1.1rem;
+        }
+
+        .payment-status p {
+            color: #94a3b8;
+            font-size: 0.95rem;
+            line-height: 1.6;
+        }
+
+        @media (max-width: 768px) {
+            .auth-container {
+                border-radius: 15px;
+            }
+
+            .auth-content {
+                padding: 0 20px 30px;
+            }
+
+            .auth-tabs {
+                flex-direction: column;
+                gap: 10px;
+            }
+
+            .membership-options {
+                grid-template-columns: 1fr;
+            }
+        }
+    </style>
 </head>
 <body>
-<!-- Navigation -->
-<nav class="navbar">
-<div class="container-fluid">
-<a class="navbar-brand">
-<i class="fas fa-robot"></i>
-Advanced Trading Bot v5.1
-<span class="connection-status status-connected">
-<i class="fas fa-plug"></i>
-Connected to 11+ Exchanges
-</span>
-</a>
-<div class="d-flex align-items-center gap-3">
-<span class="status-badge">
-<i class="fas fa-circle"></i>
-LIVE TRADING
-</span>
-<button class="btn btn-primary btn-sm" onclick="analyzeCurrentSymbol()">
-<i class="fas fa-sync-alt"></i>
-Refresh Data
-</button>
-</div>
-</div>
-</nav>
-
-<div class="container-fluid mt-4 px-3">
-<div class="row g-4">
-<!-- Left Column -->
-<div class="col-lg-8">
-<!-- Controls -->
-<div class="card mb-4">
-<div class="card-header">
-<i class="fas fa-sliders-h"></i>
-Analysis Controls
-</div>
-<div class="card-body">
-<div class="d-flex justify-content-between align-items-center flex-wrap gap-3">
-<h5 class="card-title mb-0">
-<i class="fas fa-chart-line"></i>
-Real-Time Market Analysis
-<span class="real-time-badge">
-<i class="fas fa-bolt"></i>
-Real-Time
-</span>
-</h5>
-<div class="d-flex gap-3 flex-wrap">
-<select id="symbolSelect" class="form-select form-select-sm" style="width: 160px;">
-<option value="BTCUSDT">BTC/USDT</option>
-<option value="ETHUSDT">ETH/USDT</option>
-<option value="XRPUSDT" selected>XRP/USDT</option>
-<option value="SOLUSDT">SOL/USDT</option>
-<option value="BNBUSDT">BNB/USDT</option>
-<option value="ADAUSDT">ADA/USDT</option>
-<option value="DOGEUSDT">DOGE/USDT</option>
-<option value="MATICUSDT">MATIC/USDT</option>
-<option value="LINKUSDT">LINK/USDT</option>
-<option value="AVAXUSDT">AVAX/USDT</option>
-</select>
-<select id="intervalSelect" class="form-select form-select-sm" style="width: 130px;">
-<option value="1m">1 Minute</option>
-<option value="5m">5 Minutes</option>
-<option value="15m">15 Minutes</option>
-<option value="30m">30 Minutes</option>
-<option value="1h" selected>1 Hour</option>
-<option value="4h">4 Hours</option>
-<option value="1d">1 Day</option>
-<option value="1w">1 Week</option>
-</select>
-<button class="btn btn-primary" onclick="analyzeCurrentSymbol()">
-<i class="fas fa-search"></i>
-Analyze
-</button>
-</div>
-</div>
-</div>
-</div>
-
-<!-- Price & Signal -->
-<div class="row g-4 mb-4">
-<div class="col-md-6">
-<div class="card h-100">
-<div class="card-header">
-<i class="fas fa-dollar-sign"></i>
-Current Price
-<span class="data-source-badge">
-<i class="fas fa-database"></i>
-Live Data
-</span>
-</div>
-<div class="card-body price-container">
-<div class="symbol-name" id="currentSymbol">XRP/USDT</div>
-<div class="futures-badge">
-<i class="fas fa-chart-area"></i>
-Futures Trading
-</div>
-<div class="current-price" id="currentPrice">
-<span class="spinner"></span>
-</div>
-<div class="price-change" id="priceChange">
-Loading market data...
-</div>
-<div class="volume-info">
-<div class="volume-label">24h Volume</div>
-<div class="volume-value" id="volume24h">-</div>
-</div>
-</div>
-</div>
-</div>
-
-<div class="col-md-6">
-<div class="card h-100">
-<div class="card-header">
-<i class="fas fa-brain"></i>
-AI Signal
-<span class="ai-assistant-badge">
-ML-Powered
-</span>
-</div>
-<div class="card-body signal-container">
-<div class="signal-badge signal-neutral" id="signalBadge">
-<span class="signal-text" id="signalText">ANALYZING</span>
-</div>
-<div class="confidence-bar">
-<div class="confidence-fill" id="confidenceFill" style="width: 0%"></div>
-</div>
-<div class="confidence-text" id="confidenceText">Confidence: 0%</div>
-<p class="text-secondary small mt-3 mb-0" id="signalRecommendation">
-Connecting to exchanges...
-</p>
-</div>
-</div>
-</div>
-</div>
-
-<!-- Signal Histogram -->
-<div class="card mb-4">
-<div class="card-header">
-<i class="fas fa-chart-bar"></i>
-Signal Distribution - Detailed Analysis
-</div>
-<div class="card-body">
-<div class="signal-histogram">
-<div class="histogram-title">
-<i class="fas fa-brain"></i>
-ML Model Predictions (Last 100 Signals)
-</div>
-<div class="histogram-row">
-<div class="histogram-label">Buy Signals</div>
-<div class="histogram-bar-container">
-<div class="histogram-bar histogram-bar-buy" id="buySignalBar" style="width: 0%"></div>
-</div>
-<div class="histogram-value buy" id="buySignalValue">0%</div>
-</div>
-<div class="histogram-row">
-<div class="histogram-label">Sell Signals</div>
-<div class="histogram-bar-container">
-<div class="histogram-bar histogram-bar-sell" id="sellSignalBar" style="width: 0%"></div>
-</div>
-<div class="histogram-value sell" id="sellSignalValue">0%</div>
-</div>
-<div class="histogram-row">
-<div class="histogram-label">Neutral/Hold</div>
-<div class="histogram-bar-container">
-<div class="histogram-bar histogram-bar-neutral" id="neutralSignalBar" style="width: 0%"></div>
-</div>
-<div class="histogram-value neutral" id="neutralSignalValue">0%</div>
-</div>
-</div>
-</div>
-</div>
-
-<!-- Chart -->
-<div class="card mb-4">
-<div class="card-header">
-<i class="fas fa-chart-candlestick"></i>
-Live Price Chart - TradingView
-<span class="data-source-badge">
-Binance, Bybit, OKEx, KuCoin, Gate.io, MEXC, Kraken, Bitfinex, Huobi, Coinbase, Bitget
-</span>
-</div>
-<div class="card-body">
-<div class="chart-container">
-<div id="tradingview-widget">
-<div class="text-center py-5">
-<div class="spinner mb-3" style="width: 48px; height: 48px; border-width: 4px;"></div>
-<p class="text-secondary fs-5">Loading TradingView chart...</p>
-<p class="text-muted mt-2">Real-time data from 11+ exchanges</p>
-</div>
-</div>
-</div>
-</div>
-</div>
-
-<!-- Detailed Technical Indicators -->
-<div class="card mb-4">
-<div class="card-header">
-<i class="fas fa-layer-group"></i>
-Detailed Technical Analysis
-</div>
-<div class="card-body">
-<div id="detailedIndicators">
-<div class="text-center py-5">
-<div class="spinner mb-3" style="width: 48px; height: 48px; border-width: 4px;"></div>
-<p class="text-secondary">Analyzing technical indicators...</p>
-</div>
-</div>
-</div>
-</div>
-
-<!-- Candlestick Patterns -->
-<div class="row g-4">
-<div class="col-md-6">
-<div class="card h-100">
-<div class="card-header">
-<i class="fas fa-shapes"></i>
-Candlestick Patterns
-</div>
-<div class="card-body">
-<div id="patternsContainer" class="mt-3">
-<span class="spinner"></span>
-<span class="ms-3 text-secondary">Detecting patterns...</span>
-</div>
-<p class="mt-4 mb-0 text-muted small" id="patternCount">
-Analyzing market structure...
-</p>
-</div>
-</div>
-</div>
-
-<div class="col-md-6">
-<div class="card h-100">
-<div class="card-header">
-<i class="fas fa-exchange-alt"></i>
-Market Structure
-</div>
-<div class="card-body">
-<div class="mt-3">
-<div class="indicator-detail-card neutral" id="marketStructureCard">
-<div class="indicator-header">
-<span class="indicator-name">
-<i class="fas fa-project-diagram"></i>
-Current Structure
-</span>
-<span class="indicator-signal indicator-signal-neutral" id="structureSignal">LOADING</span>
-</div>
-<div class="indicator-value" id="structureValue">-</div>
-<div class="indicator-description" id="structureDesc">
-Analyzing support/resistance levels...
-</div>
-</div>
-<div class="indicator-detail-card neutral" id="trendCard">
-<div class="indicator-header">
-<span class="indicator-name">
-<i class="fas fa-trend-up"></i>
-Trend Direction
-</span>
-<span class="indicator-signal indicator-signal-neutral" id="trendSignal">LOADING</span>
-</div>
-<div class="indicator-value" id="trendValue">-</div>
-<div class="indicator-description" id="trendDesc">
-Multi-timeframe trend analysis...
-</div>
-</div>
-<div class="indicator-detail-card neutral" id="volatilityCard">
-<div class="indicator-header">
-<span class="indicator-name">
-<i class="fas fa-bolt"></i>
-Volatility
-</span>
-<span class="indicator-signal indicator-signal-neutral" id="volatilitySignal">LOADING</span>
-</div>
-<div class="indicator-value" id="volatilityValue">-</div>
-<div class="indicator-description" id="volatilityDesc">
-Current market volatility index...
-</div>
-</div>
-</div>
-</div>
-</div>
-</div>
-</div>
-</div>
-
-<!-- Right Column -->
-<div class="col-lg-4">
-<!-- AI Chat -->
-<div class="card mb-4">
-<div class="card-header">
-<i class="fas fa-comments"></i>
-AI Trading Assistant
-<span class="ai-assistant-badge">
-24/7 Support
-</span>
-</div>
-<div class="card-body">
-<div class="chat-container" id="chatMessages">
-<div class="chat-message chat-bot">
-<strong>🤖 AI Assistant:</strong><br>
-Hello! I'm powered by advanced machine learning models analyzing real-time data from <strong>11+ exchanges</strong>.<br><br>
-<strong>Real-time capabilities:</strong>
-<ul class="mt-2 mb-0" style="font-size: 0.9rem; line-height: 1.6;">
-<li>Live technical analysis</li>
-<li>Pattern recognition (12+ patterns)</li>
-<li>ICT market structure analysis</li>
-<li>Multi-timeframe analysis (1m to 1W)</li>
-<li>Volatility-adjusted trail signals</li>
-<li>Risk management strategies</li>
-</ul>
-<em class="text-muted">✅ 100% Real Data - No synthetic/fake data</em>
-</div>
-</div>
-<div class="mt-3">
-<div class="input-group chat-input-group">
-<input type="text" class="form-control chat-input" id="chatInput"
-placeholder="Ask about market conditions, signals, or risk management...">
-<button class="btn btn-primary" onclick="sendChatMessage()">
-<i class="fas fa-paper-plane"></i>
-</button>
-</div>
-</div>
-</div>
-</div>
-
-<!-- ML Models -->
-<div class="card mb-4">
-<div class="card-header">
-<i class="fas fa-brain"></i>
-Machine Learning Models
-<span class="data-source-badge">
-Real Data Only
-</span>
-</div>
-<div class="card-body">
-<div class="mt-3">
-<div class="model-stat">
-<div class="model-name">
-<span><i class="fas fa-tree"></i> LightGBM Ensemble</span>
-<span class="text-success" id="lgbmAccuracy">--%</span>
-</div>
-<div class="model-bar">
-<div class="model-fill model-lgbm" id="lgbmBar" style="width: 0%"></div>
-</div>
-</div>
-
-<div class="model-stat">
-<div class="model-name">
-<span><i class="fas fa-brain"></i> LSTM Neural Network</span>
-<span style="color: var(--accent-blue);" id="lstmAccuracy">--%</span>
-</div>
-<div class="model-bar">
-<div class="model-fill model-lstm" id="lstmBar" style="width: 0%"></div>
-</div>
-</div>
-
-<div class="model-stat">
-<div class="model-name">
-<span><i class="fas fa-infinity"></i> Transformer Model</span>
-<span style="color: var(--accent-purple);" id="transformerAccuracy">--%</span>
-</div>
-<div class="model-bar">
-<div class="model-fill model-transformer" id="transformerBar" style="width: 0%"></div>
-</div>
-</div>
-</div>
-
-<div class="mt-4 pt-3" style="border-top: 2px solid var(--border-color);">
-<p class="mb-2" id="mlPrediction">
-<strong>Ensemble Prediction:</strong>
-<span class="text-muted ms-2">Analyzing...</span>
-</p>
-<button class="btn btn-outline-success w-100 mt-3" onclick="trainModels()">
-<i class="fas fa-sync-alt"></i>
-Retrain Models on Latest Data
-</button>
-</div>
-</div>
-</div>
-
-<!-- Exchange Status -->
-<div class="card">
-<div class="card-header">
-<i class="fas fa-cloud"></i>
-Live Data Sources (11+ Exchanges)
-<span class="connection-status status-connected">
-<i class="fas fa-check-circle"></i>
-All Online
-</span>
-</div>
-<div class="card-body">
-<div class="exchange-grid">
-<div class="exchange-card">
-<div class="exchange-logo text-primary"><i class="fas fa-bitcoin"></i></div>
-<div class="exchange-name-small">Binance</div>
-<div class="exchange-status status-active">Active</div>
-</div>
-<div class="exchange-card">
-<div class="exchange-logo text-warning"><i class="fas fa-coins"></i></div>
-<div class="exchange-name-small">Bybit</div>
-<div class="exchange-status status-active">Active</div>
-</div>
-<div class="exchange-card">
-<div class="exchange-logo text-info"><i class="fas fa-chart-bar"></i></div>
-<div class="exchange-name-small">OKEx</div>
-<div class="exchange-status status-active">Active</div>
-</div>
-<div class="exchange-card">
-<div class="exchange-logo text-success"><i class="fas fa-database"></i></div>
-<div class="exchange-name-small">KuCoin</div>
-<div class="exchange-status status-active">Active</div>
-</div>
-<div class="exchange-card">
-<div class="exchange-logo text-danger"><i class="fas fa-gem"></i></div>
-<div class="exchange-name-small">Gate.io</div>
-<div class="exchange-status status-active">Active</div>
-</div>
-<div class="exchange-card">
-<div class="exchange-logo text-purple"><i class="fas fa-rocket"></i></div>
-<div class="exchange-name-small">MEXC</div>
-<div class="exchange-status status-active">Active</div>
-</div>
-<div class="exchange-card">
-<div class="exchange-logo text-secondary"><i class="fas fa-exchange-alt"></i></div>
-<div class="exchange-name-small">Kraken</div>
-<div class="exchange-status status-active">Active</div>
-</div>
-<div class="exchange-card">
-<div class="exchange-logo text-orange"><i class="fas fa-fire"></i></div>
-<div class="exchange-name-small">Bitfinex</div>
-<div class="exchange-status status-active">Active</div>
-</div>
-<div class="exchange-card">
-<div class="exchange-logo text-cyan"><i class="fas fa-burn"></i></div>
-<div class="exchange-name-small">Huobi</div>
-<div class="exchange-status status-active">Active</div>
-</div>
-<div class="exchange-card">
-<div class="exchange-logo text-blue"><i class="fas fa-shopping-cart"></i></div>
-<div class="exchange-name-small">Coinbase</div>
-<div class="exchange-status status-active">Active</div>
-</div>
-<div class="exchange-card">
-<div class="exchange-logo text-teal"><i class="fas fa-bolt"></i></div>
-<div class="exchange-name-small">Bitget</div>
-<div class="exchange-status status-active">Active</div>
-</div>
-</div>
-
-<div class="mt-4 pt-3" style="border-top: 2px solid var(--border-color);">
-<div class="d-flex justify-content-between mb-2">
-<span class="text-muted">
-<i class="fas fa-sync"></i> Real-Time Analysis:
-</span>
-<span class="text-success fw-bold">ACTIVE</span>
-</div>
-<div class="d-flex justify-content-between mb-2">
-<span class="text-muted">
-<i class="fas fa-database"></i> Data Integrity:
-</span>
-<span class="text-success fw-bold">VERIFIED</span>
-</div>
-<div class="d-flex justify-content-between mb-2">
-<span class="text-muted">
-<i class="fas fa-shield-alt"></i> Security Status:
-</span>
-<span class="text-success fw-bold">PROTECTED</span>
-</div>
-<div class="d-flex justify-content-between">
-<span class="text-muted">
-<i class="fas fa-clock"></i> Last Update:
-</span>
-<span id="lastUpdate" class="fw-bold">Just now</span>
-</div>
-</div>
-</div>
-</div>
-</div>
-</div>
-</div>
-
-<!-- JavaScript -->
-<script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
-<script>
-// ============================================
-// GLOBAL VARIABLES - TradingView State Tracking
-// ============================================
-let currentChartSymbol = null;
-let currentChartInterval = null;
-let lastAnalysisTime = null;
-let ws = null;                      // WebSocket nesnesi
-let currentWsSymbol = null;
-
-// ============================================
-// INITIALIZATION
-// ============================================
-document.addEventListener('DOMContentLoaded', function() {
-console.log('🚀 Advanced Trading Bot v5.1 - Initializing...');
-console.log('📊 Connecting to 11+ exchanges: Binance, Bybit, OKEx, KuCoin, Gate.io, MEXC, Kraken, Bitfinex, Huobi, Coinbase, Bitget');
-console.log('🤖 Loading ML models: LightGBM, LSTM, Transformer');
-console.log('📈 Initializing TradingView widget...');
-
-// Load TradingView widget after page load
-loadTradingView();
-analyzeCurrentSymbol();
-// Auto-refresh every 60 seconds (data only, not chart)
-setInterval(analyzeCurrentSymbol, 60000);
-});
-
-// ============================================
-// TRADINGVIEW WIDGET - DÜZELTİLMİŞ ve OPTİMİZE EDİLMİŞ
-// ============================================
-function loadTradingView() {
-const container = document.getElementById('tradingview-widget');
-if (!container) {
-console.error('❌ TradingView container not found');
-return;
-}
-
-// Mevcut seçili sembol ve interval'i al
-const selectedSymbol = document.getElementById('symbolSelect').value || 'BTCUSDT';
-const selectedInterval = document.getElementById('intervalSelect').value || '1h';
-
-// Aynı sembol ve interval ise tekrar yükleme - OPTİMİZASYON
-if (currentChartSymbol === selectedSymbol && currentChartInterval === selectedInterval) {
-console.log('✅ TradingView already loaded for this symbol/interval');
-return;
-}
-
-// Loading state göster
-container.innerHTML = `
-<div class="text-center py-5">
-<div class="spinner mb-3" style="width: 48px; height: 48px; border-width: 4px;"></div>
-<p class="text-secondary fs-5">Loading TradingView chart...</p>
-<p class="text-muted mt-2">Symbol: ${selectedSymbol.replace('USDT', '/USDT')} | Interval: ${selectedInterval}</p>
-<p class="text-muted small">Data sources: Binance, Bybit, OKEx + 8 more exchanges</p>
-</div>
-`;
-
-// TradingView interval mapping - TÜM ZAMAN ARALIKLARI İÇİN
-const intervalMap = {
-'1m': '1',
-'5m': '5',
-'15m': '15',
-'30m': '30',
-'1h': '60',
-'4h': '240',
-'1d': 'D',
-'1w': 'W'
-};
-const tvInterval = intervalMap[selectedInterval] || '60'; // Varsayılan 1 saat
-
-console.log(`📈 Loading TradingView: ${selectedSymbol}, Interval: ${tvInterval}`);
-
-try {
-// TradingView widget'ı oluştur - studies PARAMETRESİZ (hata kaynağı)
-new TradingView.widget({
-width: "100%",
-height: "100%",
-symbol: "BINANCE:" + selectedSymbol,
-interval: tvInterval,
-timezone: "Etc/UTC",
-theme: "dark",
-style: "1",
-locale: "en",
-toolbar_bg: "#f1f3f6",
-enable_publishing: false,
-allow_symbol_change: false, // Kullanıcı sembol değiştiremesin (biz yönetelim)
-details: true,
-container_id: "tradingview-widget",
-library_path: "https://s3.tradingview.com/tvjs/latest/",
-autosize: true
-});
-
-// Current state'i güncelle
-currentChartSymbol = selectedSymbol;
-currentChartInterval = selectedInterval;
-
-console.log('✅ TradingView widget loaded successfully');
-showNotification('📈 TradingView chart loaded successfully', 'success');
-
-} catch (error) {
-console.error('❌ TradingView widget error:', error);
-container.innerHTML = `
-<div class="error-state">
-<i class="fas fa-chart-line"></i>
-<p>TradingView chart could not be loaded</p>
-<p class="text-muted small mt-2">Error: ${error.message || 'Unknown error'}</p>
-<p class="mt-3">
-<button class="btn btn-primary btn-sm" onclick="loadTradingView()">
-<i class="fas fa-redo"></i> Retry
-</button>
-<button class="btn btn-outline-secondary btn-sm ms-2" onclick="analyzeCurrentSymbol()">
-<i class="fas fa-sync-alt"></i> Refresh Data Only
-</button>
-</div>
-`;
-showNotification('⚠️ TradingView chart failed to load. Data analysis still working.', 'error');
-}
-}
-
-// ============================================
-// ANALYZE CURRENT SYMBOL - GÜNCELLENDİ (Chart Yenileme Kaldırıldı)
-// ============================================
-async function analyzeCurrentSymbol() {
-const symbol = document.getElementById('symbolSelect').value;
-const interval = document.getElementById('intervalSelect').value;
-
-// UI güncellemeleri
-document.getElementById('currentSymbol').textContent = symbol.replace('USDT', '/USDT');
-document.getElementById('currentPrice').innerHTML = '<span class="spinner"></span>';
-document.getElementById('signalText').textContent = 'ANALYZING';
-document.getElementById('signalBadge').className = 'signal-badge signal-neutral';
-document.getElementById('signalRecommendation').textContent = 'Analyzing market data from 11+ exchanges...';
-
-// Last update time
-lastAnalysisTime = new Date();
-document.getElementById('lastUpdate').textContent = lastAnalysisTime.toLocaleTimeString();
-
-try {
-// Gerçek backend çağrısı - production'da bu endpoint çalışacak
-const response = await fetch(`/api/analyze/${symbol}?interval=${interval}`);
-if (!response.ok) {
-throw new Error(`HTTP error! status: ${response.status}`);
-}
-const data = await response.json();
-
-if (data.success) {
-updateDashboard(data);
-showNotification(`✅ Analysis completed for ${symbol.replace('USDT', '/USDT')} (${interval})`, 'success');
-} else {
-showNotification('⚠️ Limited data available - showing partial analysis', 'info');
-// Dashboard'ı kısmi veri ile güncelle
-updateDashboard({
-price_data: { current: 0, change_percent: 0, volume_24h: 0 },
-signal: { signal: 'LIMITED_DATA', confidence: 30, recommendation: 'Limited market data available' },
-signal_distribution: { buy: 33, sell: 33, neutral: 34 }
-});
-}
-
-} catch (error) {
-// HATA YÖNETİMİ İYİLEŞTİRİLMİŞ - KULLANICI DOSTU
-console.error('❌ API connection error:', error);
-showNotification('⚠️ Real-time data unavailable. Showing last known values.', 'error');
-
-// UI'yi hata durumuna getir (son bilinen değerleri koru, ama güncelleme yok)
-if (document.getElementById('currentPrice').textContent.includes('$')) {
-// Son bilinen fiyatı koru
-document.getElementById('priceChange').innerHTML = '<i class="fas fa-exclamation-triangle text-warning"></i> Data delayed';
-document.getElementById('signalRecommendation').textContent = '⚠️ Real-time data delayed - using last known values';
-} else {
-// Hiç veri yoksa
-document.getElementById('currentPrice').textContent = '—';
-document.getElementById('priceChange').textContent = 'Data unavailable';
-document.getElementById('signalText').textContent = 'NO DATA';
-document.getElementById('signalBadge').className = 'signal-badge signal-neutral';
-document.getElementById('signalRecommendation').textContent = '⚠️ Unable to connect to exchanges. Check your internet connection.';
-document.getElementById('volume24h').textContent = '—';
-}
-}
-}
-
-// ============================================
-// UPDATE DASHBOARD - GERÇEK VERİ İLE
-// ============================================
-function updateDashboard(data) {
-// Update price - only if we have real data
-if (data.price_data && data.price_data.current > 0) {
-const price = data.price_data.current;
-const change = data.price_data.change_percent;
-document.getElementById('currentPrice').textContent = '$' + price.toLocaleString('en-US', {
-minimumFractionDigits: 2,
-maximumFractionDigits: 6
-});
-const changeEl = document.getElementById('priceChange');
-if (change >= 0) {
-changeEl.className = 'price-change price-up';
-changeEl.innerHTML = '<i class="fas fa-arrow-up"></i> ' + change.toFixed(2) + '% (24h)';
-} else {
-changeEl.className = 'price-change price-down';
-changeEl.innerHTML = '<i class="fas fa-arrow-down"></i> ' + Math.abs(change).toFixed(2) + '% (24h)';
-}
-// Update volume
-if (data.price_data.volume_24h) {
-const vol = parseFloat(data.price_data.volume_24h);
-document.getElementById('volume24h').textContent = vol > 1e9 ?
-'$' + (vol / 1e9).toFixed(2) + 'B' :
-'$' + (vol / 1e6).toFixed(2) + 'M';
-} else {
-document.getElementById('volume24h').textContent = 'N/A';
-}
-} else {
-// No real price data
-document.getElementById('currentPrice').textContent = 'N/A';
-document.getElementById('priceChange').textContent = 'No real-time data';
-document.getElementById('volume24h').textContent = 'N/A';
-}
-
-// Update signal - only if we have real signal
-if (data.signal && data.signal.signal !== 'NO_DATA') {
-const signal = data.signal.signal;
-const confidence = Math.min(99, Math.floor(data.signal.confidence)); // Max 99% göster
-const signalBadge = document.getElementById('signalBadge');
-signalBadge.className = 'signal-badge';
-if (signal.includes('STRONG_BUY') || signal.includes('BUY')) {
-signalBadge.classList.add('signal-buy');
-} else if (signal.includes('STRONG_SELL') || signal.includes('SELL')) {
-signalBadge.classList.add('signal-sell');
-} else {
-signalBadge.classList.add('signal-neutral');
-}
-document.getElementById('signalText').textContent = signal.replace(/_/g, ' ');
-document.getElementById('confidenceFill').style.width = confidence + '%';
-document.getElementById('confidenceText').textContent = 'Confidence: ' + confidence + '%';
-if (confidence >= 75) {
-document.getElementById('confidenceText').className = 'confidence-text confidence-high';
-} else if (confidence >= 50) {
-document.getElementById('confidenceText').className = 'confidence-text confidence-medium';
-} else {
-document.getElementById('confidenceText').className = 'confidence-text confidence-low';
-}
-document.getElementById('signalRecommendation').textContent = data.signal.recommendation || 'Analyzing market...';
-} else {
-// No real signal data
-document.getElementById('signalBadge').className = 'signal-badge signal-neutral';
-document.getElementById('signalText').textContent = 'NO SIGNAL';
-document.getElementById('confidenceFill').style.width = '0%';
-document.getElementById('confidenceText').textContent = 'Confidence: N/A';
-document.getElementById('signalRecommendation').textContent = 'Waiting for sufficient market data...';
-}
-
-// Update Signal Histogram
-if (data.signal_distribution) {
-document.getElementById('buySignalBar').style.width = data.signal_distribution.buy + '%';
-document.getElementById('buySignalValue').textContent = data.signal_distribution.buy + '%';
-document.getElementById('sellSignalBar').style.width = data.signal_distribution.sell + '%';
-document.getElementById('sellSignalValue').textContent = data.signal_distribution.sell + '%';
-document.getElementById('neutralSignalBar').style.width = data.signal_distribution.neutral + '%';
-document.getElementById('neutralSignalValue').textContent = data.signal_distribution.neutral + '%';
-} else {
-// Default values if no data
-document.getElementById('buySignalBar').style.width = '33%';
-document.getElementById('buySignalValue').textContent = '33%';
-document.getElementById('sellSignalBar').style.width = '33%';
-document.getElementById('sellSignalValue').textContent = '33%';
-document.getElementById('neutralSignalBar').style.width = '34%';
-document.getElementById('neutralSignalValue').textContent = '34%';
-}
-
-// Update Detailed Technical Indicators
-if (data.technical_indicators) {
-updateDetailedIndicators(data.technical_indicators);
-} else {
-document.getElementById('detailedIndicators').innerHTML = `
-<div class="loading-state">
-<i class="fas fa-chart-line text-muted"></i>
-<p class="mt-2">Technical indicators will appear after first analysis</p>
-</div>
-`;
-}
-
-// Update patterns - only real detected patterns
-if (data.patterns && data.patterns.length > 0) {
-const container = document.getElementById('patternsContainer');
-container.innerHTML = '';
-data.patterns.slice(0, 8).forEach(function(p) {
-const tag = document.createElement('span');
-tag.className = 'pattern-tag pattern-' + (p.direction || 'neutral');
-tag.textContent = p.name;
-container.appendChild(tag);
-});
-document.getElementById('patternCount').textContent = `${data.patterns.length} patterns detected in last 50 candles`;
-} else {
-document.getElementById('patternsContainer').innerHTML =
-'<span class="text-muted"><i class="fas fa-info-circle"></i> No significant patterns detected</span>';
-document.getElementById('patternCount').textContent = 'Analyzing candlestick patterns...';
-}
-
-// Update market structure details
-if (data.market_structure) {
-updateMarketStructure(data.market_structure);
-} else {
-// Default values
-document.getElementById('structureValue').textContent = 'Neutral';
-document.getElementById('structureSignal').textContent = 'NEUTRAL';
-document.getElementById('structureDesc').textContent = 'Awaiting sufficient price action data';
-document.getElementById('trendValue').textContent = 'Sideways';
-document.getElementById('trendSignal').textContent = 'NEUTRAL';
-document.getElementById('trendDesc').textContent = 'No clear trend direction established';
-document.getElementById('volatilityValue').textContent = 'Normal';
-document.getElementById('volatilitySignal').textContent = 'NORMAL';
-document.getElementById('volatilityDesc').textContent = 'Market volatility within normal ranges';
-}
-
-// Update ML models - only if we have real stats
-if (data.ml_stats) {
-updateMLModels(data.ml_stats);
-} else {
-// Don't show fake accuracy - show loading
-document.getElementById('lgbmAccuracy').textContent = 'N/A';
-document.getElementById('lgbmBar').style.width = '0%';
-document.getElementById('lstmAccuracy').textContent = 'N/A';
-document.getElementById('lstmBar').style.width = '0%';
-document.getElementById('transformerAccuracy').textContent = 'N/A';
-document.getElementById('transformerBar').style.width = '0%';
-document.getElementById('mlPrediction').innerHTML =
-'<strong>Ensemble Prediction:</strong> <span class="text-muted ms-2">Awaiting model training</span>';
-}
-}
-
-// ============================================
-// UPDATE DETAILED TECHNICAL INDICATORS
-// ============================================
-function updateDetailedIndicators(indicators) {
-const container = document.getElementById('detailedIndicators');
-if (!indicators) {
-container.innerHTML = `
-<div class="text-center py-5">
-<p class="text-muted">No technical indicator data available</p>
-</div>
-`;
-return;
-}
-
-container.innerHTML = `
-<div class="row g-3">
-<!-- RSI Indicator -->
-<div class="col-md-6">
-<div class="indicator-detail-card ${getSignalClass(indicators.rsi_value, 'rsi')}">
-<div class="indicator-header">
-<span class="indicator-name">
-<i class="fas fa-chart-line"></i>
-RSI (14)
-</span>
-<span class="indicator-signal ${getSignalClass(indicators.rsi_value, 'rsi', true)}">
-${getRSISignal(indicators.rsi_value)}
-</span>
-</div>
-<div class="indicator-value ${getIndicatorColor(indicators.rsi_value, 'rsi')}">
-${indicators.rsi_value ? indicators.rsi_value.toFixed(2) : '-'}
-</div>
-<div class="indicator-description">
-Relative Strength Index - Momentum oscillator
-</div>
-<div class="indicator-recommendation ${getSignalClass(indicators.rsi_value, 'rsi')}">
-${getRSIRecommendation(indicators.rsi_value)}
-</div>
-</div>
-</div>
-
-<!-- MACD Indicator -->
-<div class="col-md-6">
-<div class="indicator-detail-card ${getSignalClass(indicators.macd_histogram, 'macd')}">
-<div class="indicator-header">
-<span class="indicator-name">
-<i class="fas fa-exchange-alt"></i>
-MACD
-</span>
-<span class="indicator-signal ${getSignalClass(indicators.macd_histogram, 'macd', true)}">
-${getMACDSignal(indicators.macd_histogram)}
-</span>
-</div>
-<div class="indicator-value">
-${indicators.macd_histogram ? indicators.macd_histogram.toFixed(4) : '-'}
-</div>
-<div class="indicator-description">
-Moving Average Convergence Divergence
-</div>
-<div class="indicator-recommendation ${getSignalClass(indicators.macd_histogram, 'macd')}">
-${getMACDRecommendation(indicators.macd_histogram)}
-</div>
-</div>
-</div>
-
-<!-- Bollinger Bands -->
-<div class="col-md-6">
-<div class="indicator-detail-card ${getSignalClass(indicators.bb_position, 'bb')}">
-<div class="indicator-header">
-<span class="indicator-name">
-<i class="fas fa-chart-bar"></i>
-Bollinger Bands
-</span>
-<span class="indicator-signal ${getSignalClass(indicators.bb_position, 'bb', true)}">
-${getBBSignal(indicators.bb_position)}
-</span>
-</div>
-<div class="indicator-value">
-${indicators.bb_position ? indicators.bb_position.toFixed(2) : '-'}
-</div>
-<div class="indicator-description">
-Price position relative to Bollinger Bands (%)
-</div>
-<div class="indicator-recommendation ${getSignalClass(indicators.bb_position, 'bb')}">
-${getBBRecommendation(indicators.bb_position)}
-</div>
-</div>
-</div>
-
-<!-- Stochastic RSI -->
-<div class="col-md-6">
-<div class="indicator-detail-card ${getSignalClass(indicators.stoch_rsi, 'stoch')}">
-<div class="indicator-header">
-<span class="indicator-name">
-<i class="fas fa-sync-alt"></i>
-Stoch RSI
-</span>
-<span class="indicator-signal ${getSignalClass(indicators.stoch_rsi, 'stoch', true)}">
-${getStochSignal(indicators.stoch_rsi)}
-</span>
-</div>
-<div class="indicator-value">
-${indicators.stoch_rsi ? indicators.stoch_rsi.toFixed(2) : '-'}
-</div>
-<div class="indicator-description">
-Stochastic RSI - Overbought/Oversold levels
-</div>
-<div class="indicator-recommendation ${getSignalClass(indicators.stoch_rsi, 'stoch')}">
-${getStochRecommendation(indicators.stoch_rsi)}
-</div>
-</div>
-</div>
-
-<!-- Volume Profile -->
-<div class="col-md-6">
-<div class="indicator-detail-card neutral">
-<div class="indicator-header">
-<span class="indicator-name">
-<i class="fas fa-chart-area"></i>
-Volume Profile
-</span>
-<span class="indicator-signal indicator-signal-neutral">
-${indicators.volume_trend || 'NEUTRAL'}
-</span>
-</div>
-<div class="indicator-value">
-${indicators.volume_ratio ? indicators.volume_ratio.toFixed(2) + 'x' : '-'}
-</div>
-<div class="indicator-description">
-Current volume vs 20-day average
-</div>
-<div class="indicator-recommendation neutral">
-${getVolumeRecommendation(indicators.volume_ratio, indicators.volume_trend)}
-</div>
-</div>
-</div>
-
-<!-- ATR (Volatility) -->
-<div class="col-md-6">
-<div class="indicator-detail-card neutral">
-<div class="indicator-header">
-<span class="indicator-name">
-<i class="fas fa-ruler-combined"></i>
-ATR
-</span>
-<span class="indicator-signal indicator-signal-neutral">
-VOLATILITY
-</span>
-</div>
-<div class="indicator-value">
-${indicators.atr ? indicators.atr.toFixed(4) : '-'}
-</div>
-<div class="indicator-description">
-Average True Range - Volatility measure
-</div>
-<div class="indicator-recommendation neutral">
-${getATRRecommendation(indicators.atr, indicators.atr_percent)}
-</div>
-</div>
-</div>
-</div>
-`;
-}
-
-// ============================================
-// HELPER FUNCTIONS FOR INDICATORS (Kısa ve Öz)
-// ============================================
-function getSignalClass(value, type, isSignal = false) {
-if (value === null || value === undefined) return 'neutral';
-let signal = 'neutral';
-switch(type) {
-case 'rsi':
-if (value >= 70) signal = 'sell';
-else if (value <= 30) signal = 'buy';
-break;
-case 'macd':
-if (value > 0.001) signal = 'buy';
-else if (value < -0.001) signal = 'sell';
-break;
-case 'bb':
-if (value >= 80) signal = 'sell';
-else if (value <= 20) signal = 'buy';
-break;
-case 'stoch':
-if (value >= 0.8) signal = 'sell';
-else if (value <= 0.2) signal = 'buy';
-break;
-}
-return isSignal ? `indicator-signal-${signal}` : signal;
-}
-
-function getIndicatorColor(value, type) {
-if (value === null || value === undefined) return '';
-switch(type) {
-case 'rsi':
-if (value >= 70) return 'red';
-else if (value <= 30) return 'green';
-break;
-}
-return '';
-}
-
-function getRSISignal(value) {
-if (value >= 70) return 'OVERBOUGHT';
-else if (value <= 30) return 'OVERSOLD';
-else return 'NEUTRAL';
-}
-
-function getRSIRecommendation(value) {
-if (value >= 70) return 'Overbought territory - Consider taking profits';
-else if (value <= 30) return 'Oversold territory - Potential buying opportunity';
-else return 'Neutral momentum - Watch for direction';
-}
-
-function getMACDSignal(value) {
-if (value > 0.001) return 'BULLISH';
-else if (value < -0.001) return 'BEARISH';
-else return 'NEUTRAL';
-}
-
-function getMACDRecommendation(value) {
-if (value > 0.001) return 'MACD above zero - Bullish momentum confirmed';
-else if (value < -0.001) return 'MACD below zero - Bearish momentum confirmed';
-else return 'MACD near zero - Neutral momentum, watch for crossover';
-}
-
-function getBBSignal(value) {
-if (value >= 80) return 'OVERBOUGHT';
-else if (value <= 20) return 'OVERSOLD';
-else return 'NEUTRAL';
-}
-
-function getBBRecommendation(value) {
-if (value >= 80) return 'Price near upper band - Resistance zone';
-else if (value <= 20) return 'Price near lower band - Support zone';
-else return 'Price near middle band - Neutral';
-}
-
-function getStochSignal(value) {
-if (value >= 0.8) return 'OVERBOUGHT';
-else if (value <= 0.2) return 'OVERSOLD';
-else return 'NEUTRAL';
-}
-
-function getStochRecommendation(value) {
-if (value >= 0.8) return 'Stoch RSI overbought - Potential reversal';
-else if (value <= 0.2) return 'Stoch RSI oversold - Potential bounce';
-else return 'Neutral momentum - Watch for direction';
-}
-
-function getVolumeRecommendation(ratio, trend) {
-if (ratio >= 2) return 'High volume confirmation - Strong signal';
-else if (ratio >= 1.5) return 'Above average volume - Good confirmation';
-else if (ratio <= 0.7) return 'Low volume - Weak signal, be cautious';
-else return 'Normal volume levels';
-}
-
-function getATRRecommendation(atr, percent) {
-if (percent >= 5) return `High volatility (${percent.toFixed(1)}%) - Wider stops needed`;
-else if (percent >= 3) return `Moderate volatility (${percent.toFixed(1)}%) - Normal conditions`;
-else return `Low volatility (${percent.toFixed(1)}%) - Tight ranges expected`;
-}
-
-// ============================================
-// UPDATE MARKET STRUCTURE DETAILS
-// ============================================
-function updateMarketStructure(structure) {
-if (!structure) return;
-
-// Structure
-const structEl = document.getElementById('marketStructureCard');
-const structSignal = document.getElementById('structureSignal');
-const structValue = document.getElementById('structureValue');
-const structDesc = document.getElementById('structureDesc');
-
-structValue.textContent = structure.structure || 'Unknown';
-if (structure.structure === 'Bullish') {
-structEl.className = 'indicator-detail-card buy';
-structSignal.className = 'indicator-signal indicator-signal-buy';
-structSignal.textContent = 'BULLISH';
-structDesc.textContent = structure.description || 'Higher highs and higher lows confirmed';
-} else if (structure.structure === 'Bearish') {
-structEl.className = 'indicator-detail-card sell';
-structSignal.className = 'indicator-signal indicator-signal-sell';
-structSignal.textContent = 'BEARISH';
-structDesc.textContent = structure.description || 'Lower highs and lower lows confirmed';
-} else {
-structEl.className = 'indicator-detail-card neutral';
-structSignal.className = 'indicator-signal indicator-signal-neutral';
-structSignal.textContent = 'NEUTRAL';
-structDesc.textContent = structure.description || 'No clear structure identified';
-}
-
-// Trend
-const trendEl = document.getElementById('trendCard');
-const trendSignal = document.getElementById('trendSignal');
-const trendValue = document.getElementById('trendValue');
-const trendDesc = document.getElementById('trendDesc');
-
-trendValue.textContent = structure.trend || 'Unknown';
-if (structure.trend === 'Uptrend') {
-trendEl.className = 'indicator-detail-card buy';
-trendSignal.className = 'indicator-signal indicator-signal-buy';
-trendSignal.textContent = 'UPTREND';
-trendDesc.textContent = structure.trend_strength ?
-`Strong uptrend (${structure.trend_strength})` : 'Bullish momentum intact';
-} else if (structure.trend === 'Downtrend') {
-trendEl.className = 'indicator-detail-card sell';
-trendSignal.className = 'indicator-signal indicator-signal-sell';
-trendSignal.textContent = 'DOWNTREND';
-trendDesc.textContent = structure.trend_strength ?
-`Strong downtrend (${structure.trend_strength})` : 'Bearish momentum intact';
-} else {
-trendEl.className = 'indicator-detail-card neutral';
-trendSignal.className = 'indicator-signal indicator-signal-neutral';
-trendSignal.textContent = 'SIDEWAYS';
-trendDesc.textContent = 'Consolidation phase - Range bound';
-}
-
-// Volatility
-const volEl = document.getElementById('volatilityCard');
-const volSignal = document.getElementById('volatilitySignal');
-const volValue = document.getElementById('volatilityValue');
-const volDesc = document.getElementById('volatilityDesc');
-
-volValue.textContent = structure.volatility_index ?
-structure.volatility_index.toFixed(2) : 'N/A';
-if (structure.volatility === 'High') {
-volEl.className = 'indicator-detail-card neutral';
-volSignal.className = 'indicator-signal indicator-signal-neutral';
-volSignal.textContent = 'HIGH';
-volDesc.textContent = 'Elevated volatility - Expect larger moves';
-} else if (structure.volatility === 'Low') {
-volEl.className = 'indicator-detail-card neutral';
-volSignal.className = 'indicator-signal indicator-signal-neutral';
-volSignal.textContent = 'LOW';
-volDesc.textContent = 'Low volatility - Tight ranges expected';
-} else {
-volEl.className = 'indicator-detail-card neutral';
-volSignal.className = 'indicator-signal indicator-signal-neutral';
-volSignal.textContent = 'NORMAL';
-volDesc.textContent = 'Normal volatility levels';
-}
-}
-
-// ============================================
-// UPDATE ML MODELS WITH REAL STATS
-// ============================================
-function updateMLModels(stats) {
-if (!stats) {
-return; // Don't show fake data
-}
-
-document.getElementById('lgbmAccuracy').textContent = stats.lgbm.toFixed(1) + '%';
-document.getElementById('lgbmBar').style.width = stats.lgbm + '%';
-document.getElementById('lstmAccuracy').textContent = stats.lstm.toFixed(1) + '%';
-document.getElementById('lstmBar').style.width = stats.lstm + '%';
-document.getElementById('transformerAccuracy').textContent = stats.transformer.toFixed(1) + '%';
-document.getElementById('transformerBar').style.width = stats.transformer + '%';
-
-// Calculate ensemble prediction
-const avg = (stats.lgbm + stats.lstm + stats.transformer) / 3;
-const prediction = avg > 70 ? 'BULLISH' : avg > 40 ? 'NEUTRAL' : 'BEARISH';
-const predictionClass = prediction === 'BULLISH' ? 'text-success fw-bold' : 
-prediction === 'BEARISH' ? 'text-danger fw-bold' : 'text-warning fw-bold';
-
-document.getElementById('mlPrediction').innerHTML =
-`<strong>Ensemble Prediction:</strong> <span class="${predictionClass} ms-2">${prediction}</span>`;
-}
-
-// ============================================
-// CHAT MESSAGE
-// ============================================
-async function sendChatMessage() {
-const input = document.getElementById('chatInput');
-const message = input.value.trim();
-if (!message) return;
-
-addChatMessage(message, 'user');
-input.value = '';
-
-try {
-// Production'da gerçek chat API'si çalışacak
-const response = await fetch('/api/chat', {
-method: 'POST',
-headers: { 'Content-Type': 'application/json' },
-body: JSON.stringify({
-message: message,
-symbol: document.getElementById('symbolSelect').value
-})
-});
-if (!response.ok) {
-throw new Error('Chat API failed');
-}
-const data = await response.json();
-setTimeout(function() {
-addChatMessage(data.response, 'bot');
-}, 300);
-} catch (error) {
-setTimeout(function() {
-addChatMessage('🤖 Analyzing your query with real-time market data from 11+ exchanges...', 'bot');
-// Simulate AI thinking
-setTimeout(() => {
-const responses = [
-`I analyze ${document.getElementById('symbolSelect').value.replace('USDT', '/USDT')} using real data from Binance, Bybit, OKEx and 8 more exchanges. Current market shows mixed signals with moderate volatility.`,
-`Risk management tip: Always use stop-loss orders. Never risk more than 2% of your capital on a single trade.`,
-`The current market structure shows consolidation between $0.52-$0.58 for XRP. Key resistance at $0.60, support at $0.50.`,
-`I detect bullish divergence on RSI with price making lower lows while RSI makes higher lows - potential reversal signal.`,
-`Volatility is currently elevated (ATR: 4.2%). Consider wider stops or reduced position size until volatility normalizes.`
-];
-const randomResponse = responses[Math.floor(Math.random() * responses.length)];
-addChatMessage(randomResponse, 'bot');
-}, 1500);
-}, 300);
-}
-}
-
-// ============================================
-// ADD CHAT MESSAGE
-// ============================================
-function addChatMessage(message, sender) {
-const container = document.getElementById('chatMessages');
-const div = document.createElement('div');
-div.className = 'chat-message chat-' + sender;
-div.innerHTML = '<strong>' + (sender === 'user' ? '👤 You:' : '🤖 AI:') + '</strong><br>' + message;
-container.appendChild(div);
-container.scrollTop = container.scrollHeight;
-}
-
-// ============================================
-// TRAIN MODELS
-// ============================================
-async function trainModels() {
-showNotification('🤖 Training ML models on latest market data...', 'info');
-try {
-const symbol = document.getElementById('symbolSelect').value;
-const response = await fetch(`/api/train/${symbol}`, {
-method: 'POST'
-});
-if (response.ok) {
-const data = await response.json();
-showNotification(`✅ ${data.message}`, 'success');
-// Refresh analysis
-analyzeCurrentSymbol();
-} else {
-showNotification('🔄 Training initiated. Models will update after processing real market data...', 'info');
-}
-} catch (error) {
-showNotification('⚠️ Training initiated. Processing real market data from exchanges...', 'info');
-console.error('Training error:', error);
-}
-}
-
-// ============================================
-// SHOW NOTIFICATION
-// ============================================
-function showNotification(text, type) {
-const div = document.createElement('div');
-div.className = 'notification ' + type;
-div.innerHTML = `<i class="fas fa-${type === 'success' ? 'check-circle' : type === 'error' ? 'exclamation-triangle' : 'info-circle'} me-2"></i> ${text}`;
-document.body.appendChild(div);
-setTimeout(function() {
-div.remove();
-}, 3500);
-}
-
-// ============================================
-// EVENT LISTENERS - OPTİMİZE EDİLMİŞ
-// ============================================
-document.getElementById('chatInput').addEventListener('keypress', function(e) {
-if (e.key === 'Enter') sendChatMessage();
-});
-
-// Sembol değiştiğinde hem chart hem analiz
-document.getElementById('symbolSelect').addEventListener('change', function() {
-loadTradingView();
-analyzeCurrentSymbol();
-});
-
-// Interval değiştiğinde hem chart hem analiz
-document.getElementById('intervalSelect').addEventListener('change', function() {
-loadTradingView();
-analyzeCurrentSymbol();
-});
-
-// Initial chat messages
-setTimeout(() => {
-addChatMessage('💡 Pro tip: Click "Retrain Models" after major market events for updated predictions', 'bot');
-}, 2000);
-   // BURAYA EKLEYİN: (diğer fonksiyonlardan sonra,  
-       // ============================================
-// TOKEN KONTROLÜ ve KULLANICI BİLGİLERİ
-// ============================================
-window.addEventListener('load', function() {
-    // Token kontrolü
-    const token = localStorage.getItem('token');
-    if (!token) {
-        // Token yoksa ana sayfaya yönlendir
-        alert('Please login first');
-        window.location.href = '/';
-        return;
-    }
-    
-    // Kullanıcı bilgilerini localStorage'dan al ve göster
-    const savedUser = localStorage.getItem('user');
-    if (savedUser) {
-        try {
-            const user = JSON.parse(savedUser);
-            console.log('👤 User logged in:', user.username);
-            
-            // Navbar'da kullanıcı bilgisini göster (isteğe bağlı)
-            const navbarBrand = document.querySelector('.navbar-brand');
-            if (navbarBrand) {
-                navbarBrand.innerHTML += 
-                    `<span class="ms-3 text-success fw-bold">
-                        <i class="fas fa-user me-1"></i>${user.username}
-                    </span>`;
+    <div class="container">
+        <div class="auth-container">
+            <div class="auth-header">
+                <h1><i class="fas fa-robot me-2"></i>ICTSMARTPRO Trade Pro</h1>
+                <p>AI-Powered Cryptocurrency Trading Platform</p>
+            </div>
+
+            <div class="auth-tabs">
+                <button class="tab-btn active" onclick="switchTab('login')">
+                    <i class="fas fa-sign-in-alt me-2"></i>Login
+                </button>
+                <button class="tab-btn" onclick="switchTab('register')">
+                    <i class="fas fa-user-plus me-2"></i>Register
+                </button>
+            </div>
+
+            <div class="auth-content">
+                <!-- Login Form -->
+                <div id="loginFormContainer" class="auth-form active">
+                    <form id="loginForm">
+                        <div class="alert" id="loginAlert"></div>
+
+                        <div class="form-group">
+                            <label class="form-label">Username or Email</label>
+                            <input type="text" class="form-control" id="loginUsername" 
+                                placeholder="Enter your username or email" required>
+                        </div>
+
+                        <div class="form-group">
+                            <label class="form-label">Password</label>
+                            <input type="password" class="form-control" id="loginPassword" 
+                                placeholder="Enter your password" required>
+                        </div>
+
+                        <div class="form-check">
+                            <input class="form-check-input" type="checkbox" id="rememberMe">
+                            <label class="form-check-label" for="rememberMe">
+                                Remember me
+                            </label>
+                        </div>
+
+                        <button type="submit" class="btn-submit" id="loginBtn">
+                            <i class="fas fa-sign-in-alt me-2"></i>Login
+                        </button>
+
+                        <div class="form-footer">
+                            <p>Don't have an account? <a href="#" onclick="switchTab('register')">Create one</a></p>
+                        </div>
+                    </form>
+                </div>
+
+                <!-- Register Form -->
+                <div id="registerFormContainer" class="auth-form">
+                    <form id="registerForm">
+                        <div class="alert" id="registerAlert"></div>
+
+                        <div class="form-group">
+                            <label class="form-label">Username <span class="text-danger">*</span></label>
+                            <input type="text" class="form-control" id="registerUsername" 
+                                placeholder="Choose a username" required>
+                        </div>
+
+                        <div class="form-group">
+                            <label class="form-label">Email <span class="text-danger">*</span></label>
+                            <input type="email" class="form-control" id="registerEmail" 
+                                placeholder="your@email.com" required>
+                        </div>
+
+                        <div class="form-group">
+                            <label class="form-label">Password <span class="text-danger">*</span></label>
+                            <input type="password" class="form-control" id="registerPassword" 
+                                placeholder="At least 6 characters" required>
+                        </div>
+
+                        <div class="form-group">
+                            <label class="form-label">Confirm Password <span class="text-danger">*</span></label>
+                            <input type="password" class="form-control" id="registerConfirmPassword" 
+                                placeholder="Confirm your password" required>
+                        </div>
+
+                        <div class="form-group">
+                            <label class="form-label">Wallet Address <span class="text-danger">*</span></label>
+                            <input type="text" class="form-control" id="registerWallet" 
+                                placeholder="0x..." required>
+                            <small class="text-muted d-block mt-1">
+                                Enter a USDT-compatible wallet address for payments
+                            </small>
+                        </div>
+
+                        <div class="form-group">
+                            <label class="form-label">Membership Type</label>
+                            <div class="membership-options">
+                                <div class="membership-card selected" onclick="selectMembership('trial')" id="trialCard">
+                                    <h4><i class="fas fa-clock me-2"></i>Free Trial</h4>
+                                    <div class="price">7 Days <span>FREE</span></div>
+                                    <div class="features">
+                                        • Full access to all features<br>
+                                        • 11+ exchange integration<br>
+                                        • AI-powered signals<br>
+                                        • 24/7 support
+                                    </div>
+                                </div>
+                                <div class="membership-card" onclick="selectMembership('premium')" id="premiumCard">
+                                    <h4><i class="fas fa-crown me-2"></i>Premium</h4>
+                                    <div class="price">49 USDT <span>/month</span></div>
+                                    <div class="features">
+                                        • Unlimited access<br>
+                                        • Priority support<br>
+                                        • Advanced analytics<br>
+                                        • API access
+                                    </div>
+                                </div>
+                            </div>
+                            <input type="hidden" id="membershipType" value="trial">
+                        </div>
+
+                        <div class="payment-info">
+                            <h5><i class="fas fa-info-circle me-2"></i>Payment Information</h5>
+                            <p>
+                                <strong>Free Trial:</strong> 7 days full access, no payment required.<br>
+                                <strong>Premium:</strong> Pay 49 USDT/month to wallet address below.<br>
+                                <strong>Payment Address:</strong> <span id="paymentWallet" class="text-neon-cyan">
+                                    0x742d35Cc6634C0532925a3b844Bc9e7595f0bEb
+                                </span>
+                            </p>
+                        </div>
+
+                        <div class="form-check">
+                            <input class="form-check-input" type="checkbox" id="termsCheck" required>
+                            <label class="form-check-label" for="termsCheck">
+                                I agree to the <a href="#">Terms of Service</a> and <a href="#">Privacy Policy</a>
+                            </label>
+                        </div>
+
+                        <button type="submit" class="btn-submit" id="registerBtn">
+                            <i class="fas fa-user-plus me-2"></i>Create Account
+                        </button>
+
+                        <div class="form-footer">
+                            <p>Already have an account? <a href="#" onclick="switchTab('login')">Login here</a></p>
+                        </div>
+                    </form>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        // ============================================
+        // GLOBAL VARIABLES & CONFIGURATION
+        // ============================================
+        let currentUser = null;
+        let selectedNetwork = 'ERC20';
+        let verificationInterval = null;
+        let paymentCheckInterval = null; // Ödeme kontrol döngüsü
+        let isPaymentVerified = false;   // Ödeme durumu
+        let selectedMembership = 'trial'; // trial | premium
+
+        // ============================================
+        // TAB SWITCHING
+        // ============================================
+        function switchTab(tab) {
+            // Tab butonlarını güncelle
+            document.querySelectorAll('.tab-btn').forEach(btn => {
+                btn.classList.remove('active');
+            });
+            event.target.classList.add('active');
+
+            // Formları göster/gizle
+            document.getElementById('loginFormContainer').classList.remove('active');
+            document.getElementById('registerFormContainer').classList.remove('active');
+
+            if (tab === 'login') {
+                document.getElementById('loginFormContainer').classList.add('active');
+            } else {
+                document.getElementById('registerFormContainer').classList.add('active');
             }
-            
-            // Admin kontrolü (isteğe bağlı)
-            if (user.is_admin) {
-                console.log('⭐ Admin user detected');
-                // Admin'e özel ekstralar
-            }
-        } catch (e) {
-            console.error('User data parse error:', e);
         }
-    }
-    
-    // Dashboard'u başlat
-    console.log('🚀 Starting dashboard analysis...');
-    analyzeCurrentSymbol();
-});
 
-// ============================================
-// LOGOUT FONKSİYONU (navbar'a eklemek için)
-// ============================================
-function logout() {
-    if (confirm('Are you sure you want to logout?')) {
-        localStorage.removeItem('token');
-        localStorage.removeItem('user');
-        window.location.href = '/';
-    }
-}
-</script>
+        // ============================================
+        // MEMBERSHIP SELECTION
+        // ============================================
+        function selectMembership(type) {
+            selectedMembership = type;
+            document.getElementById('membershipType').value = type;
+
+            // Kartları güncelle
+            document.getElementById('trialCard').classList.toggle('selected', type === 'trial');
+            document.getElementById('premiumCard').classList.toggle('selected', type === 'premium');
+        }
+
+        // ============================================
+        // ALERT FUNCTIONS
+        // ============================================
+        function showAlert(elementId, message, type) {
+            const alert = document.getElementById(elementId);
+            alert.textContent = message;
+            alert.className = `alert alert-${type} show`;
+            
+            // 5 saniye sonra otomatik gizle
+            setTimeout(() => {
+                alert.classList.remove('show');
+            }, 5000);
+        }
+
+        // ============================================
+        // USER STORAGE FUNCTIONS
+        // ============================================
+        function saveUserToStorage(user) {
+            localStorage.setItem('currentUser', JSON.stringify(user));
+            localStorage.setItem('isLoggedIn', 'true');
+        }
+
+        function loadUserFromStorage() {
+            const savedUser = localStorage.getItem('currentUser');
+            const isLoggedIn = localStorage.getItem('isLoggedIn') === 'true';
+            
+            if (savedUser && isLoggedIn) {
+                try {
+                    currentUser = JSON.parse(savedUser);
+                    return true;
+                } catch (e) {
+                    console.error('User data parse error:', e);
+                    localStorage.removeItem('currentUser');
+                    localStorage.removeItem('isLoggedIn');
+                }
+            }
+            return false;
+        }
+
+        function clearUserStorage() {
+            localStorage.removeItem('currentUser');
+            localStorage.removeItem('isLoggedIn');
+            currentUser = null;
+        }
+
+        // ============================================
+        // LOGIN FUNCTION
+        // ============================================
+        document.getElementById('loginForm').addEventListener('submit', function(e) {
+            e.preventDefault();
+            
+            const usernameOrEmail = document.getElementById('loginUsername').value.trim();
+            const password = document.getElementById('loginPassword').value;
+            const rememberMe = document.getElementById('rememberMe').checked;
+
+            if (!usernameOrEmail || !password) {
+                showAlert('loginAlert', 'Please fill in all fields', 'error');
+                return;
+            }
+
+            const loginBtn = document.getElementById('loginBtn');
+            loginBtn.innerHTML = '<i class="fas fa-spinner fa-spin me-2"></i>Logging in...';
+            loginBtn.disabled = true;
+
+            // Simulated login (1 second delay)
+            setTimeout(() => {
+                const users = JSON.parse(localStorage.getItem('quantumtrade_users') || '[]');
+                
+                const user = users.find(u => 
+                    (u.username.toLowerCase() === usernameOrEmail.toLowerCase() || 
+                     u.email.toLowerCase() === usernameOrEmail.toLowerCase()) && 
+                    u.password === password
+                );
+
+                if (user) {
+                    // Login successful
+                    currentUser = {
+                        username: user.username,
+                        email: user.email,
+                        has_subscription: user.has_subscription,
+                        is_admin: user.is_admin || false,
+                        is_verified: user.is_verified || false,
+                        credits: user.credits || 0,
+                        wallet_address: user.wallet_address || null,
+                        membership_type: user.membership_type || 'trial'
+                    };
+                    
+                    saveUserToStorage(currentUser);
+                    
+                    showAlert('loginAlert', 'Login successful! Redirecting...', 'success');
+                    
+                    setTimeout(() => {
+                        redirectToDashboard();
+                    }, 1500);
+                } else {
+                    showAlert('loginAlert', 'Invalid username/email or password', 'error');
+                    loginBtn.innerHTML = '<i class="fas fa-sign-in-alt me-2"></i>Login';
+                    loginBtn.disabled = false;
+                }
+            }, 1000);
+        });
+
+        // ============================================
+        // REGISTER FUNCTION
+        // ============================================
+        document.getElementById('registerForm').addEventListener('submit', function(e) {
+            e.preventDefault();
+            
+            const username = document.getElementById('registerUsername').value.trim();
+            const email = document.getElementById('registerEmail').value.trim();
+            const password = document.getElementById('registerPassword').value;
+            const confirmPassword = document.getElementById('registerConfirmPassword').value;
+            const wallet = document.getElementById('registerWallet').value.trim();
+            const membershipType = document.getElementById('membershipType').value;
+            const termsChecked = document.getElementById('termsCheck').checked;
+
+            // Validation
+            if (!username || !email || !password || !confirmPassword) {
+                showAlert('registerAlert', 'Please fill in all required fields', 'error');
+                return;
+            }
+            
+            if (password.length < 6) {
+                showAlert('registerAlert', 'Password must be at least 6 characters', 'error');
+                return;
+            }
+            
+            if (password !== confirmPassword) {
+                showAlert('registerAlert', 'Passwords do not match', 'error');
+                return;
+            }
+            
+            if (!email.includes('@') || !email.includes('.')) {
+                showAlert('registerAlert', 'Please enter a valid email address', 'error');
+                return;
+            }
+            
+            if (!wallet.startsWith('0x') || wallet.length < 42) {
+                showAlert('registerAlert', 'Please enter a valid wallet address (starting with 0x)', 'error');
+                return;
+            }
+            
+            if (!termsChecked) {
+                showAlert('registerAlert', 'Please agree to the terms and conditions', 'error');
+                return;
+            }
+
+            const registerBtn = document.getElementById('registerBtn');
+            registerBtn.innerHTML = '<i class="fas fa-spinner fa-spin me-2"></i>Creating account...';
+            registerBtn.disabled = true;
+
+            // Simulated registration (1 second delay)
+            setTimeout(() => {
+                const users = JSON.parse(localStorage.getItem('quantumtrade_users') || '[]');
+                
+                // Check if username or email already exists
+                if (users.some(u => u.username.toLowerCase() === username.toLowerCase())) {
+                    showAlert('registerAlert', 'Username already taken', 'error');
+                    resetRegisterButton();
+                    return;
+                }
+                
+                if (users.some(u => u.email.toLowerCase() === email.toLowerCase())) {
+                    showAlert('registerAlert', 'Email already registered', 'error');
+                    resetRegisterButton();
+                    return;
+                }
+
+                // Create new user
+                const newUser = {
+                    id: Date.now(),
+                    username: username,
+                    email: email,
+                    password: password,
+                    wallet_address: wallet,
+                    has_subscription: membershipType === 'premium',
+                    is_admin: false,
+                    is_verified: false,
+                    credits: 0,
+                    membership_type: membershipType,
+                    created_at: new Date().toISOString()
+                };
+                
+                users.push(newUser);
+                localStorage.setItem('quantumtrade_users', JSON.stringify(users));
+
+                // Save current user session
+                currentUser = {
+                    username: newUser.username,
+                    email: newUser.email,
+                    has_subscription: newUser.has_subscription,
+                    is_admin: newUser.is_admin,
+                    is_verified: newUser.is_verified,
+                    credits: newUser.credits,
+                    wallet_address: newUser.wallet_address,
+                    membership_type: newUser.membership_type
+                };
+                
+                saveUserToStorage(currentUser);
+
+                // Show success screen
+                showRegistrationSuccess(membershipType);
+
+                function resetRegisterButton() {
+                    registerBtn.innerHTML = '<i class="fas fa-user-plus me-2"></i>Create Account';
+                    registerBtn.disabled = false;
+                }
+            }, 1000);
+        });
+
+        // ============================================
+        // SHOW REGISTRATION SUCCESS SCREEN
+        // ============================================
+        function showRegistrationSuccess(membershipType) {
+            const registerForm = document.getElementById('registerForm');
+            
+            let successHTML = `
+                <div class="success-screen">
+                    <i class="fas fa-check-circle success-icon"></i>
+                    <h2 class="success-title">🎉 Congratulations!</h2>
+                    <p class="success-message">
+                        Your account has been successfully created.<br>
+                        Welcome, <strong>${currentUser.username}</strong>!
+                    </p>
+            `;
+
+            if (membershipType === 'trial') {
+                successHTML += `
+                    <div class="alert alert-info show">
+                        <i class="fas fa-info-circle me-2"></i>
+                        <strong>Free Trial Active:</strong> You have 7 days of full access to all premium features.
+                    </div>
+                    
+                    <div class="payment-status">
+                        <h5><i class="fas fa-clock me-2"></i>Trial Period</h5>
+                        <p>
+                            • Duration: 7 days<br>
+                            • Full access to all features<br>
+                            • No payment required<br>
+                            • Expires: ${getTrialExpiryDate()}
+                        </p>
+                    </div>
+                `;
+            } else {
+                successHTML += `
+                    <div class="alert alert-warning show">
+                        <i class="fas fa-exclamation-triangle me-2"></i>
+                        <strong>Payment Required:</strong> Please send 49 USDT to activate your premium membership.
+                    </div>
+                    
+                    <div class="payment-status">
+                        <h5><i class="fas fa-receipt me-2"></i>Payment Details</h5>
+                        <p>
+                            <strong>Amount:</strong> 49 USDT<br>
+                            <strong>Network:</strong> ERC20<br>
+                            <strong>Payment Address:</strong><br>
+                            <span class="text-neon-cyan" style="word-break: break-all;">
+                                0x742d35Cc6634C0532925a3b844Bc9e7595f0bEb
+                            </span><br><br>
+                            <strong>Your Wallet:</strong><br>
+                            <span style="word-break: break-all;">
+                                ${currentUser.wallet_address}
+                            </span>
+                        </p>
+                    </div>
+                    
+                    <div class="alert alert-info">
+                        <i class="fas fa-sync-alt me-2"></i>
+                        <strong>Automatic Verification:</strong> Payment will be verified automatically. 
+                        Please wait while we check your transaction...
+                    </div>
+                `;
+                
+                // Start payment monitoring for premium users
+                startPaymentMonitoring();
+            }
+
+            successHTML += `
+                    <button class="btn-submit" id="successContinueBtn" style="width: auto; padding: 14px 40px; margin-top: 20px;">
+                        <i class="fas fa-arrow-right me-2"></i>Go to Dashboard
+                    </button>
+                </div>
+            `;
+
+            registerForm.innerHTML = successHTML;
+
+            // Continue button event
+            document.getElementById('successContinueBtn').addEventListener('click', function() {
+                redirectToDashboard();
+            });
+        }
+
+        // ============================================
+        // GET TRIAL EXPIRY DATE
+        // ============================================
+        function getTrialExpiryDate() {
+            const expiryDate = new Date();
+            expiryDate.setDate(expiryDate.getDate() + 7);
+            return expiryDate.toLocaleDateString('tr-TR', {
+                year: 'numeric',
+                month: 'long',
+                day: 'numeric',
+                hour: '2-digit',
+                minute: '2-digit'
+            });
+        }
+
+        // ============================================
+        // PAYMENT CHECK FUNCTIONS
+        // ============================================
+        function checkPaymentStatus() {
+            // DENEME AMAÇLI: Her zaman true döndür
+            // Gerçek uygulamada blockchain API'si ile kontrol edilecek
+            // Örnek: return checkBlockchainTransaction(user.wallet_address);
+            console.log('🔄 Checking payment status...');
+            return true; // Test için her zaman true
+        }
+
+        function startPaymentMonitoring() {
+            console.log('💰 Payment monitoring started...');
+            
+            // 10 saniyede bir ödeme kontrolü yap
+            paymentCheckInterval = setInterval(() => {
+                const paymentStatus = checkPaymentStatus();
+                
+                if (paymentStatus && !isPaymentVerified) {
+                    isPaymentVerified = true;
+                    console.log('✅ Payment verified!');
+                    
+                    // Stop monitoring
+                    stopPaymentMonitoring();
+                    
+                    // Update user subscription status
+                    if (currentUser) {
+                        currentUser.has_subscription = true;
+                        currentUser.membership_type = 'premium';
+                        
+                        // Update localStorage
+                        const users = JSON.parse(localStorage.getItem('quantumtrade_users') || '[]');
+                        const userIndex = users.findIndex(u => u.username === currentUser.username);
+                        if (userIndex !== -1) {
+                            users[userIndex].has_subscription = true;
+                            users[userIndex].membership_type = 'premium';
+                            localStorage.setItem('quantumtrade_users', JSON.stringify(users));
+                        }
+                        
+                        saveUserToStorage(currentUser);
+                    }
+                    
+                    showAlert('registerAlert', '✅ Payment received! Redirecting to dashboard...', 'success');
+                    
+                    // Redirect to dashboard
+                    setTimeout(() => {
+                        redirectToDashboard();
+                    }, 2000);
+                }
+            }, 10000); // 10 saniye
+        }
+
+        function stopPaymentMonitoring() {
+            if (paymentCheckInterval) {
+                clearInterval(paymentCheckInterval);
+                paymentCheckInterval = null;
+                console.log('⏹️ Payment monitoring stopped');
+            }
+        }
+
+        // ============================================
+        // REDIRECT TO DASHBOARD
+        // ============================================
+        function redirectToDashboard() {
+            // Stop any ongoing processes
+            stopPaymentMonitoring();
+            
+            // Redirect to dashboard
+            window.location.href = 'dashboard.html';
+        }
+
+        // ============================================
+        // PAGE LOAD
+        // ============================================
+        document.addEventListener('DOMContentLoaded', function() {
+            console.log('🚀 ICTSMARTPRO Trade  Auth System Loaded');
+            
+            // Check if user is already logged in
+            if (loadUserFromStorage()) {
+                console.log('👤 User already logged in:', currentUser.username);
+                // Optionally redirect to dashboard
+                // redirectToDashboard();
+            }
+        });
+    </script>
 </body>
 </html>
