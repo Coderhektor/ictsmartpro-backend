@@ -6,7 +6,7 @@ numpy>=2.0.0
 pandas>=2.2.3
 scikit-learn>=1.5.2
 
---index-url https://download.pytorch.org/whl/cpu
+ 
 torch==2.4.1+cpu
 torchvision==0.19.1+cpu
 transformers>=4.45.0
