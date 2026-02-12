@@ -1708,7 +1708,7 @@ class UltimateTechnicalIndicatorEngine:
         levels.sort(key=lambda x: x.strength, reverse=True)
         self.support_resistance = levels[:10]
     
-        def _calculate_fibonacci_levels(self):
+    def _calculate_fibonacci_levels(self):
         """Fibonacci retracement/extens seviyelerini hesapla"""
         if len(self.df) < 50:
             return
