@@ -446,11 +446,28 @@ async def health_check():
         "visitors": real_data_bridge.get_visitor_count()
     }
 
+ # ========== ZİYARETÇİ SAYACI - GERÇEK VERİ ==========
 @app.get("/api/visitors")
 async def get_visitors():
-    return {"count": real_data_bridge.increment_visitor()}
-
-
+    """
+    Ziyaretçi sayacı - HER İSTEKTE 1 ARTAR
+    SADECE GERÇEK VERİ, KESİNLİKLE RASTGELE SAYI YOK!
+    """
+    try:
+        count = real_data_bridge.increment_visitor()
+        # count her zaman integer ve sıfırdan başlar
+        return {
+            "success": True,
+            "count": count,
+            "timestamp": datetime.now().isoformat()
+        }
+    except Exception as e:
+        print(f"❌ Visitor count error: {e}")
+        return {
+            "success": False,
+            "count": 0,
+            "error": str(e)
+        }
 # ============================================
 # ANA ANALİZ ENDPOINT
 # ============================================
