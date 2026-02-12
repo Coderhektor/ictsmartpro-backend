@@ -1,16 +1,5 @@
-
-# ========================================================================================================
-# LOGGING SETUP
-# ========================================================================================================
-def setup_logging():
-    """Configure logging system"""
-    logger = logging.getLogger("trading_bot")
-    logger.setLevel(logging.INFO)
-    logger.handlers.clear()
-    
-    handler = logging.StreamHandler(sys.stdout)
-    handler.setLevel(logging.INFO)# ────────────────────────────────────────────────────────────────
-# Tüm import'lar (en üstte kalıyor)
+# ────────────────────────────────────────────────────────────────
+# TÜM IMPORT'LAR (mevcut haliyle kalıyor)
 import sys
 import json
 import time
@@ -22,20 +11,18 @@ from typing import Dict, List, Optional, Any
 from collections import defaultdict, Counter
 import os
 
-# FastAPI import'ları
 from fastapi import FastAPI, Request, HTTPException, Query, WebSocket, WebSocketDisconnect
 from fastapi.responses import HTMLResponse, JSONResponse, FileResponse
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.middleware.gzip import GZipMiddleware
 from fastapi.staticfiles import StaticFiles
 
-# aiohttp, pandas, numpy vs. devam ediyor...
 import aiohttp
 from aiohttp import ClientTimeout, TCPConnector
 import pandas as pd
 import numpy as np
 
-# ML kütüphaneleri (try-except ile)
+# ML kütüphaneleri
 ML_AVAILABLE = False
 try:
     import lightgbm as lgb
@@ -45,7 +32,30 @@ except ImportError:
     pass
 
 # ────────────────────────────────────────────────────────────────
-# FastAPI uygulamasını BURADA oluşturuyoruz (EN ÖNEMLİ KISIM)
+# LOGGING SETUP FONKSİYONU - EN ÜSTE KONMALI
+def setup_logging():
+    """Configure logging system"""
+    logger = logging.getLogger("trading_bot")
+    logger.setLevel(logging.INFO)
+    logger.handlers.clear()  # Önceki handler'ları temizle
+    
+    handler = logging.StreamHandler(sys.stdout)
+    handler.setLevel(logging.INFO)
+    
+    formatter = logging.Formatter(
+        '%(asctime)s | %(levelname)-8s | %(message)s',
+        datefmt='%Y-%m-%d %H:%M:%S'
+    )
+    handler.setFormatter(formatter)
+    logger.addHandler(handler)
+    
+    return logger
+
+# Logger'ı burada oluşturuyoruz (global olarak kullanılacak)
+logger = setup_logging()
+
+# ────────────────────────────────────────────────────────────────
+# FastAPI uygulaması
 app = FastAPI(
     title="Trading Bot v7.0",
     description="Real-time crypto analysis from 11+ exchanges",
@@ -54,7 +64,7 @@ app = FastAPI(
     redoc_url=None
 )
 
-# Middleware'ler (CORS, GZip vs.) — app tanımlandıktan sonra
+# Middleware'ler
 app.add_middleware(
     CORSMiddleware,
     allow_origins=["*"],
@@ -65,11 +75,7 @@ app.add_middleware(
 app.add_middleware(GZipMiddleware, minimum_size=1000)
 
 # ────────────────────────────────────────────────────────────────
-# ZİYARETÇİ SAYACI KISMI — app'den SONRA gelmeli!
-from collections import defaultdict
-from datetime import datetime, timedelta
-
-# Global takipçiler
+# ZİYARETÇİ SAYACI (app'den sonra geliyor - bu kısım zaten doğru)
 visitor_tracker = defaultdict(lambda: datetime.min)
 visitor_count = 0
 
@@ -80,7 +86,7 @@ async def get_visitors(request: Request):
     """
     global visitor_count
     
-    client_ip = request.client.host
+    client_ip = request.client.host or "unknown"
     
     last_visit = visitor_tracker[client_ip]
     now = datetime.utcnow()
@@ -88,23 +94,16 @@ async def get_visitors(request: Request):
     if (now - last_visit) > timedelta(hours=24):
         visitor_count += 1
         visitor_tracker[client_ip] = now
+        logger.info(f"Yeni ziyaretçi IP: {client_ip} → Toplam: {visitor_count}")
     
     return {
         "success": True,
-        "count": visitor_count
+        "count": visitor_count,
+        "your_ip": client_ip  # test için faydalı olabilir
     }
 
-
-    formatter = logging.Formatter(
-        '%(asctime)s | %(levelname)-8s | %(message)s',
-        datefmt='%Y-%m-%d %H:%M:%S'
-    )
-    handler.setFormatter(formatter)
-    logger.addHandler(handler)
-    
-    return logger
-
-logger = setup_logging()
+# ────────────────────────────────────────────────────────────────
+# Bundan sonra diğer endpoint'ler, class'lar vs. devam eder...
 
 # ========================================================================================================
 # CONFIGURATION
