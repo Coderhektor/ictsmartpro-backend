@@ -2378,6 +2378,7 @@ async def analyze_symbol(symbol: str, interval: str = "1h", limit: int = 100):
             )
         #===============AI MODEL ANALIZI =============================
         # ========== AI DEĞERLENDİRME ENDPOINT - DASHBOARD BUTONU İÇİN ==========
+        # ========== AI DEĞERLENDİRME ENDPOINT - DASHBOARD BUTONU İÇİN ==========
 @app.get("/api/ai-evaluate/{symbol}")
 async def ai_evaluate_symbol(symbol: str):
     """
@@ -2430,13 +2431,31 @@ async def ai_evaluate_symbol(symbol: str):
             elif ind.signal in [SignalType.SELL, SignalType.STRONG_SELL]:
                 sell_indicators.append({"name": ind.name, "value": ind.value})
         
+        # ============ SİNYAL DÖNÜŞÜMÜ - DASHBOARD UYUMLU ============
+        action = evaluation['signal']['action']  # "LONG", "SHORT", veya "HOLD"
+        confidence = evaluation['signal']['confidence']
+        
+        # Dashboard'un beklediği formata dönüştür
+        if action == "LONG":
+            if confidence > 75:
+                dashboard_action = "STRONG_BUY"
+            else:
+                dashboard_action = "BUY"
+        elif action == "SHORT":
+            if confidence > 75:
+                dashboard_action = "STRONG_SELL"
+            else:
+                dashboard_action = "SELL"
+        else:  # HOLD veya diğer
+            dashboard_action = "NEUTRAL"
+        
         # DASHBOARD'UN BEKLEDİĞİ FORMATTA YANIT
         return {
             "success": True,
             "symbol": original_symbol,
-            "current_price": evaluation['price']['current'],
+            "current_price": float(df['close'].iloc[-1]),  # DataFrame'den al, daha güvenilir
             "ai_evaluation": {
-                "action": evaluation['signal']['action'],
+                "action": dashboard_action,  # DÖNÜŞTÜRÜLMÜŞ SİNYAL!
                 "confidence": evaluation['signal']['confidence'],
                 "recommendation": evaluation['signal']['recommendation'],
                 "score": evaluation['signal']['score'],
@@ -2453,20 +2472,23 @@ async def ai_evaluate_symbol(symbol: str):
                 "sell": sell_indicators[:3]
             },
             "levels": {
-                "support": evaluation['levels']['support'],
-                "resistance": evaluation['levels']['resistance'],
-                "support_distance": evaluation['levels']['support_distance'],
-                "resistance_distance": evaluation['levels']['resistance_distance']
+                "support": float(evaluation['levels']['support']),
+                "resistance": float(evaluation['levels']['resistance']),
+                "support_distance": float(evaluation['levels']['support_distance']),
+                "resistance_distance": float(evaluation['levels']['resistance_distance'])
             },
             "timestamp": datetime.now().isoformat()
         }
         
     except Exception as e:
         print(f"❌ AI Evaluate error: {e}")
+        import traceback
+        traceback.print_exc()
         return {
             "success": False,
             "error": str(e)
         }
+
         # ============ 1. TEKNİK İNDİKATÖR ANALİZİ ============
         indicator_engine = TechnicalIndicatorEngine(df)
         indicators = indicator_engine.calculate_all_indicators()
