@@ -340,32 +340,53 @@ class RealDataBridge:
         
         return df
     
-    def get_heikin_ashi(self, symbol: str, limit: int = 200) -> pd.DataFrame:
-        """Heikin-Ashi mumlarını hesapla"""
-        df = self.get_dataframe(symbol, limit)
-        if df.empty:
-            return df
-        
-        ha_df = pd.DataFrame(index=df.index)
-        
-        # Heikin-Ashi Close
+def get_heikin_ashi(self, symbol: str, limit: int = 200) -> pd.DataFrame:
+    """Heikin-Ashi mumlarını hesapla - ULTIMATE FIX"""
+    df = self.get_dataframe(symbol, limit)
+    if df.empty or len(df) < 2:
+        return pd.DataFrame()
+    
+    ha_df = pd.DataFrame(index=df.index)
+    
+    try:
+        # 1. HEIKIN-ASHI CLOSE
         ha_df['ha_close'] = (df['open'] + df['high'] + df['low'] + df['close']) / 4
         
-        # Heikin-Ashi Open
+        # 2. HEIKIN-ASHI OPEN (önceki mumların ortalaması)
         ha_df['ha_open'] = (df['open'].shift(1) + df['close'].shift(1)) / 2
         ha_df['ha_open'].fillna((df['open'] + df['close']) / 2, inplace=True)
         
-        # Heikin-Ashi High
-        ha_df['ha_high'] = df[['high', 'ha_open', 'ha_close']].max(axis=1)
+        # 3. HEIKIN-ASHI HIGH (en yüksek değer)
+        high_values = pd.concat([
+            df['high'], 
+            ha_df['ha_open'], 
+            ha_df['ha_close']
+        ], axis=1)
+        ha_df['ha_high'] = high_values.max(axis=1)
         
-        # Heikin-Ashi Low
-        ha_df['ha_low'] = df[['low', 'ha_open', 'ha_close']].min(axis=1)
+        # 4. HEIKIN-ASHI LOW (en düşük değer)
+        low_values = pd.concat([
+            df['low'], 
+            ha_df['ha_open'], 
+            ha_df['ha_close']
+        ], axis=1)
+        ha_df['ha_low'] = low_values.min(axis=1)
         
-        # Heikin-Ashi trend
-        ha_df['ha_trend'] = 'bullish' if ha_df['ha_close'].iloc[-1] > ha_df['ha_open'].iloc[-1] else 'bearish'
-        ha_df['ha_color'] = ha_df.apply(lambda x: 'green' if x['ha_close'] > x['ha_open'] else 'red', axis=1)
+        # 5. HEIKIN-ASHI TREND ve RENK
+        ha_df['ha_trend'] = 'bullish'
+        ha_df['ha_color'] = 'green'
         
-        return ha_df
+        mask_bullish = ha_df['ha_close'] > ha_df['ha_open']
+        ha_df.loc[mask_bullish, 'ha_trend'] = 'bullish'
+        ha_df.loc[mask_bullish, 'ha_color'] = 'green'
+        ha_df.loc[~mask_bullish, 'ha_trend'] = 'bearish'
+        ha_df.loc[~mask_bullish, 'ha_color'] = 'red'
+        
+    except Exception as e:
+        print(f"❌ Heikin-Ashi hesaplama hatası: {e}")
+        return pd.DataFrame()
+    
+    return ha_df
     
     def increment_visitor(self) -> int:
         self.visitor_count += 1
