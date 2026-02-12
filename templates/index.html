@@ -949,8 +949,7 @@
 
     <script>
         // ============================================
-        // ICTSMARTPRO - SIFIRDAN YAZILMIŞ, SORUNSUZ AUTH SİSTEMİ
-        // Tüm hatalar giderildi, kullanıcı deneyimi optimize edildi
+        // ICTSMARTPRO - ÜCRETSİZ DENEME DASHBOARD'A DİREKT YÖNLENDİRME
         // ============================================
 
         (function() {
@@ -1130,6 +1129,21 @@
             }
 
             // ---------- DASHBOARD YÖNLENDİRME ----------
+            function redirectToDashboard() {
+                console.log('🚀 YÖNLENDİRME: Dashboard açılıyor...');
+                
+                // Demo amaçlı uyarı
+                alert('🎯 DASHBOARD\'A YÖNLENDİRİLİYORSUNUZ!\n\nKullanıcı: ' + currentUser?.username + '\nPremium: ' + (currentUser?.has_subscription ? 'EVET' : 'HAYIR') + '\n\n(30 Gün Ücretsiz Deneme Aktif)');
+                
+                // GERÇEK YÖNLENDİRME - BURASI ÖNEMLİ!
+                // window.location.href = '/dashboard';  // Gerçek projede
+                
+                // Demo simülasyon
+                setTimeout(() => {
+                    location.reload();
+                }, 2000);
+            }
+
             function showDashboardConfirmation() {
                 if (!securityModal) {
                     securityModal = new bootstrap.Modal(document.getElementById('securityModal'));
@@ -1139,36 +1153,51 @@
                 document.getElementById('confirmAccessBtn').onclick = function() {
                     securityModal.hide();
                     setTimeout(() => {
-                        // BAŞARILI YÖNLENDİRME
-                        showAlert('loginAlert', '✅ Dashboard yönlendiriliyor...', 'success');
-                        showAlert('registerAlert', '✅ Dashboard yönlendiriliyor...', 'success');
-                        
-                        // Gerçek projede: window.location.href = '/dashboard';
-                        console.log('🚀 YÖNLENDİRME: Dashboard açılıyor...');
-                        
-                        // Demo amaçlı uyarı
-                        alert('🎯 DASHBOARD\'A YÖNLENDİRİLİYOR!\n\nKullanıcı: ' + currentUser?.username + '\nPremium: ' + (currentUser?.has_subscription ? 'EVET' : 'HAYIR'));
-                        
-                        // 2 saniye sonra sayfayı yenile (dashboard simülasyonu)
-                        setTimeout(() => {
-                            location.reload();
-                        }, 2000);
+                        redirectToDashboard();
                     }, 500);
                 };
             }
 
+            // ---------- ÜCRETSİZ DENEME KULLANICISI OLUŞTUR ----------
+            function createFreeTrialUser() {
+                // Demo kullanıcı adı oluştur
+                const timestamp = Date.now();
+                const username = `kullanici_${timestamp.toString().slice(-6)}`;
+                const email = `kullanici${timestamp.toString().slice(-6)}@deneme.com`;
+                
+                // YENİ ÜCRETSİZ DENEME KULLANICISI
+                const trialUser = {
+                    id: timestamp,
+                    username: username,
+                    email: email,
+                    password: 'trial123', // Otomatik şifre
+                    wallet_address: null,
+                    has_subscription: true, // PREMIUM AKTİF!
+                    is_admin: false,
+                    is_verified: true,
+                    credits: APP_CONFIG.DEFAULT_CREDITS,
+                    is_trial: true, // Deneme kullanıcısı olduğunu belirt
+                    subscription_expiry: new Date(Date.now() + 30 * 24 * 60 * 60 * 1000).toISOString(),
+                    created_at: new Date().toISOString()
+                };
+                
+                // Kullanıcıyı kaydet
+                saveUser(trialUser);
+                
+                // Oturum aç
+                setSession(trialUser);
+                
+                console.log('🎉 Ücretsiz deneme kullanıcısı oluşturuldu:', username);
+                
+                return trialUser;
+            }
+
             // ---------- BAŞARILI GİRİŞ ----------
             function handleSuccessfulLogin(user) {
-                // Session oluştur
                 setSession(user);
-                
-                // UI güncelle
                 updateUIBasedOnAuth();
-                
-                // Başarı mesajı
                 showAlert('loginAlert', `✅ Hoş geldin, ${user.username}!`, 'success');
                 
-                // Login formunu başarı ekranına çevir
                 const loginForm = document.getElementById('loginForm');
                 const premiumBadge = user.has_subscription ? 
                     '<span class="premium-badge"><i class="fas fa-crown"></i> Premium Aktif</span>' : '';
@@ -1195,16 +1224,10 @@
             }
 
             function handleSuccessfulRegistration(user) {
-                // Kullanıcıyı kaydet
                 saveUser(user);
-                
-                // Oturum aç
                 setSession(user);
-                
-                // UI güncelle
                 updateUIBasedOnAuth();
                 
-                // Register formunu başarı ekranına çevir
                 const registerForm = document.getElementById('registerForm');
                 registerForm.innerHTML = `
                     <div class="success-screen">
@@ -1276,7 +1299,6 @@
                     const wallet = document.getElementById('registerWallet')?.value.trim();
                     const terms = document.getElementById('termsCheck')?.checked;
                     
-                    // Validasyonlar
                     if (!username || !email || !password || !confirmPassword) {
                         showAlert('registerAlert', 'Tüm alanları doldurun', 'error');
                         return;
@@ -1307,7 +1329,6 @@
                     registerBtn.disabled = true;
                     
                     setTimeout(() => {
-                        // Kullanıcı adı kontrolü
                         const existingUser = findUserByUsernameOrEmail(username);
                         if (existingUser) {
                             showAlert('registerAlert', 'Bu kullanıcı adı zaten alınmış', 'error');
@@ -1316,7 +1337,6 @@
                             return;
                         }
                         
-                        // E-posta kontrolü
                         const existingEmail = findUserByUsernameOrEmail(email);
                         if (existingEmail) {
                             showAlert('registerAlert', 'Bu e-posta zaten kayıtlı', 'error');
@@ -1325,14 +1345,13 @@
                             return;
                         }
                         
-                        // YENİ KULLANICI
                         const newUser = {
                             id: Date.now(),
                             username: username,
                             email: email,
                             password: password,
                             wallet_address: wallet || null,
-                            has_subscription: true, // 30 GÜN ÜCRETSİZ PREMIUM
+                            has_subscription: true,
                             is_admin: false,
                             is_verified: true,
                             credits: APP_CONFIG.DEFAULT_CREDITS,
@@ -1344,28 +1363,121 @@
                     }, 1000);
                 });
 
-                // GET STARTED BUTTON
+                // ============================================
+                // 🔥 ÜCRETSİZ BAŞLA BUTONU - DİREKT DASHBOARD'A YÖNLENDİRME
+                // ============================================
                 document.getElementById('getStartedBtn')?.addEventListener('click', function() {
+                    
+                    // 1. Önce mevcut oturumu kontrol et
                     if (currentUser) {
-                        // Zaten giriş yapmış -> Dashboard
+                        // Zaten giriş yapmış -> Dashboard'a yönlendir
+                        console.log('👤 Mevcut kullanıcı bulundu, dashboard yönlendiriliyor:', currentUser.username);
                         showDashboardConfirmation();
-                    } else {
-                        // Giriş yapmamış -> Kayıt formu
-                        showRegister();
-                        document.getElementById('registerCard').scrollIntoView({ behavior: 'smooth' });
+                        return;
                     }
+                    
+                    // 2. Oturum kontrolü (localStorage)
+                    if (checkExistingSession()) {
+                        console.log('👤 LocalStorage\'de oturum bulundu, dashboard yönlendiriliyor:', currentUser.username);
+                        showDashboardConfirmation();
+                        return;
+                    }
+                    
+                    // 3. YENİ ÜCRETSİZ DENEME KULLANICISI OLUŞTUR
+                    console.log('🎯 Yeni ücretsiz deneme kullanıcısı oluşturuluyor...');
+                    
+                    const trialUser = createFreeTrialUser();
+                    
+                    // UI'ı güncelle
+                    updateUIBasedOnAuth();
+                    
+                    // Başarı mesajı göster
+                    showAlert('loginAlert', `🎉 Hoş geldin, ${trialUser.username}! 30 gün premium başladı.`, 'success');
+                    showAlert('registerAlert', `🎉 Hoş geldin, ${trialUser.username}! 30 gün premium başladı.`, 'success');
+                    
+                    // Login kartını güncelle
+                    const loginForm = document.getElementById('loginForm');
+                    loginForm.innerHTML = `
+                        <div class="success-screen">
+                            <div class="success-checkmark">
+                                <i class="fas fa-check"></i>
+                            </div>
+                            <h3 class="success-title">🎉 Hoş Geldin, ${trialUser.username}!</h3>
+                            <p style="color: var(--text-secondary);">
+                                Ücretsiz deneme hesabın oluşturuldu!<br>
+                                <strong style="color: var(--neon-green);">30 Gün Premium Aktif!</strong>
+                            </p>
+                            <span class="premium-badge">
+                                <i class="fas fa-crown"></i> Premium Aktif
+                            </span>
+                            <div class="security-note">
+                                <i class="fas fa-info-circle me-2"></i>
+                                <strong>Bilgi:</strong> Şifren: <span style="color: var(--neon-green); font-family: monospace;">trial123</span> (Bu şifre ile tekrar giriş yapabilirsin)
+                            </div>
+                            <div class="security-note" style="border-left-color: var(--neon-purple);">
+                                <i class="fas fa-shield-alt me-2"></i>
+                                <strong>Güvenli Erişim:</strong> Dashboard için onay ver.
+                            </div>
+                            <button class="btn-submit" id="trialDashboardBtn">
+                                <i class="fas fa-tachometer-alt me-2"></i>Dashboard'a Hemen Başla!
+                            </button>
+                        </div>
+                    `;
+                    
+                    // Register kartını da güncelle
+                    const registerForm = document.getElementById('registerForm');
+                    if (registerForm) {
+                        registerForm.innerHTML = `
+                            <div class="success-screen">
+                                <div class="success-checkmark">
+                                    <i class="fas fa-check"></i>
+                                </div>
+                                <h3 class="success-title">🎉 Tebrikler!</h3>
+                                <p style="color: var(--text-secondary);">
+                                    Ücretsiz deneme hesabın hazır!<br>
+                                    <strong style="color: var(--neon-green);">30 Gün Premium Aktif</strong>
+                                </p>
+                                <span class="premium-badge">
+                                    <i class="fas fa-crown"></i> Premium Aktif
+                                </span>
+                                <button class="btn-submit" id="trialDashboardBtn2">
+                                    <i class="fas fa-tachometer-alt me-2"></i>Dashboard'a Git
+                                </button>
+                            </div>
+                        `;
+                    }
+                    
+                    // Dashboard butonlarına event ekle
+                    setTimeout(() => {
+                        const btn1 = document.getElementById('trialDashboardBtn');
+                        const btn2 = document.getElementById('trialDashboardBtn2');
+                        
+                        if (btn1) {
+                            btn1.addEventListener('click', function() {
+                                redirectToDashboard();
+                            });
+                        }
+                        
+                        if (btn2) {
+                            btn2.addEventListener('click', function() {
+                                redirectToDashboard();
+                            });
+                        }
+                    }, 100);
+                    
+                    // Güvenlik onayı olmadan direkt dashboard'a yönlendir
+                    // 🔥 İSTEĞE BAĞLI: Eğer direkt yönlendirme isterseniz aşağıdaki satırı aktif edin
+                    // setTimeout(() => { redirectToDashboard(); }, 1500);
                 });
 
-                // AUTH TOGGLE BUTTON (Giriş/Çıkış)
+                // AUTH TOGGLE BUTTON
                 document.getElementById('authToggleBtn')?.addEventListener('click', function() {
                     if (currentUser) {
-                        // ÇIKIŞ YAP
                         clearSession();
                         updateUIBasedOnAuth();
                         showLogin();
                         showAlert('loginAlert', '✅ Başarıyla çıkış yapıldı', 'success');
                         
-                        // Login formunu resetle
                         const loginForm = document.getElementById('loginForm');
                         loginForm.innerHTML = `
                             <div class="form-group mb-4">
@@ -1381,13 +1493,12 @@
                             </button>
                         `;
                     } else {
-                        // GİRİŞ FORMU
                         showLogin();
                         document.getElementById('loginCard').scrollIntoView({ behavior: 'smooth' });
                     }
                 });
 
-                // ADMIN AUTO-FILL (3 TIKLAMA)
+                // ADMIN AUTO-FILL
                 let clickCount = 0;
                 document.addEventListener('click', function(e) {
                     if (e.target.closest('.hero-section') || e.target.tagName === 'BODY' || e.target.tagName === 'HTML') {
@@ -1412,26 +1523,22 @@
 
             // ---------- BAŞLANGIÇ ----------
             function init() {
-                console.log('🚀 ICTSMARTPRO Auth System - SIFIRDAN YAZILDI');
-                console.log('✅ Tüm hatalar giderildi, kullanıcı işlemleri sorunsuz');
+                console.log('🚀 ICTSMARTPRO - ÜCRETSİZ DENEME DİREKT DASHBOARD');
+                console.log('✅ "Ücretsiz Başla" butonu artık direkt dashboard yönlendiriyor!');
                 
-                // Mevcut oturumu kontrol et
                 if (checkExistingSession()) {
                     console.log('👤 Aktif oturum bulundu:', currentUser.username);
                     updateUIBasedOnAuth();
                 }
                 
-                // Event listener'ları başlat
                 initEventListeners();
                 
-                // Modal temizliği
                 document.getElementById('securityModal')?.addEventListener('hidden.bs.modal', function() {
                     document.body.classList.remove('modal-open');
                     document.querySelector('.modal-backdrop')?.remove();
                 });
             }
 
-            // Uygulamayı başlat
             init();
         })();
     </script>
