@@ -1346,18 +1346,20 @@ async function updateExchangeStatus() {
         if (response.ok) {
             const data = await response.json();
             
-            data.exchanges.forEach(ex => {
-                const statusEl = document.getElementById(`status-${ex.name.toLowerCase().replace('.', '')}`);
-                if (statusEl) {
-                    if (ex.active) {
-                        statusEl.className = 'exchange-status status-active';
-                        statusEl.innerHTML = '<i class="fas fa-check-circle"></i> AKTİF';
-                    } else {
-                        statusEl.className = 'exchange-status status-waiting';
-                        statusEl.innerHTML = 'BEKLENİYOR';
+            if (data.exchanges && Array.isArray(data.exchanges)) {
+                data.exchanges.forEach(ex => {
+                    const statusEl = document.getElementById(`status-${ex.name.toLowerCase().replace('.', '')}`);
+                    if (statusEl) {
+                        if (ex.active) {
+                            statusEl.className = 'exchange-status status-active';
+                            statusEl.innerHTML = '<i class="fas fa-check-circle"></i> AKTİF';
+                        } else {
+                            statusEl.className = 'exchange-status status-waiting';
+                            statusEl.innerHTML = 'BEKLENİYOR';
+                        }
                     }
-                }
-            });
+                });
+            }
             
             document.getElementById('activeExchangeCount').innerHTML = data.total_active || 0;
         }
@@ -1369,6 +1371,8 @@ async function updateExchangeStatus() {
 // ========== TRADINGVIEW WIDGET - TEK GRAFİK ==========
 function loadTradingView() {
     const container = document.getElementById('tradingview-widget');
+    if (!container) return;
+    
     const symbol = document.getElementById('symbolSelect').value + 'USDT';
     const interval = document.getElementById('intervalSelect').value;
     const tvInterval = intervalMap[interval] || '60';
@@ -1442,7 +1446,7 @@ async function analyze(showNotif = true) {
     }
 }
 
-// ========== DASHBOARD GÜNCELLEME ==========
+// ========== DASHBOARD GÜNCELLEME - HATA KORUMALI ==========
 function updateDashboardWithRealData(data) {
     if (!data) return;
     
@@ -1453,28 +1457,26 @@ function updateDashboardWithRealData(data) {
         const volume = data.price_data.volume_24h;
         const sourceCount = data.price_data.source_count || 0;
         
-        document.getElementById('currentPrice').innerHTML = price > 0 
-            ? `$${price.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 6 })}`
-            : '—';
+        const priceEl = document.getElementById('currentPrice');
+        if (priceEl) priceEl.innerHTML = price > 0 ? `$${price.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 6 })}` : '—';
         
-        document.getElementById('currentSymbol').innerHTML = `${data.symbol.replace('USDT', '')}/USDT`;
+        const symbolEl = document.getElementById('currentSymbol');
+        if (symbolEl) symbolEl.innerHTML = `${data.symbol.replace('USDT', '')}/USDT`;
         
         const changeEl = document.getElementById('priceChange');
-        if (change !== undefined) {
+        if (changeEl && change !== undefined) {
             changeEl.className = change >= 0 ? 'price-change price-up' : 'price-change price-down';
-            changeEl.innerHTML = change >= 0 
-                ? `<i class="fas fa-arrow-up"></i> +${change.toFixed(2)}% (24s)`
-                : `<i class="fas fa-arrow-down"></i> ${change.toFixed(2)}% (24s)`;
+            changeEl.innerHTML = change >= 0 ? `<i class="fas fa-arrow-up"></i> +${change.toFixed(2)}% (24s)` : `<i class="fas fa-arrow-down"></i> ${change.toFixed(2)}% (24s)`;
         }
         
-        document.getElementById('volume24h').innerHTML = volume > 0 
-            ? (volume > 1e9 ? `$${(volume/1e9).toFixed(2)}B` : 
-               volume > 1e6 ? `$${(volume/1e6).toFixed(2)}M` : 
-               volume > 1e3 ? `$${(volume/1e3).toFixed(2)}K` : `$${volume.toFixed(0)}`)
-            : '—';
+        const volumeEl = document.getElementById('volume24h');
+        if (volumeEl) volumeEl.innerHTML = volume > 0 ? (volume > 1e9 ? `$${(volume/1e9).toFixed(2)}B` : volume > 1e6 ? `$${(volume/1e6).toFixed(2)}M` : volume > 1e3 ? `$${(volume/1e3).toFixed(2)}K` : `$${volume.toFixed(0)}`) : '—';
         
-        document.getElementById('sourceCount').innerHTML = sourceCount;
-        document.getElementById('priceSources').innerHTML = `<i class="fas fa-link"></i> ${sourceCount} KAYNAK`;
+        const sourceCountEl = document.getElementById('sourceCount');
+        if (sourceCountEl) sourceCountEl.innerHTML = sourceCount;
+        
+        const priceSourcesEl = document.getElementById('priceSources');
+        if (priceSourcesEl) priceSourcesEl.innerHTML = `<i class="fas fa-link"></i> ${sourceCount} KAYNAK`;
     }
     
     // Sinyal
@@ -1483,16 +1485,26 @@ function updateDashboardWithRealData(data) {
         const confidence = data.signal.confidence || 0;
         const recommendation = data.signal.recommendation || 'Veri bekleniyor';
         
-        document.getElementById('signalText').innerHTML = signal.replace(/_/g, ' ');
-        document.getElementById('signalBadge').className = 'signal-badge ' + 
-            (signal.includes('STRONG_BUY') ? 'signal-buy' : 
-             signal.includes('BUY') ? 'signal-buy' : 
-             signal.includes('STRONG_SELL') ? 'signal-sell' : 
-             signal.includes('SELL') ? 'signal-sell' : 'signal-neutral');
+        const signalTextEl = document.getElementById('signalText');
+        if (signalTextEl) signalTextEl.innerHTML = signal.replace(/_/g, ' ');
         
-        document.getElementById('confidenceFill').style.width = confidence + '%';
-        document.getElementById('confidenceText').innerHTML = `Güven: %${confidence.toFixed(1)}`;
-        document.getElementById('signalRecommendation').innerHTML = `📌 ${recommendation}`;
+        const signalBadgeEl = document.getElementById('signalBadge');
+        if (signalBadgeEl) {
+            signalBadgeEl.className = 'signal-badge ' + 
+                (signal.includes('STRONG_BUY') ? 'signal-buy' : 
+                 signal.includes('BUY') ? 'signal-buy' : 
+                 signal.includes('STRONG_SELL') ? 'signal-sell' : 
+                 signal.includes('SELL') ? 'signal-sell' : 'signal-neutral');
+        }
+        
+        const confidenceFillEl = document.getElementById('confidenceFill');
+        if (confidenceFillEl) confidenceFillEl.style.width = confidence + '%';
+        
+        const confidenceTextEl = document.getElementById('confidenceText');
+        if (confidenceTextEl) confidenceTextEl.innerHTML = `Güven: %${confidence.toFixed(1)}`;
+        
+        const signalRecommendationEl = document.getElementById('signalRecommendation');
+        if (signalRecommendationEl) signalRecommendationEl.innerHTML = `📌 ${recommendation}`;
     }
     
     // Sinyal dağılımı
@@ -1501,12 +1513,23 @@ function updateDashboardWithRealData(data) {
         const sell = data.signal_distribution.sell || 0;
         const neutral = data.signal_distribution.neutral || 0;
         
-        document.getElementById('buySignalBar').style.width = buy + '%';
-        document.getElementById('buySignalValue').innerHTML = buy.toFixed(1) + '%';
-        document.getElementById('sellSignalBar').style.width = sell + '%';
-        document.getElementById('sellSignalValue').innerHTML = sell.toFixed(1) + '%';
-        document.getElementById('neutralSignalBar').style.width = neutral + '%';
-        document.getElementById('neutralSignalValue').innerHTML = neutral.toFixed(1) + '%';
+        const buyBarEl = document.getElementById('buySignalBar');
+        if (buyBarEl) buyBarEl.style.width = buy + '%';
+        
+        const buyValueEl = document.getElementById('buySignalValue');
+        if (buyValueEl) buyValueEl.innerHTML = buy.toFixed(1) + '%';
+        
+        const sellBarEl = document.getElementById('sellSignalBar');
+        if (sellBarEl) sellBarEl.style.width = sell + '%';
+        
+        const sellValueEl = document.getElementById('sellSignalValue');
+        if (sellValueEl) sellValueEl.innerHTML = sell.toFixed(1) + '%';
+        
+        const neutralBarEl = document.getElementById('neutralSignalBar');
+        if (neutralBarEl) neutralBarEl.style.width = neutral + '%';
+        
+        const neutralValueEl = document.getElementById('neutralSignalValue');
+        if (neutralValueEl) neutralValueEl.innerHTML = neutral.toFixed(1) + '%';
     }
     
     // Teknik göstergeler
@@ -1517,7 +1540,8 @@ function updateDashboardWithRealData(data) {
     // Patternler
     if (data.patterns && Array.isArray(data.patterns)) {
         updatePatterns(data.patterns);
-        document.getElementById('patternCount').innerHTML = `🎯 Son 24 saat: ${data.patterns.length} pattern tespit edildi`;
+        const patternCountEl = document.getElementById('patternCount');
+        if (patternCountEl) patternCountEl.innerHTML = `🎯 Son 24 saat: ${data.patterns.length} pattern tespit edildi`;
     }
     
     // Market structure
@@ -1525,28 +1549,48 @@ function updateDashboardWithRealData(data) {
         updateMarketStructure(data.market_structure);
     }
     
-    // ML stats
+    // ML stats - HATA KORUMALI!
     if (data.ml_stats) {
-        updateMLStats(data.ml_stats);
+        const lgbmEl = document.getElementById('lgbmAccuracy');
+        if (lgbmEl) lgbmEl.innerHTML = (data.ml_stats.lgbm?.toFixed(1) || '0') + '%';
+        
+        const lgbmBarEl = document.getElementById('lgbmBar');
+        if (lgbmBarEl) lgbmBarEl.style.width = (data.ml_stats.lgbm || 0) + '%';
+        
+        const lstmEl = document.getElementById('lstmAccuracy');
+        if (lstmEl) lstmEl.innerHTML = (data.ml_stats.lstm?.toFixed(1) || '0') + '%';
+        
+        const lstmBarEl = document.getElementById('lstmBar');
+        if (lstmBarEl) lstmBarEl.style.width = (data.ml_stats.lstm || 0) + '%';
+        
+        const transformerEl = document.getElementById('transformerAccuracy');
+        if (transformerEl) transformerEl.innerHTML = (data.ml_stats.transformer?.toFixed(1) || '0') + '%';
+        
+        const transformerBarEl = document.getElementById('transformerBar');
+        if (transformerBarEl) transformerBarEl.style.width = (data.ml_stats.transformer || 0) + '%';
     }
     
     // Ensemble tahmin
     if (data.signal) {
-        const signal = data.signal.signal || 'NEUTRAL';
-        document.getElementById('ensemblePrediction').innerHTML = signal.replace('_', ' ');
+        const ensembleEl = document.getElementById('ensemblePrediction');
+        if (ensembleEl) ensembleEl.innerHTML = (data.signal.signal || 'NEUTRAL').replace('_', ' ');
     }
     
     // Son güncelleme
-    document.getElementById('lastUpdate').innerHTML = new Date().toLocaleTimeString('tr-TR');
-    document.getElementById('dataIntegrity').innerHTML = 'GERÇEK ZAMANLI';
-    document.getElementById('dataIntegrityFooter').innerHTML = '<i class="fas fa-check-circle"></i> GERÇEK ZAMANLI';
+    const lastUpdateEl = document.getElementById('lastUpdate');
+    if (lastUpdateEl) lastUpdateEl.innerHTML = new Date().toLocaleTimeString('tr-TR');
+    
+    const dataIntegrityEl = document.getElementById('dataIntegrity');
+    if (dataIntegrityEl) dataIntegrityEl.innerHTML = 'GERÇEK ZAMANLI';
+    
+    const dataIntegrityFooterEl = document.getElementById('dataIntegrityFooter');
+    if (dataIntegrityFooterEl) dataIntegrityFooterEl.innerHTML = '<i class="fas fa-check-circle"></i> GERÇEK ZAMANLI';
 }
 
 // ========== TEKNİK GÖSTERGELER ==========
 function updateTechnicalIndicators(indicators) {
     const container = document.getElementById('detailedIndicators');
-    
-    if (!indicators) return;
+    if (!container) return;
     
     let html = '<div class="row g-4">';
     
@@ -1653,6 +1697,7 @@ function updateTechnicalIndicators(indicators) {
 // ========== PATTERNS ==========
 function updatePatterns(patterns) {
     const container = document.getElementById('patternsContainer');
+    if (!container) return;
     
     if (!patterns || patterns.length === 0) {
         container.innerHTML = '<span class="fw-bold fs-5" style="color: var(--accent-cyan);">📊 Tespit edilen pattern yok</span>';
@@ -1675,18 +1720,33 @@ function updatePatterns(patterns) {
 function updateMarketStructure(structure) {
     if (!structure) return;
     
-    document.getElementById('structureValue').innerHTML = structure.structure || '-';
-    document.getElementById('structureSignal').innerHTML = (structure.structure || '').toUpperCase() || '-';
-    document.getElementById('structureDesc').innerHTML = 'Mevcut piyasa yapısı';
+    const structureValueEl = document.getElementById('structureValue');
+    if (structureValueEl) structureValueEl.innerHTML = structure.structure || '-';
     
-    document.getElementById('trendValue').innerHTML = structure.trend || '-';
-    document.getElementById('trendSignal').innerHTML = (structure.trend || '').replace(' ', '_') || '-';
-    document.getElementById('trendDesc').innerHTML = `Güç: ${structure.trend_strength || '-'}`;
+    const structureSignalEl = document.getElementById('structureSignal');
+    if (structureSignalEl) structureSignalEl.innerHTML = (structure.structure || '').toUpperCase() || '-';
+    
+    const structureDescEl = document.getElementById('structureDesc');
+    if (structureDescEl) structureDescEl.innerHTML = 'Mevcut piyasa yapısı';
+    
+    const trendValueEl = document.getElementById('trendValue');
+    if (trendValueEl) trendValueEl.innerHTML = structure.trend || '-';
+    
+    const trendSignalEl = document.getElementById('trendSignal');
+    if (trendSignalEl) trendSignalEl.innerHTML = (structure.trend || '').replace(' ', '_') || '-';
+    
+    const trendDescEl = document.getElementById('trendDesc');
+    if (trendDescEl) trendDescEl.innerHTML = `Güç: ${structure.trend_strength || '-'}`;
     
     const volValue = structure.volatility || 'ORTA';
-    document.getElementById('volatilityValue').innerHTML = volValue;
-    document.getElementById('volatilitySignal').innerHTML = volValue;
-    document.getElementById('volatilityDesc').innerHTML = structure.volatility_index ? 
+    const volatilityValueEl = document.getElementById('volatilityValue');
+    if (volatilityValueEl) volatilityValueEl.innerHTML = volValue;
+    
+    const volatilitySignalEl = document.getElementById('volatilitySignal');
+    if (volatilitySignalEl) volatilitySignalEl.innerHTML = volValue;
+    
+    const volatilityDescEl = document.getElementById('volatilityDesc');
+    if (volatilityDescEl) volatilityDescEl.innerHTML = structure.volatility_index ? 
         `Volatilite indeksi: ${structure.volatility_index.toFixed(1)}` : 'ATR bazlı';
 }
 
@@ -1695,18 +1755,27 @@ function updateMLStats(stats) {
     if (!stats) return;
     
     if (stats.lgbm) {
-        document.getElementById('lgbmAccuracy').innerHTML = stats.lgbm.toFixed(1) + '%';
-        document.getElementById('lgbmBar').style.width = stats.lgbm + '%';
+        const lgbmEl = document.getElementById('lgbmAccuracy');
+        if (lgbmEl) lgbmEl.innerHTML = stats.lgbm.toFixed(1) + '%';
+        
+        const lgbmBarEl = document.getElementById('lgbmBar');
+        if (lgbmBarEl) lgbmBarEl.style.width = stats.lgbm + '%';
     }
     
     if (stats.lstm) {
-        document.getElementById('lstmAccuracy').innerHTML = stats.lstm.toFixed(1) + '%';
-        document.getElementById('lstmBar').style.width = stats.lstm + '%';
+        const lstmEl = document.getElementById('lstmAccuracy');
+        if (lstmEl) lstmEl.innerHTML = stats.lstm.toFixed(1) + '%';
+        
+        const lstmBarEl = document.getElementById('lstmBar');
+        if (lstmBarEl) lstmBarEl.style.width = stats.lstm + '%';
     }
     
     if (stats.transformer) {
-        document.getElementById('transformerAccuracy').innerHTML = stats.transformer.toFixed(1) + '%';
-        document.getElementById('transformerBar').style.width = stats.transformer + '%';
+        const transformerEl = document.getElementById('transformerAccuracy');
+        if (transformerEl) transformerEl.innerHTML = stats.transformer.toFixed(1) + '%';
+        
+        const transformerBarEl = document.getElementById('transformerBar');
+        if (transformerBarEl) transformerBarEl.style.width = stats.transformer + '%';
     }
 }
 
@@ -1717,7 +1786,6 @@ async function evaluateAI() {
     showNotification('🤖 AI fiyatı değerlendiriyor... 79+ pattern taranıyor', 'info');
     
     try {
-        // HER BUTONDA YENİ İSTEK - GERÇEK ZAMANLI ANALİZ
         const response = await fetch(`${backendUrl}/api/ai-evaluate/${symbol}`, {
             method: 'GET',
             headers: { 'Content-Type': 'application/json' },
@@ -1766,7 +1834,7 @@ async function evaluateAI() {
                         <div style="color: var(--text-dim); font-size: 0.95rem;">SEMBOL / FİYAT</div>
                         <div style="font-size: 1.9rem; font-weight: 900; color: white;">${symbol}/USDT</div>
                         <div style="font-size: 2.2rem; font-weight: 900; color: white; text-shadow: 0 0 20px ${signalColor};">
-                          $${data.current_price?.toFixed(4) || data.price_data?.current?.toFixed(4) || '0.0000'}
+                            $${data.current_price?.toFixed(4) || '0.0000'}
                         </div>
                     </div>
                     
@@ -1872,26 +1940,28 @@ async function evaluateAI() {
         showNotification(`❌ AI değerlendirmesi başarısız: ${error.message}`, 'error');
         
         const chatDiv = document.getElementById('chatMessages');
-        const errorMessage = document.createElement('div');
-        errorMessage.className = 'chat-message chat-bot';
-        errorMessage.style.borderLeftColor = 'var(--accent-red)';
-        errorMessage.innerHTML = `
-            <div style="display: flex; align-items: center; gap: 18px;">
-                <div style="background: var(--accent-red); width: 60px; height: 60px; border-radius: 50%; display: flex; align-items: center; justify-content: center; box-shadow: var(--neon-red);">
-                    <i class="fas fa-exclamation-triangle" style="font-size: 28px; color: white;"></i>
+        if (chatDiv) {
+            const errorMessage = document.createElement('div');
+            errorMessage.className = 'chat-message chat-bot';
+            errorMessage.style.borderLeftColor = 'var(--accent-red)';
+            errorMessage.innerHTML = `
+                <div style="display: flex; align-items: center; gap: 18px;">
+                    <div style="background: var(--accent-red); width: 60px; height: 60px; border-radius: 50%; display: flex; align-items: center; justify-content: center; box-shadow: var(--neon-red);">
+                        <i class="fas fa-exclamation-triangle" style="font-size: 28px; color: white;"></i>
+                    </div>
+                    <div>
+                        <strong style="font-size: 1.4rem; color: var(--accent-red);">AI DEĞERLENDİRME HATASI</strong>
+                        <div style="color: var(--text-dim);">${error.message || 'Backend bağlantısı kurulamadı'}</div>
+                    </div>
                 </div>
-                <div>
-                    <strong style="font-size: 1.4rem; color: var(--accent-red);">AI DEĞERLENDİRME HATASI</strong>
-                    <div style="color: var(--text-dim);">${error.message || 'Backend bağlantısı kurulamadı'}</div>
+                <div style="margin-top: 18px; padding: 18px; background: rgba(255,56,96,0.1); border-radius: 20px;">
+                    <span style="color: white;">⚠️ Lütfen backend sunucusunun çalıştığından emin olun.</span><br>
+                    <span style="color: var(--text-dim); font-size: 0.95rem;">main.py ve ai_model.py çalışıyor olmalı</span>
                 </div>
-            </div>
-            <div style="margin-top: 18px; padding: 18px; background: rgba(255,56,96,0.1); border-radius: 20px;">
-                <span style="color: white;">⚠️ Lütfen backend sunucusunun çalıştığından emin olun.</span><br>
-                <span style="color: var(--text-dim); font-size: 0.95rem;">main.py ve ai_model.py çalışıyor olmalı</span>
-            </div>
-        `;
-        chatDiv.appendChild(errorMessage);
-        chatDiv.scrollTop = chatDiv.scrollHeight;
+            `;
+            chatDiv.appendChild(errorMessage);
+            chatDiv.scrollTop = chatDiv.scrollHeight;
+        }
     }
 }
 
@@ -1928,12 +1998,12 @@ function forceRefresh() {
 
 // ========== EVENT LISTENERS ==========
 document.getElementById('symbolSelect').addEventListener('change', function() {
-    loadTradingView();  // TEK GRAFİK
+    loadTradingView();
     analyze(false);
 });
 
 document.getElementById('intervalSelect').addEventListener('change', function() {
-    loadTradingView();  // TEK GRAFİK
+    loadTradingView();
     analyze(false);
 });
 
@@ -1947,7 +2017,8 @@ document.addEventListener('DOMContentLoaded', async function() {
     renderExchangeGrid();
     
     // Ziyaretçi sayacı 0'dan başlar
-    document.getElementById('visitorCount').innerHTML = '0';
+    const visitorEl = document.getElementById('visitorCount');
+    if (visitorEl) visitorEl.innerHTML = '0';
     
     // Backend bağlantısını kontrol et
     const connected = await checkBackendConnection();
