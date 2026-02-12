@@ -2536,7 +2536,7 @@ async def ai_evaluate_symbol(symbol: str):
             overall_signal=overall_signal
         )
         
-        # Pattern sayıları
+        # Pattern sayıları ve isimleri
         bullish_patterns = [p for p in patterns if p.direction == 'bullish']
         bearish_patterns = [p for p in patterns if p.direction == 'bearish']
         
@@ -2568,8 +2568,8 @@ async def ai_evaluate_symbol(symbol: str):
         else:  # HOLD veya diğer
             dashboard_action = "NEUTRAL"
         
-        # DASHBOARD'UN BEKLEDİĞİ FORMATTA YANIT
-        return {
+        # DASHBOARD'UN BEKLEDİĞİ FORMAT - BİREBİR AYNI!
+        response = {
             "success": True,
             "symbol": original_symbol,
             "current_price": float(df['close'].iloc[-1]),
@@ -2599,6 +2599,13 @@ async def ai_evaluate_symbol(symbol: str):
             "timestamp": datetime.now().isoformat()
         }
         
+        # DEBUG: Konsola yazdır, bakalım doğru mu?
+        print(f"✅ AI Evaluate response for {original_symbol}:")
+        print(f"   Action: {dashboard_action}, Confidence: {evaluation['signal']['confidence']}")
+        print(f"   Bullish patterns: {len(bullish_patterns)}, Bearish patterns: {len(bearish_patterns)}")
+        
+        return response
+        
     except Exception as e:
         print(f"❌ AI Evaluate error: {e}")
         traceback.print_exc()
@@ -2606,6 +2613,8 @@ async def ai_evaluate_symbol(symbol: str):
             "success": False,
             "error": str(e)
         }
+
+# ========== AI DEĞERLENDİRME ENDPOINT - DASHBOARD BUTONU İÇİN ==========
 
 @app.post("/api/train/{symbol}")
 async def train_models(symbol: str):
