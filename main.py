@@ -1,60 +1,4 @@
-import sys
-import json
-import time
-import asyncio
-import logging
-import secrets
-from datetime import datetime, timezone
-from typing import Dict, List, Optional, Any
-from collections import defaultdict, Counter
-import os
-# FastAPI
-from fastapi import FastAPI, Request, HTTPException, Query, WebSocket, WebSocketDisconnect
-from fastapi.responses import HTMLResponse, JSONResponse, FileResponse
-from fastapi.middleware.cors import CORSMiddleware
-from fastapi.middleware.gzip import GZipMiddleware
-from fastapi.staticfiles import StaticFiles
 
-# HTTP Client
-import aiohttp
-from aiohttp import ClientTimeout, TCPConnector
-
-# Data Processing
-import pandas as pd
-import numpy as np
-
-# ML Libraries (Optional)
-ML_AVAILABLE = False
-try:
-    import lightgbm as lgb
-    from sklearn.metrics import accuracy_score, precision_score, recall_score
-    ML_AVAILABLE = True
-except ImportError:
-    pass
-#=========================================ZIYARETCI SAYISI==============================================
-from collections import defaultdict
-from datetime import datetime, timedelta
-
-# Global ziyaretçi takipçisi
-visitor_tracker = defaultdict(lambda: datetime.min)
-visitor_count = 0
-
-@app.get("/api/visitors")
-async def get_visitors(request: Request):
-    global visitor_count
-    
-    client_ip = request.client.host
-    
-    # Son 24 saatte bu IP'den gelmiş mi?
-    last_visit = visitor_tracker[client_ip]
-    if (datetime.utcnow() - last_visit) > timedelta(hours=24):
-        visitor_count += 1
-        visitor_tracker[client_ip] = datetime.utcnow()
-    
-    return {
-        "success": True,
-        "count": visitor_count
-    }
 # ========================================================================================================
 # LOGGING SETUP
 # ========================================================================================================
@@ -65,7 +9,92 @@ def setup_logging():
     logger.handlers.clear()
     
     handler = logging.StreamHandler(sys.stdout)
-    handler.setLevel(logging.INFO)
+    handler.setLevel(logging.INFO)# ────────────────────────────────────────────────────────────────
+# Tüm import'lar (en üstte kalıyor)
+import sys
+import json
+import time
+import asyncio
+import logging
+import secrets
+from datetime import datetime, timezone
+from typing import Dict, List, Optional, Any
+from collections import defaultdict, Counter
+import os
+
+# FastAPI import'ları
+from fastapi import FastAPI, Request, HTTPException, Query, WebSocket, WebSocketDisconnect
+from fastapi.responses import HTMLResponse, JSONResponse, FileResponse
+from fastapi.middleware.cors import CORSMiddleware
+from fastapi.middleware.gzip import GZipMiddleware
+from fastapi.staticfiles import StaticFiles
+
+# aiohttp, pandas, numpy vs. devam ediyor...
+import aiohttp
+from aiohttp import ClientTimeout, TCPConnector
+import pandas as pd
+import numpy as np
+
+# ML kütüphaneleri (try-except ile)
+ML_AVAILABLE = False
+try:
+    import lightgbm as lgb
+    from sklearn.metrics import accuracy_score, precision_score, recall_score
+    ML_AVAILABLE = True
+except ImportError:
+    pass
+
+# ────────────────────────────────────────────────────────────────
+# FastAPI uygulamasını BURADA oluşturuyoruz (EN ÖNEMLİ KISIM)
+app = FastAPI(
+    title="Trading Bot v7.0",
+    description="Real-time crypto analysis from 11+ exchanges",
+    version="7.0.0",
+    docs_url="/docs" if os.getenv("ENV") == "development" else None,
+    redoc_url=None
+)
+
+# Middleware'ler (CORS, GZip vs.) — app tanımlandıktan sonra
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["*"],
+    allow_credentials=True,
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
+app.add_middleware(GZipMiddleware, minimum_size=1000)
+
+# ────────────────────────────────────────────────────────────────
+# ZİYARETÇİ SAYACI KISMI — app'den SONRA gelmeli!
+from collections import defaultdict
+from datetime import datetime, timedelta
+
+# Global takipçiler
+visitor_tracker = defaultdict(lambda: datetime.min)
+visitor_count = 0
+
+@app.get("/api/visitors")
+async def get_visitors(request: Request):
+    """
+    Ziyaretçi sayısını döndürür (aynı IP 24 saatte sadece 1 kez sayılır)
+    """
+    global visitor_count
+    
+    client_ip = request.client.host
+    
+    last_visit = visitor_tracker[client_ip]
+    now = datetime.utcnow()
+    
+    if (now - last_visit) > timedelta(hours=24):
+        visitor_count += 1
+        visitor_tracker[client_ip] = now
+    
+    return {
+        "success": True,
+        "count": visitor_count
+    }
+
+
     formatter = logging.Formatter(
         '%(asctime)s | %(levelname)-8s | %(message)s',
         datefmt='%Y-%m-%d %H:%M:%S'
