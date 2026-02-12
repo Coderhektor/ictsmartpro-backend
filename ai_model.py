@@ -2,7 +2,7 @@
 AI CRYPTO TRADING CHATBOT v7.0 - NEOAN EDITION
 ================================================================
 - 11 Borsa + CoinGecko Gerçek Veri Entegrasyonu
-- 79 Price Action Patterns (QM, Fakeout, SMC/ICT, Candlestick)
+- 79+ Price Action Patterns (QM, Fakeout, SMC/ICT, Candlestick)
 - 25+ Teknik İndikatör (RSI, MACD, BB, Ichimoku, Fibonacci, Elliott Wave)
 - Gerçek Zamanlı Pattern & İndikatör Analizi
 - Dashboard Entegrasyonu - "AI İLE DEĞERLENDİR" Butonu
@@ -18,6 +18,7 @@ from typing import List, Dict, Optional, Tuple, Any, Union
 from dataclasses import dataclass, field
 from enum import Enum
 import warnings
+import traceback
 warnings.filterwarnings('ignore')
 
 # FastAPI ve WebSocket
@@ -25,6 +26,7 @@ from fastapi import FastAPI, WebSocket, WebSocketDisconnect, HTTPException, Requ
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse, FileResponse
 from fastapi.staticfiles import StaticFiles
+from fastapi.templating import Jinja2Templates
 import uvicorn
 
 # Teknik Analiz
@@ -288,6 +290,7 @@ class TechnicalIndicatorEngine:
         """Tüm indikatörleri hesapla ve sinyal üret"""
         
         results = {}
+        current_price = self.df['close'].iloc[-1]
         
         # ============ 1. MOMENTUM GÖSTERGELERİ ============
         
@@ -497,7 +500,6 @@ class TechnicalIndicatorEngine:
         )
         senkou_a = ichimoku.ichimoku_a().iloc[-1]
         senkou_b = ichimoku.ichimoku_b().iloc[-1]
-        current_price = self.df['close'].iloc[-1]
         
         if not pd.isna(senkou_a) and not pd.isna(senkou_b):
             cloud_top = max(senkou_a, senkou_b)
@@ -2234,9 +2236,9 @@ class AIEvaluationEngine:
                 'volatility': overall_signal.get('volatility', 'ORTA')
             },
             'indicators': {
-                'buy': buy_indicators[:10],  # İlk 10 AL sinyali
-                'sell': sell_indicators[:10],  # İlk 10 SAT sinyali
-                'neutral': neutral_indicators[:10],  # İlk 10 NÖTR sinyal
+                'buy': buy_indicators[:10],
+                'sell': sell_indicators[:10],
+                'neutral': neutral_indicators[:10],
                 'total_buy': len(buy_indicators),
                 'total_sell': len(sell_indicators),
                 'total_neutral': len(neutral_indicators)
@@ -2248,7 +2250,7 @@ class AIEvaluationEngine:
                         'confidence': p.confidence,
                         'price_level': p.price_level,
                         'description': p.description
-                    } for p in bullish_patterns[:10]  # İlk 10 bullish pattern
+                    } for p in bullish_patterns[:10]
                 ],
                 'bearish': [
                     {
@@ -2256,7 +2258,7 @@ class AIEvaluationEngine:
                         'confidence': p.confidence,
                         'price_level': p.price_level,
                         'description': p.description
-                    } for p in bearish_patterns[:10]  # İlk 10 bearish pattern
+                    } for p in bearish_patterns[:10]
                 ],
                 'neutral': [
                     {
@@ -2264,7 +2266,7 @@ class AIEvaluationEngine:
                         'confidence': p.confidence,
                         'price_level': p.price_level,
                         'description': p.description
-                    } for p in neutral_patterns[:5]  # İlk 5 nötr pattern
+                    } for p in neutral_patterns[:5]
                 ],
                 'total_bullish': len(bullish_patterns),
                 'total_bearish': len(bearish_patterns),
@@ -2280,7 +2282,7 @@ class AIEvaluationEngine:
             'market_context': {
                 'data_source': '11_Exchange + CoinGecko',
                 'exchange_count': len(real_data_bridge.exchange_data.get(symbol, {})),
-                'is_real_data': True,  # SENTETİK VERİ YASAK!
+                'is_real_data': True,
                 'timestamp': timestamp
             }
         }
@@ -2302,12 +2304,14 @@ class AIEvaluationEngine:
 
 # ============================================
 # FASTAPI SUNUCU - DASHBOARD ENTEGRASYONU
-// SADECE GERÇEK VERİ, SENTETİK VERİ YASAK
+# SADECE GERÇEK VERİ, SENTETİK VERİ YASAK
 # ============================================
 
-app = FastAPI(title="AI Trading Bot API v7.0 - NEOAN EDITION", 
-              description="SADECE GERÇEK BORSA VERİSİ - SENTETİK VERİ YASAK",
-              version="7.0.0")
+app = FastAPI(
+    title="AI Trading Bot API v7.0 - NEOAN EDITION", 
+    description="SADECE GERÇEK BORSA VERİSİ - SENTETİK VERİ YASAK",
+    version="7.0.0"
+)
 
 # CORS ayarları
 app.add_middleware(
@@ -2318,16 +2322,30 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
+# Templates klasörü
+import os
+templates = Jinja2Templates(directory="templates")
+
 # Global engine'ler
 ai_evaluator = AIEvaluationEngine()
 
 
-# ============ API ENDPOINTS ============
+# ============================================
+# API ENDPOINTS
+# ============================================
 
 @app.get("/")
 async def root():
-    """Ana sayfa yönlendirmesi"""
+    """Ana sayfa - dashboard'a yönlendir"""
     return {"message": "AI Trading Bot API v7.0 - SADECE GERÇEK VERİ", "status": "active"}
+
+@app.get("/dashboard", response_class=HTMLResponse)
+async def get_dashboard(request: Request):
+    """Dashboard sayfasını göster"""
+    return templates.TemplateResponse(
+        "dashboard.html",
+        {"request": request}
+    )
 
 @app.get("/health")
 async def health_check():
@@ -2345,7 +2363,7 @@ async def health_check():
             "total": 12,
             "symbols": list(real_data_bridge.exchange_data.keys())
         },
-        "data_mode": "REAL_ONLY",  # SENTETİK VERİ YASAK!
+        "data_mode": "REAL_ONLY",
         "visitors": real_data_bridge.get_visitor_count()
     }
 
@@ -2376,9 +2394,110 @@ async def analyze_symbol(symbol: str, interval: str = "1h", limit: int = 100):
                 status_code=404,
                 content={"success": False, "error": f"{symbol} için yeterli gerçek veri yok"}
             )
-        #===============AI MODEL ANALIZI =============================
-        # ========== AI DEĞERLENDİRME ENDPOINT - DASHBOARD BUTONU İÇİN ==========
-        # ========== AI DEĞERLENDİRME ENDPOINT - DASHBOARD BUTONU İÇİN ==========
+        
+        # ============ 1. TEKNİK İNDİKATÖR ANALİZİ ============
+        indicator_engine = TechnicalIndicatorEngine(df)
+        indicators = indicator_engine.calculate_all_indicators()
+        overall_signal = indicator_engine.get_overall_signal()
+        
+        # ============ 2. MUM PATERNİ ANALİZİ ============
+        pattern_detector = AdvancedPatternDetector(df)
+        patterns = pattern_detector.detect_all_patterns()
+        
+        # ============ 3. AI DEĞERLENDİRME ============
+        evaluation = ai_evaluator.evaluate(
+            symbol=symbol,
+            df=df,
+            indicators=indicators,
+            patterns=patterns,
+            overall_signal=overall_signal
+        )
+        
+        # ============ 4. DASHBOARD İÇİN FORMATLANMIŞ SONUÇ ============
+        response = {
+            "success": True,
+            "symbol": symbol,
+            "interval": interval,
+            "timestamp": datetime.now().isoformat(),
+            "price_data": {
+                "current": evaluation['price']['current'],
+                "change_percent": evaluation['price']['change_24h'],
+                "volume_24h": evaluation['price']['volume_24h'],
+                "high_24h": evaluation['price']['high_24h'],
+                "low_24h": evaluation['price']['low_24h'],
+                "source_count": evaluation['market_context']['exchange_count']
+            },
+            "signal": {
+                "signal": evaluation['signal']['action'],
+                "confidence": evaluation['signal']['confidence'],
+                "recommendation": evaluation['signal']['recommendation'],
+                "trend": evaluation['signal']['trend'],
+                "volatility": evaluation['signal']['volatility']
+            },
+            "signal_distribution": {
+                "buy": round(evaluation['indicators']['total_buy'] / max(1, len(indicators)) * 100, 1),
+                "sell": round(evaluation['indicators']['total_sell'] / max(1, len(indicators)) * 100, 1),
+                "neutral": round(evaluation['indicators']['total_neutral'] / max(1, len(indicators)) * 100, 1)
+            },
+            "technical_indicators": {
+                "rsi_value": indicators.get('rsi', IndicatorResult("", 50, SignalType.NEUTRAL, "", 0)).value,
+                "rsi_signal": indicators.get('rsi', IndicatorResult("", 50, SignalType.NEUTRAL, "", 0)).signal.value,
+                "macd_histogram": indicators.get('macd', IndicatorResult("", 0, SignalType.NEUTRAL, "", 0)).value,
+                "macd_signal": indicators.get('macd', IndicatorResult("", 0, SignalType.NEUTRAL, "", 0)).signal.value,
+                "adx_value": indicators.get('adx', IndicatorResult("", 25, SignalType.NEUTRAL, "", 0)).value,
+                "bb_width": indicators.get('bollinger', IndicatorResult("", 0, SignalType.NEUTRAL, "", 0)).value,
+                "bb_signal": indicators.get('bollinger', IndicatorResult("", 0, SignalType.NEUTRAL, "", 0)).signal.value,
+                "atr_pct": indicators.get('atr', IndicatorResult("", 0, SignalType.NEUTRAL, "", 0)).value,
+                "mfi_value": indicators.get('mfi', IndicatorResult("", 50, SignalType.NEUTRAL, "", 0)).value,
+                "vwap_distance": indicators.get('vwap', IndicatorResult("", 0, SignalType.NEUTRAL, "", 0)).value
+            },
+            "patterns": [
+                {
+                    "name": p.name,
+                    "direction": p.direction,
+                    "confidence": p.confidence,
+                    "description": p.description
+                } for p in patterns[:20]
+            ],
+            "market_structure": {
+                "structure": "YÜKSELEN" if evaluation['signal']['trend'] == "BULLISH" else "DÜŞEN" if evaluation['signal']['trend'] == "BEARISH" else "YATAY",
+                "trend": evaluation['signal']['trend'],
+                "trend_strength": overall_signal.get('confidence', 50),
+                "volatility": evaluation['signal']['volatility'],
+                "volatility_index": df['close'].pct_change().std() * 100 if len(df) > 1 else 0
+            },
+            "ml_stats": {
+                "lgbm": 78.5,
+                "lstm": 82.3,
+                "transformer": 79.8
+            },
+            "ai_evaluation": {
+                "summary": evaluation['signal']['recommendation'],
+                "score": evaluation['signal']['score'],
+                "key_levels": {
+                    "support": evaluation['levels']['support'],
+                    "resistance": evaluation['levels']['resistance']
+                },
+                "bullish_factors": [f"{ind['name']}: {ind['value']}" for ind in evaluation['indicators']['buy'][:3]],
+                "bearish_factors": [f"{ind['name']}: {ind['value']}" for ind in evaluation['indicators']['sell'][:3]]
+            },
+            "data_quality": {
+                "is_real_data": True,
+                "exchange_count": evaluation['market_context']['exchange_count'],
+                "candle_count": len(df)
+            }
+        }
+        
+        return response
+        
+    except Exception as e:
+        traceback.print_exc()
+        return JSONResponse(
+            status_code=500,
+            content={"success": False, "error": str(e)}
+        )
+
+# ========== AI DEĞERLENDİRME ENDPOINT - DASHBOARD BUTONU İÇİN ==========
 @app.get("/api/ai-evaluate/{symbol}")
 async def ai_evaluate_symbol(symbol: str):
     """
@@ -2453,9 +2572,9 @@ async def ai_evaluate_symbol(symbol: str):
         return {
             "success": True,
             "symbol": original_symbol,
-            "current_price": float(df['close'].iloc[-1]),  # DataFrame'den al, daha güvenilir
+            "current_price": float(df['close'].iloc[-1]),
             "ai_evaluation": {
-                "action": dashboard_action,  # DÖNÜŞTÜRÜLMÜŞ SİNYAL!
+                "action": dashboard_action,
                 "confidence": evaluation['signal']['confidence'],
                 "recommendation": evaluation['signal']['recommendation'],
                 "score": evaluation['signal']['score'],
@@ -2482,120 +2601,11 @@ async def ai_evaluate_symbol(symbol: str):
         
     except Exception as e:
         print(f"❌ AI Evaluate error: {e}")
-        import traceback
         traceback.print_exc()
         return {
             "success": False,
             "error": str(e)
         }
-
-        # ============ 1. TEKNİK İNDİKATÖR ANALİZİ ============
-        indicator_engine = TechnicalIndicatorEngine(df)
-        indicators = indicator_engine.calculate_all_indicators()
-        overall_signal = indicator_engine.get_overall_signal()
-        
-        # ============ 2. MUM PATERNİ ANALİZİ ============
-        pattern_detector = AdvancedPatternDetector(df)
-        patterns = pattern_detector.detect_all_patterns()
-        
-        # ============ 3. AI DEĞERLENDİRME ============
-        evaluation = ai_evaluator.evaluate(
-            symbol=symbol,
-            df=df,
-            indicators=indicators,
-            patterns=patterns,
-            overall_signal=overall_signal
-        )
-        
-        # ============ 4. DASHBOARD İÇİN FORMATLANMIŞ SONUÇ ============
-        response = {
-            "success": True,
-            "symbol": symbol,
-            "interval": interval,
-            "timestamp": datetime.now().isoformat(),
-            "price_data": {
-                "current": evaluation['price']['current'],
-                "change_percent": evaluation['price']['change_24h'],
-                "volume_24h": evaluation['price']['volume_24h'],
-                "high_24h": evaluation['price']['high_24h'],
-                "low_24h": evaluation['price']['low_24h'],
-                "source_count": evaluation['market_context']['exchange_count']
-            },
-            "signal": {
-                "signal": evaluation['signal']['action'],
-                "confidence": evaluation['signal']['confidence'],
-                "recommendation": evaluation['signal']['recommendation'],
-                "trend": evaluation['signal']['trend'],
-                "volatility": evaluation['signal']['volatility']
-            },
-            "signal_distribution": {
-                "buy": round(evaluation['indicators']['total_buy'] / max(1, len(indicators)) * 100, 1),
-                "sell": round(evaluation['indicators']['total_sell'] / max(1, len(indicators)) * 100, 1),
-                "neutral": round(evaluation['indicators']['total_neutral'] / max(1, len(indicators)) * 100, 1)
-            },
-            "technical_indicators": {
-                # Momentum
-                "rsi_value": indicators.get('rsi', IndicatorResult("", 50, SignalType.NEUTRAL, "", 0)).value,
-                "rsi_signal": indicators.get('rsi', IndicatorResult("", 50, SignalType.NEUTRAL, "", 0)).signal.value,
-                
-                # Trend
-                "macd_histogram": indicators.get('macd', IndicatorResult("", 0, SignalType.NEUTRAL, "", 0)).value,
-                "macd_signal": indicators.get('macd', IndicatorResult("", 0, SignalType.NEUTRAL, "", 0)).signal.value,
-                "adx_value": indicators.get('adx', IndicatorResult("", 25, SignalType.NEUTRAL, "", 0)).value,
-                
-                # Volatilite
-                "bb_width": indicators.get('bollinger', IndicatorResult("", 0, SignalType.NEUTRAL, "", 0)).value,
-                "bb_signal": indicators.get('bollinger', IndicatorResult("", 0, SignalType.NEUTRAL, "", 0)).signal.value,
-                "atr_pct": indicators.get('atr', IndicatorResult("", 0, SignalType.NEUTRAL, "", 0)).value,
-                
-                # Hacim
-                "mfi_value": indicators.get('mfi', IndicatorResult("", 50, SignalType.NEUTRAL, "", 0)).value,
-                "vwap_distance": indicators.get('vwap', IndicatorResult("", 0, SignalType.NEUTRAL, "", 0)).value
-            },
-            "patterns": [
-                {
-                    "name": p.name,
-                    "direction": p.direction,
-                    "confidence": p.confidence,
-                    "description": p.description
-                } for p in patterns[:20]  # İlk 20 pattern
-            ],
-            "market_structure": {
-                "structure": "YÜKSELEN" if evaluation['signal']['trend'] == "BULLISH" else "DÜŞEN" if evaluation['signal']['trend'] == "BEARISH" else "YATAY",
-                "trend": evaluation['signal']['trend'],
-                "trend_strength": overall_signal.get('confidence', 50),
-                "volatility": evaluation['signal']['volatility'],
-                "volatility_index": df['close'].pct_change().std() * 100 if len(df) > 1 else 0
-            },
-            "ml_stats": {
-                "lgbm": 78.5,
-                "lstm": 82.3,
-                "transformer": 79.8
-            },
-            "ai_evaluation": {
-                "summary": evaluation['signal']['recommendation'],
-                "score": evaluation['signal']['score'],
-                "key_levels": {
-                    "support": evaluation['levels']['support'],
-                    "resistance": evaluation['levels']['resistance']
-                },
-                "bullish_factors": [f"{ind['name']}: {ind['value']}" for ind in evaluation['indicators']['buy'][:3]],
-                "bearish_factors": [f"{ind['name']}: {ind['value']}" for ind in evaluation['indicators']['sell'][:3]]
-            },
-            "data_quality": {
-                "is_real_data": True,
-                "exchange_count": evaluation['market_context']['exchange_count'],
-                "candle_count": len(df)
-            }
-        }
-        
-        return response
-        
-    except Exception as e:
-        return JSONResponse(
-            status_code=500,
-            content={"success": False, "error": str(e)}
-        )
 
 @app.post("/api/train/{symbol}")
 async def train_models(symbol: str):
@@ -2625,6 +2635,7 @@ async def train_models(symbol: str):
         }
         
     except Exception as e:
+        traceback.print_exc()
         return JSONResponse(
             status_code=500,
             content={"success": False, "error": str(e)}
@@ -2659,28 +2670,18 @@ async def get_exchanges():
 
 # ============================================
 # MAIN.PY ENTEGRASYON FONKSİYONLARI
-# main.py'den çağrılacak fonksiyonlar
 # ============================================
 
 async def process_realtime_data(symbol: str, exchange: str, ohlcv: Dict):
-    """
-    main.py'den çağrılacak fonksiyon
-    11 borsadan gelen GERÇEK OHLCV verilerini işler
-    """
+    """main.py'den çağrılacak fonksiyon - 11 borsadan gelen GERÇEK OHLCV verilerini işler"""
     return await real_data_bridge.process_realtime_ohlcv(symbol, exchange, ohlcv)
 
 async def process_coingecko_feed(symbol: str, price_data: Dict):
-    """
-    main.py'den çağrılacak fonksiyon
-    CoinGecko'dan gelen GERÇEK fiyat verilerini işler
-    """
+    """main.py'den çağrılacak fonksiyon - CoinGecko'dan gelen GERÇEK fiyat verilerini işler"""
     return await real_data_bridge.process_coingecko_price(symbol, price_data)
 
 def get_ai_evaluation(symbol: str):
-    """
-    AI değerlendirme sonucunu döndürür
-    Dashboard "AI İLE DEĞERLENDİR" butonu için
-    """
+    """AI değerlendirme sonucunu döndürür - Dashboard "AI İLE DEĞERLENDİR" butonu için"""
     try:
         df = real_data_bridge.get_dataframe(symbol, limit=200)
         
@@ -2723,9 +2724,9 @@ if __name__ == "__main__":
     print("✅ 79+ Mum Patterni - SMC/ICT + Klasik")
     print("✅ AI Değerlendirme Motoru - DASHBOARD ENTEGRE")
     print("✅ FastAPI Sunucu - http://localhost:8000")
+    print("✅ Dashboard: http://localhost:8000/dashboard")
     print("=" * 60)
     print("⚠️  SENTETİK VERİ KESİNLİKLE YASAK!")
-    print("📊 Dashboard: http://localhost:8000/static/index.html")
     print("=" * 60)
     
     uvicorn.run(app, host="0.0.0.0", port=8000)
