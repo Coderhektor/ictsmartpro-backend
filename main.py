@@ -3612,9 +3612,8 @@ async def health_check():
         "data_mode": "REAL_ONLY",
         "visitors": real_data_bridge.get_visitor_count(),
         "patterns_count": len(PatternType),
-        "indicators_count": 25+  # 25+
-        }
-
+        "indicators_count": 25  # veya "25+"
+    }
 @app.get("/api/visitors")
 async def get_visitors():
     """Ziyaretçi sayacı - HER İSTEKTE 1 ARTAR"""
