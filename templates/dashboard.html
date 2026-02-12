@@ -1303,26 +1303,59 @@ async function checkBackendConnection() {
 }
 
 // ========== ZİYARETÇİ SAYACI ==========
+// ========== ZİYARETÇİ SAYACI - SADECE GERÇEK BACKEND ==========
+// KESİNLİKLE LOCALSTORAGE YOK, KESİNLİKLE RASTGELE SAYI YOK!
 async function updateVisitorCount() {
     try {
         const response = await fetch(`${backendUrl}/api/visitors`, {
             method: 'GET',
             headers: { 'Content-Type': 'application/json' },
-            timeout: 3000
-        }).catch(() => null);
+            timeout: 5000
+        });
         
-        if (response && response.ok) {
-            const data = await response.json();
-            visitorCount = data.count || 0;
-        } else {
-            visitorCount = 0;
+        if (!response.ok) {
+            throw new Error(`HTTP ${response.status}`);
         }
+        
+        const data = await response.json();
+        
+        // SADECE GERÇEK BACKEND VERİSİ!
+        if (data.success === true && typeof data.count === 'number') {
+            visitorCount = data.count;
+            
+            // Sayfada göster
+            const visitorEl = document.getElementById('visitorCount');
+            if (visitorEl) {
+                visitorEl.innerHTML = visitorCount.toLocaleString('tr-TR');
+                visitorEl.className = 'visitor-count-zero';
+            }
+            
+            console.log(`👥 Ziyaretçi sayacı: ${visitorCount}`);
+        } else {
+            // Backend hata döndürdü - ASLA RASTGELE SAYI ÜRETME!
+            console.error('❌ Visitor count error:', data.error || 'Bilinmeyen hata');
+            
+            const visitorEl = document.getElementById('visitorCount');
+            if (visitorEl) {
+                visitorEl.innerHTML = '0';  // SADECE 0, ASLA RASTGELE!
+                visitorEl.className = 'visitor-count-zero';
+            }
+        }
+        
     } catch (error) {
-        console.error('Visitor count error:', error);
-        visitorCount = 0;
+        console.error('❌ Backend bağlantı hatası:', error);
+        
+        // Backend bağlantısı yok - ASLA RASTGELE SAYI ÜRETME!
+        // Kullanıcıya gerçek durumu göster
+        const visitorEl = document.getElementById('visitorCount');
+        if (visitorEl) {
+            visitorEl.innerHTML = '0';  // SADECE 0!
+            visitorEl.className = 'visitor-count-zero';
+        }
+        
+        // Kullanıcıyı bilgilendir
+        showNotification('⚠️ Backend bağlantısı yok - main.py ve ai_model.py çalışıyor mu?', 'error');
     }
-    
-    document.getElementById('visitorCount').innerHTML = visitorCount;
 }
 
 // ========== EXCHANGE GRID RENDER ==========
