@@ -31,7 +31,30 @@ try:
     ML_AVAILABLE = True
 except ImportError:
     pass
+#=========================================ZIYARETCI SAYISI==============================================
+from collections import defaultdict
+from datetime import datetime, timedelta
 
+# Global ziyaretçi takipçisi
+visitor_tracker = defaultdict(lambda: datetime.min)
+visitor_count = 0
+
+@app.get("/api/visitors")
+async def get_visitors(request: Request):
+    global visitor_count
+    
+    client_ip = request.client.host
+    
+    # Son 24 saatte bu IP'den gelmiş mi?
+    last_visit = visitor_tracker[client_ip]
+    if (datetime.utcnow() - last_visit) > timedelta(hours=24):
+        visitor_count += 1
+        visitor_tracker[client_ip] = datetime.utcnow()
+    
+    return {
+        "success": True,
+        "count": visitor_count
+    }
 # ========================================================================================================
 # LOGGING SETUP
 # ========================================================================================================
