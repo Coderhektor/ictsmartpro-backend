@@ -1766,7 +1766,7 @@ async function evaluateAI() {
                         <div style="color: var(--text-dim); font-size: 0.95rem;">SEMBOL / FİYAT</div>
                         <div style="font-size: 1.9rem; font-weight: 900; color: white;">${symbol}/USDT</div>
                         <div style="font-size: 2.2rem; font-weight: 900; color: white; text-shadow: 0 0 20px ${signalColor};">
-                            $${data.current_price?.toFixed(4) || '0.0000'}
+                          $${data.current_price?.toFixed(4) || data.price_data?.current?.toFixed(4) || '0.0000'}
                         </div>
                     </div>
                     
