@@ -1192,7 +1192,7 @@ startup_time = time.time()
 @app.get("/", response_class=HTMLResponse)
 async def root():
     """Serve index.html as homepage"""
-    html_path = os.path.join(os.path.dirname(__file__), "templates", "indexx.html")
+    html_path = os.path.join(os.path.dirname(__file__), "templates", "index.html")
     if os.path.exists(html_path):
         return FileResponse(html_path)
     return HTMLResponse("""
@@ -1201,7 +1201,7 @@ async def root():
     <body>
         <h1>🚀 ICTSMARTPRO  AI</h1>
         <p>AI-Powered Crypto Trading Platform</p>
-        <p> COMING SOON /</p>
+        <p> COMMING SOON /</p>
     </body>
     </html>
     """)
