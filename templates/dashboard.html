@@ -740,6 +740,30 @@
         </a>
     </div>  
 </nav>
+ </nav>  <!-- Navbar burada bitiyor -->
+
+<!-- ========== ZİYARETÇİ SAYACI - NAVBAR ALTII ========== -->
+<div class="container-fluid mt-2 mb-3">
+    <div class="row">
+        <div class="col-12">
+            <div style="display: flex; justify-content: flex-end; align-items: center;">
+                <span class="visitor-counter" style="background: rgba(0, 229, 255, 0.2);
+                                                    padding: 0.8rem 2rem;
+                                                    border-radius: 60px;
+                                                    border: 2px solid var(--accent-cyan);
+                                                    box-shadow: var(--neon-cyan);">
+                    <i class="fas fa-users" style="font-size: 1.5rem; color: var(--accent-cyan);"></i>
+                    <div style="display: flex; flex-direction: column; align-items: flex-start; margin-left: 10px;">
+                        <span style="color: var(--text-dim); font-size: 0.8rem;">AKTİF ZİYARETÇİ</span>
+                        <span id="visitorCount" class="visitor-count-number" style="font-size: 1.8rem; line-height: 1;">0</span>
+                    </div>
+                </span>
+            </div>
+        </div>
+    </div>
+</div>
+
+<div class="container-fluid mt-4 px-3">  <!-- Ana içerik burada başlıyor -->
     
 <div class="container-fluid mt-4 px-3">
     <div class="row g-4">
@@ -1903,68 +1927,6 @@ window.addEventListener('beforeunload', function() {
     if (refreshInterval) clearInterval(refreshInterval);
 });
 </script>
-<!-- ========== FOOTER - ZİYARETÇİ SAYACI ========== -->
-<footer style="background: rgba(10, 14, 23, 0.95); 
-               backdrop-filter: blur(25px); 
-               border-top: 3px solid var(--accent-cyan);
-               box-shadow: var(--neon-cyan);
-               margin-top: 4rem;
-               padding: 2rem 0;
-               border-top-left-radius: 60px;
-               border-top-right-radius: 60px;">
-    <div class="container-fluid">
-        <div class="row align-items-center">
-            <div class="col-md-6">
-                <div style="display: flex; align-items: center; gap: 20px;">
-                    <div style="background: linear-gradient(135deg, var(--accent-purple), var(--accent-cyan));
-                                width: 70px; height: 70px; border-radius: 50%;
-                                display: flex; align-items: center; justify-content: center;
-                                box-shadow: var(--neon-cyan);">
-                        <i class="fas fa-robot" style="font-size: 35px; color: white;"></i>
-                    </div>
-                    <div>
-                        <h3 style="color: white; font-weight: 900; margin-bottom: 5px;">
-                            ICTSMARTPRO TRADING BOT v7.0
-                        </h3>
-                        <p style="color: var(--text-dim); margin: 0; font-size: 0.95rem;">
-                            <i class="fas fa-shield-alt" style="color: var(--accent-green);"></i> 
-                            11+ Exchange Gerçek Veri • AI Destekli Analiz
-                        </p>
-                    </div>
-                </div>
-            </div>
-            <div class="col-md-6">
-                <div style="display: flex; justify-content: flex-end; align-items: center;">
-                    <span class="visitor-counter" style="background: rgba(0, 229, 255, 0.2);
-                                                        padding: 1.2rem 3rem;
-                                                        border-radius: 80px;
-                                                        border: 3px solid var(--accent-cyan);
-                                                        box-shadow: var(--neon-cyan);">
-                        <i class="fas fa-users" style="font-size: 2.2rem; color: var(--accent-cyan);"></i>
-                        <div style="display: flex; flex-direction: column; align-items: flex-start; margin-left: 15px;">
-                            <span style="color: var(--text-dim); font-size: 0.9rem;">AKTİF ZİYARETÇİ</span>
-                            <span id="visitorCount" class="visitor-count-number" style="font-size: 3rem; line-height: 1;">0</span>
-                        </div>
-                    </span>
-                </div>
-            </div>
-        </div>
-        <div class="row mt-5">
-    <div class="col-12">
-        <div style="display: flex; flex-direction: column; align-items: center; gap: 15px;
-                    border-top: 1px solid rgba(255,255,255,0.1); padding-top: 2rem;
-                    color: var(--text-dim); font-size: 0.9rem; text-align: center;">
-            <span>⚠️ Bu içerik yatırım tavsiyesi niteliği taşımaz. Lütfen kendi araştırmanızı yaparak karar veriniz.</span>
-            <div style="display: flex; gap: 30px; flex-wrap: wrap; justify-content: center;">
-                <span>© 2024 ICTSMARTPRO - Tüm hakları saklıdır</span>
-                <span>
-                    <i class="fas fa-database" style="color: var(--accent-green);"></i> 
-                    Veri Durumu: <span id="dataIntegrityFooter">GERÇEK ZAMANLI</span>
-                </span>
-            </div>
-        </div>
-    </div>
-</div>
-</footer>
+
 </body>
 </html>
