@@ -1102,14 +1102,7 @@ async def get_visitors(request: Request):
 # ========================================================================================================
 # FASTAPI APPLICATION
 # ========================================================================================================
-app = FastAPI(
-    title="ICTSMARTPRO Trading Bot v7.0",
-    description="Real-time cryptocurrency trading analysis from 11+ exchanges",
-    version="7.0.0",
-    docs_url="/docs" if Config.DEBUG else None,
-    redoc_url=None,
-)
-
+ 
 # Middleware
 app.add_middleware(
     CORSMiddleware,
