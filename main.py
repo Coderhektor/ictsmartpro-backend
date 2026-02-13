@@ -1075,34 +1075,16 @@ class SignalDistributionAnalyzer:
         }
 
 # ========================================================================================================
-# ZİYARETÇİ SAYACI
+# FASTAPI APPLICATION - TEK TANE! (BURASI ÇOK ÖNEMLİ)
 # ========================================================================================================
-visitor_tracker = defaultdict(lambda: datetime.min)
-visitor_count = 0
+app = FastAPI(
+    title="ICTSMARTPRO Trading Bot v7.0",
+    description="Real-time cryptocurrency trading analysis from 11+ exchanges",
+    version="7.0.0",
+    docs_url="/docs" if Config.DEBUG else None,
+    redoc_url=None,
+)
 
-@app.get("/api/visitors")
-async def get_visitors(request: Request):
-    global visitor_count
-    
-    client_ip = request.client.host or "unknown"
-    last_visit = visitor_tracker[client_ip]
-    now = datetime.utcnow()
-    
-    if (now - last_visit) > timedelta(hours=24):
-        visitor_count += 1
-        visitor_tracker[client_ip] = now
-        logger.info(f"Yeni ziyaretçi IP: {client_ip} → Toplam: {visitor_count}")
-    
-    return {
-        "success": True,
-        "count": visitor_count,
-        "your_ip": client_ip
-    }
-
-# ========================================================================================================
-# FASTAPI APPLICATION
-# ========================================================================================================
- 
 # Middleware
 app.add_middleware(
     CORSMiddleware,
@@ -1128,6 +1110,31 @@ data_fetcher = ExchangeDataFetcher()
 ml_engine = MLEngine()
 websocket_connections = set()
 startup_time = time.time()
+
+# ========================================================================================================
+# ZİYARETÇİ SAYACI - app tanımından SONRA gelmeli!
+# ========================================================================================================
+visitor_tracker = defaultdict(lambda: datetime.min)
+visitor_count = 0
+
+@app.get("/api/visitors")
+async def get_visitors(request: Request):
+    global visitor_count
+    
+    client_ip = request.client.host or "unknown"
+    last_visit = visitor_tracker[client_ip]
+    now = datetime.utcnow()
+    
+    if (now - last_visit) > timedelta(hours=24):
+        visitor_count += 1
+        visitor_tracker[client_ip] = now
+        logger.info(f"Yeni ziyaretçi IP: {client_ip} → Toplam: {visitor_count}")
+    
+    return {
+        "success": True,
+        "count": visitor_count,
+        "your_ip": client_ip
+    }
 
 # ========================================================================================================
 # API ENDPOINTS
