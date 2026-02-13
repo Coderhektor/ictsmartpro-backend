@@ -995,15 +995,19 @@
             };
 
             // ---------- DEMO YÖNLENDİRME ----------
-            function redirectToDashboard() {
-                showAlert('loginAlert', '✅ Demo panele yönlendiriliyorsunuz...', 'success');
-                showAlert('registerAlert', '✅ Demo panele yönlendiriliyorsunuz...', 'success');
-                
-                // Demo simülasyonu - gerçek projede dashboard sayfasına yönlendirir
-                setTimeout(() => {
-                    alert('🎯 DEMO MOD: Dashboard paneline yönlendirme yapılacak.\n\nBu bir önizlemedir.');
-                }, 1500);
-            }
+            // ---------- DOĞRUDAN DASHBOARD YÖNLENDİRME ----------
+function redirectToDashboard() {
+    // Bildirim göster
+    showAlert('loginAlert', '✅ Dashboard yükleniyor...', 'success');
+    showAlert('registerAlert', '✅ Dashboard yükleniyor...', 'success');
+    
+    // 🔥 DOĞRUDAN YÖNLENDİRME - 1 SANİYE SONRA
+    setTimeout(() => {
+        window.location.href = '/dashboard';  // Gerçek dashboard URL'i
+        // Eğer dashboard sayfası henüz yoksa, mevcut sayfayı yenile:
+        // location.reload();
+        }, 800);
+    }
 
             // ---------- DENEME KULLANICISI OLUŞTUR ----------
             function createTrialUser() {
