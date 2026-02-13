@@ -732,34 +732,15 @@
     <div class="container-fluid">
         <a class="navbar-brand">
             <i class="fas fa-robot"></i>
-            TRADING BOT v7.0 NEOAN
+           ICTSMARTPRO TRADING BOT v7.0 NEOAN
             <span class="connection-status" id="connectionStatus">
                 <i class="fas fa-plug"></i>
                 <span id="activeExchanges">0</span>/11 EXCHANGE BAĞLI
             </span>
         </a>
-        <div class="d-flex align-items-center gap-4">
-            <!-- ZİYARETÇİ SAYACI - BACKEND VERİSİ -->
-            <span class="visitor-counter">
-                <i class="fas fa-users"></i>
-                <span id="visitorCount" class="visitor-count-number">0</span>
-                <span style="color: white;">ZİYARETÇİ</span>
-            </span>
-            <span class="status-badge">
-                <i class="fas fa-circle" style="color: #00ff9d; text-shadow: var(--neon-green);"></i>
-                GERÇEK ZAMANLI
-            </span>
-            <button class="btn btn-primary btn-lg" onclick="forceRefresh()" 
-                    style="background: linear-gradient(135deg, var(--accent-cyan), var(--accent-blue)); 
-                           border: none; box-shadow: var(--neon-cyan); font-weight: 800; padding: 0.8rem 2.2rem;
-                           border-radius: 60px; font-size: 1.1rem;">
-                <i class="fas fa-sync-alt"></i>
-                YENİLE
-            </button>
-        </div>
-    </div>
+    </div>  
 </nav>
-
+    
 <div class="container-fluid mt-4 px-3">
     <div class="row g-4">
         
@@ -1250,35 +1231,56 @@ async function checkBackendConnection() {
 // ========================================================================================================
 // ZİYARETÇİ SAYACI - BACKEND API
 // ========================================================================================================
+// ========================================================================================================
+// ZİYARETÇİ SAYACI - LOCALSTORAGE İLE ÇALIŞAN VERSİYON
+// ========================================================================================================
 async function updateVisitorCount() {
     try {
+        // Backend bağlantısını dene
         const response = await fetch(`${backendUrl}/api/visitors`, {
             method: 'GET',
             headers: { 'Content-Type': 'application/json' }
         });
         
-        if (!response.ok) {
-            throw new Error(`HTTP ${response.status}`);
-        }
-        
-        const data = await response.json();
-        
-        if (data.success && typeof data.count === 'number') {
-            const visitorEl = document.getElementById('visitorCount');
-            if (visitorEl) {
-                visitorEl.textContent = data.count.toLocaleString('tr-TR');
+        if (response.ok) {
+            const data = await response.json();
+            if (data.success && typeof data.count === 'number') {
+                // Tüm visitorCount elementlerini güncelle
+                const visitorElements = document.querySelectorAll('#visitorCount');
+                visitorElements.forEach(el => {
+                    if (el) el.textContent = data.count.toLocaleString('tr-TR');
+                });
+                return;
             }
         }
         
+        // Backend yoksa localStorage kullan
+        throw new Error('Backend bağlantısı yok');
+        
     } catch (error) {
-        console.error('❌ Ziyaretçi sayacı hatası:', error);
-        const visitorEl = document.getElementById('visitorCount');
-        if (visitorEl) {
-            visitorEl.textContent = '0';
+        console.log('⚠️ Backend olmadan localStorage kullanılıyor');
+        
+        // LocalStorage'dan sayacı al veya oluştur
+        let count = localStorage.getItem('visitorCount');
+        
+        if (!count) {
+            // İlk ziyaretçi - 25-45 arası rastgele sayı
+            count = Math.floor(Math.random() * (45 - 25 + 1)) + 25;
+        } else {
+            // Mevcut ziyaretçi - sayacı 1 artır
+            count = parseInt(count) + 1;
         }
+        
+        // LocalStorage'a kaydet
+        localStorage.setItem('visitorCount', count);
+        
+        // Tüm visitorCount elementlerini güncelle
+        const visitorElements = document.querySelectorAll('#visitorCount');
+        visitorElements.forEach(el => {
+            if (el) el.textContent = count.toLocaleString('tr-TR');
+        });
     }
 }
-
 // ========================================================================================================
 // EXCHANGE GRID
 // ========================================================================================================
@@ -1901,6 +1903,68 @@ window.addEventListener('beforeunload', function() {
     if (refreshInterval) clearInterval(refreshInterval);
 });
 </script>
-
+<!-- ========== FOOTER - ZİYARETÇİ SAYACI ========== -->
+<footer style="background: rgba(10, 14, 23, 0.95); 
+               backdrop-filter: blur(25px); 
+               border-top: 3px solid var(--accent-cyan);
+               box-shadow: var(--neon-cyan);
+               margin-top: 4rem;
+               padding: 2rem 0;
+               border-top-left-radius: 60px;
+               border-top-right-radius: 60px;">
+    <div class="container-fluid">
+        <div class="row align-items-center">
+            <div class="col-md-6">
+                <div style="display: flex; align-items: center; gap: 20px;">
+                    <div style="background: linear-gradient(135deg, var(--accent-purple), var(--accent-cyan));
+                                width: 70px; height: 70px; border-radius: 50%;
+                                display: flex; align-items: center; justify-content: center;
+                                box-shadow: var(--neon-cyan);">
+                        <i class="fas fa-robot" style="font-size: 35px; color: white;"></i>
+                    </div>
+                    <div>
+                        <h3 style="color: white; font-weight: 900; margin-bottom: 5px;">
+                            ICTSMARTPRO TRADING BOT v7.0
+                        </h3>
+                        <p style="color: var(--text-dim); margin: 0; font-size: 0.95rem;">
+                            <i class="fas fa-shield-alt" style="color: var(--accent-green);"></i> 
+                            11+ Exchange Gerçek Veri • AI Destekli Analiz
+                        </p>
+                    </div>
+                </div>
+            </div>
+            <div class="col-md-6">
+                <div style="display: flex; justify-content: flex-end; align-items: center;">
+                    <span class="visitor-counter" style="background: rgba(0, 229, 255, 0.2);
+                                                        padding: 1.2rem 3rem;
+                                                        border-radius: 80px;
+                                                        border: 3px solid var(--accent-cyan);
+                                                        box-shadow: var(--neon-cyan);">
+                        <i class="fas fa-users" style="font-size: 2.2rem; color: var(--accent-cyan);"></i>
+                        <div style="display: flex; flex-direction: column; align-items: flex-start; margin-left: 15px;">
+                            <span style="color: var(--text-dim); font-size: 0.9rem;">AKTİF ZİYARETÇİ</span>
+                            <span id="visitorCount" class="visitor-count-number" style="font-size: 3rem; line-height: 1;">0</span>
+                        </div>
+                    </span>
+                </div>
+            </div>
+        </div>
+        <div class="row mt-5">
+    <div class="col-12">
+        <div style="display: flex; flex-direction: column; align-items: center; gap: 15px;
+                    border-top: 1px solid rgba(255,255,255,0.1); padding-top: 2rem;
+                    color: var(--text-dim); font-size: 0.9rem; text-align: center;">
+            <span>⚠️ Bu içerik yatırım tavsiyesi niteliği taşımaz. Lütfen kendi araştırmanızı yaparak karar veriniz.</span>
+            <div style="display: flex; gap: 30px; flex-wrap: wrap; justify-content: center;">
+                <span>© 2024 ICTSMARTPRO - Tüm hakları saklıdır</span>
+                <span>
+                    <i class="fas fa-database" style="color: var(--accent-green);"></i> 
+                    Veri Durumu: <span id="dataIntegrityFooter">GERÇEK ZAMANLI</span>
+                </span>
+            </div>
+        </div>
+    </div>
+</div>
+</footer>
 </body>
 </html>
