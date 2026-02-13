@@ -3,15 +3,19 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>ICTSMARTPRO Trade AI | AI Destekli Kripto Trading</title>
+    <title>ICTSMARTPRO | Yapay Zeka Destekli Kripto Analiz Platformu</title>
+    
     <!-- Bootstrap 5 -->
     <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
-    <!-- Font Awesome -->
+    
+    <!-- Font Awesome 6 -->
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
-    <!-- Google Fonts -->
+    
+    <!-- Inter Font -->
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&display=swap" rel="stylesheet">
+    
     <style>
-        /* MODERN NEON TASARIM */
+        /* ========== MODERN NEON TASARIM - PROFESYONEL ========== */
         * {
             margin: 0;
             padding: 0;
@@ -26,10 +30,14 @@
             --neon-pink: #ff00aa;
             --neon-green: #00ff9d;
             --neon-cyan: #0ff;
-            --text-primary: #fff;
+            --text-primary: #ffffff;
             --text-secondary: #a0aec0;
-            --border-glow: rgba(0, 243, 255, 0.3);
-            --shadow-glow: 0 0 20px rgba(0, 243, 255, 0.3);
+            --text-dim: #8a8f99;
+            --border-glow: rgba(0, 243, 255, 0.2);
+            --shadow-glow: 0 0 20px rgba(0, 243, 255, 0.2);
+            --radius-lg: 28px;
+            --radius-md: 20px;
+            --radius-sm: 16px;
         }
 
         body {
@@ -49,19 +57,24 @@
             width: 100%;
             height: 100%;
             background: 
-                radial-gradient(circle at 20% 30%, rgba(179, 0, 255, 0.08) 0%, transparent 40%),
-                radial-gradient(circle at 80% 70%, rgba(0, 243, 255, 0.08) 0%, transparent 40%),
-                radial-gradient(circle at 40% 80%, rgba(255, 0, 170, 0.05) 0%, transparent 50%);
+                radial-gradient(circle at 20% 30%, rgba(179, 0, 255, 0.05) 0%, transparent 40%),
+                radial-gradient(circle at 80% 70%, rgba(0, 243, 255, 0.05) 0%, transparent 40%);
             pointer-events: none;
             z-index: -1;
         }
 
-        /* NAVBAR */
+        .container-fluid {
+            max-width: 1400px;
+            margin: 0 auto;
+            padding: 0 25px;
+        }
+
+        /* ========== NAVBAR ========== */
         .navbar {
             background: rgba(10, 12, 18, 0.95);
             backdrop-filter: blur(12px);
             border-bottom: 2px solid var(--neon-blue);
-            box-shadow: 0 0 30px rgba(0, 243, 255, 0.2);
+            box-shadow: 0 0 30px rgba(0, 243, 255, 0.15);
             padding: 1rem 0;
             position: fixed;
             width: 100%;
@@ -70,21 +83,24 @@
         }
 
         .navbar-brand {
-            font-size: 1.8rem;
+            font-size: 1.6rem;
             font-weight: 800;
-            background: linear-gradient(45deg, var(--neon-blue), var(--neon-purple));
+            background: linear-gradient(135deg, var(--neon-blue), var(--neon-purple));
             -webkit-background-clip: text;
             -webkit-text-fill-color: transparent;
-            filter: drop-shadow(0 0 10px var(--neon-blue));
             display: flex;
             align-items: center;
             gap: 10px;
         }
 
+        .navbar-brand i {
+            filter: drop-shadow(0 0 8px var(--neon-blue));
+        }
+
         .nav-link {
             color: var(--text-secondary) !important;
             font-weight: 600;
-            margin: 0 10px;
+            margin: 0 12px;
             transition: 0.3s;
             position: relative;
         }
@@ -103,7 +119,6 @@
             height: 2px;
             background: linear-gradient(90deg, var(--neon-blue), var(--neon-cyan));
             transition: 0.3s;
-            box-shadow: 0 0 10px var(--neon-cyan);
         }
 
         .nav-link:hover::after {
@@ -118,7 +133,6 @@
             border-radius: 12px;
             font-weight: 600;
             transition: 0.3s;
-            box-shadow: 0 0 15px rgba(179, 0, 255, 0.3);
             display: flex;
             align-items: center;
             gap: 8px;
@@ -131,7 +145,21 @@
             transform: translateY(-2px);
         }
 
-        /* HERO SECTION */
+        .secure-badge {
+            display: inline-flex;
+            align-items: center;
+            gap: 6px;
+            background: rgba(0, 255, 157, 0.1);
+            border: 1px solid var(--neon-green);
+            color: var(--neon-green);
+            padding: 6px 16px;
+            border-radius: 40px;
+            font-size: 0.85rem;
+            font-weight: 600;
+            margin-left: 15px;
+        }
+
+        /* ========== HERO SECTION ========== */
         .hero-section {
             min-height: 100vh;
             display: flex;
@@ -141,21 +169,44 @@
         }
 
         .hero-title {
-            font-size: 4.2rem;
+            font-size: 4rem;
             font-weight: 800;
             line-height: 1.1;
             background: linear-gradient(135deg, var(--neon-cyan), var(--neon-blue), var(--neon-purple));
             -webkit-background-clip: text;
             -webkit-text-fill-color: transparent;
-            filter: drop-shadow(0 0 30px rgba(0, 243, 255, 0.4));
+            filter: drop-shadow(0 0 30px rgba(0, 243, 255, 0.3));
             margin-bottom: 1.5rem;
         }
 
         .hero-subtitle {
-            font-size: 1.4rem;
+            font-size: 1.3rem;
             color: var(--text-secondary);
-            margin-bottom: 2.5rem;
+            margin-bottom: 2rem;
             max-width: 700px;
+        }
+
+        .security-badges {
+            display: flex;
+            gap: 20px;
+            margin-bottom: 2rem;
+            flex-wrap: wrap;
+        }
+
+        .security-badge {
+            background: rgba(0, 243, 255, 0.05);
+            border: 1px solid var(--neon-blue);
+            padding: 8px 20px;
+            border-radius: 40px;
+            font-size: 0.95rem;
+            color: var(--neon-cyan);
+            display: inline-flex;
+            align-items: center;
+            gap: 8px;
+        }
+
+        .security-badge i {
+            color: var(--neon-green);
         }
 
         .btn-hero {
@@ -168,14 +219,12 @@
             align-items: center;
             gap: 12px;
             border: none;
-            position: relative;
-            overflow: hidden;
         }
 
         .btn-primary-hero {
             background: linear-gradient(45deg, var(--neon-purple), var(--neon-blue));
             color: white;
-            box-shadow: 0 0 30px rgba(179, 0, 255, 0.5);
+            box-shadow: 0 0 30px rgba(179, 0, 255, 0.4);
             border: 2px solid var(--neon-cyan);
         }
 
@@ -188,7 +237,6 @@
             background: transparent;
             border: 2px solid var(--neon-blue);
             color: var(--neon-cyan);
-            box-shadow: 0 0 20px rgba(0, 243, 255, 0.3);
         }
 
         .btn-outline-hero:hover {
@@ -197,7 +245,50 @@
             transform: translateY(-2px);
         }
 
-        /* AUTH CARDS */
+        /* ========== STATS ========== */
+        .stats-container {
+            display: flex;
+            gap: 25px;
+            margin-top: 40px;
+            padding-top: 30px;
+            border-top: 2px solid rgba(179, 0, 255, 0.3);
+            flex-wrap: wrap;
+        }
+
+        .stat-item {
+            text-align: center;
+            padding: 20px 25px;
+            border: 2px solid var(--neon-blue);
+            border-radius: 20px;
+            background: rgba(0, 243, 255, 0.03);
+            transition: 0.3s;
+            flex: 1;
+            min-width: 120px;
+        }
+
+        .stat-item:hover {
+            transform: translateY(-5px);
+            border-color: var(--neon-cyan);
+            box-shadow: 0 0 30px var(--neon-cyan);
+        }
+
+        .stat-number {
+            font-size: 2.8rem;
+            font-weight: 800;
+            background: linear-gradient(45deg, var(--neon-cyan), var(--neon-blue));
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+            line-height: 1;
+        }
+
+        .stat-label {
+            color: var(--neon-cyan);
+            font-weight: 600;
+            font-size: 1.15rem;
+            margin-top: 8px;
+        }
+
+        /* ========== AUTH CARDS ========== */
         .auth-card {
             background: rgba(20, 24, 31, 0.95);
             backdrop-filter: blur(12px);
@@ -206,10 +297,11 @@
             padding: 45px;
             width: 100%;
             max-width: 500px;
-            box-shadow: 0 0 40px rgba(179, 0, 255, 0.2);
+            box-shadow: 0 0 40px rgba(179, 0, 255, 0.15);
             transition: 0.4s;
             position: relative;
             overflow: hidden;
+            margin-left: auto;
         }
 
         .auth-card::before {
@@ -219,7 +311,7 @@
             left: -50%;
             width: 200%;
             height: 200%;
-            background: radial-gradient(circle, rgba(0, 243, 255, 0.1) 0%, transparent 70%);
+            background: radial-gradient(circle, rgba(0, 243, 255, 0.05) 0%, transparent 70%);
             animation: rotate 20s linear infinite;
         }
 
@@ -230,22 +322,24 @@
 
         .auth-card:hover {
             border-color: var(--neon-cyan);
-            box-shadow: 0 0 60px rgba(0, 243, 255, 0.3);
+            box-shadow: 0 0 50px rgba(0, 243, 255, 0.2);
             transform: translateY(-8px);
         }
 
-        .auth-card.active {
-            border-color: var(--neon-blue);
-            box-shadow: 0 0 50px rgba(0, 243, 255, 0.4);
-        }
-
         .auth-title {
-            font-size: 2.2rem;
+            font-size: 2rem;
             font-weight: 800;
             background: linear-gradient(45deg, var(--neon-blue), var(--neon-purple));
             -webkit-background-clip: text;
             -webkit-text-fill-color: transparent;
             margin-bottom: 10px;
+        }
+
+        .form-label {
+            color: var(--neon-cyan);
+            font-weight: 600;
+            margin-bottom: 10px;
+            display: block;
         }
 
         .form-control {
@@ -267,15 +361,7 @@
         }
 
         .form-control::placeholder {
-            color: rgba(160, 174, 192, 0.6);
-        }
-
-        .form-label {
-            color: var(--neon-cyan);
-            font-weight: 600;
-            margin-bottom: 10px;
-            display: block;
-            text-shadow: 0 0 5px var(--neon-cyan);
+            color: rgba(160, 174, 192, 0.5);
         }
 
         .btn-submit {
@@ -289,14 +375,11 @@
             font-size: 1.15rem;
             transition: 0.3s;
             margin-top: 20px;
-            position: relative;
-            overflow: hidden;
         }
 
         .btn-submit:hover {
             transform: translateY(-2px);
             box-shadow: 0 0 35px var(--neon-cyan);
-            border-color: var(--neon-pink);
         }
 
         .btn-submit:disabled {
@@ -305,7 +388,7 @@
             cursor: not-allowed;
         }
 
-        /* ALERT MESSAGES */
+        /* ========== ALERTS ========== */
         .alert {
             padding: 16px 24px;
             border-radius: 14px;
@@ -316,182 +399,32 @@
         }
 
         @keyframes slideIn {
-            from {
-                opacity: 0;
-                transform: translateY(-10px);
-            }
-            to {
-                opacity: 1;
-                transform: translateY(0);
-            }
+            from { opacity: 0; transform: translateY(-10px); }
+            to { opacity: 1; transform: translateY(0); }
         }
 
         .alert-success {
             background: rgba(0, 255, 157, 0.1);
             border-color: var(--neon-green);
             color: var(--neon-green);
-            box-shadow: 0 0 20px rgba(0, 255, 157, 0.2);
         }
 
         .alert-error {
             background: rgba(255, 0, 170, 0.1);
             border-color: var(--neon-pink);
             color: var(--neon-pink);
-            box-shadow: 0 0 20px rgba(255, 0, 170, 0.2);
         }
 
-        .alert-warning {
-            background: rgba(255, 255, 0, 0.1);
-            border-color: #ffff00;
-            color: #ffff00;
-        }
-
-        .alert-info {
-            background: rgba(0, 243, 255, 0.1);
-            border-color: var(--neon-blue);
-            color: var(--neon-blue);
-        }
-
-        /* ADMIN INFO */
-        .admin-info {
-            background: rgba(179, 0, 255, 0.1);
-            border: 2px solid var(--neon-purple);
-            border-radius: 24px;
-            padding: 30px;
-            margin-top: 40px;
-            backdrop-filter: blur(5px);
-            box-shadow: 0 0 30px rgba(179, 0, 255, 0.2);
-        }
-
-        .admin-credentials {
-            background: rgba(0, 0, 0, 0.4);
-            border: 2px solid var(--neon-blue);
-            border-radius: 18px;
-            padding: 20px;
-            font-family: 'Courier New', monospace;
-            margin-top: 15px;
-        }
-
-        .admin-credentials strong {
-            color: var(--neon-cyan);
-        }
-
-        /* STATS */
-        .stats-container {
-            display: flex;
-            gap: 30px;
-            margin-top: 40px;
-            padding-top: 30px;
-            border-top: 2px solid var(--neon-purple);
-            flex-wrap: wrap;
-        }
-
-        .stat-item {
-            text-align: center;
-            padding: 20px 25px;
-            border: 2px solid var(--neon-blue);
-            border-radius: 20px;
-            background: rgba(0, 243, 255, 0.05);
-            box-shadow: 0 0 20px rgba(0, 243, 255, 0.2);
-            transition: 0.3s;
-            flex: 1;
-            min-width: 120px;
-        }
-
-        .stat-item:hover {
-            transform: translateY(-5px);
-            box-shadow: 0 0 35px var(--neon-cyan);
-        }
-
-        .stat-number {
-            font-size: 2.8rem;
-            font-weight: 800;
-            background: linear-gradient(45deg, var(--neon-cyan), var(--neon-blue));
-            -webkit-background-clip: text;
-            -webkit-text-fill-color: transparent;
-            line-height: 1;
-        }
-
-        .stat-label {
-            color: var(--neon-cyan);
-            font-weight: 600;
-            font-size: 1.15rem;
-            margin-top: 8px;
-        }
-
-        /* SUCCESS SCREEN */
-        .success-screen {
-            text-align: center;
-            padding: 30px 20px;
-        }
-
-        .success-checkmark {
-            width: 120px;
-            height: 120px;
-            border-radius: 50%;
-            background: rgba(0, 255, 157, 0.15);
-            margin: 0 auto 25px;
-            display: flex;
-            align-items: center;
-            justify-content: center;
-            font-size: 4rem;
-            color: var(--neon-green);
-            border: 3px solid var(--neon-green);
-            box-shadow: 0 0 40px rgba(0, 255, 157, 0.4);
-            animation: pulse 2s infinite;
-        }
-
-        @keyframes pulse {
-            0% { box-shadow: 0 0 20px rgba(0, 255, 157, 0.4); }
-            50% { box-shadow: 0 0 45px rgba(0, 255, 157, 0.7); }
-            100% { box-shadow: 0 0 20px rgba(0, 255, 157, 0.4); }
-        }
-
-        .success-title {
-            font-size: 2.3rem;
-            font-weight: 800;
-            background: linear-gradient(45deg, var(--neon-green), var(--neon-cyan));
-            -webkit-background-clip: text;
-            -webkit-text-fill-color: transparent;
-            margin-bottom: 20px;
-        }
-
-        .premium-badge {
-            background: linear-gradient(45deg, var(--neon-purple), var(--neon-pink));
-            padding: 8px 28px;
-            border-radius: 40px;
-            font-weight: 700;
-            display: inline-block;
-            margin: 20px 0;
-            box-shadow: 0 0 25px rgba(179, 0, 255, 0.5);
-            border: 2px solid var(--neon-cyan);
-            color: white;
-        }
-
-        .security-note {
-            background: rgba(0, 243, 255, 0.08);
-            border-left: 5px solid var(--neon-cyan);
-            padding: 18px;
-            border-radius: 12px;
-            margin: 25px 0;
-            text-align: left;
-            color: var(--text-secondary);
-        }
-
-        .security-note strong {
-            color: var(--neon-cyan);
-        }
-
-        /* FEATURES */
-        .features-section {
-            padding: 100px 0;
-            background: rgba(20, 24, 31, 0.7);
+        /* ========== ABOUT SECTION ========== */
+        .about-section {
+            padding: 80px 0;
+            background: rgba(20, 24, 31, 0.6);
             border-top: 2px solid var(--neon-purple);
             border-bottom: 2px solid var(--neon-purple);
         }
 
         .section-title {
-            font-size: 3.2rem;
+            font-size: 3rem;
             font-weight: 800;
             text-align: center;
             background: linear-gradient(45deg, var(--neon-cyan), var(--neon-blue), var(--neon-purple));
@@ -500,9 +433,27 @@
             margin-bottom: 20px;
         }
 
+        .about-text {
+            max-width: 800px;
+            margin: 0 auto;
+            text-align: center;
+            color: var(--text-secondary);
+            font-size: 1.2rem;
+            line-height: 1.8;
+        }
+
+        .about-text strong {
+            color: var(--neon-cyan);
+        }
+
+        /* ========== FEATURES SECTION ========== */
+        .features-section {
+            padding: 100px 0;
+        }
+
         .features-grid {
             display: grid;
-            grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
+            grid-template-columns: repeat(auto-fit, minmax(320px, 1fr));
             gap: 30px;
             margin-top: 60px;
         }
@@ -515,19 +466,18 @@
             text-align: center;
             transition: 0.4s;
             backdrop-filter: blur(10px);
-            box-shadow: 0 0 30px rgba(179, 0, 255, 0.15);
         }
 
         .feature-card:hover {
             transform: translateY(-12px);
             border-color: var(--neon-cyan);
-            box-shadow: 0 0 50px rgba(0, 243, 255, 0.25);
+            box-shadow: 0 0 40px rgba(0, 243, 255, 0.2);
         }
 
         .feature-icon {
             width: 90px;
             height: 90px;
-            background: rgba(0, 243, 255, 0.08);
+            background: rgba(0, 243, 255, 0.05);
             border: 2px solid var(--neon-blue);
             border-radius: 30px;
             display: flex;
@@ -536,7 +486,6 @@
             margin: 0 auto 25px;
             font-size: 2.5rem;
             color: var(--neon-cyan);
-            box-shadow: 0 0 25px rgba(0, 243, 255, 0.3);
         }
 
         .feature-title {
@@ -552,87 +501,54 @@
             line-height: 1.7;
         }
 
-        /* SECURITY MODAL */
-        .modal-content {
-            background: var(--card-bg);
-            border: 2px solid var(--neon-purple);
-            border-radius: 28px;
-            box-shadow: 0 0 60px rgba(179, 0, 255, 0.4);
+        /* ========== SUCCESS SCREEN ========== */
+        .success-screen {
+            text-align: center;
+            padding: 30px 20px;
         }
 
-        .modal-title {
-            color: var(--neon-cyan);
-            font-size: 1.8rem;
-            font-weight: 700;
-        }
-
-        .step {
-            display: flex;
-            align-items: flex-start;
-            gap: 15px;
-            padding: 15px;
-            background: rgba(0, 243, 255, 0.05);
-            border-radius: 16px;
-            margin-bottom: 15px;
-            border: 2px solid var(--neon-purple);
-        }
-
-        .step-number {
-            width: 35px;
-            height: 35px;
-            background: linear-gradient(45deg, var(--neon-purple), var(--neon-blue));
+        .success-checkmark {
+            width: 120px;
+            height: 120px;
             border-radius: 50%;
+            background: rgba(0, 255, 157, 0.1);
+            margin: 0 auto 25px;
             display: flex;
             align-items: center;
             justify-content: center;
+            font-size: 4rem;
+            color: var(--neon-green);
+            border: 3px solid var(--neon-green);
+            animation: pulse 2s infinite;
+        }
+
+        @keyframes pulse {
+            0% { box-shadow: 0 0 20px rgba(0, 255, 157, 0.3); }
+            50% { box-shadow: 0 0 40px rgba(0, 255, 157, 0.5); }
+            100% { box-shadow: 0 0 20px rgba(0, 255, 157, 0.3); }
+        }
+
+        .success-title {
+            font-size: 2.2rem;
             font-weight: 800;
-            border: 2px solid var(--neon-cyan);
-            flex-shrink: 0;
-        }
-
-        .btn-confirm {
             background: linear-gradient(45deg, var(--neon-green), var(--neon-cyan));
-            border: 2px solid var(--neon-cyan);
-            padding: 14px 35px;
-            border-radius: 16px;
-            font-weight: 700;
-            color: white;
-            transition: 0.3s;
-            box-shadow: 0 0 25px rgba(0, 255, 157, 0.4);
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+            margin-bottom: 20px;
         }
 
-        .btn-confirm:hover {
-            transform: scale(1.05);
-            box-shadow: 0 0 40px var(--neon-green);
-        }
-
-        .btn-cancel {
-            background: rgba(255, 0, 170, 0.1);
-            border: 2px solid var(--neon-pink);
-            color: var(--neon-pink);
-            padding: 14px 35px;
-            border-radius: 16px;
-            font-weight: 700;
-        }
-
-        .btn-cancel:hover {
-            background: rgba(255, 0, 170, 0.2);
-        }
-
-        /* FOOTER */
+        /* ========== FOOTER ========== */
         .footer {
-            text-align: center;
-            padding: 50px 0;
+            padding: 60px 0 40px;
             border-top: 2px solid var(--neon-purple);
-            color: var(--text-secondary);
-            background: rgba(10, 12, 18, 0.9);
+            background: rgba(10, 12, 18, 0.95);
         }
 
         .footer-links {
             display: flex;
             justify-content: center;
-            gap: 30px;
-            margin-bottom: 25px;
+            gap: 40px;
+            margin-bottom: 30px;
             flex-wrap: wrap;
         }
 
@@ -645,35 +561,50 @@
 
         .footer-links a:hover {
             color: var(--neon-cyan);
-            text-shadow: 0 0 10px var(--neon-cyan);
         }
 
-        .container-fluid {
-            max-width: 1400px;
-            margin: 0 auto;
-            padding: 0 25px;
+        .risk-disclaimer {
+            max-width: 900px;
+            margin: 0 auto 30px;
+            padding: 20px;
+            background: rgba(255, 56, 96, 0.05);
+            border-left: 4px solid #ff3860;
+            border-radius: 12px;
+            color: #ff8a8a;
+            font-size: 0.9rem;
+            text-align: center;
         }
 
+        .risk-disclaimer strong {
+            color: #ff3860;
+        }
+
+        /* ========== RESPONSIVE ========== */
         @media (max-width: 992px) {
-            .hero-title { font-size: 3.2rem; }
+            .hero-title { font-size: 3rem; }
             .hero-subtitle { font-size: 1.2rem; }
-            .auth-card { padding: 35px; }
+            .auth-card { padding: 35px; margin-left: 0; }
         }
 
         @media (max-width: 768px) {
-            .hero-title { font-size: 2.6rem; }
-            .section-title { font-size: 2.4rem; }
+            .hero-title { font-size: 2.4rem; }
+            .section-title { font-size: 2.2rem; }
             .auth-card { padding: 30px 20px; }
             .stat-number { font-size: 2.2rem; }
+            .secure-badge { margin-left: 0; margin-top: 10px; }
         }
     </style>
 </head>
 <body>
-    <!-- NAVBAR -->
+
+    <!-- ========== NAVBAR ========== -->
     <nav class="navbar navbar-expand-lg">
         <div class="container-fluid">
             <a class="navbar-brand" href="#">
-                <i class="fas fa-robot"></i> ICTSMARTPRO Trade AI
+                <i class="fas fa-robot"></i> ICTSMARTPRO
+                <span class="secure-badge">
+                    <i class="fas fa-lock"></i> 256-bit SSL
+                </span>
             </a>
             <button class="navbar-toggler" type="button" data-bs-toggle="collapse" data-bs-target="#navbarNav">
                 <i class="fas fa-bars" style="color: var(--neon-cyan);"></i>
@@ -682,6 +613,9 @@
                 <ul class="navbar-nav ms-auto align-items-center">
                     <li class="nav-item">
                         <a class="nav-link" href="#home">Ana Sayfa</a>
+                    </li>
+                    <li class="nav-item">
+                        <a class="nav-link" href="#about">Hakkımızda</a>
                     </li>
                     <li class="nav-item">
                         <a class="nav-link" href="#features">Özellikler</a>
@@ -697,53 +631,55 @@
         </div>
     </nav>
 
-    <!-- HERO + AUTH SECTION -->
+    <!-- ========== HERO + AUTH SECTION ========== -->
     <section id="home" class="hero-section">
         <div class="container-fluid">
             <div class="row align-items-center g-5">
                 <div class="col-lg-6">
                     <h1 class="hero-title">
-                        Yapay Zeka ile<br>Akıllı Kripto Trading
+                        Yapay Zeka ile<br>Akıllı Kripto Analiz
                     </h1>
                     <p class="hero-subtitle">
-                     AI destekli analiz sistemimiz, piyasa verilerini işleyerek olası trade fırsatlarını belirler.
+                        Makine öğrenmesi tabanlı analiz sistemimiz, piyasa verilerini işleyerek 
+                        potansiyel trade fırsatlarını belirlemenize yardımcı olur.
                     </p>
+                    
+                    <!-- GÜVENLİK BADGE'LERİ -->
+                    <div class="security-badges">
+                        <span class="security-badge">
+                            <i class="fas fa-shield-alt"></i> 256-bit Şifreleme
+                        </span>
+                        <span class="security-badge">
+                            <i class="fas fa-mobile-alt"></i> 2FA Desteği
+                        </span>
+                        <span class="security-badge">
+                            <i class="fas fa-lock"></i> API Anahtarları Şifreli
+                        </span>
+                    </div>
+
                     <div class="hero-cta d-flex gap-3 flex-wrap">
                         <button class="btn-hero btn-primary-hero" id="getStartedBtn">
-                            <i class="fas fa-rocket"></i> Ücretsiz Başla
+                            <i class="fas fa-rocket"></i> Ücretsiz Dene
                         </button>
                         <button class="btn-hero btn-outline-hero" onclick="document.getElementById('features').scrollIntoView({behavior: 'smooth'})">
                             <i class="fas fa-info-circle"></i> Keşfet
                         </button>
                     </div>
 
-                    <!-- STATS -->
+                    <!-- İSTATİSTİKLER - %94 KALDIRILDI -->
                     <div class="stats-container">
                         <div class="stat-item">
                             <div class="stat-number">11+</div>
-                            <div class="stat-label">Borsa</div>
+                            <div class="stat-label">Borsa Entegrasyonu</div>
                         </div>
                         <div class="stat-item">
-                            <div class="stat-number">%94</div>
-                            <div class="stat-label">Doğruluk</div>
+                            <div class="stat-number">Gerçek</div>
+                            <div class="stat-label">Zamanlı Veri</div>
                         </div>
                         <div class="stat-item">
                             <div class="stat-number">7/24</div>
-                            <div class="stat-label">Kesintisiz</div>
+                            <div class="stat-label">Kesintisiz İzleme</div>
                         </div>
-                    </div>
-
-                    <!-- ADMIN INFO -->
-                    <div class="admin-info">
-                        <h4 style="color: var(--neon-purple);"><i class="fas fa-crown"></i> Admin Demo Erişim</h4>
-                        <div class="admin-credentials">
-                            <div><strong>👤 Kullanıcı:</strong>username</div>
-                            <div><strong>🔑 Şifre:</strong>password</div>
-                            <div><strong>📧 E-posta:</strong> admin@ictsmartpro.ai</div>
-                        </div>
-                        <p class="mt-3 small text-warning">
-                            <i class="fas fa-mouse-pointer"></i> Admin bilgileri için herhangi bir yere 3 kez tıklayın
-                        </p>
                     </div>
                 </div>
 
@@ -754,13 +690,13 @@
                             <h2 class="auth-title">
                                 <i class="fas fa-sign-in-alt me-2"></i>Giriş Yap
                             </h2>
-                            <p style="color: var(--text-secondary);">Trading paneline erişin</p>
+                            <p style="color: var(--text-secondary);">Panelinize erişin</p>
                         </div>
                         <div class="alert" id="loginAlert" style="display: none;"></div>
                         <form id="loginForm">
                             <div class="form-group mb-4">
                                 <label class="form-label">Kullanıcı Adı / E-posta</label>
-                                <input type="text" class="form-control" id="loginIdentifier" placeholder="kullaniciadi@email.com" required>
+                                <input type="text" class="form-control" id="loginIdentifier" placeholder="kullanici@email.com" required>
                             </div>
                             <div class="form-group mb-4">
                                 <label class="form-label">Şifre</label>
@@ -771,7 +707,7 @@
                             </button>
                         </form>
                         <div class="auth-switch text-center mt-4">
-                            <span style="color: var(--text-secondary);">Hesabın yok mu?</span>
+                            <span style="color: var(--text-secondary);">Hesabınız yok mu?</span>
                             <a onclick="showRegister()" style="color: var(--neon-cyan); cursor: pointer; font-weight: 700; margin-left: 5px;">
                                 <i class="fas fa-user-plus"></i> Hemen Kayıt Ol
                             </a>
@@ -784,7 +720,7 @@
                             <h2 class="auth-title">
                                 <i class="fas fa-user-plus me-2"></i>Kayıt Ol
                             </h2>
-                            <p style="color: var(--text-secondary);">30 gün ücretsiz premium</p>
+                            <p style="color: var(--text-secondary);">14 gün ücretsiz deneme</p>
                         </div>
                         <div class="alert" id="registerAlert" style="display: none;"></div>
                         <form id="registerForm">
@@ -804,22 +740,19 @@
                                 <label class="form-label">Şifre Tekrar</label>
                                 <input type="password" class="form-control" id="registerConfirmPassword" placeholder="Şifreyi tekrar girin" required>
                             </div>
-                            <div class="form-group mb-3">
-                                <label class="form-label">Cüzdan (opsiyonel)</label>
-                                <input type="text" class="form-control" id="registerWallet" placeholder="0x...">
-                            </div>
                             <div class="form-check mb-3">
                                 <input class="form-check-input" type="checkbox" id="termsCheck" required>
                                 <label class="form-check-label" style="color: var(--text-secondary);">
-                                    <a href="#" style="color: var(--neon-cyan);">Kullanım şartları</a>'nı kabul ediyorum
+                                    <a href="#" style="color: var(--neon-cyan);">Kullanım şartları</a>'nı ve 
+                                    <a href="#" style="color: var(--neon-cyan);">risk bildirimini</a> okudum, kabul ediyorum
                                 </label>
                             </div>
                             <button type="submit" class="btn-submit" id="registerBtn">
-                                <i class="fas fa-user-plus me-2"></i>Ücretsiz Hesap Oluştur
+                                <i class="fas fa-user-plus me-2"></i>Hesap Oluştur
                             </button>
                         </form>
                         <div class="auth-switch text-center mt-4">
-                            <span style="color: var(--text-secondary);">Zaten hesabın var mı?</span>
+                            <span style="color: var(--text-secondary);">Zaten hesabınız var mı?</span>
                             <a onclick="showLogin()" style="color: var(--neon-cyan); cursor: pointer; font-weight: 700;">
                                 <i class="fas fa-sign-in-alt"></i> Giriş Yap
                             </a>
@@ -830,127 +763,116 @@
         </div>
     </section>
 
-    <!-- FEATURES SECTION -->
+    <!-- ========== HAKKIMIZDA SECTION ========== -->
+    <section id="about" class="about-section">
+        <div class="container-fluid">
+            <h2 class="section-title">Hakkımızda</h2>
+            <div class="about-text">
+                <p>
+                    ICTSMARTPRO, kripto para piyasalarındaki karmaşık verileri anlamlı sinyallere dönüştürmek 
+                    için yapay zeka teknolojilerini kullanan bir analiz platformudur. 
+                </p>
+                <p class="mt-3">
+                    Amacımız, trader'lara daha bilinçli karar alma imkanı sunmak, 
+                    piyasa verilerini işleyerek potansiyel fırsatları tespit etmelerine yardımcı olmaktır.
+                    <strong> Bu bir yatırım tavsiyesi platformu değildir.</strong>
+                </p>
+            </div>
+        </div>
+    </section>
+
+    <!-- ========== FEATURES SECTION ========== -->
     <section id="features" class="features-section">
         <div class="container-fluid">
             <h2 class="section-title">Neden ICTSMARTPRO?</h2>
             <p class="text-center" style="color: var(--text-secondary); font-size: 1.2rem; max-width: 700px; margin: 0 auto;">
-                Yapay zeka destekli trading algoritmaları ile piyasanın önünde olun
+                Yapay zeka destekli analiz algoritmaları ile piyasanın önünde olun
             </p>
+            
             <div class="features-grid">
+                <!-- FEATURE 1 - GÜNCELLENDİ -->
                 <div class="feature-card">
                     <div class="feature-icon">
                         <i class="fas fa-brain"></i>
                     </div>
-                    <h3 class="feature-title">AI Tahmin Motoru</h3>
+                    <h3 class="feature-title">Makine Öğrenmesi Analizi</h3>
                     <p class="feature-desc">
-                        Derin öğrenme modelleri ile %94 doğrulukta fiyat tahmini. 1 milyon+ veri noktası ile eğitildi.
+                        Derin öğrenme modelleri ile veri odaklı fiyat tahmini ve sinyal üretimi. 
+                        Milyonlarca veri noktası üzerinde sürekli eğitiliyor.
                     </p>
                 </div>
+                
+                <!-- FEATURE 2 - GÜNCELLENDİ -->
                 <div class="feature-card">
                     <div class="feature-icon">
                         <i class="fas fa-bolt"></i>
                     </div>
-                    <h3 class="feature-title">Gerçek Zamanlı Veri</h3>
+                    <h3 class="feature-title">Çoklu Borsa Entegrasyonu</h3>
                     <p class="feature-desc">
-                        11+ borsadan WebSocket bağlantısı ile milisaniye gecikmesiz veri akışı. Anlık sinyal ve uyarılar.
+                        11+ borsadan WebSocket bağlantısı ile düşük gecikmeli veri akışı. 
+                        Anlık piyasa takibi ve fiyat uyarıları.
                     </p>
                 </div>
+                
+                <!-- FEATURE 3 - GÜNCELLENDİ -->
                 <div class="feature-card">
                     <div class="feature-icon">
                         <i class="fas fa-shield-alt"></i>
                     </div>
                     <h3 class="feature-title">Kurumsal Güvenlik</h3>
                     <p class="feature-desc">
-                        Banka seviyesinde şifreleme, 2FA desteği ve soğuk cüzdan entegrasyonu. Fonlarınız her zaman güvende.
+                        Banka seviyesinde şifreleme, iki faktörlü doğrulama (2FA) ve 
+                        güvenli veri işleme standartları. API anahtarlarınız şifrelenerek saklanır.
                     </p>
                 </div>
             </div>
         </div>
     </section>
 
-    <!-- SECURITY MODAL -->
-    <div class="modal fade" id="securityModal" tabindex="-1" aria-hidden="true">
-        <div class="modal-dialog modal-dialog-centered">
-            <div class="modal-content">
-                <div class="modal-header border-0 pb-0">
-                    <h5 class="modal-title">
-                        <i class="fas fa-shield-alt me-2"></i>Güvenlik Onayı
-                    </h5>
-                    <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal"></button>
-                </div>
-                <div class="modal-body">
-                    <div class="text-center mb-4">
-                        <div style="width: 80px; height: 80px; background: rgba(0, 255, 157, 0.1); border-radius: 50%; margin: 0 auto; border: 3px solid var(--neon-green); display: flex; align-items: center; justify-content: center;">
-                            <i class="fas fa-check-circle" style="font-size: 3rem; color: var(--neon-green);"></i>
-                        </div>
-                        <h4 style="color: var(--neon-cyan); margin-top: 20px;">Dashboard Erişimi</h4>
-                        <p style="color: var(--text-secondary);">Hesap güvenliğiniz için onay vermelisiniz</p>
-                    </div>
-                    <div class="security-steps">
-                        <div class="step">
-                            <div class="step-number">1</div>
-                            <div>
-                                <strong style="color: var(--neon-cyan);">Kimlik Doğrulama</strong>
-                                <p style="color: var(--text-secondary); margin: 5px 0 0;">Hesap sahipliğiniz doğrulanıyor</p>
-                            </div>
-                        </div>
-                        <div class="step">
-                            <div class="step-number">2</div>
-                            <div>
-                                <strong style="color: var(--neon-cyan);">Güvenlik Taraması</strong>
-                                <p style="color: var(--text-secondary); margin: 5px 0 0;">Yetkisiz erişim kontrolü yapılıyor</p>
-                            </div>
-                        </div>
-                        <div class="step">
-                            <div class="step-number">3</div>
-                            <div>
-                                <strong style="color: var(--neon-cyan);">Dashboard Yönlendirme</strong>
-                                <p style="color: var(--text-secondary); margin: 5px 0 0;">Kişisel trading paneline erişim</p>
-                            </div>
-                        </div>
-                    </div>
-                </div>
-                <div class="modal-footer border-0">
-                    <div class="d-grid gap-3 w-100">
-                        <button type="button" class="btn-confirm" id="confirmAccessBtn">
-                            <i class="fas fa-lock-open me-2"></i>Onayla ve Devam Et
-                        </button>
-                        <button type="button" class="btn-cancel" data-bs-dismiss="modal">
-                            <i class="fas fa-times me-2"></i>İptal
-                        </button>
-                    </div>
-                </div>
-            </div>
-        </div>
-    </div>
-
-    <!-- FOOTER -->
+    <!-- ========== FOOTER - RİSK UYARISI VE YASAL METİNLER ========== -->
     <footer class="footer">
         <div class="container-fluid">
+            
+            <!-- RİSK UYARISI - ZORUNLU -->
+            <div class="risk-disclaimer">
+                <strong>⚠️ Önemli Risk Uyarısı:</strong> Kripto para ticareti yüksek risk içerir ve 
+                sermayenizin tamamını kaybedebilirsiniz. Bu platform yatırım tavsiyesi niteliği taşımaz. 
+                Tüm kararlar ve işlemler sizin sorumluluğunuzdadır. Geçmiş performans gelecek sonuçların garantisi değildir.
+            </div>
+            
+            <!-- YASAL LİNKLER -->
             <div class="footer-links">
-                <a href="#home">Ana Sayfa</a>
+                <a href="#">Ana Sayfa</a>
+                <a href="#about">Hakkımızda</a>
                 <a href="#features">Özellikler</a>
-                <a href="#">Gizlilik</a>
-                <a href="#">Şartlar</a>
+                <a href="#">Gizlilik Politikası</a>
+                <a href="#">Kullanım Şartları</a>
+                <a href="#">Risk Bildirimi</a>
+                <a href="#">Çerez Politikası</a>
                 <a href="#">İletişim</a>
             </div>
-            <p>© 2026 ICTSMARTPRO Trade AI. Tüm hakları saklıdır.</p>
-            <div class="mt-3">
-                <span class="premium-badge" style="font-size: 0.9rem;">
-                    <i class="fas fa-crown"></i> 30 Gün Ücretsiz Deneme
+            
+            <!-- TELİF HAKKI -->
+            <p class="text-center" style="color: var(--text-dim); margin-bottom: 15px;">
+                © 2026 ICTSMARTPRO. Tüm hakları saklıdır.
+            </p>
+            
+            <!-- GÜVENLİK BADGE'İ -->
+            <div class="text-center">
+                <span style="display: inline-flex; align-items: center; gap: 8px; background: rgba(0, 255, 157, 0.05); padding: 8px 24px; border-radius: 40px; border: 1px solid var(--neon-green);">
+                    <i class="fas fa-check-circle" style="color: var(--neon-green);"></i>
+                    <span style="color: var(--text-secondary);">256-bit SSL • 2FA Desteği • Şifreli Veritabanı</span>
                 </span>
             </div>
         </div>
     </footer>
 
-    <!-- BOOTSTRAP JS -->
+    <!-- Bootstrap JS -->
     <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
 
     <script>
         // ============================================
-        // ICTSMARTPRO - ÜCRETSİZ DENEME DİREKT DASHBOARD
-        // 30 GÜN BEKLEMEDEN ANINDA ERİŞİM!
+        // ICTSMARTPRO - PROFESYONEL ANALİZ PLATFORMU
         // ============================================
 
         (function() {
@@ -958,17 +880,8 @@
 
             // ---------- KONFİGÜRASYON ----------
             const APP_CONFIG = {
-                ADMIN_USER: {
-                    username: 'ictsmartpro',
-                    email: 'admin@ictsmartpro.ai',
-                    password: '123456',
-                    is_admin: true,
-                    has_subscription: true,
-                    is_verified: true,
-                    credits: 9999
-                },
-                DEFAULT_CREDITS: 100,
-                TRIAL_DAYS: 30,
+                DEFAULT_CREDITS: 50,
+                TRIAL_DAYS: 14,
                 STORAGE_KEYS: {
                     USERS: 'ictsmartpro_users',
                     CURRENT_USER: 'ictsmartpro_current',
@@ -996,11 +909,11 @@
                 alert.style.display = 'block';
                 
                 if (alert.timeout) clearTimeout(alert.timeout);
-                alert.timeout = setTimeout(() => alert.style.display = 'none', 3000);
+                alert.timeout = setTimeout(() => alert.style.display = 'none', 4000);
             }
 
             function generateToken() {
-                return `token_${Date.now()}_${Math.random().toString(36).substring(2, 15)}`;
+                return `token_${Date.now()}_${Math.random().toString(36).substring(2)}`;
             }
 
             // ---------- KULLANICI İŞLEMLERİ ----------
@@ -1019,11 +932,6 @@
             }
 
             function findUserByUsernameOrEmail(identifier) {
-                if (identifier.toLowerCase() === APP_CONFIG.ADMIN_USER.username.toLowerCase() || 
-                    identifier.toLowerCase() === APP_CONFIG.ADMIN_USER.email.toLowerCase()) {
-                    return APP_CONFIG.ADMIN_USER;
-                }
-
                 const users = getUsers();
                 return users.find(u => 
                     u.username.toLowerCase() === identifier.toLowerCase() || 
@@ -1032,20 +940,20 @@
             }
 
             function validatePassword(user, password) {
-                if (!user) return false;
-                return user.password === password;
+                return user && user.password === password;
             }
 
             // ---------- SESSION YÖNETİMİ ----------
             function setSession(user) {
                 const sessionUser = {
-                    id: user.id || Date.now(),
+                    id: user.id,
                     username: user.username,
                     email: user.email,
-                    has_subscription: true, // HER ZAMAN PREMIUM!
-                    is_admin: user.is_admin || false,
+                    has_subscription: user.has_subscription || false,
+                    is_admin: false,
                     is_verified: true,
-                    credits: user.credits || 100
+                    credits: user.credits || 50,
+                    trial_end: user.trial_end
                 };
                 
                 localStorage.setItem(APP_CONFIG.STORAGE_KEYS.CURRENT_USER, JSON.stringify(sessionUser));
@@ -1060,21 +968,6 @@
                 currentUser = null;
             }
 
-            function checkExistingSession() {
-                try {
-                    const savedUser = localStorage.getItem(APP_CONFIG.STORAGE_KEYS.CURRENT_USER);
-                    const token = localStorage.getItem(APP_CONFIG.STORAGE_KEYS.TOKEN);
-                    
-                    if (savedUser && token) {
-                        currentUser = JSON.parse(savedUser);
-                        return true;
-                    }
-                } catch (e) {
-                    clearSession();
-                }
-                return false;
-            }
-
             // ---------- UI YÖNETİMİ ----------
             function updateUIBasedOnAuth() {
                 const authToggleBtn = document.getElementById('authToggleBtn');
@@ -1082,116 +975,62 @@
                 
                 if (currentUser) {
                     authToggleBtn.innerHTML = `<i class="fas fa-user-circle"></i> <span id="authToggleText">${currentUser.username}</span>`;
-                    authToggleText.textContent = currentUser.username;
                 } else {
                     authToggleBtn.innerHTML = '<i class="fas fa-sign-in-alt"></i> <span id="authToggleText">Giriş Yap</span>';
-                    authToggleText.textContent = 'Giriş Yap';
                 }
             }
 
-            function showRegister() {
+            window.showRegister = function() {
                 document.getElementById('loginCard').style.display = 'none';
                 document.getElementById('registerCard').style.display = 'block';
                 document.getElementById('loginCard').classList.remove('active');
                 document.getElementById('registerCard').classList.add('active');
-                document.getElementById('loginAlert').style.display = 'none';
-                document.getElementById('registerAlert').style.display = 'none';
-            }
+            };
 
-            function showLogin() {
+            window.showLogin = function() {
                 document.getElementById('registerCard').style.display = 'none';
                 document.getElementById('loginCard').style.display = 'block';
                 document.getElementById('registerCard').classList.remove('active');
                 document.getElementById('loginCard').classList.add('active');
-                document.getElementById('loginAlert').style.display = 'none';
-                document.getElementById('registerAlert').style.display = 'none';
-                
-                const loginForm = document.getElementById('loginForm');
-                if (loginForm) {
-                    loginForm.innerHTML = `
-                        <div class="form-group mb-4">
-                            <label class="form-label">Kullanıcı Adı / E-posta</label>
-                            <input type="text" class="form-control" id="loginIdentifier" placeholder="kullaniciadi@email.com" required>
-                        </div>
-                        <div class="form-group mb-4">
-                            <label class="form-label">Şifre</label>
-                            <input type="password" class="form-control" id="loginPassword" placeholder="••••••••" required>
-                        </div>
-                        <button type="submit" class="btn-submit" id="loginBtn">
-                            <i class="fas fa-sign-in-alt me-2"></i>Giriş Yap
-                        </button>
-                    `;
-                }
-            }
+            };
 
-            // ============================================
-            // 🚀 ANA ÖZELLİK: DİREKT DASHBOARD YÖNLENDİRME
-            // ============================================
+            // ---------- DEMO YÖNLENDİRME ----------
             function redirectToDashboard() {
-                console.log('🚀 DASHBOARD\'A YÖNLENDİRİLİYOR:', currentUser?.username);
+                showAlert('loginAlert', '✅ Demo panele yönlendiriliyorsunuz...', 'success');
+                showAlert('registerAlert', '✅ Demo panele yönlendiriliyorsunuz...', 'success');
                 
-                // 🔥 GERÇEK YÖNLENDİRME - HEMEN ÇALIŞIR!
-                window.location.href = '/dashboard';  // Gerçek projede
-                
-                // Demo gösterim
-                showAlert('loginAlert', '✅ Dashboard yükleniyor...', 'success');
-                showAlert('registerAlert', '✅ Dashboard yükleniyor...', 'success');
-                
-                // Sayfayı yenile (dashboard simülasyonu)
+                // Demo simülasyonu - gerçek projede dashboard sayfasına yönlendirir
                 setTimeout(() => {
-                    location.reload();
+                    alert('🎯 DEMO MOD: Dashboard paneline yönlendirme yapılacak.\n\nBu bir önizlemedir.');
                 }, 1500);
             }
 
-            // ---------- ÜCRETSİZ DENEME KULLANICISI OLUŞTUR ----------
-            function createFreeTrialUser() {
+            // ---------- DENEME KULLANICISI OLUŞTUR ----------
+            function createTrialUser() {
                 const timestamp = Date.now();
-                const username = `kullanici_${timestamp.toString().slice(-6)}`;
-                const email = `kullanici${timestamp.toString().slice(-6)}@deneme.com`;
+                const username = `demo_${timestamp.toString().slice(-6)}`;
+                const email = `demo${timestamp.toString().slice(-6)}@deneme.com`;
+                
+                const trialEnd = new Date();
+                trialEnd.setDate(trialEnd.getDate() + APP_CONFIG.TRIAL_DAYS);
                 
                 const trialUser = {
                     id: timestamp,
                     username: username,
                     email: email,
-                    password: 'trial123',
-                    wallet_address: null,
+                    password: 'demo123456',
                     has_subscription: true,
                     is_admin: false,
                     is_verified: true,
-                    credits: 100,
+                    credits: 50,
                     is_trial: true,
+                    trial_end: trialEnd.toISOString(),
                     created_at: new Date().toISOString()
                 };
                 
                 saveUser(trialUser);
                 setSession(trialUser);
-                console.log('🎉 Yeni ücretsiz deneme kullanıcısı:', username);
-                
                 return trialUser;
-            }
-
-            // ---------- BAŞARILI GİRİŞ ----------
-            function handleSuccessfulLogin(user) {
-                setSession(user);
-                updateUIBasedOnAuth();
-                showAlert('loginAlert', `✅ Hoş geldin, ${user.username}!`, 'success');
-                
-                // DIREKT DASHBOARD'A YÖNLENDİR!
-                setTimeout(() => {
-                    redirectToDashboard();
-                }, 500);
-            }
-
-            function handleSuccessfulRegistration(user) {
-                saveUser(user);
-                setSession(user);
-                updateUIBasedOnAuth();
-                showAlert('registerAlert', '✅ Hesap oluşturuldu!', 'success');
-                
-                // DIREKT DASHBOARD'A YÖNLENDİR!
-                setTimeout(() => {
-                    redirectToDashboard();
-                }, 500);
             }
 
             // ---------- EVENT LISTENER'LAR ----------
@@ -1216,13 +1055,16 @@
                         const user = findUserByUsernameOrEmail(identifier);
                         
                         if (user && validatePassword(user, password)) {
-                            handleSuccessfulLogin(user);
+                            setSession(user);
+                            updateUIBasedOnAuth();
+                            showAlert('loginAlert', `✅ Hoş geldiniz, ${user.username}!`, 'success');
+                            setTimeout(redirectToDashboard, 800);
                         } else {
-                            showAlert('loginAlert', '❌ Kullanıcı adı/şifre hatalı!', 'error');
+                            showAlert('loginAlert', '❌ Kullanıcı adı veya şifre hatalı', 'error');
                             loginBtn.innerHTML = '<i class="fas fa-sign-in-alt me-2"></i>Giriş Yap';
                             loginBtn.disabled = false;
                         }
-                    }, 500);
+                    }, 600);
                 });
 
                 // REGISTER
@@ -1233,16 +1075,15 @@
                     const email = document.getElementById('registerEmail')?.value.trim();
                     const password = document.getElementById('registerPassword')?.value;
                     const confirmPassword = document.getElementById('registerConfirmPassword')?.value;
-                    const wallet = document.getElementById('registerWallet')?.value.trim();
                     const terms = document.getElementById('termsCheck')?.checked;
                     
                     if (!username || !email || !password || !confirmPassword) {
-                        showAlert('registerAlert', 'Tüm alanları doldurun', 'error');
+                        showAlert('registerAlert', 'Lütfen tüm alanları doldurun', 'error');
                         return;
                     }
                     
                     if (password.length < 6) {
-                        showAlert('registerAlert', 'Şifre en az 6 karakter', 'error');
+                        showAlert('registerAlert', 'Şifre en az 6 karakter olmalıdır', 'error');
                         return;
                     }
                     
@@ -1252,12 +1093,12 @@
                     }
                     
                     if (!email.includes('@') || !email.includes('.')) {
-                        showAlert('registerAlert', 'Geçerli e-posta girin', 'error');
+                        showAlert('registerAlert', 'Geçerli bir e-posta adresi girin', 'error');
                         return;
                     }
                     
                     if (!terms) {
-                        showAlert('registerAlert', 'Kullanım şartlarını kabul edin', 'error');
+                        showAlert('registerAlert', 'Kullanım şartlarını kabul etmelisiniz', 'error');
                         return;
                     }
                     
@@ -1269,61 +1110,55 @@
                         const existingUser = findUserByUsernameOrEmail(username);
                         if (existingUser) {
                             showAlert('registerAlert', 'Bu kullanıcı adı zaten alınmış', 'error');
-                            registerBtn.innerHTML = '<i class="fas fa-user-plus me-2"></i>Ücretsiz Hesap Oluştur';
+                            registerBtn.innerHTML = '<i class="fas fa-user-plus me-2"></i>Hesap Oluştur';
                             registerBtn.disabled = false;
                             return;
                         }
                         
                         const existingEmail = findUserByUsernameOrEmail(email);
                         if (existingEmail) {
-                            showAlert('registerAlert', 'Bu e-posta zaten kayıtlı', 'error');
-                            registerBtn.innerHTML = '<i class="fas fa-user-plus me-2"></i>Ücretsiz Hesap Oluştur';
+                            showAlert('registerAlert', 'Bu e-posta adresi zaten kayıtlı', 'error');
+                            registerBtn.innerHTML = '<i class="fas fa-user-plus me-2"></i>Hesap Oluştur';
                             registerBtn.disabled = false;
                             return;
                         }
+                        
+                        const trialEnd = new Date();
+                        trialEnd.setDate(trialEnd.getDate() + APP_CONFIG.TRIAL_DAYS);
                         
                         const newUser = {
                             id: Date.now(),
                             username: username,
                             email: email,
                             password: password,
-                            wallet_address: wallet || null,
                             has_subscription: true,
                             is_admin: false,
                             is_verified: true,
-                            credits: 100,
+                            credits: 50,
+                            is_trial: true,
+                            trial_end: trialEnd.toISOString(),
                             created_at: new Date().toISOString()
                         };
                         
-                        handleSuccessfulRegistration(newUser);
+                        saveUser(newUser);
+                        setSession(newUser);
+                        updateUIBasedOnAuth();
+                        showAlert('registerAlert', '✅ Hesabınız oluşturuldu! 14 günlük deneme süreniz başladı.', 'success');
+                        setTimeout(redirectToDashboard, 800);
                     }, 800);
                 });
 
-                // ============================================
-                // 🔥 ÜCRETSİZ BAŞLA - DİREKT DASHBOARD!
-                // 30 GÜN BEKLEME YOK, HEMEN ERİŞİM!
-                // ============================================
+                // ÜCRETSİZ BAŞLA BUTONU
                 document.getElementById('getStartedBtn')?.addEventListener('click', function() {
-                    
-                    // 1. Zaten giriş yapmış mı?
-                    if (currentUser || checkExistingSession()) {
-                        console.log('👤 Aktif oturum bulundu, dashboard yönlendiriliyor');
+                    if (currentUser) {
                         redirectToDashboard();
                         return;
                     }
                     
-                    // 2. YENİ ÜCRETSİZ KULLANICI OLUŞTUR
-                    console.log('🎯 Yeni ücretsiz kullanıcı oluşturuluyor...');
-                    const trialUser = createFreeTrialUser();
+                    const trialUser = createTrialUser();
                     updateUIBasedOnAuth();
-                    
-                    // 3. HEMEN DASHBOARD'A YÖNLENDİR!
-                    showAlert('loginAlert', `🎉 Hoş geldin, ${trialUser.username}! Anında erişim sağlanıyor...`, 'success');
-                    
-                    // 4. DİREKT YÖNLENDİRME - BEKLEME YOK!
-                    setTimeout(() => {
-                        redirectToDashboard();
-                    }, 500);
+                    showAlert('loginAlert', `🎉 Hoş geldiniz, ${trialUser.username}! 14 günlük deneme süreniz başladı.`, 'success');
+                    setTimeout(redirectToDashboard, 800);
                 });
 
                 // AUTH TOGGLE BUTTON
@@ -1332,45 +1167,27 @@
                         clearSession();
                         updateUIBasedOnAuth();
                         showLogin();
-                        showAlert('loginAlert', '✅ Çıkış yapıldı', 'success');
+                        showAlert('loginAlert', '✅ Başarıyla çıkış yapıldı', 'success');
                     } else {
                         showLogin();
                         document.getElementById('loginCard').scrollIntoView({ behavior: 'smooth' });
-                    }
-                });
-
-                // ADMIN AUTO-FILL
-                let clickCount = 0;
-                document.addEventListener('click', function(e) {
-                    if (e.target.closest('.hero-section') || e.target.tagName === 'BODY' || e.target.tagName === 'HTML') {
-                        clickCount++;
-                        
-                        if (clickCount === 3) {
-                            const loginIdentifier = document.getElementById('loginIdentifier');
-                            const loginPassword = document.getElementById('loginPassword');
-                            
-                            if (loginIdentifier && loginPassword) {
-                                loginIdentifier.value = APP_CONFIG.ADMIN_USER.username;
-                                loginPassword.value = APP_CONFIG.ADMIN_USER.password;
-                                showAlert('loginAlert', '⚡ Admin bilgileri dolduruldu!', 'warning');
-                            }
-                            clickCount = 0;
-                        }
-                        
-                        setTimeout(() => { clickCount = 0; }, 1000);
                     }
                 });
             }
 
             // ---------- BAŞLANGIÇ ----------
             function init() {
-                console.log('🚀 ICTSMARTPRO - ANINDA ERİŞİM MODU!');
-                console.log('✅ "Ücretsiz Başla" butonu ARTIK DİREKT DASHBOARD!');
-                console.log('✅ 30 gün bekleme yok, hemen erişim!');
-                
-                if (checkExistingSession()) {
-                    console.log('👤 Aktif oturum bulundu:', currentUser.username);
-                    updateUIBasedOnAuth();
+                // Mevcut oturumu kontrol et
+                try {
+                    const savedUser = localStorage.getItem(APP_CONFIG.STORAGE_KEYS.CURRENT_USER);
+                    const token = localStorage.getItem(APP_CONFIG.STORAGE_KEYS.TOKEN);
+                    
+                    if (savedUser && token) {
+                        currentUser = JSON.parse(savedUser);
+                        updateUIBasedOnAuth();
+                    }
+                } catch (e) {
+                    clearSession();
                 }
                 
                 initEventListeners();
@@ -1379,5 +1196,6 @@
             init();
         })();
     </script>
+
 </body>
 </html>
