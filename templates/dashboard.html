@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>🚀 AI CRYPTO TRADING BOT v7.0 - ULTIMATE DASHBOARD</title>
+    <title>🚀 ICTSMARTPRO TRADING BOT v7.0 - ULTIMATE DASHBOARD</title>
     
     <!-- Bootstrap 5 -->
     <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
@@ -13,6 +13,9 @@
     
     <!-- Inter Font -->
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800;900&display=swap" rel="stylesheet">
+    
+    <!-- TradingView Widget -->
+    <script type="text/javascript" src="https://s3.tradingview.com/tv.js"></script>
     
     <style>
         /* ========== NEON COLORS ========== */
@@ -142,6 +145,22 @@
             font-weight: 700;
         }
 
+        /* ========== VISITOR COUNTER ========== */
+        .visitor-badge {
+            background: linear-gradient(135deg, var(--accent-purple), var(--accent-pink));
+            box-shadow: var(--neon-purple);
+            padding: 0.8rem 1.8rem;
+            border-radius: 50px;
+            font-size: 1rem;
+            font-weight: 700;
+            color: white;
+        }
+
+        .visitor-badge i {
+            margin-right: 8px;
+            color: var(--accent-cyan);
+        }
+
         /* ========== CARDS ========== */
         .card {
             background: rgba(15, 21, 32, 0.85);
@@ -215,6 +234,22 @@
             min-height: 650px;
             flex: 1;
             border-radius: var(--radius-md);
+        }
+
+        .chart-loading {
+            position: absolute;
+            top: 0;
+            left: 0;
+            right: 0;
+            bottom: 0;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            background: var(--bg-dark);
+            z-index: 10;
+            border-radius: var(--radius-md);
+            gap: 20px;
         }
 
         /* ========== BUTTONS ========== */
@@ -507,6 +542,12 @@
             box-shadow: var(--neon-green);
         }
 
+        .exchange-badge.inactive {
+            background: rgba(255, 255, 255, 0.05);
+            border-color: var(--text-dim);
+            color: var(--text-dim);
+        }
+
         /* ========== RESPONSIVE ========== */
         @media (max-width: 1400px) {
             .container-fluid { padding: 0 1.5rem; }
@@ -533,15 +574,14 @@
     <div class="container-fluid">
         <a class="navbar-brand">
             <i class="fas fa-robot"></i>
-            AI CRYPTO TRADING BOT v7.0
+            ICTSMARTPRO TRADING BOT v7.0
             <span class="connection-status" id="connectionStatus">
                 <i class="fas fa-plug"></i>
                 <span id="backendStatus">CONNECTING</span>
             </span>
         </a>
         <div class="d-flex align-items-center gap-3">
-            <span class="badge" style="background: linear-gradient(135deg, var(--accent-cyan), var(--accent-purple)); 
-                   box-shadow: var(--neon-cyan); padding: 0.8rem 1.8rem; border-radius: 50px; font-size: 1rem;">
+            <span class="visitor-badge">
                 <i class="fas fa-eye"></i> Visitors: <span id="visitorCount">0</span>
             </span>
         </div>
@@ -564,12 +604,12 @@
                     <div class="d-flex justify-content-between align-items-center flex-wrap gap-3">
                         <h5 class="card-title mb-0" style="color: white; text-shadow: 0 0 20px var(--accent-cyan); font-size: 1.6rem;">
                             <i class="fas fa-chart-line"></i>
-                            Multi-Source Real Data
+                            11+ Exchange Real Data
                             <span class="badge ms-2" id="dataSourceBadge" 
                                   style="background: linear-gradient(135deg, var(--accent-cyan), var(--accent-purple)); 
                                          box-shadow: var(--neon-cyan); padding: 0.8rem 1.8rem; border-radius: 50px;
                                          font-size: 1rem;">
-                                <i class="fas fa-database"></i> <span id="activeExchanges">0</span> EXCHANGES
+                                <i class="fas fa-database"></i> <span id="activeExchanges">0</span>/11 ACTIVE
                             </span>
                         </h5>
                         <div class="d-flex gap-3 flex-wrap">
@@ -630,10 +670,10 @@
                             <div class="row mt-4">
                                 <div class="col-6">
                                     <div class="text-muted small fw-bold" style="color: var(--accent-cyan) !important; font-size: 0.95rem;">
-                                        <i class="fas fa-chart-bar"></i> DATA MODE
+                                        <i class="fas fa-chart-bar"></i> 24h VOLUME
                                     </div>
-                                    <div class="fs-4 fw-bold" style="color: var(--accent-cyan); text-shadow: 0 0 25px var(--accent-cyan);">
-                                        REAL-TIME
+                                    <div class="fs-4 fw-bold" style="color: var(--accent-cyan); text-shadow: 0 0 25px var(--accent-cyan);" id="volume24h">
+                                        —
                                     </div>
                                 </div>
                                 <div class="col-6">
@@ -656,7 +696,7 @@
                             AI Signal
                             <span class="badge ms-2" style="background: linear-gradient(135deg, var(--accent-purple), var(--accent-pink)); 
                                    box-shadow: var(--neon-purple); padding: 0.6rem 1.4rem; border-radius: 40px;">
-                                <i class="fas fa-microchip"></i> AI ENGINE
+                                <i class="fas fa-microchip"></i> ENSEMBLE
                             </span>
                         </div>
                         <div class="card-body text-center">
@@ -669,7 +709,7 @@
                             <div class="fw-bold fs-3" id="confidenceText" style="color: white; text-shadow: 0 0 20px var(--accent-cyan);">
                                 Confidence: 0%
                             </div>
-                            <p class="mt-3 mb-0 fw-bold fs-5" id="aiRecommendation" 
+                            <p class="mt-3 mb-0 fw-bold fs-5" id="signalRecommendation" 
                                style="color: var(--text-soft); background: rgba(0,229,255,0.1); padding: 1rem; border-radius: 40px; border: 1px solid var(--accent-cyan);">
                                 ⏳ Waiting for backend connection...
                             </p>
@@ -688,7 +728,7 @@
                     <div class="mb-4">
                         <div class="d-flex justify-content-between mb-2">
                             <span class="fw-bold fs-5" style="color: var(--accent-green);">
-                                <i class="fas fa-arrow-up"></i> BUY SIGNALS
+                                <i class="fas fa-arrow-up"></i> BUY
                             </span>
                             <span class="fw-bold fs-4" style="color: var(--accent-green);" id="buyPercent">0%</span>
                         </div>
@@ -700,7 +740,7 @@
                     <div class="mb-4">
                         <div class="d-flex justify-content-between mb-2">
                             <span class="fw-bold fs-5" style="color: var(--accent-red);">
-                                <i class="fas fa-arrow-down"></i> SELL SIGNALS
+                                <i class="fas fa-arrow-down"></i> SELL
                             </span>
                             <span class="fw-bold fs-4" style="color: var(--accent-red);" id="sellPercent">0%</span>
                         </div>
@@ -741,6 +781,27 @@
                 </div>
             </div>
 
+            <!-- TECHNICAL INDICATORS -->
+            <div class="card mb-4">
+                <div class="card-header">
+                    <i class="fas fa-flask"></i>
+                    Technical Indicators
+                </div>
+                <div class="card-body">
+                    <div id="technicalIndicators">
+                        <div class="text-center py-5">
+                            <div class="spinner-border" role="status" 
+                                 style="width: 5rem; height: 5rem; color: var(--accent-cyan); box-shadow: var(--neon-cyan); border-width: 0.3rem;">
+                                <span class="visually-hidden">Loading...</span>
+                            </div>
+                            <p class="fw-bold mt-3 fs-4" style="color: white; text-shadow: 0 0 20px var(--accent-cyan);">
+                                Calculating technical indicators...
+                            </p>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
             <!-- PATTERNS & MARKET STRUCTURE -->
             <div class="row g-4">
                 <div class="col-md-6">
@@ -771,12 +832,21 @@
                             <div id="marketStructure">
                                 <div class="indicator-card neutral mb-3">
                                     <div class="d-flex justify-content-between align-items-center">
-                                        <span class="fw-bold fs-5"><i class="fas fa-project-diagram"></i> Trend</span>
-                                        <span class="badge fs-6" id="trendBadge" 
+                                        <span class="fw-bold fs-5"><i class="fas fa-project-diagram"></i> Structure</span>
+                                        <span class="badge fs-6" id="structureBadge" 
                                               style="background: var(--accent-purple); padding: 0.6rem 1.4rem; border-radius: 40px;">—</span>
                                     </div>
+                                    <div class="fs-1 fw-bold mt-2" id="structureValue" style="color: white;">—</div>
+                                    <small class="fw-bold fs-6" id="structureDesc" style="color: var(--text-dim);">Market structure</small>
+                                </div>
+                                <div class="indicator-card neutral mb-3">
+                                    <div class="d-flex justify-content-between align-items-center">
+                                        <span class="fw-bold fs-5"><i class="fas fa-trend-up"></i> Trend</span>
+                                        <span class="badge fs-6" id="trendBadge" 
+                                              style="background: var(--accent-cyan); padding: 0.6rem 1.4rem; border-radius: 40px;">—</span>
+                                    </div>
                                     <div class="fs-1 fw-bold mt-2" id="trendValue" style="color: white;">—</div>
-                                    <small class="fw-bold fs-6" id="trendDesc" style="color: var(--text-dim);">Trend direction</small>
+                                    <small class="fw-bold fs-6" id="trendDesc" style="color: var(--text-dim);">Trend direction & strength</small>
                                 </div>
                                 <div class="indicator-card neutral">
                                     <div class="d-flex justify-content-between align-items-center">
@@ -785,7 +855,7 @@
                                               style="background: var(--accent-orange); padding: 0.6rem 1.4rem; border-radius: 40px;">—</span>
                                     </div>
                                     <div class="fs-1 fw-bold mt-2" id="volValue" style="color: white;">—</div>
-                                    <small class="fw-bold fs-6" id="volDesc" style="color: var(--text-dim);">Market volatility</small>
+                                    <small class="fw-bold fs-6" id="volDesc" style="color: var(--text-dim);">Volatility regime</small>
                                 </div>
                             </div>
                         </div>
@@ -797,11 +867,11 @@
         <!-- ========== RIGHT COLUMN ========== -->
         <div class="col-lg-4">
 
-            <!-- EXCHANGE STATUS -->
+            <!-- EXCHANGE STATUS - BACKEND UYUMLU -->
             <div class="card mb-4">
                 <div class="card-header">
                     <i class="fas fa-network-wired"></i>
-                    Data Sources
+                    Data Sources • 11+ Exchanges
                 </div>
                 <div class="card-body" id="exchangeContainer">
                     <div class="text-center py-4">
@@ -812,46 +882,18 @@
                 </div>
             </div>
 
-            <!-- AI EVALUATION -->
+            <!-- ML STATS -->
             <div class="card mb-4">
                 <div class="card-header">
-                    <i class="fas fa-robot"></i>
-                    AI Evaluation
+                    <i class="fas fa-brain"></i>
+                    ML Model Performance
                 </div>
                 <div class="card-body">
-                    <div id="aiEvaluation">
-                        <div class="mb-3">
-                            <div class="d-flex justify-content-between">
-                                <span class="fw-bold">Action</span>
-                                <span class="badge" id="aiAction" style="background: var(--accent-purple);">—</span>
-                            </div>
-                        </div>
-                        <div class="mb-3">
-                            <div class="d-flex justify-content-between">
-                                <span class="fw-bold">Strength</span>
-                                <span class="badge" id="aiStrength" style="background: var(--accent-blue);">—</span>
-                            </div>
-                        </div>
-                        <div class="mb-3">
-                            <div class="d-flex justify-content-between">
-                                <span class="fw-bold">Risk Level</span>
-                                <span class="badge" id="aiRisk" style="background: var(--accent-orange);">—</span>
-                            </div>
-                        </div>
-                        <div class="mb-3">
-                            <div class="d-flex justify-content-between">
-                                <span class="fw-bold">AI Score</span>
-                                <span class="fs-2 fw-bold" id="aiScore" style="color: var(--accent-cyan);">0</span>
-                            </div>
-                        </div>
-                        <div class="mt-4 pt-3 border-top" style="border-color: var(--accent-cyan) !important; border-width: 2px !important;">
-                            <button class="btn btn-outline-success w-100 btn-lg fw-bold" onclick="aiEvaluate()" 
-                                    style="border: 3px solid var(--accent-purple); color: var(--accent-purple); 
-                                           box-shadow: var(--neon-purple); background: rgba(189,0,255,0.05); 
-                                           font-size: 1.2rem; padding: 1rem; border-radius: 60px;">
-                                <i class="fas fa-brain"></i>
-                                AI RE-EVALUATE
-                            </button>
+                    <div id="mlStats">
+                        <div class="text-center py-4">
+                            <span class="fw-bold fs-5" style="color: var(--accent-cyan);">
+                                <i class="fas fa-spinner fa-pulse"></i> Loading ML stats...
+                            </span>
                         </div>
                     </div>
                 </div>
@@ -895,14 +937,8 @@
                     </div>
                     <div class="mb-3">
                         <div class="d-flex justify-content-between">
-                            <span class="fw-bold">Patterns</span>
-                            <span class="badge" style="background: var(--accent-purple);">79+</span>
-                        </div>
-                    </div>
-                    <div class="mb-3">
-                        <div class="d-flex justify-content-between">
-                            <span class="fw-bold">Indicators</span>
-                            <span class="badge" style="background: var(--accent-blue);">25+</span>
+                            <span class="fw-bold">Max Confidence</span>
+                            <span class="badge" style="background: var(--accent-purple);" id="maxConfidence">79%</span>
                         </div>
                     </div>
                     <div class="mt-4 pt-3 border-top" style="border-color: var(--accent-cyan) !important; border-width: 2px !important;">
@@ -938,10 +974,10 @@
                         This content is not investment advice. Please do your own research before making decisions.
                     </span>
                     <div style="display: flex; gap: 30px; flex-wrap: wrap; justify-content: center; margin-top: 10px;">
-                        <span>© 2024 AI CRYPTO TRADING BOT v7.0 - All rights reserved</span>
+                        <span>© 2024 ICTSMARTPRO v7.0 - All rights reserved</span>
                         <span>
                             <i class="fas fa-database" style="color: var(--accent-green);"></i> 
-                            Real-time Multi-Source Data
+                            Real-time 11+ Exchange Data
                         </span>
                     </div>
                 </div>
@@ -950,28 +986,21 @@
     </div>
 </footer>
 
-<script src="https://s3.tradingview.com/tv.js"></script>
 <script>
 // ========================================================================================================
-// AI CRYPTO TRADING BOT v7.0 - DASHBOARD JAVASCRIPT
+// ICTSMARTPRO v7.0 - BACKEND UYUMLU DASHBOARD
 // ========================================================================================================
 
-// GLOBAL CONFIGURATION
 const CONFIG = {
     backendUrl: window.location.origin,
     refreshInterval: 30000,
-    retryAttempts: 3,
-    chartRetryAttempts: 5,
-    chartRetryDelay: 1000
+    maxConfidence: 79.0
 };
 
-// GLOBAL STATE
 let currentData = null;
 let autoRefreshTimer = null;
 let tvWidget = null;
-let tradingViewScriptLoaded = false;
 
-// INTERVAL MAPPING FOR TRADINGVIEW
 const INTERVAL_MAP = {
     '1m': '1', '5m': '5', '15m': '15', '30m': '30',
     '1h': '60', '4h': '240', '1d': 'D', '1w': 'W'
@@ -990,88 +1019,39 @@ function showNotification(text, type = 'info') {
 }
 
 // ========================================================================================================
-// TRADINGVIEW CHART WITH RETRY
+// TRADINGVIEW CHART
 // ========================================================================================================
-async function loadTradingView(retryCount = 0) {
+async function loadTradingView() {
     const container = document.getElementById('tradingview-widget');
     if (!container) return;
-    
-    if (!tradingViewScriptLoaded || typeof TradingView === 'undefined') {
-        if (retryCount < CONFIG.chartRetryAttempts) {
-            container.innerHTML = `
-                <div class="text-center py-5">
-                    <div class="spinner-border text-cyan" role="status" style="width: 3rem; height: 3rem;"></div>
-                    <p class="fw-bold mt-3" style="color: var(--accent-cyan);">
-                        Loading TradingView library... (${retryCount + 1}/${CONFIG.chartRetryAttempts})
-                    </p>
-                </div>
-            `;
-            setTimeout(() => loadTradingView(retryCount + 1), CONFIG.chartRetryDelay);
-            return;
-        }
-    }
     
     const symbol = document.getElementById('symbolSelect').value;
     const interval = document.getElementById('intervalSelect').value;
     const tvInterval = INTERVAL_MAP[interval] || '60';
     
-    if (tvWidget !== null) {
-        try {
-            if (typeof tvWidget.remove === 'function') {
-                tvWidget.remove();
-            }
-        } catch (e) {
-            console.warn('Widget remove failed:', e);
-        }
+    if (tvWidget) {
+        try { tvWidget.remove(); } catch (e) {}
         tvWidget = null;
     }
     
-    container.innerHTML = `
-        <div class="text-center py-5">
-            <div class="spinner-border text-cyan" role="status" style="width: 3rem; height: 3rem;"></div>
-            <p class="fw-bold mt-3" style="color: var(--accent-cyan);">
-                Loading chart for ${symbol}/USDT...
-            </p>
-        </div>
-    `;
+    container.innerHTML = `<div class="text-center py-5"><div class="spinner-border text-cyan" role="status"></div><p class="fw-bold mt-3">Loading chart...</p></div>`;
     
     await new Promise(resolve => setTimeout(resolve, 200));
     
     try {
         tvWidget = new TradingView.widget({
-            width: '100%',
-            height: '100%',
+            width: '100%', height: '100%',
             symbol: `BINANCE:${symbol}USDT`,
             interval: tvInterval,
-            timezone: 'Etc/UTC',
-            theme: 'dark',
-            style: '1',
-            locale: 'en',
-            toolbar_bg: '#0a0e17',
-            enable_publishing: false,
-            allow_symbol_change: true,
-            details: true,
-            container_id: 'tradingview-widget',
-            autosize: true,
-            studies: [
-                "RSI@tv-basicstudies",
-                "MACD@tv-basicstudies",
-                "BB@tv-basicstudies",
-                "Volume@tv-basicstudies"
-            ],
+            timezone: 'Etc/UTC', theme: 'dark', style: '1', locale: 'en',
+            toolbar_bg: '#0a0e17', enable_publishing: false, allow_symbol_change: true,
+            container_id: 'tradingview-widget', autosize: true,
+            studies: ["RSI@tv-basicstudies", "MACD@tv-basicstudies", "BB@tv-basicstudies"],
             disabled_features: ["header_widget"],
-            loading_screen: { backgroundColor: "#0a0e17", foregroundColor: "#00e5ff" }
+            loading_screen: { backgroundColor: "#0a0e17" }
         });
-        
-        tvWidget.onChartReady(() => {
-            console.log('✅ TradingView chart loaded successfully');
-        });
-        
     } catch (error) {
-        console.error('❌ TradingView widget creation failed:', error);
-        if (retryCount < CONFIG.chartRetryAttempts) {
-            setTimeout(() => loadTradingView(retryCount + 1), CONFIG.chartRetryDelay * (retryCount + 1));
-        }
+        console.error('TradingView error:', error);
     }
 }
 
@@ -1087,19 +1067,17 @@ async function checkBackendHealth() {
             document.getElementById('backendStatus').innerHTML = 
                 '<span style="color: var(--accent-green);"><i class="fas fa-check-circle"></i> CONNECTED</span>';
             
-            if (data.exchanges && data.exchanges.total_active) {
-                document.getElementById('activeExchanges').textContent = data.exchanges.total_active;
+            if (data.max_confidence_limit) {
+                document.getElementById('maxConfidence').textContent = data.max_confidence_limit + '%';
             }
             
             showNotification('✅ Backend connected successfully', 'success');
-            tradingViewScriptLoaded = true;
             return true;
         }
     } catch (error) {
-        console.error('Backend health check failed:', error);
         document.getElementById('backendStatus').innerHTML = 
             '<span style="color: var(--accent-red);"><i class="fas fa-times-circle"></i> DISCONNECTED</span>';
-        showNotification('❌ Backend connection failed - Is main.py running?', 'error');
+        showNotification('❌ Backend connection failed', 'error');
         return false;
     }
 }
@@ -1120,7 +1098,7 @@ async function loadVisitorCount() {
 }
 
 // ========================================================================================================
-// LOAD EXCHANGES
+// LOAD EXCHANGES - BACKEND /api/exchanges UYUMLU
 // ========================================================================================================
 async function loadExchanges() {
     try {
@@ -1131,14 +1109,20 @@ async function loadExchanges() {
             const container = document.getElementById('exchangeContainer');
             container.innerHTML = '';
             
-            data.exchanges.slice(0, 12).forEach(exchange => {
+            let activeCount = 0;
+            data.data.exchanges.forEach(exchange => {
+                const isActive = exchange.status === 'active';
+                if (isActive) activeCount++;
+                
                 const badge = document.createElement('span');
-                badge.className = `exchange-badge ${exchange.active ? 'active' : ''}`;
-                badge.innerHTML = `<i class="fas ${exchange.icon}"></i> ${exchange.name}`;
+                badge.className = `exchange-badge ${isActive ? 'active' : 'inactive'}`;
+                badge.innerHTML = `<i class="fas fa-circle"></i> ${exchange.name}`;
                 container.appendChild(badge);
             });
             
-            document.getElementById('activeExchanges').textContent = data.total_active || data.total;
+            document.getElementById('activeExchanges').textContent = activeCount;
+            document.getElementById('dataSourceBadge').innerHTML = 
+                `<i class="fas fa-database"></i> ${activeCount}/11 ACTIVE`;
         }
     } catch (error) {
         console.error('Load exchanges error:', error);
@@ -1146,7 +1130,7 @@ async function loadExchanges() {
 }
 
 // ========================================================================================================
-// MAIN ANALYSIS FUNCTION
+// MAIN ANALYSIS FUNCTION - BACKEND /api/analyze/{symbol} UYUMLU
 // ========================================================================================================
 async function analyzeSymbol(silent = false) {
     const symbol = document.getElementById('symbolSelect').value;
@@ -1159,238 +1143,271 @@ async function analyzeSymbol(silent = false) {
     try {
         const response = await fetch(
             `${CONFIG.backendUrl}/api/analyze/${symbol}?interval=${interval}&limit=200`,
-            {
-                method: 'GET',
-                headers: { 'Content-Type': 'application/json' }
-            }
+            { method: 'GET', headers: { 'Content-Type': 'application/json' } }
         );
         
-        if (!response.ok) {
-            throw new Error(`HTTP ${response.status}: ${response.statusText}`);
-        }
+        if (!response.ok) throw new Error(`HTTP ${response.status}`);
         
         const data = await response.json();
         
         if (data.success) {
             currentData = data;
             updateDashboard(data);
-            
-            if (!silent) {
-                showNotification(`✅ Analysis complete for ${symbol}/USDT`, 'success');
-            }
-        } else {
-            throw new Error(data.message || 'Analysis failed');
+            if (!silent) showNotification(`✅ Analysis complete`, 'success');
         }
         
     } catch (error) {
         console.error('Analysis error:', error);
-        showNotification(`❌ Analysis failed: ${error.message}`, 'error');
+        if (!silent) showNotification(`❌ Analysis failed`, 'error');
     }
 }
 
 // ========================================================================================================
-// UPDATE DASHBOARD
+// UPDATE DASHBOARD - BACKEND RESPONSE UYUMLU
 // ========================================================================================================
 function updateDashboard(data) {
     if (!data) return;
     
-    updatePriceData(data);
-    updateAISignal(data);
-    updateSignalDistribution(data);
-    updatePatterns(data);
-    updateMarketStructure(data);
-    updateSupportResistance(data);
+    // PRICE DATA
+    if (data.price_data) {
+        const price = data.price_data.current;
+        const change = data.price_data.change_percent;
+        const volume = data.price_data.volume_24h;
+        
+        document.getElementById('currentSymbol').textContent = data.symbol.replace('USDT', '/USDT');
+        
+        if (price > 0) {
+            document.getElementById('currentPrice').textContent = 
+                `$${price.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
+        }
+        
+        const changeEl = document.getElementById('priceChange');
+        if (change !== undefined) {
+            changeEl.className = change >= 0 ? 'price-change price-up' : 'price-change price-down';
+            changeEl.innerHTML = change >= 0 
+                ? `<i class="fas fa-arrow-up"></i> +${change.toFixed(2)}%` 
+                : `<i class="fas fa-arrow-down"></i> ${change.toFixed(2)}%`;
+        }
+        
+        if (volume > 0) {
+            const volumeEl = document.getElementById('volume24h');
+            if (volume > 1e9) volumeEl.textContent = `$${(volume/1e9).toFixed(2)}B`;
+            else if (volume > 1e6) volumeEl.textContent = `$${(volume/1e6).toFixed(2)}M`;
+            else if (volume > 1e3) volumeEl.textContent = `$${(volume/1e3).toFixed(2)}K`;
+            else volumeEl.textContent = `$${volume.toFixed(0)}`;
+        }
+        
+        document.getElementById('sourceCount').textContent = data.price_data.source_count || 0;
+    }
     
+    // SIGNAL
+    if (data.signal) {
+        const signal = data.signal.signal || 'NEUTRAL';
+        const confidence = data.signal.confidence || 0;
+        
+        document.getElementById('signalText').textContent = signal.replace('_', ' ');
+        
+        const signalBadge = document.getElementById('signalBadge');
+        signalBadge.className = 'signal-badge';
+        if (signal.includes('BUY')) signalBadge.classList.add('signal-buy');
+        else if (signal.includes('SELL')) signalBadge.classList.add('signal-sell');
+        else signalBadge.classList.add('signal-neutral');
+        
+        document.getElementById('confidenceFill').style.width = confidence + '%';
+        document.getElementById('confidenceText').textContent = `Confidence: ${confidence.toFixed(1)}%`;
+        document.getElementById('signalRecommendation').textContent = 
+            `📌 ${data.signal.recommendation || 'No recommendation'}`;
+    }
+    
+    // SIGNAL DISTRIBUTION
+    if (data.signal_distribution) {
+        const dist = data.signal_distribution;
+        document.getElementById('buyBar').style.width = dist.buy + '%';
+        document.getElementById('buyPercent').textContent = dist.buy + '%';
+        document.getElementById('sellBar').style.width = dist.sell + '%';
+        document.getElementById('sellPercent').textContent = dist.sell + '%';
+        document.getElementById('neutralBar').style.width = dist.neutral + '%';
+        document.getElementById('neutralPercent').textContent = dist.neutral + '%';
+    }
+    
+    // PATTERNS
+    if (data.patterns && Array.isArray(data.patterns)) {
+        const container = document.getElementById('patternsContainer');
+        const bullish = data.patterns.filter(p => p.direction === 'bullish').length;
+        const bearish = data.patterns.filter(p => p.direction === 'bearish').length;
+        
+        container.innerHTML = '';
+        data.patterns.slice(0, 12).forEach(p => {
+            const tag = document.createElement('span');
+            tag.className = `pattern-tag pattern-${p.direction}`;
+            tag.textContent = `${p.name} (${(p.confidence * 100).toFixed(0)}%)`;
+            container.appendChild(tag);
+        });
+        
+        document.getElementById('patternCount').textContent = data.patterns.length;
+        document.getElementById('patternStats').textContent = 
+            `Total: ${data.patterns.length} | Bullish: ${bullish} | Bearish: ${bearish}`;
+    }
+    
+    // MARKET STRUCTURE
+    if (data.market_structure) {
+        const ms = data.market_structure;
+        document.getElementById('structureValue').textContent = ms.structure || '—';
+        document.getElementById('structureBadge').textContent = ms.structure || '—';
+        document.getElementById('structureDesc').textContent = ms.description || '—';
+        
+        document.getElementById('trendValue').textContent = ms.trend || '—';
+        document.getElementById('trendBadge').textContent = ms.trend || '—';
+        document.getElementById('trendDesc').textContent = `Strength: ${ms.trend_strength || '—'}`;
+        
+        document.getElementById('volValue').textContent = ms.volatility || '—';
+        document.getElementById('volBadge').textContent = ms.volatility || '—';
+        document.getElementById('volDesc').textContent = `Index: ${(ms.volatility_index || 0).toFixed(1)}`;
+    }
+    
+    // TECHNICAL INDICATORS
+    if (data.technical_indicators) {
+        updateTechnicalIndicators(data.technical_indicators);
+    }
+    
+    // ML STATS
+    if (data.ml_stats) {
+        updateMLStats(data.ml_stats);
+    }
+    
+    // LAST UPDATE
     document.getElementById('lastUpdate').textContent = new Date().toLocaleTimeString('en-US');
 }
 
-function updatePriceData(data) {
-    const priceData = data.price_data;
-    if (!priceData) return;
+// ========================================================================================================
+// TECHNICAL INDICATORS
+// ========================================================================================================
+function updateTechnicalIndicators(tech) {
+    const container = document.getElementById('technicalIndicators');
     
-    const symbol = data.symbol.replace('USDT', '/USDT');
-    document.getElementById('currentSymbol').textContent = symbol;
+    let html = '<div class="row g-3">';
     
-    if (priceData.current > 0) {
-        document.getElementById('currentPrice').textContent = 
-            `$${priceData.current.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 8 })}`;
-    }
-    
-    const changeEl = document.getElementById('priceChange');
-    const change = priceData.change_percent || 0;
-    if (change !== undefined) {
-        changeEl.className = change >= 0 ? 'price-change price-up' : 'price-change price-down';
-        changeEl.innerHTML = change >= 0 
-            ? `<i class="fas fa-arrow-up"></i> +${change.toFixed(2)}% (24h)` 
-            : `<i class="fas fa-arrow-down"></i> ${change.toFixed(2)}% (24h)`;
-    }
-    
-    document.getElementById('sourceCount').textContent = priceData.source_count || 0;
-}
-
-function updateAISignal(data) {
-    const aiEval = data.ai_evaluation;
-    if (!aiEval) return;
-    
-    const signal = aiEval.action || 'NEUTRAL';
-    const confidence = aiEval.confidence || 0;
-    
-    const signalBadge = document.getElementById('signalBadge');
-    const signalText = document.getElementById('signalText');
-    
-    signalText.textContent = signal.replace('_', ' ');
-    
-    signalBadge.className = 'signal-badge';
-    if (signal.includes('BUY')) {
-        signalBadge.classList.add('signal-buy');
-    } else if (signal.includes('SELL')) {
-        signalBadge.classList.add('signal-sell');
-    } else {
-        signalBadge.classList.add('signal-neutral');
-    }
-    
-    document.getElementById('confidenceFill').style.width = confidence + '%';
-    document.getElementById('confidenceText').textContent = `Confidence: ${confidence.toFixed(1)}%`;
-    document.getElementById('aiRecommendation').textContent = 
-        `📌 ${aiEval.recommendation || 'No recommendation'}`;
-    
-    document.getElementById('aiAction').textContent = signal.replace('_', ' ');
-    document.getElementById('aiStrength').textContent = aiEval.strength || '—';
-    document.getElementById('aiRisk').textContent = aiEval.risk_level || '—';
-    document.getElementById('aiScore').textContent = (aiEval.score || 0).toFixed(1);
-}
-
-function updateSignalDistribution(data) {
-    const dist = data.signal_distribution;
-    if (!dist) return;
-    
-    document.getElementById('buyBar').style.width = dist.buy + '%';
-    document.getElementById('buyPercent').textContent = dist.buy + '%';
-    
-    document.getElementById('sellBar').style.width = dist.sell + '%';
-    document.getElementById('sellPercent').textContent = dist.sell + '%';
-    
-    document.getElementById('neutralBar').style.width = dist.neutral + '%';
-    document.getElementById('neutralPercent').textContent = dist.neutral + '%';
-}
-
-function updatePatterns(data) {
-    const patterns = data.patterns;
-    if (!patterns) return;
-    
-    const container = document.getElementById('patternsContainer');
-    
-    if (patterns.length === 0) {
-        container.innerHTML = '<span class="fw-bold fs-5" style="color: var(--accent-cyan);">No patterns detected</span>';
-        document.getElementById('patternCount').textContent = '0';
-        document.getElementById('patternStats').textContent = 'Total: 0 | Bullish: 0 | Bearish: 0';
-        return;
-    }
-    
-    container.innerHTML = '';
-    
-    const bullish = patterns.filter(p => p.direction === 'bullish').length;
-    const bearish = patterns.filter(p => p.direction === 'bearish').length;
-    
-    patterns.slice(0, 10).forEach(pattern => {
-        const tag = document.createElement('span');
-        tag.className = `pattern-tag pattern-${pattern.direction}`;
-        tag.textContent = `${pattern.name} (${(pattern.confidence * 100).toFixed(0)}%)`;
-        container.appendChild(tag);
-    });
-    
-    document.getElementById('patternCount').textContent = patterns.length;
-    document.getElementById('patternStats').textContent = 
-        `Total: ${patterns.length} | Bullish: ${bullish} | Bearish: ${bearish}`;
-}
-
-function updateMarketStructure(data) {
-    const structure = data.market_structure;
-    if (!structure) return;
-    
-    document.getElementById('trendValue').textContent = structure.trend || '—';
-    document.getElementById('trendBadge').textContent = structure.trend || '—';
-    document.getElementById('trendDesc').textContent = structure.description || 'No description';
-    
-    document.getElementById('volValue').textContent = structure.volatility || '—';
-    document.getElementById('volBadge').textContent = structure.volatility || '—';
-    document.getElementById('volDesc').textContent = 
-        `Index: ${(structure.volatility_index || 0).toFixed(1)}`;
-}
-
-function updateSupportResistance(data) {
-    const levels = data.support_resistance;
-    if (!levels) return;
-    
-    const container = document.getElementById('supportResistance');
-    
-    if (levels.length === 0) {
-        container.innerHTML = '<p class="text-center">No levels detected</p>';
-        return;
-    }
-    
-    let html = '<div class="d-flex flex-column gap-2">';
-    
-    levels.slice(0, 8).forEach(level => {
-        const typeColor = level.type === 'support' ? 'var(--accent-green)' : 'var(--accent-red)';
+    if (tech.rsi_value !== undefined) {
+        const rsiClass = tech.rsi_value >= 70 ? 'sell' : tech.rsi_value <= 30 ? 'buy' : 'neutral';
         html += `
-            <div class="d-flex justify-content-between align-items-center p-2" 
-                 style="background: rgba(0,229,255,0.05); border-radius: 12px; border: 1px solid rgba(0,229,255,0.2);">
-                <span class="fw-bold" style="color: ${typeColor};">
-                    ${level.type.toUpperCase()}: $${level.price.toFixed(4)}
-                </span>
-                <span class="badge" style="background: ${typeColor};">
-                    ${level.strength.toFixed(0)}%
-                </span>
+            <div class="col-md-4">
+                <div class="indicator-card ${rsiClass}">
+                    <div class="d-flex justify-content-between">
+                        <span class="fw-bold">RSI (14)</span>
+                        <span class="badge" style="background: var(--accent-cyan);">${tech.rsi_value.toFixed(2)}</span>
+                    </div>
+                </div>
             </div>
         `;
-    });
+    }
+    
+    if (tech.macd_histogram !== undefined) {
+        const macdClass = tech.macd_histogram > 0 ? 'buy' : 'sell';
+        html += `
+            <div class="col-md-4">
+                <div class="indicator-card ${macdClass}">
+                    <div class="d-flex justify-content-between">
+                        <span class="fw-bold">MACD</span>
+                        <span class="badge" style="background: var(--accent-purple);">${tech.macd_histogram.toFixed(4)}</span>
+                    </div>
+                </div>
+            </div>
+        `;
+    }
+    
+    if (tech.bb_position !== undefined) {
+        const bbClass = tech.bb_position >= 80 ? 'sell' : tech.bb_position <= 20 ? 'buy' : 'neutral';
+        html += `
+            <div class="col-md-4">
+                <div class="indicator-card ${bbClass}">
+                    <div class="d-flex justify-content-between">
+                        <span class="fw-bold">BB %</span>
+                        <span class="badge" style="background: var(--accent-blue);">${tech.bb_position.toFixed(2)}%</span>
+                    </div>
+                </div>
+            </div>
+        `;
+    }
     
     html += '</div>';
     container.innerHTML = html;
 }
 
 // ========================================================================================================
-// AI EVALUATE
+// ML STATS
 // ========================================================================================================
-async function aiEvaluate() {
-    const symbol = document.getElementById('symbolSelect').value;
+function updateMLStats(stats) {
+    const container = document.getElementById('mlStats');
     
-    showNotification(`🧠 AI Evaluating ${symbol}/USDT...`, 'info');
-    
-    try {
-        const response = await fetch(`${CONFIG.backendUrl}/api/ai-evaluate/${symbol}`);
-        const data = await response.json();
-        
-        if (data.success) {
-            updateDashboard({
-                symbol: data.symbol,
-                price_data: { current: data.current_price },
-                ai_evaluation: data.ai_evaluation,
-                signal_distribution: { buy: 0, sell: 0, neutral: 0 },
-                patterns: data.key_patterns ? data.key_patterns.bullish.concat(data.key_patterns.bearish).map(name => ({ name, direction: 'neutral', confidence: 0.5 })) : [],
-                market_structure: { trend: data.ai_evaluation.trend, volatility: data.ai_evaluation.volatility }
-            });
-            showNotification('✅ AI Evaluation complete', 'success');
-        } else {
-            throw new Error(data.error || 'AI evaluation failed');
-        }
-    } catch (error) {
-        console.error('AI evaluate error:', error);
-        showNotification(`❌ AI evaluation failed: ${error.message}`, 'error');
+    if (!stats || Object.keys(stats).length === 0) {
+        container.innerHTML = '<p class="text-center">No ML stats available</p>';
+        return;
     }
+    
+    let html = '';
+    
+    if (stats.lgbm) {
+        html += `
+            <div class="mb-3">
+                <div class="d-flex justify-content-between">
+                    <span class="fw-bold" style="color: var(--accent-green);">LightGBM</span>
+                    <span class="fw-bold">${stats.lgbm.toFixed(1)}%</span>
+                </div>
+                <div class="progress" style="height: 10px;">
+                    <div class="progress-bar" style="width: ${stats.lgbm}%; background: linear-gradient(90deg, #00ff9d, #00e5ff);"></div>
+                </div>
+            </div>
+        `;
+    }
+    
+    if (stats.lstm) {
+        html += `
+            <div class="mb-3">
+                <div class="d-flex justify-content-between">
+                    <span class="fw-bold" style="color: var(--accent-cyan);">LSTM</span>
+                    <span class="fw-bold">${stats.lstm.toFixed(1)}%</span>
+                </div>
+                <div class="progress" style="height: 10px;">
+                    <div class="progress-bar" style="width: ${stats.lstm}%; background: linear-gradient(90deg, #3b82f6, #00e5ff);"></div>
+                </div>
+            </div>
+        `;
+    }
+    
+    if (stats.transformer) {
+        html += `
+            <div class="mb-3">
+                <div class="d-flex justify-content-between">
+                    <span class="fw-bold" style="color: var(--accent-purple);">Transformer</span>
+                    <span class="fw-bold">${stats.transformer.toFixed(1)}%</span>
+                </div>
+                <div class="progress" style="height: 10px;">
+                    <div class="progress-bar" style="width: ${stats.transformer}%; background: linear-gradient(90deg, #bd00ff, #ff66c4);"></div>
+                </div>
+            </div>
+        `;
+    }
+    
+    container.innerHTML = html;
+}
+
+// ========================================================================================================
+// SUPPORT & RESISTANCE
+// ========================================================================================================
+function updateSupportResistance(data) {
+    // Bu endpoint backend'de yok, pass
 }
 
 // ========================================================================================================
 // EVENT LISTENERS
 // ========================================================================================================
 document.getElementById('symbolSelect').addEventListener('change', function() {
-    loadTradingView(0);
+    loadTradingView();
     analyzeSymbol(false);
 });
 
 document.getElementById('intervalSelect').addEventListener('change', function() {
-    loadTradingView(0);
+    loadTradingView();
     analyzeSymbol(false);
 });
 
@@ -1399,7 +1416,6 @@ document.getElementById('intervalSelect').addEventListener('change', function() 
 // ========================================================================================================
 function startAutoRefresh() {
     if (autoRefreshTimer) clearInterval(autoRefreshTimer);
-    
     autoRefreshTimer = setInterval(() => {
         if (document.visibilityState === 'visible') {
             analyzeSymbol(true);
@@ -1412,39 +1428,22 @@ function startAutoRefresh() {
 // INITIALIZATION
 // ========================================================================================================
 document.addEventListener('DOMContentLoaded', async function() {
-    console.log('🚀 AI Crypto Trading Bot v7.0 Dashboard Initializing...');
+    console.log('🚀 ICTSMARTPRO v7.0 Dashboard Starting...');
     
     const connected = await checkBackendHealth();
     
     if (connected) {
         await loadVisitorCount();
         await loadExchanges();
-        await loadTradingView(0);
-        
+        await loadTradingView();
         setTimeout(() => analyzeSymbol(false), 1000);
-        
         startAutoRefresh();
     }
 });
 
 window.addEventListener('beforeunload', function() {
     if (autoRefreshTimer) clearInterval(autoRefreshTimer);
-    if (tvWidget && typeof tvWidget.remove === 'function') {
-        try {
-            tvWidget.remove();
-        } catch (e) {
-            console.warn('Widget cleanup failed:', e);
-        }
-    }
-});
-
-document.addEventListener('visibilitychange', function() {
-    if (document.visibilityState === 'hidden') {
-        if (autoRefreshTimer) clearInterval(autoRefreshTimer);
-    } else {
-        startAutoRefresh();
-        if (!tvWidget) loadTradingView(0);
-    }
+    if (tvWidget) try { tvWidget.remove(); } catch(e) {}
 });
 </script>
 
