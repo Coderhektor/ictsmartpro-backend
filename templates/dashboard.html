@@ -1,9 +1,9 @@
 <!DOCTYPE html>
-<html lang="tr">
+<html lang="en">
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>🚀 ICTSMARTPRO ULTIMATE v10.0 - 30+ KAYNAK • HYBRID ML</title>
+    <title>🚀 ICTSMARTPRO TRADING BOT v9.0 - ULTIMATE ML EDITION</title>
     
     <!-- Bootstrap 5 -->
     <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
@@ -18,7 +18,7 @@
     <script type="text/javascript" src="https://s3.tradingview.com/tv.js"></script>
     
     <style>
-        /* ========== NEOAN RENKLER - ULTRA NEON ========== */
+        /* ========== NEON COLORS ========== */
         :root {
             --bg-deep: #03050a;
             --bg-dark: #0a0e17;
@@ -145,41 +145,6 @@
             font-weight: 700;
         }
 
-        /* ========== ZİYARETÇİ SAYACI ========== */
-        .visitor-counter {
-            background: rgba(0, 229, 255, 0.12);
-            padding: 0.7rem 2rem;
-            border-radius: 60px;
-            border: 2px solid var(--accent-cyan);
-            box-shadow: var(--neon-cyan);
-            color: white;
-            font-weight: 700;
-            backdrop-filter: blur(8px);
-            display: inline-flex;
-            align-items: center;
-            gap: 14px;
-            font-size: 1.2rem;
-        }
-
-        .visitor-counter i {
-            color: var(--accent-cyan);
-            text-shadow: var(--neon-cyan);
-            font-size: 1.5rem;
-        }
-
-        .visitor-count-number {
-            font-size: 2rem;
-            font-weight: 900;
-            color: var(--accent-amber);
-            text-shadow: 0 0 30px var(--accent-amber);
-            animation: countPulse 2s ease-in-out infinite;
-        }
-
-        @keyframes countPulse {
-            0%, 100% { text-shadow: 0 0 30px var(--accent-amber); }
-            50% { text-shadow: 0 0 60px var(--accent-orange); }
-        }
-
         /* ========== CARDS ========== */
         .card {
             background: rgba(15, 21, 32, 0.85);
@@ -253,84 +218,9 @@
             min-height: 650px;
             flex: 1;
             border-radius: var(--radius-md);
-            background: var(--bg-dark);
         }
 
-        .chart-loading {
-            position: absolute;
-            top: 0;
-            left: 0;
-            right: 0;
-            bottom: 0;
-            display: flex;
-            flex-direction: column;
-            align-items: center;
-            justify-content: center;
-            background: var(--bg-dark);
-            z-index: 10;
-            border-radius: var(--radius-md);
-            gap: 20px;
-        }
-
-        .chart-loading .spinner-border {
-            width: 4rem;
-            height: 4rem;
-            color: var(--accent-cyan);
-            border-width: 0.3rem;
-        }
-
-        /* ========== AI CHAT ========== */
-        .chat-container {
-            height: 420px;
-            overflow-y: auto;
-            background: rgba(10, 14, 23, 0.98);
-            backdrop-filter: blur(15px);
-            border-radius: var(--radius-lg);
-            padding: 2rem;
-            border: 2px solid var(--accent-cyan);
-            box-shadow: inset var(--neon-cyan), var(--shadow-lg);
-            scrollbar-width: thin;
-            scrollbar-color: var(--accent-cyan) var(--bg-dark);
-        }
-
-        .chat-container::-webkit-scrollbar {
-            width: 6px;
-        }
-
-        .chat-container::-webkit-scrollbar-track {
-            background: var(--bg-dark);
-            border-radius: 15px;
-        }
-
-        .chat-container::-webkit-scrollbar-thumb {
-            background: var(--accent-cyan);
-            border-radius: 15px;
-            box-shadow: var(--neon-cyan);
-        }
-
-        .chat-message {
-            margin-bottom: 2rem;
-            padding: 1.8rem;
-            border-radius: var(--radius-lg);
-            border: 2px solid rgba(0, 229, 255, 0.25);
-            font-size: 1rem;
-            font-weight: 500;
-            color: white;
-            transition: var(--transition-butter);
-        }
-
-        .chat-message:hover {
-            border-color: var(--accent-cyan);
-            box-shadow: var(--neon-cyan);
-        }
-
-        .chat-bot {
-            background: linear-gradient(135deg, rgba(59, 130, 246, 0.2), rgba(189, 0, 255, 0.2));
-            border-left: 10px solid var(--accent-cyan);
-            box-shadow: var(--neon-cyan);
-        }
-
-        /* ========== NEON BUTTON ========== */
+        /* ========== BUTTONS ========== */
         .btn-evaluate {
             background: linear-gradient(135deg, var(--accent-purple), var(--accent-pink), var(--accent-cyan));
             background-size: 200% 200%;
@@ -359,87 +249,7 @@
             border-color: white;
         }
 
-        .btn-evaluate i {
-            margin-right: 15px;
-            font-size: 1.6rem;
-        }
-
-        /* ========== EXCHANGE GRID - 30+ KAYNAK ========== */
-        .exchange-grid {
-            display: grid;
-            grid-template-columns: repeat(auto-fill, minmax(100px, 1fr));
-            gap: 12px;
-            max-height: 400px;
-            overflow-y: auto;
-            padding-right: 5px;
-        }
-
-        .exchange-grid::-webkit-scrollbar {
-            width: 4px;
-        }
-
-        .exchange-grid::-webkit-scrollbar-track {
-            background: var(--bg-dark);
-            border-radius: 10px;
-        }
-
-        .exchange-grid::-webkit-scrollbar-thumb {
-            background: var(--accent-cyan);
-            border-radius: 10px;
-        }
-
-        .exchange-card {
-            background: rgba(20, 26, 39, 0.92);
-            backdrop-filter: blur(8px);
-            border-radius: var(--radius-md);
-            padding: 1rem 0.5rem;
-            text-align: center;
-            border: 2px solid rgba(0, 229, 255, 0.25);
-            transition: var(--transition-butter);
-            color: white;
-            font-size: 0.85rem;
-        }
-
-        .exchange-card:hover {
-            transform: translateY(-5px);
-            border-color: var(--accent-cyan);
-            box-shadow: var(--neon-cyan);
-            background: rgba(0, 229, 255, 0.15);
-        }
-
-        .exchange-logo {
-            font-size: 1.8rem;
-            margin-bottom: 6px;
-        }
-
-        .exchange-name-small {
-            font-size: 0.8rem;
-            font-weight: 700;
-            margin-bottom: 6px;
-        }
-
-        .exchange-status {
-            padding: 4px 8px;
-            border-radius: 30px;
-            font-size: 0.7rem;
-            font-weight: 800;
-            display: inline-block;
-        }
-
-        .status-active {
-            background: rgba(0, 255, 157, 0.2);
-            color: var(--accent-green);
-            border: 1px solid var(--accent-green);
-            box-shadow: var(--neon-green);
-        }
-
-        .status-waiting {
-            background: rgba(255, 255, 255, 0.08);
-            color: var(--text-dim);
-            border: 1px solid rgba(255, 255, 255, 0.2);
-        }
-
-        /* ========== FİYAT GÖSTERGELERİ ========== */
+        /* ========== PRICE DISPLAY ========== */
         .current-price {
             font-size: 5.2rem;
             font-weight: 900;
@@ -477,7 +287,7 @@
             border: 2px solid var(--accent-red);
         }
 
-        /* ========== SİNYAL BADGE ========== */
+        /* ========== SIGNAL BADGE ========== */
         .signal-badge {
             padding: 2.8rem 2.2rem;
             border-radius: 40px;
@@ -624,21 +434,22 @@
             padding: 1rem;
         }
 
-        /* ========== PATTERN TAGS ========== */
+        /* ========== PATTERNS ========== */
         .pattern-tag {
             display: inline-block;
-            padding: 8px 16px;
-            margin: 4px 4px;
-            border-radius: 40px;
-            font-size: 0.9rem;
-            font-weight: 700;
+            padding: 12px 26px;
+            margin: 6px 6px;
+            border-radius: 60px;
+            font-size: 1rem;
+            font-weight: 800;
             border: 2px solid transparent;
             transition: var(--transition-butter);
             cursor: default;
+            letter-spacing: 0.5px;
         }
 
         .pattern-tag:hover {
-            transform: scale(1.05);
+            transform: scale(1.07);
         }
 
         .pattern-bullish {
@@ -701,9 +512,9 @@
             background: rgba(20, 26, 39, 0.92);
             backdrop-filter: blur(8px);
             border-radius: var(--radius-md);
-            padding: 1.2rem;
-            margin-bottom: 1rem;
-            border-left: 8px solid var(--accent-blue);
+            padding: 1.5rem;
+            margin-bottom: 1.5rem;
+            border-left: 10px solid var(--accent-blue);
             border: 1px solid rgba(59, 130, 246, 0.3);
             color: white;
             transition: var(--transition-butter);
@@ -712,7 +523,7 @@
         .indicator-card:hover {
             border-color: var(--accent-blue);
             box-shadow: var(--neon-blue);
-            transform: translateX(5px);
+            transform: translateX(8px);
         }
 
         .indicator-card.buy {
@@ -740,7 +551,6 @@
 
         @media (max-width: 768px) {
             .navbar-brand { font-size: 1.4rem; }
-            .visitor-counter { font-size: 1rem; padding: 0.5rem 1.2rem; }
             .current-price { font-size: 2.8rem; }
             .signal-badge { font-size: 1.6rem; padding: 1.5rem 1rem; }
             .btn-evaluate { font-size: 1rem; padding: 1.2rem 1.8rem; }
@@ -754,7 +564,7 @@
     <div class="container-fluid">
         <a class="navbar-brand">
             <i class="fas fa-robot"></i>
-            ICTSMARTPRO ULTIMATE v10.0
+            ICTSMARTPRO TRADING BOT v9.0
             <span class="connection-status" id="connectionStatus">
                 <i class="fas fa-plug"></i>
                 <span id="backendStatus">CONNECTING</span>
@@ -763,97 +573,80 @@
     </div>
 </nav>
 
-<!-- ========== ZİYARETÇİ SAYACI ========== -->
-<div class="container-fluid mt-2 mb-3">
-    <div class="row">
-        <div class="col-12">
-            <div style="display: flex; justify-content: flex-end; align-items: center;">
-                <span class="visitor-counter">
-                    <i class="fas fa-users"></i>
-                    <div style="display: flex; flex-direction: column; align-items: flex-start; margin-left: 10px;">
-                        <span style="color: var(--text-dim); font-size: 0.8rem;">AKTİF ZİYARETÇİ</span>
-                        <span id="visitorCount" class="visitor-count-number">0</span>
-                    </div>
-                </span>
-            </div>
-        </div>
-    </div>
-</div>
-
 <div class="container-fluid mt-4 px-3">
     <div class="row g-4">
         
-        <!-- ========== SOL ANA KOLON ========== -->
+        <!-- ========== LEFT MAIN COLUMN ========== -->
         <div class="col-lg-8">
             
-            <!-- KONTROL PANELİ -->
+            <!-- CONTROL PANEL -->
             <div class="card mb-4">
                 <div class="card-header">
                     <i class="fas fa-sliders-h"></i>
-                    ⚡ ANALİZ KONTROLLERİ • 30+ VERİ KAYNAĞI
+                    Analysis Controls
                 </div>
                 <div class="card-body">
                     <div class="d-flex justify-content-between align-items-center flex-wrap gap-3">
                         <h5 class="card-title mb-0" style="color: white; text-shadow: 0 0 20px var(--accent-cyan); font-size: 1.6rem;">
                             <i class="fas fa-chart-line"></i>
-                            YAHOO • BINANCE • COINGECKO
-                            <span class="badge ms-2" id="totalSourcesBadge"
-                                  style="background: linear-gradient(135deg, var(--accent-cyan), var(--accent-purple));
+                            Multi-Source Data
+                            <span class="badge ms-2" id="dataSourceBadge" 
+                                  style="background: linear-gradient(135deg, var(--accent-cyan), var(--accent-purple)); 
                                          box-shadow: var(--neon-cyan); padding: 0.8rem 1.8rem; border-radius: 50px;
                                          font-size: 1rem;">
-                                <i class="fas fa-database"></i> <span id="totalSourceCount">0</span>/30 KAYNAK
+                                <i class="fas fa-database"></i> LIVE
                             </span>
                         </h5>
                         <div class="d-flex gap-3 flex-wrap">
                             <select id="symbolSelect" class="form-select form-select-lg" style="width: 210px;">
-                                <option value="BTC">BTC/USDT</option>
-                                <option value="ETH">ETH/USDT</option>
-                                <option value="SOL">SOL/USDT</option>
-                                <option value="BNB">BNB/USDT</option>
-                                <option value="ADA">ADA/USDT</option>
-                                <option value="DOGE">DOGE/USDT</option>
-                                <option value="MATIC">MATIC/USDT</option>
-                                <option value="LINK">LINK/USDT</option>
-                                <option value="AVAX">AVAX/USDT</option>
-                                <option value="XRP">XRP/USDT</option>
+                                <option value="BTCUSDT">BTC/USDT</option>
+                                <option value="ETHUSDT">ETH/USDT</option>
+                                <option value="SOLUSDT">SOL/USDT</option>
+                                <option value="BNBUSDT">BNB/USDT</option>
+                                <option value="ADAUSDT">ADA/USDT</option>
+                                <option value="DOGEUSDT">DOGE/USDT</option>
+                                <option value="MATICUSDT">MATIC/USDT</option>
+                                <option value="LINKUSDT">LINK/USDT</option>
+                                <option value="AVAXUSDT">AVAX/USDT</option>
+                                <option value="XRPUSDT">XRP/USDT</option>
                             </select>
                             <select id="intervalSelect" class="form-select form-select-lg" style="width: 180px; border-color: var(--accent-purple); box-shadow: var(--neon-purple);">
-                                <option value="1m">1 DAKİKA</option>
-                                <option value="5m">5 DAKİKA</option>
-                                <option value="15m">15 DAKİKA</option>
-                                <option value="30m">30 DAKİKA</option>
-                                <option value="1h" selected>1 SAAT</option>
-                                <option value="4h">4 SAAT</option>
-                                <option value="1d">1 GÜN</option>
-                                <option value="1w">1 HAFTA</option>
+                                <option value="1m">1 MINUTE</option>
+                                <option value="5m">5 MINUTES</option>
+                                <option value="15m">15 MINUTES</option>
+                                <option value="30m">30 MINUTES</option>
+                                <option value="1h" selected>1 HOUR</option>
+                                <option value="4h">4 HOURS</option>
+                                <option value="1d">1 DAY</option>
+                                <option value="1w">1 WEEK</option>
                             </select>
-                            <button class="btn btn-primary btn-lg" onclick="analyzeSymbol()"
-                                    style="background: linear-gradient(135deg, var(--accent-green), var(--accent-cyan));
-                                           border: none; box-shadow: var(--neon-green); font-weight: 800;
+                            <button class="btn btn-primary btn-lg" onclick="analyzeSymbol()" 
+                                    style="background: linear-gradient(135deg, var(--accent-green), var(--accent-cyan)); 
+                                           border: none; box-shadow: var(--neon-green); font-weight: 800; 
                                            padding: 0.8rem 2.5rem; border-radius: 60px;">
                                 <i class="fas fa-search"></i>
-                                ANALİZ ET
+                                ANALYZE
                             </button>
                         </div>
                     </div>
                 </div>
             </div>
 
-            <!-- FİYAT ve ML SİNYALİ -->
+            <!-- PRICE & SIGNAL -->
             <div class="row g-4 mb-4">
                 <div class="col-md-6">
                     <div class="card h-100">
                         <div class="card-header">
                             <i class="fas fa-dollar-sign"></i>
-                            💎 CANLI FİYAT
-                            <span class="badge ms-2" id="priceSources"
-                                  style="background: linear-gradient(135deg, var(--accent-cyan), var(--accent-blue));
+                            Live Price
+                            <span class="badge ms-2" id="priceSources" 
+                                  style="background: linear-gradient(135deg, var(--accent-cyan), var(--accent-blue)); 
                                          box-shadow: var(--neon-cyan); padding: 0.6rem 1.4rem; border-radius: 40px;">
-                                <i class="fas fa-link"></i> <span id="sourceCount">0</span> KAYNAK
+                                <i class="fas fa-link"></i> <span id="sourceCount">0</span> SOURCES
                             </span>
                         </div>
                         <div class="card-body text-center">
-                            <div class="symbol-name fs-2 fw-bold" id="currentSymbol"
+                            <div class="symbol-name fs-2 fw-bold" id="currentSymbol" 
                                  style="text-shadow: 0 0 20px var(--accent-cyan); color: var(--text-soft);">
                                 BTC/USDT
                             </div>
@@ -862,20 +655,20 @@
                             <div class="row mt-4">
                                 <div class="col-6">
                                     <div class="text-muted small fw-bold" style="color: var(--accent-cyan) !important; font-size: 0.95rem;">
-                                        <i class="fas fa-chart-bar"></i> 24s HACİM
+                                        <i class="fas fa-chart-bar"></i> PRIMARY SOURCE
                                     </div>
-                                    <div class="fs-2 fw-bold" style="color: var(--accent-cyan); text-shadow: 0 0 25px var(--accent-cyan);"
-                                         id="volume24h">
-                                        -
+                                    <div class="fs-4 fw-bold" style="color: var(--accent-cyan); text-shadow: 0 0 25px var(--accent-cyan);" 
+                                         id="primarySource">
+                                        —
                                     </div>
                                 </div>
                                 <div class="col-6">
                                     <div class="text-muted small fw-bold" style="color: var(--accent-purple) !important; font-size: 0.95rem;">
-                                        <i class="fas fa-shield-alt"></i> VERİ DURUMU
+                                        <i class="fas fa-shield-alt"></i> DATA STATUS
                                     </div>
-                                    <div class="fs-2 fw-bold" style="color: var(--accent-purple); text-shadow: 0 0 25px var(--accent-purple);"
-                                         id="dataIntegrity">
-                                        GERÇEK
+                                    <div class="fs-4 fw-bold" style="color: var(--accent-purple); text-shadow: 0 0 25px var(--accent-purple);" 
+                                         id="dataStatus">
+                                        REAL-TIME
                                     </div>
                                 </div>
                             </div>
@@ -886,71 +679,71 @@
                     <div class="card h-100">
                         <div class="card-header">
                             <i class="fas fa-brain"></i>
-                            🧠 ML SİNYALİ
-                            <span class="badge ms-2" style="background: linear-gradient(135deg, var(--accent-purple), var(--accent-pink));
+                            ML Signal
+                            <span class="badge ms-2" style="background: linear-gradient(135deg, var(--accent-purple), var(--accent-pink)); 
                                    box-shadow: var(--neon-purple); padding: 0.6rem 1.4rem; border-radius: 40px;">
                                 <i class="fas fa-microchip"></i> ENSEMBLE
                             </span>
                         </div>
                         <div class="card-body text-center">
                             <div class="signal-badge signal-neutral" id="signalBadge">
-                                <span class="signal-text" id="signalText">BEKLENİYOR</span>
+                                <span class="signal-text" id="signalText">WAITING</span>
                             </div>
                             <div class="progress mb-3" style="height: 20px;">
                                 <div class="progress-bar" id="confidenceFill" role="progressbar" style="width: 0%;"></div>
                             </div>
                             <div class="fw-bold fs-3" id="confidenceText" style="color: white; text-shadow: 0 0 20px var(--accent-cyan);">
-                                Güven: 0%
+                                Confidence: 0%
                             </div>
-                            <p class="mt-3 mb-0 fw-bold fs-5" id="mlPrediction"
+                            <p class="mt-3 mb-0 fw-bold fs-5" id="mlPrediction" 
                                style="color: var(--text-soft); background: rgba(0,229,255,0.1); padding: 1rem; border-radius: 40px; border: 1px solid var(--accent-cyan);">
-                                ⏳ Backend bağlantısı bekleniyor...
+                                ⏳ Waiting for backend connection...
                             </p>
                         </div>
                     </div>
                 </div>
             </div>
 
-            <!-- SİNYAL DAĞILIMI -->
+            <!-- SIGNAL DISTRIBUTION -->
             <div class="card mb-4">
                 <div class="card-header">
                     <i class="fas fa-chart-pie"></i>
-                    📊 SİNYAL DAĞILIMI • 30+ KAYNAK KONSENSÜSÜ
+                    Signal Distribution
                 </div>
                 <div class="card-body">
                     <div class="mb-4">
                         <div class="d-flex justify-content-between mb-2">
                             <span class="fw-bold fs-5" style="color: var(--accent-green);">
-                                <i class="fas fa-arrow-up"></i> AL
+                                <i class="fas fa-arrow-up"></i> BUY
                             </span>
-                            <span class="fw-bold fs-4" style="color: var(--accent-green);" id="buySignalValue">0%</span>
+                            <span class="fw-bold fs-4" style="color: var(--accent-green);" id="buyPercent">0%</span>
                         </div>
                         <div class="progress" style="height: 26px; border: 2px solid var(--accent-green); box-shadow: var(--neon-green);">
-                            <div class="progress-bar bg-success" id="buySignalBar" role="progressbar"
+                            <div class="progress-bar bg-success" id="buyBar" role="progressbar" 
                                  style="width: 0%; background: linear-gradient(90deg, #00ff9d, #00e676);"></div>
                         </div>
                     </div>
                     <div class="mb-4">
                         <div class="d-flex justify-content-between mb-2">
                             <span class="fw-bold fs-5" style="color: var(--accent-red);">
-                                <i class="fas fa-arrow-down"></i> SAT
+                                <i class="fas fa-arrow-down"></i> SELL
                             </span>
-                            <span class="fw-bold fs-4" style="color: var(--accent-red);" id="sellSignalValue">0%</span>
+                            <span class="fw-bold fs-4" style="color: var(--accent-red);" id="sellPercent">0%</span>
                         </div>
                         <div class="progress" style="height: 26px; border: 2px solid var(--accent-red); box-shadow: var(--neon-red);">
-                            <div class="progress-bar bg-danger" id="sellSignalBar" role="progressbar"
+                            <div class="progress-bar bg-danger" id="sellBar" role="progressbar" 
                                  style="width: 0%; background: linear-gradient(90deg, #ff3860, #ff1744);"></div>
                         </div>
                     </div>
                     <div>
                         <div class="d-flex justify-content-between mb-2">
                             <span class="fw-bold fs-5" style="color: var(--accent-purple);">
-                                <i class="fas fa-minus"></i> NÖTR
+                                <i class="fas fa-minus"></i> NEUTRAL
                             </span>
-                            <span class="fw-bold fs-4" style="color: var(--accent-purple);" id="neutralSignalValue">0%</span>
+                            <span class="fw-bold fs-4" style="color: var(--accent-purple);" id="neutralPercent">0%</span>
                         </div>
                         <div class="progress" style="height: 26px; border: 2px solid var(--accent-purple); box-shadow: var(--neon-purple);">
-                            <div class="progress-bar bg-secondary" id="neutralSignalBar" role="progressbar"
+                            <div class="progress-bar bg-secondary" id="neutralBar" role="progressbar" 
                                  style="width: 0%; background: linear-gradient(90deg, #bd00ff, #7c4dff);"></div>
                         </div>
                     </div>
@@ -961,8 +754,8 @@
             <div class="card mb-4">
                 <div class="card-header">
                     <i class="fas fa-chart-candlestick"></i>
-                    📈 CANLI FİYAT GRAFİĞİ • TRADINGVIEW
-                    <span class="badge ms-2" style="background: linear-gradient(135deg, var(--accent-cyan), var(--accent-blue));
+                    Live Price Chart • TradingView
+                    <span class="badge ms-2" style="background: linear-gradient(135deg, var(--accent-cyan), var(--accent-blue)); 
                            box-shadow: var(--neon-cyan); padding: 0.6rem 1.4rem; border-radius: 40px;">
                         <i class="fas fa-check-circle"></i> BINANCE
                     </span>
@@ -974,42 +767,44 @@
                 </div>
             </div>
 
-            <!-- DETAYLI TEKNİK ANALİZ -->
+            <!-- TECHNICAL INDICATORS -->
             <div class="card mb-4">
                 <div class="card-header">
                     <i class="fas fa-flask"></i>
-                    🔬 DETAYLI TEKNİK ANALİZ
+                    Technical Indicators
                 </div>
                 <div class="card-body">
                     <div id="technicalIndicators">
                         <div class="text-center py-5">
-                            <div class="spinner-border" role="status"
+                            <div class="spinner-border" role="status" 
                                  style="width: 5rem; height: 5rem; color: var(--accent-cyan); box-shadow: var(--neon-cyan); border-width: 0.3rem;">
-                                <span class="visually-hidden">Yükleniyor...</span>
+                                <span class="visually-hidden">Loading...</span>
                             </div>
                             <p class="fw-bold mt-3 fs-4" style="color: white; text-shadow: 0 0 20px var(--accent-cyan);">
-                                Teknik göstergeler hesaplanıyor...
+                                Calculating technical indicators...
                             </p>
                         </div>
                     </div>
                 </div>
             </div>
 
-            <!-- PATTERN ve MARKET STRUCTURE -->
+            <!-- PATTERNS & MARKET STRUCTURE -->
             <div class="row g-4">
                 <div class="col-md-6">
                     <div class="card h-100">
                         <div class="card-header">
                             <i class="fas fa-shapes"></i>
-                            🎯 MUM PATERNLERİ
+                            Detected Patterns
                         </div>
                         <div class="card-body">
                             <div id="patternsContainer" class="mt-2" style="min-height: 140px;">
                                 <span class="fw-bold fs-5" style="color: var(--accent-cyan);">
-                                    <i class="fas fa-spinner fa-pulse"></i> Pattern verisi bekleniyor...
+                                    <i class="fas fa-spinner fa-pulse"></i> Scanning patterns...
                                 </span>
                             </div>
-                            <p class="mt-4 mb-0 fw-bold fs-5" id="patternCount" style="color: var(--text-dim);">-</p>
+                            <p class="mt-4 mb-0 fw-bold fs-5" id="patternCount" style="color: var(--text-dim);">
+                                Patterns: 0
+                            </p>
                         </div>
                     </div>
                 </div>
@@ -1017,36 +812,27 @@
                     <div class="card h-100">
                         <div class="card-header">
                             <i class="fas fa-exchange-alt"></i>
-                            🌊 MARKET YAPISI
+                            Market Structure
                         </div>
                         <div class="card-body">
-                            <div id="marketStructureContainer">
+                            <div id="marketStructure">
                                 <div class="indicator-card neutral mb-3">
                                     <div class="d-flex justify-content-between align-items-center">
-                                        <span class="fw-bold fs-5"><i class="fas fa-project-diagram"></i> Piyasa Yapısı</span>
-                                        <span class="badge fs-6" id="structureSignal"
-                                              style="background: var(--accent-purple); padding: 0.6rem 1.4rem; border-radius: 40px;">-</span>
+                                        <span class="fw-bold fs-5"><i class="fas fa-project-diagram"></i> Trend</span>
+                                        <span class="badge fs-6" id="trendBadge" 
+                                              style="background: var(--accent-purple); padding: 0.6rem 1.4rem; border-radius: 40px;">—</span>
                                     </div>
-                                    <div class="fs-1 fw-bold mt-2" id="structureValue" style="color: white;">-</div>
-                                    <small class="fw-bold fs-6" id="structureDesc" style="color: var(--text-dim);">-</small>
-                                </div>
-                                <div class="indicator-card neutral mb-3">
-                                    <div class="d-flex justify-content-between align-items-center">
-                                        <span class="fw-bold fs-5"><i class="fas fa-trend-up"></i> Trend Yönü</span>
-                                        <span class="badge fs-6" id="trendSignal"
-                                              style="background: var(--accent-cyan); padding: 0.6rem 1.4rem; border-radius: 40px;">-</span>
-                                    </div>
-                                    <div class="fs-1 fw-bold mt-2" id="trendValue" style="color: white;">-</div>
-                                    <small class="fw-bold fs-6" id="trendDesc" style="color: var(--text-dim);">-</small>
+                                    <div class="fs-1 fw-bold mt-2" id="trendValue" style="color: white;">—</div>
+                                    <small class="fw-bold fs-6" id="trendDesc" style="color: var(--text-dim);">Trend direction</small>
                                 </div>
                                 <div class="indicator-card neutral">
                                     <div class="d-flex justify-content-between align-items-center">
-                                        <span class="fw-bold fs-5"><i class="fas fa-bolt"></i> Volatilite</span>
-                                        <span class="badge fs-6" id="volatilitySignal"
-                                              style="background: var(--accent-orange); padding: 0.6rem 1.4rem; border-radius: 40px;">-</span>
+                                        <span class="fw-bold fs-5"><i class="fas fa-bolt"></i> Volatility</span>
+                                        <span class="badge fs-6" id="volBadge" 
+                                              style="background: var(--accent-orange); padding: 0.6rem 1.4rem; border-radius: 40px;">—</span>
                                     </div>
-                                    <div class="fs-1 fw-bold mt-2" id="volatilityValue" style="color: white;">-</div>
-                                    <small class="fw-bold fs-6" id="volatilityDesc" style="color: var(--text-dim);">-</small>
+                                    <div class="fs-1 fw-bold mt-2" id="volValue" style="color: white;">—</div>
+                                    <small class="fw-bold fs-6" id="volDesc" style="color: var(--text-dim);">Market volatility</small>
                                 </div>
                             </div>
                         </div>
@@ -1055,52 +841,14 @@
             </div>
         </div>
 
-        <!-- ========== SAĞ KOLON ========== -->
+        <!-- ========== RIGHT COLUMN ========== -->
         <div class="col-lg-4">
 
-            <!-- AI TRADING ASİSTANI -->
-            <div class="card mb-4">
-                <div class="card-header">
-                    <i class="fas fa-comments"></i>
-                    🤖 AI TRADING ASİSTANI
-                </div>
-                <div class="card-body">
-                    <div class="chat-container" id="chatMessages">
-                        <div class="chat-message chat-bot">
-                            <div style="display: flex; align-items: center; gap: 18px; margin-bottom: 15px;">
-                                <div style="background: linear-gradient(135deg, var(--accent-purple), var(--accent-cyan));
-                                            width: 65px; height: 65px; border-radius: 50%; display: flex; align-items: center;
-                                            justify-content: center; box-shadow: var(--neon-cyan);">
-                                    <i class="fas fa-robot" style="font-size: 32px; color: white;"></i>
-                                </div>
-                                <div>
-                                    <strong style="font-size: 1.5rem; color: var(--accent-cyan); text-shadow: 0 0 25px var(--accent-cyan);">
-                                        AI ASİSTAN
-                                    </strong>
-                                    <div style="color: var(--text-dim); font-size: 0.95rem;">
-                                        <i class="fas fa-database"></i> 30+ Kaynak
-                                    </div>
-                                </div>
-                            </div>
-                            <div style="font-size: 1.1rem; font-weight: 500; color: white; line-height: 1.7;">
-                                ⚡ GERÇEK ZAMANLI ANALİZ
-                            </div>
-                        </div>
-                    </div>
-                    <div class="mt-4">
-                        <button class="btn btn-evaluate w-100" onclick="evaluateAI()">
-                            <i class="fas fa-brain"></i>
-                            🚀 FİYATI AI İLE DEĞERLENDİR
-                        </button>
-                    </div>
-                </div>
-            </div>
-
-            <!-- ML MODELLERİ -->
+            <!-- ML MODELS -->
             <div class="card mb-4">
                 <div class="card-header">
                     <i class="fas fa-brain"></i>
-                    🧠 MAKİNE ÖĞRENMESİ
+                    Machine Learning Models
                 </div>
                 <div class="card-body">
                     <div class="mb-4">
@@ -1163,12 +911,12 @@
                             <span class="fs-4 fw-bold" style="color: white;">ENSEMBLE</span>
                             <span class="fs-2 fw-bold" id="ensembleAcc" style="color: var(--accent-amber); text-shadow: 0 0 25px var(--accent-amber);">0%</span>
                         </div>
-                        <button class="btn btn-outline-success w-100 mt-2 btn-lg fw-bold" onclick="trainModels()"
-                                style="border: 3px solid var(--accent-green); color: var(--accent-green);
-                                       box-shadow: var(--neon-green); background: rgba(0,255,157,0.05);
+                        <button class="btn btn-outline-success w-100 mt-2 btn-lg fw-bold" onclick="trainModels()" 
+                                style="border: 3px solid var(--accent-green); color: var(--accent-green); 
+                                       box-shadow: var(--neon-green); background: rgba(0,255,157,0.05); 
                                        font-size: 1.2rem; padding: 1rem; border-radius: 60px;">
                             <i class="fas fa-sync-alt"></i>
-                            ⚡ MODELLERİ EĞİT
+                            TRAIN MODELS
                         </button>
                     </div>
                 </div>
@@ -1178,39 +926,40 @@
             <div class="card mb-4">
                 <div class="card-header">
                     <i class="fas fa-star"></i>
-                    ⭐ TOP FEATURES
+                    Top Features
                 </div>
                 <div class="card-body">
                     <div id="featureImportance" style="min-height: 200px;">
                         <div class="text-center py-4">
                             <span class="fw-bold fs-5" style="color: var(--accent-cyan);">
-                                <i class="fas fa-info-circle"></i> Analiz sonrası gösterilecek
+                                <i class="fas fa-info-circle"></i> Feature importance will be shown after analysis
                             </span>
                         </div>
                     </div>
                 </div>
             </div>
 
-            <!-- 30+ VERİ KAYNAĞI -->
+            <!-- DATA SOURCES -->
             <div class="card">
                 <div class="card-header">
                     <i class="fas fa-cloud"></i>
-                    ☁️ 30+ VERİ KAYNAĞI
-                    <span class="ms-2" id="exchangeStatusBadge"
-                          style="background: rgba(0,229,255,0.15); padding: 0.6rem 1.4rem; border-radius: 40px; border: 1px solid var(--accent-cyan);">
-                        <i class="fas fa-check-circle" style="color: var(--accent-green);"></i>
-                        <span id="activeSourceCount">0</span>/30 AKTİF
-                    </span>
+                    Data Source Health
                 </div>
                 <div class="card-body">
-                    <div class="exchange-grid" id="exchangeGrid"></div>
+                    <div id="dataSourceStats" style="min-height: 150px;">
+                        <div class="text-center py-4">
+                            <span class="fw-bold fs-5" style="color: var(--accent-cyan);">
+                                <i class="fas fa-spinner fa-pulse"></i> Loading source statistics...
+                            </span>
+                        </div>
+                    </div>
                     <div class="mt-4 pt-3 border-top" style="border-color: var(--accent-cyan) !important; border-width: 2px !important;">
                         <div class="d-flex justify-content-between mb-3">
                             <span class="fw-bold fs-5" style="color: var(--text-dim);">
-                                <i class="fas fa-sync"></i> SON GÜNCELLEME
+                                <i class="fas fa-sync"></i> LAST UPDATE
                             </span>
                             <span id="lastUpdate" class="fw-bold fs-5" style="color: var(--accent-cyan); text-shadow: 0 0 20px var(--accent-cyan);">
-                                -
+                                —
                             </span>
                         </div>
                     </div>
@@ -1220,9 +969,9 @@
     </div>
 </div>
 
-<!-- ========== FOOTER - YATIRIM UYARISI ========== -->
-<footer style="background: rgba(10, 14, 23, 0.95);
-               backdrop-filter: blur(25px);
+<!-- ========== FOOTER ========== -->
+<footer style="background: rgba(10, 14, 23, 0.95); 
+               backdrop-filter: blur(25px); 
                border-top: 3px solid var(--accent-cyan);
                box-shadow: var(--neon-cyan);
                margin-top: 4rem;
@@ -1235,16 +984,16 @@
                 <div style="display: flex; flex-direction: column; align-items: center; gap: 10px;
                             color: var(--text-dim); font-size: 0.9rem; text-align: center;">
                     <span style="color: var(--accent-amber); font-weight: 700;">
-                        ⚠️ UYARI
+                        ⚠️ DISCLAIMER
                     </span>
                     <span>
-                        Bu içerik yatırım tavsiyesi niteliği taşımaz. Lütfen kendi araştırmanızı yaparak karar veriniz.
+                        This content is not investment advice. Please do your own research before making decisions.
                     </span>
                     <div style="display: flex; gap: 30px; flex-wrap: wrap; justify-content: center; margin-top: 10px;">
-                        <span>© 2024 ICTSMARTPRO - Tüm hakları saklıdır</span>
+                        <span>© 2024 ICTSMARTPRO - All rights reserved</span>
                         <span>
-                            <i class="fas fa-database" style="color: var(--accent-green);"></i>
-                            30+ Gerçek Zamanlı Veri Kaynağı
+                            <i class="fas fa-database" style="color: var(--accent-green);"></i> 
+                            Real-time Multi-Source Data
                         </span>
                     </div>
                 </div>
@@ -1255,248 +1004,77 @@
 
 <script>
 // ========================================================================================================
-// ICTSMARTPRO ULTIMATE v10.0 - DÜZELTİLMİŞ VERSİYON
+// ICTSMARTPRO TRADING BOT v9.0 - FULL BACKEND INTEGRATION
 // ========================================================================================================
 
-// GLOBAL CONFIG - BACKEND URL
+// GLOBAL CONFIGURATION
 const CONFIG = {
-    backendUrl: 'http://localhost:8000',  // Backend portu
+    backendUrl: window.location.origin,
     refreshInterval: 30000,
-    maxRetries: 3,
+    retryAttempts: 3,
     retryDelay: 2000
 };
 
 // GLOBAL STATE
 let currentData = null;
 let autoRefreshTimer = null;
-let tvWidget = null;
-let tvLoadAttempts = 0;
-const MAX_TV_ATTEMPTS = 3;
 
-// ========================================================================================================
-// 30+ VERİ KAYNAĞI LİSTESİ
-// ========================================================================================================
-const dataSources = [
-    // Kripto Borsaları (15)
-    { name: 'Binance', icon: 'fa-bitcoin', color: 'text-warning', type: 'crypto' },
-    { name: 'Bybit', icon: 'fa-coins', color: 'text-info', type: 'crypto' },
-    { name: 'OKX', icon: 'fa-chart-bar', color: 'text-primary', type: 'crypto' },
-    { name: 'KuCoin', icon: 'fa-database', color: 'text-success', type: 'crypto' },
-    { name: 'Gate.io', icon: 'fa-gem', color: 'text-danger', type: 'crypto' },
-    { name: 'MEXC', icon: 'fa-rocket', color: 'text-purple', type: 'crypto' },
-    { name: 'Kraken', icon: 'fa-exchange-alt', color: 'text-secondary', type: 'crypto' },
-    { name: 'Bitfinex', icon: 'fa-fire', color: 'text-orange', type: 'crypto' },
-    { name: 'Huobi', icon: 'fa-burn', color: 'text-cyan', type: 'crypto' },
-    { name: 'Coinbase', icon: 'fa-shopping-cart', color: 'text-blue', type: 'crypto' },
-    { name: 'Bitget', icon: 'fa-bolt', color: 'text-teal', type: 'crypto' },
-    { name: 'BinanceUS', icon: 'fa-dollar-sign', color: 'text-primary', type: 'crypto' },
-    { name: 'Crypto.com', icon: 'fa-crown', color: 'text-warning', type: 'crypto' },
-    { name: 'LBank', icon: 'fa-chart-line', color: 'text-info', type: 'crypto' },
-    { name: 'WhiteBIT', icon: 'fa-flag', color: 'text-success', type: 'crypto' },
-    
-    // Yahoo Finance (Borsa, Forex, Endeks)
-    { name: 'Yahoo Finance', icon: 'fa-yahoo', color: 'text-purple', type: 'yahoo' },
-    { name: 'Yahoo BIST', icon: 'fa-chart-simple', color: 'text-purple', type: 'yahoo' },
-    { name: 'Yahoo Forex', icon: 'fa-dollar-sign', color: 'text-purple', type: 'yahoo' },
-    { name: 'Yahoo Indices', icon: 'fa-chart-line', color: 'text-purple', type: 'yahoo' },
-    { name: 'Yahoo Crypto', icon: 'fa-bitcoin', color: 'text-purple', type: 'yahoo' },
-    { name: 'Yahoo ETFs', icon: 'fa-boxes', color: 'text-purple', type: 'yahoo' },
-    { name: 'Yahoo Futures', icon: 'fa-clock', color: 'text-purple', type: 'yahoo' },
-    { name: 'Yahoo Options', icon: 'fa-code-branch', color: 'text-purple', type: 'yahoo' },
-    
-    // CoinGecko (Kripto)
-    { name: 'CoinGecko', icon: 'fa-lizard', color: 'text-green', type: 'coingecko' },
-    { name: 'CG Binance', icon: 'fa-bitcoin', color: 'text-green', type: 'coingecko' },
-    { name: 'CG Coinbase', icon: 'fa-coins', color: 'text-green', type: 'coingecko' },
-    { name: 'CG Kraken', icon: 'fa-fish', color: 'text-green', type: 'coingecko' },
-    { name: 'CG Bybit', icon: 'fa-bolt', color: 'text-green', type: 'coingecko' },
-    { name: 'CG OKX', icon: 'fa-chart-pie', color: 'text-green', type: 'coingecko' },
-    { name: 'CG KuCoin', icon: 'fa-cube', color: 'text-green', type: 'coingecko' },
-    { name: 'CG Gate', icon: 'fa-gate', color: 'text-green', type: 'coingecko' },
-    { name: 'CG MEXC', icon: 'fa-m', color: 'text-green', type: 'coingecko' },
-    { name: 'CG Bitget', icon: 'fa-b', color: 'text-green', type: 'coingecko' }
-];
-
-// INTERVAL MAPPING
+// INTERVAL MAPPING FOR TRADINGVIEW
 const INTERVAL_MAP = {
     '1m': '1', '5m': '5', '15m': '15', '30m': '30',
     '1h': '60', '4h': '240', '1d': 'D', '1w': 'W'
 };
 
 // ========================================================================================================
-// YARDIMCI FONKSİYONLAR
+// NOTIFICATION SYSTEM
 // ========================================================================================================
-function formatNumber(num, decimals = 2) {
-    if (num === undefined || num === null || isNaN(num)) return '-';
-    return Number(num).toLocaleString('en-US', { 
-        minimumFractionDigits: decimals, 
-        maximumFractionDigits: decimals 
-    });
-}
-
-function formatVolume(volume) {
-    if (!volume || volume <= 0) return '-';
-    if (volume > 1e9) return `$${(volume/1e9).toFixed(2)}B`;
-    if (volume > 1e6) return `$${(volume/1e6).toFixed(2)}M`;
-    if (volume > 1e3) return `$${(volume/1e3).toFixed(2)}K`;
-    return `$${volume.toFixed(0)}`;
-}
-
 function showNotification(text, type = 'info') {
     const div = document.createElement('div');
     div.className = `notification ${type}`;
-    const icon = type === 'success' ? 'check-circle' : type === 'error' ? 'exclamation-triangle' : 'info-circle';
-    div.innerHTML = `<i class="fas fa-${icon} me-3"></i> ${text}`;
+    const icons = { success: 'check-circle', error: 'exclamation-triangle', info: 'info-circle' };
+    div.innerHTML = `<i class="fas fa-${icons[type]} me-3" style="font-size: 1.8rem;"></i> ${text}`;
     document.body.appendChild(div);
     setTimeout(() => div.remove(), 3000);
 }
 
 // ========================================================================================================
-// ZİYARETÇİ SAYACI
-// ========================================================================================================
-async function updateVisitorCount() {
-    try {
-        const response = await fetch(`${CONFIG.backendUrl}/api/visitors`);
-        if (response.ok) {
-            const data = await response.json();
-            if (data.success && typeof data.count === 'number') {
-                document.getElementById('visitorCount').textContent = data.count.toLocaleString('tr-TR');
-                return;
-            }
-        }
-        document.getElementById('visitorCount').textContent = '0';
-    } catch (error) {
-        console.error('Visitor count error:', error);
-        document.getElementById('visitorCount').textContent = '0';
-    }
-}
-
-// ========================================================================================================
-// 30+ KAYNAK GRID RENDER
-// ========================================================================================================
-function renderDataSourceGrid() {
-    const grid = document.getElementById('exchangeGrid');
-    if (!grid) return;
-    
-    grid.innerHTML = dataSources.map(source => {
-        // DÜZELTİLDİ: Source ID oluşturma - noktaları ve boşlukları temizle
-        const sourceId = source.name
-            .toLowerCase()
-            .replace(/\s+/g, '')
-            .replace(/\./g, '')
-            .replace(/\//g, '');
-        
-        return `
-            <div class="exchange-card" id="source-${sourceId}">
-                <div class="exchange-logo ${source.color}"><i class="fas ${source.icon}"></i></div>
-                <div class="exchange-name-small">${source.name}</div>
-                <div class="exchange-status status-waiting" id="status-${sourceId}">
-                    BEKLENİYOR
-                </div>
-            </div>
-        `;
-    }).join('');
-    
-    document.getElementById('totalSourceCount').textContent = dataSources.length;
-    document.getElementById('activeSourceCount').textContent = '0';
-}
-
-// ========================================================================================================
-// BACKEND HEALTH CHECK
+// BACKEND CONNECTION CHECK
 // ========================================================================================================
 async function checkBackendHealth() {
     try {
-        console.log('🔍 Checking backend at:', CONFIG.backendUrl + '/health');
         const response = await fetch(`${CONFIG.backendUrl}/health`);
         const data = await response.json();
         
         if (response.ok && data.status === 'healthy') {
             document.getElementById('backendStatus').innerHTML = 
                 '<span style="color: var(--accent-green);"><i class="fas fa-check-circle"></i> CONNECTED</span>';
-            showNotification('✅ Backend bağlantısı kuruldu', 'success');
+            showNotification('✅ Backend connected successfully', 'success');
             return true;
-        } else {
-            throw new Error('Backend not healthy');
         }
     } catch (error) {
         console.error('Backend health check failed:', error);
         document.getElementById('backendStatus').innerHTML = 
             '<span style="color: var(--accent-red);"><i class="fas fa-times-circle"></i> DISCONNECTED</span>';
-        showNotification('❌ Backend bağlantısı yok', 'error');
+        showNotification('❌ Backend connection failed - Is main.py running?', 'error');
         return false;
     }
 }
 
 // ========================================================================================================
-// TRADINGVIEW CHART - DÜZELTİLDİ
+// TRADINGVIEW CHART
 // ========================================================================================================
-function ensureTradingViewScript() {
-    return new Promise((resolve, reject) => {
-        if (typeof TradingView !== 'undefined') {
-            resolve();
-            return;
-        }
-        
-        // Script zaten eklenmiş mi kontrol et
-        if (document.querySelector('script[src*="tv.js"]')) {
-            // Script var ama yüklenmemiş olabilir, bekle
-            const checkInterval = setInterval(() => {
-                if (typeof TradingView !== 'undefined') {
-                    clearInterval(checkInterval);
-                    resolve();
-                }
-            }, 100);
-            
-            // Timeout
-            setTimeout(() => {
-                clearInterval(checkInterval);
-                reject(new Error("TradingView load timeout"));
-            }, 5000);
-            return;
-        }
-        
-        const script = document.createElement('script');
-        script.src = 'https://s3.tradingview.com/tv.js';
-        script.async = true;
-        
-        script.onload = () => {
-            console.log("✅ TradingView loaded");
-            resolve();
-        };
-        
-        script.onerror = () => reject(new Error("TradingView script failed"));
-        document.head.appendChild(script);
-    });
-}
-
-async function loadTradingView() {
+function loadTradingView() {
     const container = document.getElementById('tradingview-widget');
     if (!container) return;
     
-    const symbol = document.getElementById('symbolSelect').value + 'USDT';
+    const symbol = document.getElementById('symbolSelect').value;
     const interval = document.getElementById('intervalSelect').value;
     const tvInterval = INTERVAL_MAP[interval] || '60';
     
-    // Show loading
-    container.innerHTML = `
-        <div class="chart-loading">
-            <div class="spinner-border" role="status"></div>
-            <p class="fw-bold fs-4" style="color: var(--accent-cyan);">Yükleniyor...</p>
-        </div>
-    `;
+    container.innerHTML = '';
     
     try {
-        await ensureTradingViewScript();
-        
-        if (tvWidget) {
-            try { tvWidget.remove(); } catch (e) {}
-            tvWidget = null;
-        }
-        
-        container.innerHTML = '';
-        await new Promise(resolve => setTimeout(resolve, 300));
-        
-        tvWidget = new TradingView.widget({
+        new TradingView.widget({
             width: '100%',
             height: '100%',
             symbol: `BINANCE:${symbol}`,
@@ -1504,553 +1082,470 @@ async function loadTradingView() {
             timezone: 'Etc/UTC',
             theme: 'dark',
             style: '1',
-            locale: 'tr',
+            locale: 'en',
             toolbar_bg: '#0a0e17',
             enable_publishing: false,
             allow_symbol_change: true,
+            details: true,
             container_id: 'tradingview-widget',
             autosize: true,
-            studies: ["RSI@tv-basicstudies", "MACD@tv-basicstudies", "BB@tv-basicstudies"],
-            disabled_features: ["header_widget"],
-            loading_screen: { backgroundColor: "#0a0e17" }
+            studies: [
+                "RSI@tv-basicstudies",
+                "MACD@tv-basicstudies",
+                "BB@tv-basicstudies",
+                "Volume@tv-basicstudies"
+            ]
         });
-        
-        tvWidget.onChartReady(() => {
-            console.log("✅ Chart ready");
-            tvLoadAttempts = 0;
-        });
-        
     } catch (error) {
         console.error('TradingView error:', error);
-        if (tvLoadAttempts < MAX_TV_ATTEMPTS) {
-            tvLoadAttempts++;
-            setTimeout(loadTradingView, 2000);
-        } else {
-            container.innerHTML = `
-                <div class="chart-loading">
-                    <p class="fw-bold fs-4" style="color: var(--accent-red);">
-                        <i class="fas fa-exclamation-triangle"></i> TradingView yüklenemedi
-                    </p>
-                </div>
-            `;
-        }
+        container.innerHTML = '<div class="text-center py-5 text-cyan fw-bold fs-2">⚠️ Chart loading failed</div>';
     }
 }
 
 // ========================================================================================================
-// MAIN ANALYSIS - DÜZELTİLDİ
+// MAIN ANALYSIS FUNCTION - Backend /api/analyze/{symbol}
 // ========================================================================================================
 async function analyzeSymbol(silent = false) {
     const symbol = document.getElementById('symbolSelect').value;
     const interval = document.getElementById('intervalSelect').value;
     
-    if (!silent) showNotification(`📊 ${symbol}/USDT analiz ediliyor...`, 'info');
+    if (!silent) {
+        showNotification(`📊 Analyzing ${symbol}...`, 'info');
+    }
     
     try {
-        // DÜZELTİLDİ: URL yapısı backend ile uyumlu
-        const url = `${CONFIG.backendUrl}/api/analyze/${symbol}?interval=${interval}&limit=200&use_ml=true&ml_model=ensemble`;
-        console.log('📡 Fetching:', url);
-        
-        const response = await fetch(url);
+        const response = await fetch(
+            `${CONFIG.backendUrl}/api/analyze/${symbol}?interval=${interval}&limit=200&use_ml=true&ml_model=ensemble`,
+            {
+                method: 'GET',
+                headers: { 'Content-Type': 'application/json' }
+            }
+        );
         
         if (!response.ok) {
-            const errorText = await response.text();
-            throw new Error(`HTTP ${response.status}: ${errorText}`);
+            throw new Error(`HTTP ${response.status}: ${response.statusText}`);
         }
         
         const data = await response.json();
-        console.log('📊 Data received:', data);
         
         if (data.success) {
             currentData = data;
             updateDashboard(data);
             
-            // DÜZELTİLDİ: Kaynak durumlarını güncelle
-            updateSourceStatusFromData(data);
-            
-            if (!silent) showNotification(`✅ Analiz tamamlandı`, 'success');
+            if (!silent) {
+                showNotification(`✅ Analysis complete for ${symbol}`, 'success');
+            }
         } else {
-            throw new Error('API returned success: false');
+            throw new Error(data.message || 'Analysis failed');
         }
         
     } catch (error) {
         console.error('Analysis error:', error);
-        if (!silent) showNotification(`❌ Analiz başarısız: ${error.message}`, 'error');
+        showNotification(`❌ Analysis failed: ${error.message}`, 'error');
     }
 }
 
 // ========================================================================================================
-// KAYNAK DURUMU GÜNCELLE - DÜZELTİLDİ
+// UPDATE DASHBOARD WITH BACKEND DATA
 // ========================================================================================================
-function updateSourceStatusFromData(data) {
-    // Aktif kaynak sayısını güncelle
-    if (data.price_data && data.price_data.source_count) {
-        document.getElementById('activeSourceCount').textContent = data.price_data.source_count;
-        document.getElementById('sourceCount').textContent = data.price_data.source_count;
-    }
-    
-    // Kaynak istatistikleri varsa
-    if (data.data_source_stats) {
-        const sources = data.data_source_stats;
-        
-        dataSources.forEach(source => {
-            const sourceId = source.name
-                .toLowerCase()
-                .replace(/\s+/g, '')
-                .replace(/\./g, '')
-                .replace(/\//g, '');
-            
-            const statusEl = document.getElementById(`status-${sourceId}`);
-            if (!statusEl) return;
-            
-            // Kaynak sağlıklı mı kontrol et
-            let isActive = false;
-            if (source.type === 'yahoo' && sources.yahoo_finance && sources.yahoo_finance.available) {
-                isActive = true;
-            } else if (source.type === 'coingecko' && sources.coingecko && sources.coingecko.available) {
-                isActive = true;
-            } else if (source.type === 'crypto' && sources[source.name.toLowerCase()] && 
-                       sources[source.name.toLowerCase()].available) {
-                isActive = true;
-            }
-            
-            if (isActive) {
-                statusEl.className = 'exchange-status status-active';
-                statusEl.innerHTML = 'AKTİF';
-            } else {
-                statusEl.className = 'exchange-status status-waiting';
-                statusEl.innerHTML = 'BEKLENİYOR';
-            }
-        });
-    }
-}
-
-// ========================================================================
-// DASHBOARD UPDATE - ANA FONKSİYON (DÜZELTİLDİ)
-// ========================================================================
 function updateDashboard(data) {
-    if (!data || !data.success) return;
+    if (!data) return;
     
-    console.log('🔄 Updating dashboard with:', data);
+    console.log('Updating dashboard with data:', data);
     
-    // ===== PRICE UPDATE =====
+    // 1. PRICE DATA
     if (data.price_data) {
-        const price = data.price_data.current;
-        const change = data.price_data.change_percent;
-        const volume = data.price_data.volume;
-        
-        document.getElementById('currentSymbol').textContent = data.symbol.replace('USDT', '/USDT');
-        
-        // Fiyat gösterimi
-        if (price && price > 0) {
-            document.getElementById('currentPrice').textContent = `$${formatNumber(price, 2)}`;
-        } else {
-            document.getElementById('currentPrice').textContent = '—';
-        }
-        
-        // Değişim yüzdesi
-        const changeEl = document.getElementById('priceChange');
-        if (change !== undefined && change !== null) {
-            const changeValue = Number(change);
-            changeEl.className = changeValue >= 0 ? 'price-change price-up' : 'price-change price-down';
-            changeEl.innerHTML = changeValue >= 0 
-                ? `<i class="fas fa-arrow-up"></i> +${changeValue.toFixed(2)}%` 
-                : `<i class="fas fa-arrow-down"></i> ${changeValue.toFixed(2)}%`;
-        } else {
-            changeEl.innerHTML = '—';
-        }
-        
-        // Hacim
-        document.getElementById('volume24h').textContent = formatVolume(volume);
-        
-        // Kaynak sayısı
-        if (data.price_data.source_count) {
-            document.getElementById('sourceCount').textContent = data.price_data.source_count;
-        }
+        updatePriceData(data.price_data, data.symbol);
     }
     
-    // ===== ML PREDICTION =====
+    // 2. ML PREDICTION
     if (data.ml_prediction) {
-        const pred = data.ml_prediction;
-        
-        // Sinyal metni
-        const signalText = pred.prediction || 'NEUTRAL';
-        document.getElementById('signalText').textContent = signalText;
-        
-        // Sinyal badge rengi
-        const badge = document.getElementById('signalBadge');
-        badge.className = 'signal-badge';
-        if (signalText.includes('BUY')) {
-            badge.classList.add('signal-buy');
-        } else if (signalText.includes('SELL')) {
-            badge.classList.add('signal-sell');
-        } else {
-            badge.classList.add('signal-neutral');
-        }
-        
-        // Güven oranı (backend'de confidence yüzde olarak geliyor)
-        const confidence = pred.confidence || 0;
-        document.getElementById('confidenceFill').style.width = confidence + '%';
-        document.getElementById('confidenceText').textContent = `Güven: %${confidence}`;
-        
-        // Model bilgisi
-        const modelInfo = pred.model_used ? pred.model_used : 'ensemble';
-        let probInfo = '';
-        if (pred.probabilities) {
-            probInfo = `<span class="ms-3 small">
-                AL: %${(pred.probabilities.buy * 100).toFixed(1)} / SAT: %${(pred.probabilities.sell * 100).toFixed(1)}
-            </span>`;
-        }
-        document.getElementById('mlPrediction').innerHTML = `
-            <i class="fas fa-microchip me-2"></i> Model: ${modelInfo}
-            ${probInfo}
-        `;
+        updateMLPrediction(data.ml_prediction);
     }
     
-    // ===== SİNYAL DAĞILIMI (Pattern'lerden hesapla) =====
-    if (data.patterns && Array.isArray(data.patterns) && data.patterns.length > 0) {
-        let bullish = 0, bearish = 0, neutral = 0;
-        
-        data.patterns.forEach(p => {
-            if (p.signal === 'bullish') bullish++;
-            else if (p.signal === 'bearish') bearish++;
-            else neutral++;
-        });
-        
-        const total = bullish + bearish + neutral;
-        
-        if (total > 0) {
-            const buyPercent = (bullish / total * 100).toFixed(1);
-            const sellPercent = (bearish / total * 100).toFixed(1);
-            const neutralPercent = (neutral / total * 100).toFixed(1);
-            
-            document.getElementById('buySignalValue').textContent = `%${buyPercent}`;
-            document.getElementById('buySignalBar').style.width = buyPercent + '%';
-            
-            document.getElementById('sellSignalValue').textContent = `%${sellPercent}`;
-            document.getElementById('sellSignalBar').style.width = sellPercent + '%';
-            
-            document.getElementById('neutralSignalValue').textContent = `%${neutralPercent}`;
-            document.getElementById('neutralSignalBar').style.width = neutralPercent + '%';
-        }
-    }
-    
-    // ===== ML STATS =====
+    // 3. ML STATS
     if (data.ml_stats) {
-        const stats = data.ml_stats;
-        
-        // LSTM
-        const lstmVal = stats.lstm || 0;
-        document.getElementById('lstmAcc').textContent = lstmVal.toFixed(1) + '%';
-        document.getElementById('lstmBar').style.width = lstmVal + '%';
-        
-        // Transformer
-        const tfVal = stats.transformer || 0;
-        document.getElementById('transformerAcc').textContent = tfVal.toFixed(1) + '%';
-        document.getElementById('transformerBar').style.width = tfVal + '%';
-        
-        // XGBoost
-        const xgbVal = stats.xgboost || 0;
-        document.getElementById('xgboostAcc').textContent = xgbVal.toFixed(1) + '%';
-        document.getElementById('xgboostBar').style.width = xgbVal + '%';
-        
-        // LightGBM
-        const lgbVal = stats.lightgbm || 0;
-        document.getElementById('lightgbmAcc').textContent = lgbVal.toFixed(1) + '%';
-        document.getElementById('lightgbmBar').style.width = lgbVal + '%';
-        
-        // Random Forest
-        const rfVal = stats.random_forest || 0;
-        document.getElementById('rfAcc').textContent = rfVal.toFixed(1) + '%';
-        document.getElementById('rfBar').style.width = rfVal + '%';
-        
-        // Ensemble
-        const ensVal = stats.ensemble || 0;
-        document.getElementById('ensembleAcc').textContent = ensVal.toFixed(1) + '%';
+        updateMLStats(data.ml_stats);
     }
     
-    // ===== PATTERNS =====
-    if (data.patterns && Array.isArray(data.patterns)) {
-        const container = document.getElementById('patternsContainer');
-        
-        if (data.patterns.length > 0) {
-            container.innerHTML = data.patterns.slice(0, 8).map(p => {
-                const signalClass = p.signal === 'bullish' ? 'pattern-bullish' : 
-                                   p.signal === 'bearish' ? 'pattern-bearish' : 'pattern-neutral';
-                const icon = p.signal === 'bullish' ? 'arrow-up' : 
-                            p.signal === 'bearish' ? 'arrow-down' : 'minus';
-                return `
-                    <span class="pattern-tag ${signalClass}">
-                        <i class="fas fa-${icon}"></i>
-                        ${p.name}
-                        <span class="ms-2 badge bg-dark">%${p.confidence}</span>
-                    </span>
-                `;
-            }).join('');
-            
-            document.getElementById('patternCount').innerHTML = 
-                `<i class="fas fa-chart-pie me-2"></i> Toplam ${data.patterns.length} pattern tespit edildi`;
-        } else {
-            container.innerHTML = '<span class="fw-bold fs-5" style="color: var(--text-dim);">⚠️ Pattern bulunamadı</span>';
-            document.getElementById('patternCount').innerHTML = '-';
-        }
+    // 4. PATTERNS
+    if (data.patterns) {
+        updatePatterns(data.patterns);
     }
     
-    // ===== TECHNICAL INDICATORS =====
+    // 5. TECHNICAL INDICATORS
     if (data.technical_indicators) {
-        const tech = data.technical_indicators;
-        
-        // RSI durumuna göre sınıf belirle
-        const rsiClass = tech.rsi > 70 ? 'sell' : tech.rsi < 30 ? 'buy' : 'neutral';
-        
-        const techHtml = `
-            <div class="row g-3">
-                <div class="col-md-6">
-                    <div class="indicator-card">
-                        <div class="d-flex justify-content-between">
-                            <span><i class="fas fa-chart-line"></i> SMA 20</span>
-                            <span class="fw-bold">$${tech.sma_20 ? formatNumber(tech.sma_20, 2) : '-'}</span>
-                        </div>
-                    </div>
-                </div>
-                <div class="col-md-6">
-                    <div class="indicator-card">
-                        <div class="d-flex justify-content-between">
-                            <span><i class="fas fa-chart-line"></i> SMA 50</span>
-                            <span class="fw-bold">$${tech.sma_50 ? formatNumber(tech.sma_50, 2) : '-'}</span>
-                        </div>
-                    </div>
-                </div>
-                <div class="col-md-6">
-                    <div class="indicator-card ${rsiClass}">
-                        <div class="d-flex justify-content-between">
-                            <span><i class="fas fa-bolt"></i> RSI (14)</span>
-                            <span class="fw-bold">${tech.rsi ? tech.rsi.toFixed(2) : '50.00'}</span>
-                        </div>
-                    </div>
-                </div>
-                <div class="col-md-6">
-                    <div class="indicator-card">
-                        <div class="d-flex justify-content-between">
-                            <span><i class="fas fa-chart-bar"></i> MACD</span>
-                            <span class="fw-bold ${tech.macd > tech.macd_signal ? 'text-success' : 'text-danger'}">
-                                ${tech.macd ? tech.macd.toFixed(4) : '0.0000'}
-                            </span>
-                        </div>
-                    </div>
-                </div>
-                ${tech.bb_upper ? `
-                <div class="col-12">
-                    <div class="indicator-card">
-                        <div class="d-flex justify-content-between">
-                            <span><i class="fas fa-chart-simple"></i> Bollinger Bands</span>
-                            <span>
-                                Ü: $${formatNumber(tech.bb_upper, 2)} / 
-                                O: $${formatNumber(tech.bb_middle, 2)} / 
-                                A: $${formatNumber(tech.bb_lower, 2)}
-                            </span>
-                        </div>
-                    </div>
-                </div>
-                ` : ''}
-            </div>
-        `;
-        document.getElementById('technicalIndicators').innerHTML = techHtml;
+        updateTechnicalIndicators(data.technical_indicators);
     }
     
-    // ===== MARKET STRUCTURE =====
+    // 6. MARKET STRUCTURE
     if (data.market_structure) {
-        const ms = data.market_structure;
-        
-        // Structure
-        const trendUpper = (ms.trend || 'neutral').toUpperCase();
-        document.getElementById('structureSignal').textContent = trendUpper;
-        document.getElementById('structureSignal').style.background = 
-            ms.trend === 'bullish' ? 'var(--accent-green)' : 
-            ms.trend === 'bearish' ? 'var(--accent-red)' : 'var(--accent-purple)';
-        document.getElementById('structureValue').textContent = trendUpper;
-        document.getElementById('structureDesc').textContent = 'Ana trend yönü';
-        
-        // Support/Resistance
-        document.getElementById('trendSignal').textContent = 'S/R';
-        document.getElementById('trendValue').innerHTML = `
-            D: $${ms.support ? formatNumber(ms.support, 2) : '-'} / 
-            Y: $${ms.resistance ? formatNumber(ms.resistance, 2) : '-'}
-        `;
-        document.getElementById('trendDesc').textContent = 'Destek / Direnç';
-        
-        // Volatility
-        const vol = ms.volatility || 0;
-        const volLevel = vol > 50 ? 'YÜKSEK' : vol > 25 ? 'ORTA' : 'DÜŞÜK';
-        document.getElementById('volatilitySignal').textContent = volLevel;
-        document.getElementById('volatilityValue').textContent = `%${vol.toFixed(1)}`;
-        document.getElementById('volatilityDesc').textContent = 'Yıllık volatilite';
+        updateMarketStructure(data.market_structure);
     }
     
-    // ===== FEATURE IMPORTANCE =====
-    if (data.ml_prediction?.feature_importance && 
-        Array.isArray(data.ml_prediction.feature_importance) && 
-        data.ml_prediction.feature_importance.length > 0) {
-        
-        const features = data.ml_prediction.feature_importance.slice(0, 5);
-        const featHtml = features.map(f => `
-            <div class="d-flex justify-content-between align-items-center mb-2">
-                <span style="color: var(--accent-cyan);">${f}</span>
-                <span class="badge" style="background: var(--accent-purple);">⭐</span>
-            </div>
-        `).join('');
-        document.getElementById('featureImportance').innerHTML = featHtml || 
-            '<div class="text-center">Feature importance yakında</div>';
+    // 7. DATA SOURCE STATS
+    if (data.data_source_stats) {
+        updateDataSourceStats(data.data_source_stats);
     }
     
-    // ===== LAST UPDATE =====
-    document.getElementById('lastUpdate').textContent = new Date().toLocaleTimeString('tr-TR');
+    // 8. UPDATE TIMESTAMP
+    document.getElementById('lastUpdate').textContent = new Date().toLocaleTimeString('en-US');
 }
 
-// ========================================================================
-// AI EVALUATION
-// ========================================================================
-function evaluateAI() {
-    if (!currentData) {
-        showNotification('⚠️ Önce analiz yapın', 'error');
+// ========================================================================================================
+// UPDATE PRICE DATA
+// ========================================================================================================
+function updatePriceData(priceData, symbol) {
+    const price = priceData.current;
+    const change = priceData.change_percent;
+    const sourceCount = priceData.source_count || 0;
+    const primarySource = priceData.primary_source || 'Unknown';
+    
+    // Symbol
+    document.getElementById('currentSymbol').textContent = symbol.replace('USDT', '/USDT');
+    
+    // Price
+    if (price > 0) {
+        document.getElementById('currentPrice').textContent = 
+            `$${price.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 8 })}`;
+    }
+    
+    // Change
+    const changeEl = document.getElementById('priceChange');
+    if (change !== undefined) {
+        changeEl.className = change >= 0 ? 'price-change price-up' : 'price-change price-down';
+        changeEl.innerHTML = change >= 0 
+            ? `<i class="fas fa-arrow-up"></i> +${change.toFixed(2)}% (24h)` 
+            : `<i class="fas fa-arrow-down"></i> ${change.toFixed(2)}% (24h)`;
+    }
+    
+    // Source count
+    document.getElementById('sourceCount').textContent = sourceCount;
+    
+    // Primary source
+    document.getElementById('primarySource').textContent = primarySource.toUpperCase();
+}
+
+// ========================================================================================================
+// UPDATE ML PREDICTION
+// ========================================================================================================
+function updateMLPrediction(mlData) {
+    const prediction = mlData.prediction || 'NEUTRAL';
+    const confidence = mlData.confidence || 0;
+    const probabilities = mlData.probabilities || { buy: 0.5, sell: 0.5 };
+    
+    // Signal badge
+    const signalBadge = document.getElementById('signalBadge');
+    const signalText = document.getElementById('signalText');
+    
+    signalText.textContent = prediction;
+    
+    if (prediction.includes('BUY')) {
+        signalBadge.className = 'signal-badge signal-buy';
+    } else if (prediction.includes('SELL')) {
+        signalBadge.className = 'signal-badge signal-sell';
+    } else {
+        signalBadge.className = 'signal-badge signal-neutral';
+    }
+    
+    // Confidence bar
+    document.getElementById('confidenceFill').style.width = confidence + '%';
+    document.getElementById('confidenceText').textContent = `Confidence: ${confidence.toFixed(1)}%`;
+    
+    // ML prediction text
+    document.getElementById('mlPrediction').textContent = 
+        `📌 Model: ${mlData.model_used || 'Ensemble'} • ${prediction}`;
+    
+    // Signal distribution (from probabilities)
+    const buyPercent = (probabilities.buy * 100).toFixed(1);
+    const sellPercent = (probabilities.sell * 100).toFixed(1);
+    const neutralPercent = (100 - buyPercent - sellPercent).toFixed(1);
+    
+    document.getElementById('buyBar').style.width = buyPercent + '%';
+    document.getElementById('buyPercent').textContent = buyPercent + '%';
+    
+    document.getElementById('sellBar').style.width = sellPercent + '%';
+    document.getElementById('sellPercent').textContent = sellPercent + '%';
+    
+    document.getElementById('neutralBar').style.width = neutralPercent + '%';
+    document.getElementById('neutralPercent').textContent = neutralPercent + '%';
+}
+
+// ========================================================================================================
+// UPDATE ML STATS
+// ========================================================================================================
+function updateMLStats(stats) {
+    // LSTM
+    const lstmAcc = stats.lstm || 0;
+    document.getElementById('lstmAcc').textContent = lstmAcc.toFixed(1) + '%';
+    document.getElementById('lstmBar').style.width = lstmAcc + '%';
+    
+    // Transformer
+    const transformerAcc = stats.transformer || 0;
+    document.getElementById('transformerAcc').textContent = transformerAcc.toFixed(1) + '%';
+    document.getElementById('transformerBar').style.width = transformerAcc + '%';
+    
+    // XGBoost
+    const xgboostAcc = stats.xgboost || 0;
+    document.getElementById('xgboostAcc').textContent = xgboostAcc.toFixed(1) + '%';
+    document.getElementById('xgboostBar').style.width = xgboostAcc + '%';
+    
+    // LightGBM
+    const lightgbmAcc = stats.lightgbm || 0;
+    document.getElementById('lightgbmAcc').textContent = lightgbmAcc.toFixed(1) + '%';
+    document.getElementById('lightgbmBar').style.width = lightgbmAcc + '%';
+    
+    // Random Forest
+    const rfAcc = stats.random_forest || 0;
+    document.getElementById('rfAcc').textContent = rfAcc.toFixed(1) + '%';
+    document.getElementById('rfBar').style.width = rfAcc + '%';
+    
+    // Ensemble
+    const ensembleAcc = stats.ensemble || 0;
+    document.getElementById('ensembleAcc').textContent = ensembleAcc.toFixed(1) + '%';
+}
+
+// ========================================================================================================
+// UPDATE PATTERNS
+// ========================================================================================================
+function updatePatterns(patterns) {
+    const container = document.getElementById('patternsContainer');
+    
+    if (!patterns || patterns.length === 0) {
+        container.innerHTML = '<span class="fw-bold fs-5" style="color: var(--accent-cyan);">No patterns detected</span>';
+        document.getElementById('patternCount').textContent = 'Patterns: 0';
         return;
     }
     
-    const chatDiv = document.getElementById('chatMessages');
-    const msg = document.createElement('div');
-    msg.className = 'chat-message chat-bot';
+    container.innerHTML = '';
     
-    const prediction = currentData.ml_prediction?.prediction || 'NEUTRAL';
-    const confidence = currentData.ml_prediction?.confidence || 0;
-    const patternCount = currentData.patterns?.length || 0;
-    const price = currentData.price_data?.current || 0;
-    const rsi = currentData.technical_indicators?.rsi || 50;
+    patterns.slice(0, 10).forEach(pattern => {
+        const tag = document.createElement('span');
+        tag.className = `pattern-tag pattern-${pattern.signal}`;
+        tag.textContent = `${pattern.name} (${(pattern.confidence * 100).toFixed(0)}%)`;
+        container.appendChild(tag);
+    });
     
-    // SADECE GERÇEK VERİLERLE YORUM
-    let comment = '';
-    if (prediction.includes('BUY')) {
-        comment = '📈 Teknik göstergeler ve ML modelleri alım yönünde sinyal veriyor.';
-        if (rsi < 30) comment += ' RSI aşırı satım bölgesinde.';
-    } else if (prediction.includes('SELL')) {
-        comment = '📉 Satış baskısı artıyor. ML modelleri %' + confidence + ' güvenle düşüş bekliyor.';
-        if (rsi > 70) comment += ' RSI aşırı alım bölgesinde.';
-    } else {
-        comment = '⚖️ Piyasa nötr bölgede. Belirgin bir sinyal yok.';
-    }
-    
-    msg.innerHTML = `
-        <div style="display: flex; align-items: center; gap: 15px; margin-bottom: 15px;">
-            <div style="background: linear-gradient(135deg, var(--accent-purple), var(--accent-cyan));
-                        width: 50px; height: 50px; border-radius: 50%; display: flex; align-items: center;
-                        justify-content: center; box-shadow: var(--neon-cyan);">
-                <i class="fas fa-brain" style="font-size: 24px;"></i>
-            </div>
-            <div>
-                <strong style="color: var(--accent-cyan);">AI DEĞERLENDİRME</strong>
-                <div style="font-size: 0.8rem;">${new Date().toLocaleTimeString('tr-TR')}</div>
-            </div>
-        </div>
-        <div style="font-size: 1.1rem; font-weight: 700; margin-bottom: 10px;
-                    color: ${prediction.includes('BUY') ? 'var(--accent-green)' : 
-                           prediction.includes('SELL') ? 'var(--accent-red)' : 'var(--accent-purple)'};">
-            ${prediction} • %${confidence} Güven
-        </div>
-        <div style="margin-top: 10px; font-size: 1rem;">${comment}</div>
-        <div style="margin-top: 15px; padding-top: 15px; border-top: 1px solid rgba(0,229,255,0.3);">
-            <div class="row">
-                <div class="col-4">
-                    <small>Fiyat</small>
-                    <div class="fw-bold">$${formatNumber(price, 2)}</div>
-                </div>
-                <div class="col-4">
-                    <small>RSI</small>
-                    <div class="fw-bold">${rsi.toFixed(1)}</div>
-                </div>
-                <div class="col-4">
-                    <small>Pattern</small>
-                    <div class="fw-bold">${patternCount}</div>
-                </div>
-            </div>
-        </div>
-    `;
-    
-    chatDiv.appendChild(msg);
-    chatDiv.scrollTop = chatDiv.scrollHeight;
+    document.getElementById('patternCount').textContent = `Patterns: ${patterns.length}`;
 }
 
-// ========================================================================
+// ========================================================================================================
+// UPDATE TECHNICAL INDICATORS
+// ========================================================================================================
+function updateTechnicalIndicators(indicators) {
+    const container = document.getElementById('technicalIndicators');
+    
+    let html = '<div class="row g-3">';
+    
+    // RSI
+    if (indicators.rsi !== undefined) {
+        const rsiClass = indicators.rsi >= 70 ? 'sell' : indicators.rsi <= 30 ? 'buy' : 'neutral';
+        html += `
+            <div class="col-md-6">
+                <div class="indicator-card ${rsiClass}">
+                    <div class="d-flex justify-content-between">
+                        <span class="fw-bold"><i class="fas fa-chart-line"></i> RSI (14)</span>
+                        <span class="badge" style="background: var(--accent-cyan);">${indicators.rsi.toFixed(2)}</span>
+                    </div>
+                </div>
+            </div>
+        `;
+    }
+    
+    // MACD
+    if (indicators.macd !== undefined) {
+        const macdClass = indicators.macd > 0 ? 'buy' : 'sell';
+        html += `
+            <div class="col-md-6">
+                <div class="indicator-card ${macdClass}">
+                    <div class="d-flex justify-content-between">
+                        <span class="fw-bold"><i class="fas fa-exchange-alt"></i> MACD</span>
+                        <span class="badge" style="background: var(--accent-purple);">${indicators.macd.toFixed(4)}</span>
+                    </div>
+                </div>
+            </div>
+        `;
+    }
+    
+    // SMA 20
+    if (indicators.sma_20 !== undefined) {
+        html += `
+            <div class="col-md-6">
+                <div class="indicator-card neutral">
+                    <div class="d-flex justify-content-between">
+                        <span class="fw-bold"><i class="fas fa-chart-area"></i> SMA (20)</span>
+                        <span class="badge" style="background: var(--accent-green);">$${indicators.sma_20.toFixed(2)}</span>
+                    </div>
+                </div>
+            </div>
+        `;
+    }
+    
+    // Bollinger Bands
+    if (indicators.bb_upper !== undefined) {
+        html += `
+            <div class="col-md-6">
+                <div class="indicator-card neutral">
+                    <div class="d-flex justify-content-between">
+                        <span class="fw-bold"><i class="fas fa-chart-simple"></i> BB Upper</span>
+                        <span class="badge" style="background: var(--accent-blue);">$${indicators.bb_upper.toFixed(2)}</span>
+                    </div>
+                </div>
+            </div>
+        `;
+    }
+    
+    html += '</div>';
+    container.innerHTML = html;
+}
+
+// ========================================================================================================
+// UPDATE MARKET STRUCTURE
+// ========================================================================================================
+function updateMarketStructure(structure) {
+    // Trend
+    document.getElementById('trendValue').textContent = (structure.trend || 'Unknown').toUpperCase();
+    document.getElementById('trendBadge').textContent = structure.trend || '—';
+    document.getElementById('trendDesc').textContent = `Support: $${structure.support || 0} | Resistance: $${structure.resistance || 0}`;
+    
+    // Volatility
+    document.getElementById('volValue').textContent = (structure.volatility * 100 || 0).toFixed(2) + '%';
+    document.getElementById('volBadge').textContent = structure.volatility >= 0.5 ? 'HIGH' : structure.volatility >= 0.3 ? 'MEDIUM' : 'LOW';
+    document.getElementById('volDesc').textContent = `Volume trend: ${structure.volume_trend || 'Unknown'}`;
+}
+
+// ========================================================================================================
+// UPDATE DATA SOURCE STATS
+// ========================================================================================================
+function updateDataSourceStats(stats) {
+    const container = document.getElementById('dataSourceStats');
+    
+    let html = '<div class="d-flex flex-column gap-2">';
+    
+    for (const [source, data] of Object.entries(stats)) {
+        const successRate = data.success_rate || 0;
+        const available = data.available ? '✅' : '❌';
+        
+        html += `
+            <div class="d-flex justify-content-between align-items-center p-2" 
+                 style="background: rgba(0,229,255,0.05); border-radius: 12px; border: 1px solid rgba(0,229,255,0.2);">
+                <span class="fw-bold" style="color: var(--text-soft);">
+                    ${available} ${source.replace('_', ' ').toUpperCase()}
+                </span>
+                <span class="badge" style="background: ${successRate >= 80 ? 'var(--accent-green)' : successRate >= 50 ? 'var(--accent-amber)' : 'var(--accent-red)'};">
+                    ${successRate.toFixed(0)}%
+                </span>
+            </div>
+        `;
+    }
+    
+    html += '</div>';
+    container.innerHTML = html;
+}
+
+// ========================================================================================================
 // TRAIN MODELS
-// ========================================================================
+// ========================================================================================================
 async function trainModels() {
     const symbol = document.getElementById('symbolSelect').value;
-    showNotification('🧠 Modeller eğitiliyor...', 'info');
+    const interval = document.getElementById('intervalSelect').value;
+    
+    showNotification('🧠 Training ML models...', 'info');
     
     try {
-        const response = await fetch(`${CONFIG.backendUrl}/api/train/${symbol}?interval=1h&limit=1000`, { 
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' }
-        });
+        const response = await fetch(
+            `${CONFIG.backendUrl}/api/train/${symbol}?interval=${interval}&limit=1000`,
+            {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' }
+            }
+        );
         
-        if (response.ok) {
-            const data = await response.json();
-            showNotification('✅ Eğitim tamamlandı', 'success');
-            // 3 saniye sonra analizi yenile
+        const data = await response.json();
+        
+        if (response.ok && data.success) {
+            showNotification('✅ Models trained successfully!', 'success');
+            
+            // Refresh analysis after 3 seconds
             setTimeout(() => analyzeSymbol(true), 3000);
         } else {
-            throw new Error('Training failed');
+            throw new Error(data.message || 'Training failed');
         }
+        
     } catch (error) {
         console.error('Training error:', error);
-        showNotification('❌ Eğitim başarısız', 'error');
+        showNotification(`❌ Training failed: ${error.message}`, 'error');
     }
 }
 
-// ========================================================================
-// INIT
-// ========================================================================
+// ========================================================================================================
+// EVENT LISTENERS
+// ========================================================================================================
+document.getElementById('symbolSelect').addEventListener('change', function() {
+    loadTradingView();
+    analyzeSymbol(false);
+});
+
+document.getElementById('intervalSelect').addEventListener('change', function() {
+    loadTradingView();
+    analyzeSymbol(false);
+});
+
+// ========================================================================================================
+// AUTO REFRESH
+// ========================================================================================================
+function startAutoRefresh() {
+    if (autoRefreshTimer) clearInterval(autoRefreshTimer);
+    
+    autoRefreshTimer = setInterval(() => {
+        if (document.visibilityState === 'visible') {
+            analyzeSymbol(true);
+        }
+    }, CONFIG.refreshInterval);
+}
+
+function stopAutoRefresh() {
+    if (autoRefreshTimer) {
+        clearInterval(autoRefreshTimer);
+        autoRefreshTimer = null;
+    }
+}
+
+// ========================================================================================================
+// INITIALIZATION
+// ========================================================================================================
 document.addEventListener('DOMContentLoaded', async function() {
-    console.log('🚀 ICTSMARTPRO ULTIMATE v10.0 Starting...');
-    console.log('📡 Backend URL:', CONFIG.backendUrl);
+    console.log('🚀 ICTSMARTPRO Trading Bot v9.0 Initializing...');
     
-    // Render 30+ sources
-    renderDataSourceGrid();
-    
-    // Check backend
+    // Check backend health
     const connected = await checkBackendHealth();
     
     if (connected) {
-        await updateVisitorCount();
-        setInterval(updateVisitorCount, 30000);
+        // Load TradingView chart
+        loadTradingView();
+        
+        // Initial analysis
+        setTimeout(() => analyzeSymbol(false), 1000);
+        
+        // Start auto refresh
+        startAutoRefresh();
     }
-    
-    // TradingView
-    await loadTradingView();
-    
-    // First analysis
-    setTimeout(() => analyzeSymbol(true), 1000);
-    
-    // Auto refresh
-    autoRefreshTimer = setInterval(() => {
-        if (document.visibilityState === 'visible') analyzeSymbol(true);
-    }, CONFIG.refreshInterval);
 });
 
-// Event listeners
-document.getElementById('symbolSelect').addEventListener('change', () => {
-    loadTradingView();
-    analyzeSymbol(false);
+// Cleanup on page unload
+window.addEventListener('beforeunload', function() {
+    stopAutoRefresh();
 });
 
-document.getElementById('intervalSelect').addEventListener('change', () => {
-    loadTradingView();
-    analyzeSymbol(false);
-});
-
-// Cleanup
-window.addEventListener('beforeunload', () => {
-    if (autoRefreshTimer) clearInterval(autoRefreshTimer);
-    if (tvWidget) try { tvWidget.remove(); } catch(e) {}
+// Pause refresh when page is hidden
+document.addEventListener('visibilitychange', function() {
+    if (document.visibilityState === 'hidden') {
+        stopAutoRefresh();
+    } else {
+        startAutoRefresh();
+    }
 });
 </script>
+
 </body>
 </html>
