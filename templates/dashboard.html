@@ -14,9 +14,6 @@
     <!-- Inter Font -->
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800;900&display=swap" rel="stylesheet">
     
-    <!-- TradingView Widget -->
-    <script type="text/javascript" src="https://s3.tradingview.com/tv.js"></script>
-    
     <style>
         /* ========== NEON COLORS ========== */
         :root {
@@ -198,7 +195,7 @@
             font-size: 1.5rem;
         }
 
-        /* ========== TRADINGVIEW CHART ========== */
+        /* ========== CHART CONTAINER ========== */
         .chart-container {
             background: var(--bg-dark);
             border-radius: 0 0 var(--radius-lg) var(--radius-lg);
@@ -218,6 +215,30 @@
             min-height: 650px;
             flex: 1;
             border-radius: var(--radius-md);
+            background: var(--bg-dark);
+        }
+
+        .chart-loading {
+            position: absolute;
+            top: 0;
+            left: 0;
+            right: 0;
+            bottom: 0;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            background: var(--bg-dark);
+            z-index: 10;
+            border-radius: var(--radius-md);
+            gap: 20px;
+        }
+
+        .chart-loading .spinner-border {
+            width: 4rem;
+            height: 4rem;
+            color: var(--accent-cyan);
+            border-width: 0.3rem;
         }
 
         /* ========== BUTTONS ========== */
@@ -750,7 +771,7 @@
                 </div>
             </div>
 
-            <!-- TRADINGVIEW CHART -->
+            <!-- TRADINGVIEW CHART - FIXED VERSION -->
             <div class="card mb-4">
                 <div class="card-header">
                     <i class="fas fa-chart-candlestick"></i>
@@ -761,7 +782,7 @@
                     </span>
                 </div>
                 <div class="card-body p-0">
-                    <div class="chart-container">
+                    <div class="chart-container" id="chartContainer">
                         <div id="tradingview-widget"></div>
                     </div>
                 </div>
@@ -1004,7 +1025,7 @@
 
 <script>
 // ========================================================================================================
-// ICTSMARTPRO TRADING BOT v9.0 - FULL BACKEND INTEGRATION
+// ICTSMARTPRO TRADING BOT v9.0 - FULL BACKEND INTEGRATION + FIXED TRADINGVIEW
 // ========================================================================================================
 
 // GLOBAL CONFIGURATION
@@ -1018,12 +1039,149 @@ const CONFIG = {
 // GLOBAL STATE
 let currentData = null;
 let autoRefreshTimer = null;
+let tvWidget = null;
+let tradingViewScriptLoaded = false;
+let tvLoadAttempts = 0;
+const MAX_TV_ATTEMPTS = 3;
 
 // INTERVAL MAPPING FOR TRADINGVIEW
 const INTERVAL_MAP = {
     '1m': '1', '5m': '5', '15m': '15', '30m': '30',
     '1h': '60', '4h': '240', '1d': 'D', '1w': 'W'
 };
+
+// ========================================================================================================
+// LOAD TRADINGVIEW SCRIPT DYNAMICALLY
+// ========================================================================================================
+function loadTradingViewScript() {
+    return new Promise((resolve, reject) => {
+        if (tradingViewScriptLoaded && typeof TradingView !== 'undefined') {
+            resolve();
+            return;
+        }
+        
+        const script = document.createElement('script');
+        script.src = 'https://s3.tradingview.com/tv.js';
+        script.async = true;
+        
+        script.onload = () => {
+            tradingViewScriptLoaded = true;
+            console.log("✅ TradingView library loaded successfully");
+            resolve();
+        };
+        
+        script.onerror = () => {
+            console.error("❌ Failed to load TradingView script");
+            reject(new Error("TradingView script failed to load"));
+        };
+        
+        document.head.appendChild(script);
+    });
+}
+
+// ========================================================================================================
+// TRADINGVIEW CHART - FIXED VERSION
+// ========================================================================================================
+async function loadTradingView() {
+    const container = document.getElementById('tradingview-widget');
+    const chartContainer = document.getElementById('chartContainer');
+    
+    if (!container) return;
+    
+    const symbol = document.getElementById('symbolSelect').value;
+    const interval = document.getElementById('intervalSelect').value;
+    const tvInterval = INTERVAL_MAP[interval] || '60';
+    
+    // Show loading state
+    container.innerHTML = `
+        <div class="chart-loading">
+            <div class="spinner-border" role="status"></div>
+            <p class="fw-bold fs-4" style="color: var(--accent-cyan); text-shadow: 0 0 20px var(--accent-cyan);">
+                Loading TradingView Chart...
+            </p>
+        </div>
+    `;
+    
+    try {
+        // Ensure script is loaded
+        await loadTradingViewScript();
+        
+        // Destroy previous widget if exists
+        if (tvWidget) {
+            try {
+                tvWidget.remove();
+            } catch (e) {
+                console.warn("Widget remove failed", e);
+            }
+            tvWidget = null;
+        }
+        
+        // Clear container
+        container.innerHTML = '';
+        
+        // Small delay to ensure container is ready
+        await new Promise(resolve => setTimeout(resolve, 300));
+        
+        // Create new widget
+        tvWidget = new TradingView.widget({
+            width: '100%',
+            height: '100%',
+            symbol: `BINANCE:${symbol}`,
+            interval: tvInterval,
+            timezone: 'Etc/UTC',
+            theme: 'dark',
+            style: '1',
+            locale: 'en',
+            toolbar_bg: '#0a0e17',
+            enable_publishing: false,
+            allow_symbol_change: true,
+            details: true,
+            container_id: 'tradingview-widget',
+            autosize: true,
+            studies: [
+                "RSI@tv-basicstudies",
+                "MACD@tv-basicstudies",
+                "BB@tv-basicstudies",
+                "Volume@tv-basicstudies"
+            ],
+            disabled_features: ["header_widget"],
+            loading_screen: { backgroundColor: "#0a0e17" },
+            overrides: {
+                "paneProperties.background": "#0a0e17",
+                "paneProperties.vertGridProperties.color": "#1a2330",
+                "paneProperties.horzGridProperties.color": "#1a2330"
+            }
+        });
+        
+        // Monitor widget load
+        tvWidget.onChartReady(() => {
+            console.log("✅ TradingView chart loaded successfully");
+            tvLoadAttempts = 0;
+        });
+        
+    } catch (error) {
+        console.error('TradingView error:', error);
+        
+        // Retry logic
+        if (tvLoadAttempts < MAX_TV_ATTEMPTS) {
+            tvLoadAttempts++;
+            console.log(`Retrying TradingView (${tvLoadAttempts}/${MAX_TV_ATTEMPTS})...`);
+            setTimeout(loadTradingView, 2000);
+        } else {
+            container.innerHTML = `
+                <div class="text-center py-5">
+                    <i class="fas fa-exclamation-triangle" style="font-size: 4rem; color: var(--accent-red);"></i>
+                    <p class="fw-bold fs-3 mt-3" style="color: var(--accent-red);">
+                        ⚠️ Chart failed to load
+                    </p>
+                    <button class="btn btn-outline-cyan mt-3" onclick="loadTradingView()">
+                        <i class="fas fa-redo"></i> Retry
+                    </button>
+                </div>
+            `;
+        }
+    }
+}
 
 // ========================================================================================================
 // NOTIFICATION SYSTEM
@@ -1061,49 +1219,7 @@ async function checkBackendHealth() {
 }
 
 // ========================================================================================================
-// TRADINGVIEW CHART
-// ========================================================================================================
-function loadTradingView() {
-    const container = document.getElementById('tradingview-widget');
-    if (!container) return;
-    
-    const symbol = document.getElementById('symbolSelect').value;
-    const interval = document.getElementById('intervalSelect').value;
-    const tvInterval = INTERVAL_MAP[interval] || '60';
-    
-    container.innerHTML = '';
-    
-    try {
-        new TradingView.widget({
-            width: '100%',
-            height: '100%',
-            symbol: `BINANCE:${symbol}`,
-            interval: tvInterval,
-            timezone: 'Etc/UTC',
-            theme: 'dark',
-            style: '1',
-            locale: 'en',
-            toolbar_bg: '#0a0e17',
-            enable_publishing: false,
-            allow_symbol_change: true,
-            details: true,
-            container_id: 'tradingview-widget',
-            autosize: true,
-            studies: [
-                "RSI@tv-basicstudies",
-                "MACD@tv-basicstudies",
-                "BB@tv-basicstudies",
-                "Volume@tv-basicstudies"
-            ]
-        });
-    } catch (error) {
-        console.error('TradingView error:', error);
-        container.innerHTML = '<div class="text-center py-5 text-cyan fw-bold fs-2">⚠️ Chart loading failed</div>';
-    }
-}
-
-// ========================================================================================================
-// MAIN ANALYSIS FUNCTION - Backend /api/analyze/{symbol}
+// MAIN ANALYSIS FUNCTION
 // ========================================================================================================
 async function analyzeSymbol(silent = false) {
     const symbol = document.getElementById('symbolSelect').value;
@@ -1522,7 +1638,7 @@ document.addEventListener('DOMContentLoaded', async function() {
     
     if (connected) {
         // Load TradingView chart
-        loadTradingView();
+        await loadTradingView();
         
         // Initial analysis
         setTimeout(() => analyzeSymbol(false), 1000);
@@ -1535,6 +1651,11 @@ document.addEventListener('DOMContentLoaded', async function() {
 // Cleanup on page unload
 window.addEventListener('beforeunload', function() {
     stopAutoRefresh();
+    if (tvWidget) {
+        try {
+            tvWidget.remove();
+        } catch (e) {}
+    }
 });
 
 // Pause refresh when page is hidden
