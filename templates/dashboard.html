@@ -1258,9 +1258,11 @@
 // ICTSMARTPRO ULTIMATE v10.0 - BACKEND İLE %100 UYUMLU
 // ========================================================================================================
 
-// GLOBAL CONFIG
+// GLOBAL CONFIG - BACKEND URL'İNİ DOĞRU AYARLA
 const CONFIG = {
-    backendUrl: window.location.origin,
+    // Eğer backend farklı portta çalışıyorsa (örnek: 8000, 5000 vs.)
+    backendUrl: 'http://localhost:8000',  // ← BURAYI KONTROL ET! Genelde 8000
+    // backendUrl: window.location.origin, // Eğer aynı portta çalışıyorsa
     refreshInterval: 30000,
     maxRetries: 3,
     retryDelay: 2000
@@ -1353,7 +1355,7 @@ function showNotification(text, type = 'info') {
 }
 
 // ========================================================================================================
-// ZİYARETÇİ SAYACI
+// ZİYARETÇİ SAYACI - SADECE BACKEND
 // ========================================================================================================
 async function updateVisitorCount() {
     try {
@@ -1365,17 +1367,10 @@ async function updateVisitorCount() {
                 return;
             }
         }
-        throw new Error('Backend error');
+        document.getElementById('visitorCount').textContent = '0';
     } catch (error) {
-        // LocalStorage fallback
-        let count = localStorage.getItem('visitorCount');
-        if (!count) {
-            count = Math.floor(Math.random() * 50) + 50;
-        } else {
-            count = parseInt(count) + 1;
-        }
-        localStorage.setItem('visitorCount', count);
-        document.getElementById('visitorCount').textContent = count.toLocaleString('tr-TR');
+        console.error('Visitor count error:', error);
+        document.getElementById('visitorCount').textContent = '0';
     }
 }
 
@@ -1405,6 +1400,7 @@ function renderDataSourceGrid() {
 // ========================================================================================================
 async function checkBackendHealth() {
     try {
+        console.log('🔍 Checking backend at:', CONFIG.backendUrl + '/health');
         const response = await fetch(`${CONFIG.backendUrl}/health`);
         const data = await response.json();
         
@@ -1413,8 +1409,11 @@ async function checkBackendHealth() {
                 '<span style="color: var(--accent-green);"><i class="fas fa-check-circle"></i> CONNECTED</span>';
             showNotification('✅ Backend bağlantısı kuruldu', 'success');
             return true;
+        } else {
+            throw new Error('Backend not healthy');
         }
     } catch (error) {
+        console.error('Backend health check failed:', error);
         document.getElementById('backendStatus').innerHTML = 
             '<span style="color: var(--accent-red);"><i class="fas fa-times-circle"></i> DISCONNECTED</span>';
         showNotification('❌ Backend bağlantısı yok', 'error');
@@ -1517,38 +1516,46 @@ async function analyzeSymbol(silent = false) {
     if (!silent) showNotification(`📊 ${symbol}/USDT analiz ediliyor...`, 'info');
     
     try {
-        const response = await fetch(
-            `${CONFIG.backendUrl}/api/analyze/${symbol}USDT?interval=${interval}&limit=200&use_ml=true&ml_model=ensemble`
-        );
+        const url = `${CONFIG.backendUrl}/api/analyze/${symbol}USDT?interval=${interval}&limit=200&use_ml=true&ml_model=ensemble`;
+        console.log('📡 Fetching:', url);
         
-        if (!response.ok) throw new Error(`HTTP ${response.status}`);
+        const response = await fetch(url);
+        
+        if (!response.ok) {
+            const errorText = await response.text();
+            throw new Error(`HTTP ${response.status}: ${errorText}`);
+        }
         
         const data = await response.json();
+        console.log('📊 Data received:', data);
         
         if (data.success) {
             currentData = data;
             updateDashboard(data);
-            updateSourceStatus();
             if (!silent) showNotification(`✅ Analiz tamamlandı`, 'success');
+        } else {
+            throw new Error('API returned success: false');
         }
         
     } catch (error) {
         console.error('Analysis error:', error);
-        if (!silent) showNotification(`❌ Analiz başarısız`, 'error');
+        if (!silent) showNotification(`❌ Analiz başarısız: ${error.message}`, 'error');
     }
 }
 
 // ========================================================================================================
-// DASHBOARD UPDATE - BACKEND YAPISINA GÖRE DÜZENLENDİ
+// DASHBOARD UPDATE - BACKEND YAPISINA GÖRE
 // ========================================================================================================
 function updateDashboard(data) {
     if (!data || !data.success) return;
+    
+    console.log('🔄 Updating dashboard with:', data);
     
     // ===== PRICE UPDATE =====
     if (data.price_data) {
         const price = data.price_data.current;
         const change = data.price_data.change_percent;
-        const volume = data.price_data.volume; // Backend'de 'volume' olarak geliyor, 'volume_24h' değil
+        const volume = data.price_data.volume;
         
         document.getElementById('currentSymbol').textContent = data.symbol.replace('USDT', '/USDT');
         
@@ -1820,44 +1827,25 @@ function updateDashboard(data) {
 }
 
 // ========================================================================================================
-// KAYNAK DURUMU GÜNCELLE
+// KAYNAK DURUMU GÜNCELLE - SADECE BEKLİYOR GÖSTER
 // ========================================================================================================
 async function updateSourceStatus() {
-    try {
-        // Gerçek backend endpoint'i yoksa demo mod
-        if (!await checkBackendHealth()) {
-            // Demo mod - rastgele durumlar
-            let activeCount = 0;
-            dataSources.forEach(source => {
-                const sourceKey = source.name.toLowerCase().replace(/\s+/g, '').replace(/\./g, '');
-                const statusEl = document.getElementById(`status-${sourceKey}`);
-                if (statusEl) {
-                    const isActive = Math.random() > 0.3;
-                    if (isActive) {
-                        statusEl.className = 'exchange-status status-active';
-                        statusEl.innerHTML = '<i class="fas fa-check-circle"></i> AKTİF';
-                        activeCount++;
-                    } else {
-                        statusEl.className = 'exchange-status status-waiting';
-                        statusEl.innerHTML = 'BEKLENİYOR';
-                    }
-                }
-            });
-            document.getElementById('activeSourceCount').textContent = activeCount;
-            document.getElementById('sourceCount').textContent = activeCount;
-            return;
+    // Tüm kaynakları "BEKLENİYOR" olarak göster - gerçek API gelene kadar
+    dataSources.forEach(source => {
+        const sourceKey = source.name.toLowerCase().replace(/\s+/g, '').replace(/\./g, '');
+        const statusEl = document.getElementById(`status-${sourceKey}`);
+        if (statusEl) {
+            statusEl.className = 'exchange-status status-waiting';
+            statusEl.innerHTML = 'BEKLENİYOR';
         }
-        
-        // TODO: Gerçek backend /api/sources endpoint'i eklendiğinde burayı güncelle
-        // Şimdilik demo mod
-        
-    } catch (error) {
-        console.error('Source status update error:', error);
-    }
+    });
+    
+    document.getElementById('activeSourceCount').textContent = '0';
+    document.getElementById('sourceCount').textContent = '0';
 }
 
 // ========================================================================================================
-// AI EVALUATION - BACKEND DATA KULLANARAK
+// AI EVALUATION - SADECE GERÇEK VERİLERLE
 // ========================================================================================================
 function evaluateAI() {
     if (!currentData) {
@@ -1874,19 +1862,17 @@ function evaluateAI() {
     const patternCount = currentData.patterns?.length || 0;
     const price = currentData.price_data?.current || 0;
     const rsi = currentData.technical_indicators?.rsi || 50;
-    const trend = currentData.market_structure?.trend || 'neutral';
     
-    // AI yorumu oluştur
+    // SADECE GERÇEK VERİLERLE YORUM
     let comment = '';
     if (prediction.includes('BUY')) {
-        comment = '📈 Teknik göstergeler ve ML modelleri alım yönünde sinyal veriyor. RSI değeri aşırı satım bölgesine yakın. ';
-        comment += patternCount > 10 ? `${patternCount} farklı pattern tespit edildi, çoğunluğu alım yönünde.` : '';
+        comment = '📈 Teknik göstergeler ve ML modelleri alım yönünde sinyal veriyor.';
+        if (rsi < 30) comment += ' RSI aşırı satım bölgesinde.';
     } else if (prediction.includes('SELL')) {
-        comment = '📉 Satış baskısı artıyor. ML modelleri %' + confidence + ' güvenle düşüş bekliyor. ';
-        comment += trend === 'bearish' ? 'Mevcut trend de satış yönünü destekliyor.' : '';
+        comment = '📉 Satış baskısı artıyor. ML modelleri %' + confidence + ' güvenle düşüş bekliyor.';
+        if (rsi > 70) comment += ' RSI aşırı alım bölgesinde.';
     } else {
-        comment = '⚖️ Piyasa nötr bölgede. Belirgin bir sinyal yok, konsolidasyon devam edebilir. ';
-        comment += 'RSI ' + rsi.toFixed(1) + ' seviyesinde, ne aşırı alım ne aşırı satım.';
+        comment = '⚖️ Piyasa nötr bölgede. Belirgin bir sinyal yok.';
     }
     
     msg.innerHTML = `
@@ -1961,9 +1947,13 @@ async function trainModels() {
 // ========================================================================================================
 document.addEventListener('DOMContentLoaded', async function() {
     console.log('🚀 ICTSMARTPRO ULTIMATE v10.0 Starting...');
+    console.log('📡 Backend URL:', CONFIG.backendUrl);
     
     // Render 30+ sources
     renderDataSourceGrid();
+    
+    // Kaynak durumunu güncelle (bekliyor olarak)
+    updateSourceStatus();
     
     // Check backend
     const connected = await checkBackendHealth();
