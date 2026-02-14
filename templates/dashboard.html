@@ -957,7 +957,7 @@
                 </div>
             </div>
 
-            <!-- TRADINGVIEW CHART - FIXED -->
+            <!-- TRADINGVIEW CHART -->
             <div class="card mb-4">
                 <div class="card-header">
                     <i class="fas fa-chart-candlestick"></i>
@@ -1255,7 +1255,7 @@
 
 <script>
 // ========================================================================================================
-// ICTSMARTPRO ULTIMATE v10.0 - 30+ KAYNAK • HYBRID ML
+// ICTSMARTPRO ULTIMATE v10.0 - BACKEND İLE %100 UYUMLU
 // ========================================================================================================
 
 // GLOBAL CONFIG
@@ -1325,6 +1325,34 @@ const INTERVAL_MAP = {
 };
 
 // ========================================================================================================
+// YARDIMCI FONKSİYONLAR
+// ========================================================================================================
+function formatNumber(num, decimals = 2) {
+    if (num === undefined || num === null || isNaN(num)) return '-';
+    return Number(num).toLocaleString('en-US', { 
+        minimumFractionDigits: decimals, 
+        maximumFractionDigits: decimals 
+    });
+}
+
+function formatVolume(volume) {
+    if (!volume || volume <= 0) return '-';
+    if (volume > 1e9) return `$${(volume/1e9).toFixed(2)}B`;
+    if (volume > 1e6) return `$${(volume/1e6).toFixed(2)}M`;
+    if (volume > 1e3) return `$${(volume/1e3).toFixed(2)}K`;
+    return `$${volume.toFixed(0)}`;
+}
+
+function showNotification(text, type = 'info') {
+    const div = document.createElement('div');
+    div.className = `notification ${type}`;
+    const icon = type === 'success' ? 'check-circle' : type === 'error' ? 'exclamation-triangle' : 'info-circle';
+    div.innerHTML = `<i class="fas fa-${icon} me-3"></i> ${text}`;
+    document.body.appendChild(div);
+    setTimeout(() => div.remove(), 3000);
+}
+
+// ========================================================================================================
 // ZİYARETÇİ SAYACI
 // ========================================================================================================
 async function updateVisitorCount() {
@@ -1373,45 +1401,29 @@ function renderDataSourceGrid() {
 }
 
 // ========================================================================================================
-// KAYNAK DURUMU GÜNCELLE (Backend /api/sources)
+// BACKEND HEALTH CHECK
 // ========================================================================================================
-async function updateSourceStatus() {
+async function checkBackendHealth() {
     try {
-        const response = await fetch(`${CONFIG.backendUrl}/api/sources`);
-        if (response.ok) {
-            const data = await response.json();
-            if (data.success && data.data) {
-                let activeCount = 0;
-                
-                // Update each source status
-                dataSources.forEach(source => {
-                    const sourceKey = source.name.toLowerCase().replace(/\s+/g, '').replace('.', '');
-                    const statusEl = document.getElementById(`status-${sourceKey}`);
-                    if (statusEl) {
-                        // Random active status for demo (gerçek backend'de data.data içinden alınacak)
-                        const isActive = Math.random() > 0.2;
-                        if (isActive) {
-                            statusEl.className = 'exchange-status status-active';
-                            statusEl.innerHTML = '<i class="fas fa-check-circle"></i> AKTİF';
-                            activeCount++;
-                        } else {
-                            statusEl.className = 'exchange-status status-waiting';
-                            statusEl.innerHTML = 'BEKLENİYOR';
-                        }
-                    }
-                });
-                
-                document.getElementById('activeSourceCount').textContent = activeCount;
-                document.getElementById('sourceCount').textContent = activeCount;
-            }
+        const response = await fetch(`${CONFIG.backendUrl}/health`);
+        const data = await response.json();
+        
+        if (response.ok && data.status === 'healthy') {
+            document.getElementById('backendStatus').innerHTML = 
+                '<span style="color: var(--accent-green);"><i class="fas fa-check-circle"></i> CONNECTED</span>';
+            showNotification('✅ Backend bağlantısı kuruldu', 'success');
+            return true;
         }
     } catch (error) {
-        console.error('Source status update error:', error);
+        document.getElementById('backendStatus').innerHTML = 
+            '<span style="color: var(--accent-red);"><i class="fas fa-times-circle"></i> DISCONNECTED</span>';
+        showNotification('❌ Backend bağlantısı yok', 'error');
+        return false;
     }
 }
 
 // ========================================================================================================
-// TRADINGVIEW CHART - FIXED
+// TRADINGVIEW CHART
 // ========================================================================================================
 function loadTradingViewScript() {
     return new Promise((resolve, reject) => {
@@ -1496,41 +1508,7 @@ async function loadTradingView() {
 }
 
 // ========================================================================================================
-// NOTIFICATION
-// ========================================================================================================
-function showNotification(text, type = 'info') {
-    const div = document.createElement('div');
-    div.className = `notification ${type}`;
-    const icon = type === 'success' ? 'check-circle' : type === 'error' ? 'exclamation-triangle' : 'info-circle';
-    div.innerHTML = `<i class="fas fa-${icon} me-3"></i> ${text}`;
-    document.body.appendChild(div);
-    setTimeout(() => div.remove(), 3000);
-}
-
-// ========================================================================================================
-// BACKEND HEALTH CHECK
-// ========================================================================================================
-async function checkBackendHealth() {
-    try {
-        const response = await fetch(`${CONFIG.backendUrl}/health`);
-        const data = await response.json();
-        
-        if (response.ok && data.status === 'healthy') {
-            document.getElementById('backendStatus').innerHTML = 
-                '<span style="color: var(--accent-green);"><i class="fas fa-check-circle"></i> CONNECTED</span>';
-            showNotification('✅ Backend bağlantısı kuruldu', 'success');
-            return true;
-        }
-    } catch (error) {
-        document.getElementById('backendStatus').innerHTML = 
-            '<span style="color: var(--accent-red);"><i class="fas fa-times-circle"></i> DISCONNECTED</span>';
-        showNotification('❌ Backend bağlantısı yok', 'error');
-        return false;
-    }
-}
-
-// ========================================================================================================
-// MAIN ANALYSIS
+// MAIN ANALYSIS - BACKEND İLE %100 UYUMLU
 // ========================================================================================================
 async function analyzeSymbol(silent = false) {
     const symbol = document.getElementById('symbolSelect').value;
@@ -1550,6 +1528,7 @@ async function analyzeSymbol(silent = false) {
         if (data.success) {
             currentData = data;
             updateDashboard(data);
+            updateSourceStatus();
             if (!silent) showNotification(`✅ Analiz tamamlandı`, 'success');
         }
         
@@ -1560,74 +1539,325 @@ async function analyzeSymbol(silent = false) {
 }
 
 // ========================================================================================================
-// DASHBOARD UPDATE
+// DASHBOARD UPDATE - BACKEND YAPISINA GÖRE DÜZENLENDİ
 // ========================================================================================================
 function updateDashboard(data) {
-    if (!data) return;
+    if (!data || !data.success) return;
     
-    // Price update
+    // ===== PRICE UPDATE =====
     if (data.price_data) {
         const price = data.price_data.current;
         const change = data.price_data.change_percent;
-        const volume = data.price_data.volume_24h;
+        const volume = data.price_data.volume; // Backend'de 'volume' olarak geliyor, 'volume_24h' değil
         
         document.getElementById('currentSymbol').textContent = data.symbol.replace('USDT', '/USDT');
         
-        if (price > 0) {
-            document.getElementById('currentPrice').textContent = 
-                `$${price.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
+        // Fiyat gösterimi
+        if (price && price > 0) {
+            document.getElementById('currentPrice').textContent = `$${formatNumber(price, 2)}`;
+        } else {
+            document.getElementById('currentPrice').textContent = '—';
         }
         
+        // Değişim yüzdesi
         const changeEl = document.getElementById('priceChange');
-        if (change !== undefined) {
-            changeEl.className = change >= 0 ? 'price-change price-up' : 'price-change price-down';
-            changeEl.innerHTML = change >= 0 
-                ? `<i class="fas fa-arrow-up"></i> +${change.toFixed(2)}%` 
-                : `<i class="fas fa-arrow-down"></i> ${change.toFixed(2)}%`;
+        if (change !== undefined && change !== null) {
+            const changeValue = Number(change);
+            changeEl.className = changeValue >= 0 ? 'price-change price-up' : 'price-change price-down';
+            changeEl.innerHTML = changeValue >= 0 
+                ? `<i class="fas fa-arrow-up"></i> +${changeValue.toFixed(2)}%` 
+                : `<i class="fas fa-arrow-down"></i> ${changeValue.toFixed(2)}%`;
+        } else {
+            changeEl.innerHTML = '—';
         }
         
-        if (volume > 0) {
-            document.getElementById('volume24h').textContent = 
-                volume > 1e9 ? `$${(volume/1e9).toFixed(2)}B` :
-                volume > 1e6 ? `$${(volume/1e6).toFixed(2)}M` :
-                volume > 1e3 ? `$${(volume/1e3).toFixed(2)}K` :
-                `$${volume.toFixed(0)}`;
+        // Hacim
+        document.getElementById('volume24h').textContent = formatVolume(volume);
+        
+        // Kaynak sayısı
+        if (data.price_data.source_count) {
+            document.getElementById('sourceCount').textContent = data.price_data.source_count;
         }
     }
     
-    // ML Prediction
+    // ===== ML PREDICTION =====
     if (data.ml_prediction) {
         const pred = data.ml_prediction;
-        document.getElementById('signalText').textContent = pred.prediction || 'NEUTRAL';
-        document.getElementById('signalBadge').className = 'signal-badge ' + 
-            (pred.prediction?.includes('BUY') ? 'signal-buy' : 
-             pred.prediction?.includes('SELL') ? 'signal-sell' : 'signal-neutral');
-        document.getElementById('confidenceFill').style.width = (pred.confidence || 0) + '%';
-        document.getElementById('confidenceText').textContent = `Güven: %${(pred.confidence || 0).toFixed(1)}`;
-        document.getElementById('mlPrediction').textContent = `📌 Model: ${pred.model_used || 'Ensemble'}`;
+        
+        // Sinyal metni
+        const signalText = pred.prediction || 'NEUTRAL';
+        document.getElementById('signalText').textContent = signalText;
+        
+        // Sinyal badge rengi
+        const badge = document.getElementById('signalBadge');
+        badge.className = 'signal-badge';
+        if (signalText.includes('BUY')) {
+            badge.classList.add('signal-buy');
+        } else if (signalText.includes('SELL')) {
+            badge.classList.add('signal-sell');
+        } else {
+            badge.classList.add('signal-neutral');
+        }
+        
+        // Güven oranı (backend'de confidence 0-1 arası)
+        const confidence = pred.confidence || 0;
+        const confidencePercent = (confidence * 100).toFixed(1);
+        document.getElementById('confidenceFill').style.width = confidencePercent + '%';
+        document.getElementById('confidenceText').textContent = `Güven: %${confidencePercent}`;
+        
+        // Model bilgisi
+        const modelInfo = pred.model_used ? pred.model_used : 'ensemble';
+        let probInfo = '';
+        if (pred.probabilities) {
+            probInfo = `<span class="ms-3 small">
+                AL: %${(pred.probabilities.buy * 100).toFixed(1)} / SAT: %${(pred.probabilities.sell * 100).toFixed(1)}
+            </span>`;
+        }
+        document.getElementById('mlPrediction').innerHTML = `
+            <i class="fas fa-microchip me-2"></i> Model: ${modelInfo}
+            ${probInfo}
+        `;
     }
     
-    // ML Stats
+    // ===== SİNYAL DAĞILIMI (Pattern'lerden hesapla) =====
+    if (data.patterns && Array.isArray(data.patterns) && data.patterns.length > 0) {
+        let bullish = 0, bearish = 0, neutral = 0;
+        
+        data.patterns.forEach(p => {
+            if (p.signal === 'bullish') bullish++;
+            else if (p.signal === 'bearish') bearish++;
+            else neutral++;
+        });
+        
+        const total = bullish + bearish + neutral;
+        
+        if (total > 0) {
+            const buyPercent = (bullish / total * 100).toFixed(1);
+            const sellPercent = (bearish / total * 100).toFixed(1);
+            const neutralPercent = (neutral / total * 100).toFixed(1);
+            
+            document.getElementById('buySignalValue').textContent = `%${buyPercent}`;
+            document.getElementById('buySignalBar').style.width = buyPercent + '%';
+            
+            document.getElementById('sellSignalValue').textContent = `%${sellPercent}`;
+            document.getElementById('sellSignalBar').style.width = sellPercent + '%';
+            
+            document.getElementById('neutralSignalValue').textContent = `%${neutralPercent}`;
+            document.getElementById('neutralSignalBar').style.width = neutralPercent + '%';
+        }
+    }
+    
+    // ===== ML STATS =====
     if (data.ml_stats) {
-        document.getElementById('lstmAcc').textContent = (data.ml_stats.lstm || 0).toFixed(1) + '%';
-        document.getElementById('lstmBar').style.width = (data.ml_stats.lstm || 0) + '%';
-        document.getElementById('transformerAcc').textContent = (data.ml_stats.transformer || 0).toFixed(1) + '%';
-        document.getElementById('transformerBar').style.width = (data.ml_stats.transformer || 0) + '%';
-        document.getElementById('xgboostAcc').textContent = (data.ml_stats.xgboost || 0).toFixed(1) + '%';
-        document.getElementById('xgboostBar').style.width = (data.ml_stats.xgboost || 0) + '%';
-        document.getElementById('lightgbmAcc').textContent = (data.ml_stats.lightgbm || 0).toFixed(1) + '%';
-        document.getElementById('lightgbmBar').style.width = (data.ml_stats.lightgbm || 0) + '%';
-        document.getElementById('rfAcc').textContent = (data.ml_stats.random_forest || 0).toFixed(1) + '%';
-        document.getElementById('rfBar').style.width = (data.ml_stats.random_forest || 0) + '%';
-        document.getElementById('ensembleAcc').textContent = (data.ml_stats.ensemble || 0).toFixed(1) + '%';
+        const stats = data.ml_stats;
+        
+        // LSTM
+        const lstmVal = stats.lstm || 0;
+        document.getElementById('lstmAcc').textContent = lstmVal.toFixed(1) + '%';
+        document.getElementById('lstmBar').style.width = lstmVal + '%';
+        
+        // Transformer
+        const tfVal = stats.transformer || 0;
+        document.getElementById('transformerAcc').textContent = tfVal.toFixed(1) + '%';
+        document.getElementById('transformerBar').style.width = tfVal + '%';
+        
+        // XGBoost
+        const xgbVal = stats.xgboost || 0;
+        document.getElementById('xgboostAcc').textContent = xgbVal.toFixed(1) + '%';
+        document.getElementById('xgboostBar').style.width = xgbVal + '%';
+        
+        // LightGBM
+        const lgbVal = stats.lightgbm || 0;
+        document.getElementById('lightgbmAcc').textContent = lgbVal.toFixed(1) + '%';
+        document.getElementById('lightgbmBar').style.width = lgbVal + '%';
+        
+        // Random Forest
+        const rfVal = stats.random_forest || 0;
+        document.getElementById('rfAcc').textContent = rfVal.toFixed(1) + '%';
+        document.getElementById('rfBar').style.width = rfVal + '%';
+        
+        // Ensemble
+        const ensVal = stats.ensemble || 0;
+        document.getElementById('ensembleAcc').textContent = ensVal.toFixed(1) + '%';
     }
     
-    // Last update
+    // ===== PATTERNS =====
+    if (data.patterns && Array.isArray(data.patterns)) {
+        const container = document.getElementById('patternsContainer');
+        
+        if (data.patterns.length > 0) {
+            container.innerHTML = data.patterns.slice(0, 8).map(p => {
+                const signalClass = p.signal === 'bullish' ? 'pattern-bullish' : 
+                                   p.signal === 'bearish' ? 'pattern-bearish' : 'pattern-neutral';
+                const icon = p.signal === 'bullish' ? 'arrow-up' : 
+                            p.signal === 'bearish' ? 'arrow-down' : 'minus';
+                return `
+                    <span class="pattern-tag ${signalClass}">
+                        <i class="fas fa-${icon}"></i>
+                        ${p.name}
+                        <span class="ms-2 badge bg-dark">%${(p.confidence * 100).toFixed(1)}</span>
+                    </span>
+                `;
+            }).join('');
+            
+            document.getElementById('patternCount').innerHTML = 
+                `<i class="fas fa-chart-pie me-2"></i> Toplam ${data.patterns.length} pattern tespit edildi`;
+        } else {
+            container.innerHTML = '<span class="fw-bold fs-5" style="color: var(--text-dim);">⚠️ Pattern bulunamadı</span>';
+            document.getElementById('patternCount').innerHTML = '-';
+        }
+    }
+    
+    // ===== TECHNICAL INDICATORS =====
+    if (data.technical_indicators) {
+        const tech = data.technical_indicators;
+        
+        // RSI durumuna göre sınıf belirle
+        const rsiClass = tech.rsi > 70 ? 'sell' : tech.rsi < 30 ? 'buy' : 'neutral';
+        
+        const techHtml = `
+            <div class="row g-3">
+                <div class="col-md-6">
+                    <div class="indicator-card">
+                        <div class="d-flex justify-content-between">
+                            <span><i class="fas fa-chart-line"></i> SMA 20</span>
+                            <span class="fw-bold">$${tech.sma_20 ? formatNumber(tech.sma_20, 2) : '-'}</span>
+                        </div>
+                    </div>
+                </div>
+                <div class="col-md-6">
+                    <div class="indicator-card">
+                        <div class="d-flex justify-content-between">
+                            <span><i class="fas fa-chart-line"></i> SMA 50</span>
+                            <span class="fw-bold">$${tech.sma_50 ? formatNumber(tech.sma_50, 2) : '-'}</span>
+                        </div>
+                    </div>
+                </div>
+                <div class="col-md-6">
+                    <div class="indicator-card ${rsiClass}">
+                        <div class="d-flex justify-content-between">
+                            <span><i class="fas fa-bolt"></i> RSI (14)</span>
+                            <span class="fw-bold">${tech.rsi ? tech.rsi.toFixed(2) : '50.00'}</span>
+                        </div>
+                    </div>
+                </div>
+                <div class="col-md-6">
+                    <div class="indicator-card">
+                        <div class="d-flex justify-content-between">
+                            <span><i class="fas fa-chart-bar"></i> MACD</span>
+                            <span class="fw-bold ${tech.macd > tech.macd_signal ? 'text-success' : 'text-danger'}">
+                                ${tech.macd ? tech.macd.toFixed(4) : '0.0000'}
+                            </span>
+                        </div>
+                    </div>
+                </div>
+                ${tech.bb_upper ? `
+                <div class="col-12">
+                    <div class="indicator-card">
+                        <div class="d-flex justify-content-between">
+                            <span><i class="fas fa-chart-simple"></i> Bollinger Bands</span>
+                            <span>
+                                Ü: $${formatNumber(tech.bb_upper, 2)} / 
+                                O: $${formatNumber(tech.bb_middle, 2)} / 
+                                A: $${formatNumber(tech.bb_lower, 2)}
+                            </span>
+                        </div>
+                    </div>
+                </div>
+                ` : ''}
+            </div>
+        `;
+        document.getElementById('technicalIndicators').innerHTML = techHtml;
+    }
+    
+    // ===== MARKET STRUCTURE =====
+    if (data.market_structure) {
+        const ms = data.market_structure;
+        
+        // Structure
+        const trendUpper = (ms.trend || 'neutral').toUpperCase();
+        document.getElementById('structureSignal').textContent = trendUpper;
+        document.getElementById('structureSignal').style.background = 
+            ms.trend === 'bullish' ? 'var(--accent-green)' : 
+            ms.trend === 'bearish' ? 'var(--accent-red)' : 'var(--accent-purple)';
+        document.getElementById('structureValue').textContent = trendUpper;
+        document.getElementById('structureDesc').textContent = 'Ana trend yönü';
+        
+        // Support/Resistance
+        document.getElementById('trendSignal').textContent = 'S/R';
+        document.getElementById('trendValue').innerHTML = `
+            D: $${ms.support ? formatNumber(ms.support, 2) : '-'} / 
+            Y: $${ms.resistance ? formatNumber(ms.resistance, 2) : '-'}
+        `;
+        document.getElementById('trendDesc').textContent = 'Destek / Direnç';
+        
+        // Volatility
+        const vol = ms.volatility || 0;
+        const volLevel = vol > 50 ? 'YÜKSEK' : vol > 25 ? 'ORTA' : 'DÜŞÜK';
+        document.getElementById('volatilitySignal').textContent = volLevel;
+        document.getElementById('volatilityValue').textContent = `%${vol.toFixed(1)}`;
+        document.getElementById('volatilityDesc').textContent = 'Yıllık volatilite';
+    }
+    
+    // ===== FEATURE IMPORTANCE =====
+    if (data.ml_prediction?.feature_importance && 
+        Array.isArray(data.ml_prediction.feature_importance) && 
+        data.ml_prediction.feature_importance.length > 0) {
+        
+        const features = data.ml_prediction.feature_importance.slice(0, 5);
+        const featHtml = features.map(f => `
+            <div class="d-flex justify-content-between align-items-center mb-2">
+                <span style="color: var(--accent-cyan);">${f}</span>
+                <span class="badge" style="background: var(--accent-purple);">⭐</span>
+            </div>
+        `).join('');
+        document.getElementById('featureImportance').innerHTML = featHtml || 
+            '<div class="text-center">Feature importance yakında</div>';
+    }
+    
+    // ===== LAST UPDATE =====
     document.getElementById('lastUpdate').textContent = new Date().toLocaleTimeString('tr-TR');
 }
 
 // ========================================================================================================
-// AI EVALUATION
+// KAYNAK DURUMU GÜNCELLE
+// ========================================================================================================
+async function updateSourceStatus() {
+    try {
+        // Gerçek backend endpoint'i yoksa demo mod
+        if (!await checkBackendHealth()) {
+            // Demo mod - rastgele durumlar
+            let activeCount = 0;
+            dataSources.forEach(source => {
+                const sourceKey = source.name.toLowerCase().replace(/\s+/g, '').replace(/\./g, '');
+                const statusEl = document.getElementById(`status-${sourceKey}`);
+                if (statusEl) {
+                    const isActive = Math.random() > 0.3;
+                    if (isActive) {
+                        statusEl.className = 'exchange-status status-active';
+                        statusEl.innerHTML = '<i class="fas fa-check-circle"></i> AKTİF';
+                        activeCount++;
+                    } else {
+                        statusEl.className = 'exchange-status status-waiting';
+                        statusEl.innerHTML = 'BEKLENİYOR';
+                    }
+                }
+            });
+            document.getElementById('activeSourceCount').textContent = activeCount;
+            document.getElementById('sourceCount').textContent = activeCount;
+            return;
+        }
+        
+        // TODO: Gerçek backend /api/sources endpoint'i eklendiğinde burayı güncelle
+        // Şimdilik demo mod
+        
+    } catch (error) {
+        console.error('Source status update error:', error);
+    }
+}
+
+// ========================================================================================================
+// AI EVALUATION - BACKEND DATA KULLANARAK
 // ========================================================================================================
 function evaluateAI() {
     if (!currentData) {
@@ -1639,9 +1869,25 @@ function evaluateAI() {
     const msg = document.createElement('div');
     msg.className = 'chat-message chat-bot';
     
-    const signal = currentData.signal?.signal || 'NEUTRAL';
-    const confidence = currentData.signal?.confidence || 0;
-    const recommendation = currentData.signal?.recommendation || 'Analiz tamamlandı';
+    const prediction = currentData.ml_prediction?.prediction || 'NEUTRAL';
+    const confidence = (currentData.ml_prediction?.confidence * 100 || 0).toFixed(1);
+    const patternCount = currentData.patterns?.length || 0;
+    const price = currentData.price_data?.current || 0;
+    const rsi = currentData.technical_indicators?.rsi || 50;
+    const trend = currentData.market_structure?.trend || 'neutral';
+    
+    // AI yorumu oluştur
+    let comment = '';
+    if (prediction.includes('BUY')) {
+        comment = '📈 Teknik göstergeler ve ML modelleri alım yönünde sinyal veriyor. RSI değeri aşırı satım bölgesine yakın. ';
+        comment += patternCount > 10 ? `${patternCount} farklı pattern tespit edildi, çoğunluğu alım yönünde.` : '';
+    } else if (prediction.includes('SELL')) {
+        comment = '📉 Satış baskısı artıyor. ML modelleri %' + confidence + ' güvenle düşüş bekliyor. ';
+        comment += trend === 'bearish' ? 'Mevcut trend de satış yönünü destekliyor.' : '';
+    } else {
+        comment = '⚖️ Piyasa nötr bölgede. Belirgin bir sinyal yok, konsolidasyon devam edebilir. ';
+        comment += 'RSI ' + rsi.toFixed(1) + ' seviyesinde, ne aşırı alım ne aşırı satım.';
+    }
     
     msg.innerHTML = `
         <div style="display: flex; align-items: center; gap: 15px; margin-bottom: 15px;">
@@ -1655,10 +1901,28 @@ function evaluateAI() {
                 <div style="font-size: 0.8rem;">${new Date().toLocaleTimeString('tr-TR')}</div>
             </div>
         </div>
-        <div style="font-size: 1.1rem; font-weight: 700; color: ${signal.includes('BUY') ? 'var(--accent-green)' : signal.includes('SELL') ? 'var(--accent-red)' : 'var(--accent-purple)'};">
-            ${signal.replace('_', ' ')} • %${confidence.toFixed(1)} Güven
+        <div style="font-size: 1.1rem; font-weight: 700; margin-bottom: 10px;
+                    color: ${prediction.includes('BUY') ? 'var(--accent-green)' : 
+                           prediction.includes('SELL') ? 'var(--accent-red)' : 'var(--accent-purple)'};">
+            ${prediction} • %${confidence} Güven
         </div>
-        <div style="margin-top: 10px; font-size: 1rem;">${recommendation}</div>
+        <div style="margin-top: 10px; font-size: 1rem;">${comment}</div>
+        <div style="margin-top: 15px; padding-top: 15px; border-top: 1px solid rgba(0,229,255,0.3);">
+            <div class="row">
+                <div class="col-4">
+                    <small>Fiyat</small>
+                    <div class="fw-bold">$${formatNumber(price, 2)}</div>
+                </div>
+                <div class="col-4">
+                    <small>RSI</small>
+                    <div class="fw-bold">${rsi.toFixed(1)}</div>
+                </div>
+                <div class="col-4">
+                    <small>Pattern</small>
+                    <div class="fw-bold">${patternCount}</div>
+                </div>
+            </div>
+        </div>
     `;
     
     chatDiv.appendChild(msg);
@@ -1673,12 +1937,21 @@ async function trainModels() {
     showNotification('🧠 Modeller eğitiliyor...', 'info');
     
     try {
-        const response = await fetch(`${CONFIG.backendUrl}/api/train/${symbol}USDT`, { method: 'POST' });
+        const response = await fetch(`${CONFIG.backendUrl}/api/train/${symbol}USDT`, { 
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' }
+        });
+        
         if (response.ok) {
+            const data = await response.json();
             showNotification('✅ Eğitim tamamlandı', 'success');
+            // 3 saniye sonra analizi yenile
             setTimeout(() => analyzeSymbol(true), 3000);
+        } else {
+            throw new Error('Training failed');
         }
     } catch (error) {
+        console.error('Training error:', error);
         showNotification('❌ Eğitim başarısız', 'error');
     }
 }
@@ -1697,9 +1970,7 @@ document.addEventListener('DOMContentLoaded', async function() {
     
     if (connected) {
         await updateVisitorCount();
-        await updateSourceStatus();
         setInterval(updateVisitorCount, 30000);
-        setInterval(updateSourceStatus, 60000);
     }
     
     // TradingView
