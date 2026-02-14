@@ -46,7 +46,7 @@ from fastapi import FastAPI, Request, HTTPException, Query, WebSocket, WebSocket
 from fastapi.responses import HTMLResponse, JSONResponse, FileResponse
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.middleware.gzip import GZipMiddleware
-
+from fastapi.responses import HTMLResponse, FileResponse 
 # Async HTTP
 import aiohttp
 from aiohttp import ClientTimeout, TCPConnector
@@ -2478,7 +2478,7 @@ startup_time = time.time()
 # ENDPOINTS
 # ============================================================
 
-from fastapi.responses import HTMLResponse, FileResponse  # ← ÜSTE EKLE!
+ 
 
 @app.get("/", response_class=HTMLResponse)  # ← response_class EKLE!
 async def root():
