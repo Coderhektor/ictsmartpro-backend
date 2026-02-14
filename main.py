@@ -525,6 +525,30 @@ class MultiSourceDataFetcher:
         except Exception as e:
             logger.error(f"Yahoo Finance error: {str(e)}")
             raise
+            # ============================================================
+# ZİYARETÇİ SAYACI ENDPOINT (backend.py'ye EKLENECEK)
+# ============================================================
+visitor_tracker = defaultdict(lambda: datetime.min)
+visitor_count = 0
+
+@app.get("/api/visitors")
+async def get_visitors(request: Request):
+    """Get unique visitor count"""
+    global visitor_count
+    
+    client_ip = request.client.host or "unknown"
+    last_visit = visitor_tracker[client_ip]
+    now = datetime.utcnow()
+    
+    if (now - last_visit) > timedelta(hours=24):
+        visitor_count += 1
+        visitor_tracker[client_ip] = now
+    
+    return {
+        "success": True,
+        "count": visitor_count,
+        "your_ip": client_ip
+    }
     
     async def _fetch_from_crypto_exchange(self, symbol: str, interval: str, limit: int, exchange: str) -> List[Candle]:
         """Kripto borsalarından veri çek (mock - gerçek API entegrasyonu eklenebilir)"""
