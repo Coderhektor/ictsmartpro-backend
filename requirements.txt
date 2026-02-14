@@ -1,31 +1,38 @@
-fastapi>=0.115.0
-uvicorn[standard]>=0.30.0
-orjson>=3.10.0
-aiohttp>=3.10.0
-websockets>=13.0
+# Web / API temel paketler
+fastapi >= 0.115.0
+uvicorn[standard] >= 0.30.0
+orjson >= 3.10.0
+aiohttp >= 3.10.0
+websockets >= 13.0
 
-numpy>=2.0.0
-pandas>=2.2.3
-scikit-learn>=1.5.2
-scipy>=1.14.0
+# Veri bilimi & makine öğrenmesi çekirdek
+numpy >= 2.0.0
+pandas >= 2.2.3
+scikit-learn >= 1.5.2
+scipy >= 1.14.0
 
+# PyTorch CPU (senin belirttiğin gibi)
 --extra-index-url https://download.pytorch.org/whl/cpu
-torch==2.3.1+cpu
-torchvision==0.18.1+cpu
-transformers>=4.45.0
+torch == 2.3.1+cpu
+torchvision == 0.18.1+cpu
+transformers >= 4.45.0
 
-pandas-ta>=0.3.14b0   # numba'yı sevmiyorsan yorum yap
+# Teknik analiz & finans
+yfinance >= 0.2.40          # güncel sürümler 0.2.x familyasından, stabil olanı seçtim
+pandas-ta >= 0.3.14b0       # numba'yı sevmiyorsan yorum satırına al → # pandas-ta >= 0.3.14b0
 
-opencv-python-headless>=4.10.0   # headless versiyon!
-pillow>=10.4.0
-plotly>=5.24.0
+# Görüntü & görselleştirme
+opencv-python-headless >= 4.10.0
+pillow >= 10.4.0
+plotly >= 5.24.0
 
-pydantic>=2.9.0
-rich>=13.8.0
-loguru>=0.7.2
-psutil>=6.0.0
-aiocache>=0.12.1
-python-multipart==0.0.12
-jinja2>=3.1.4
-fastapi-limiter==0.1.6
-redis>=5.0.1
+# Yardımcı / performans / limit / log
+pydantic >= 2.9.0
+rich >= 13.8.0
+loguru >= 0.7.2
+psutil >= 6.0.0
+aiocache >= 0.12.1
+python-multipart == 0.0.12
+jinja2 >= 3.1.4
+fastapi-limiter == 0.1.6
+redis >= 5.0.1
