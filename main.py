@@ -2478,33 +2478,28 @@ startup_time = time.time()
 # ENDPOINTS
 # ============================================================
 
-@app.get("/")
+from fastapi.responses import HTMLResponse, FileResponse  # ← ÜSTE EKLE!
+
+@app.get("/", response_class=HTMLResponse)  # ← response_class EKLE!
 async def root():
-    """Root endpoint"""
-    return {
-        "name": "ICTSMARTPRO ULTIMATE v9.0",
-        "status": "online",
-        "features": {
-            "ml_models": {
-                "lstm": TF_AVAILABLE,
-                "transformer": TF_AVAILABLE,
-                "xgboost": XGB_AVAILABLE,
-                "lightgbm": LGB_AVAILABLE,
-                "random_forest": SKLEARN_AVAILABLE,
-                "ensemble": True
-            },
-            "data_sources": {
-                "yahoo_finance": YFINANCE_AVAILABLE,
-                "crypto_exchanges": 15,
-                "coingecko": CG_AVAILABLE
-            },
-            "patterns": "79+",
-            "failover": True,
-            "rate_limiting": True
-        },
-        "max_confidence": Config.MAX_CONFIDENCE,
-        "timestamp": datetime.now(timezone.utc).isoformat()
-    }
+    """Serve index.html as homepage"""
+    html_path = os.path.join(os.path.dirname(__file__), "templates", "index.html")
+    
+    # templates/index.html varsa göster
+    if os.path.exists(html_path):
+        return FileResponse(html_path)
+    
+    # yoksa fallback HTML göster
+    return HTMLResponse("""
+    <!DOCTYPE html>
+    <html>
+    <head><title>ICTSMARTPRO</title></head>
+    <body>
+        <h1>🚀 ICTSMARTPRO TRADING BOT v9.0</h1>
+    
+    </body>
+    </html>
+    """)
 
 @app.get("/health")
 async def health_check():
