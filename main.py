@@ -42,11 +42,11 @@ import numpy as np
 import pandas as pd
 
 # FastAPI
-from fastapi import FastAPI, Request, HTTPException, Query, WebSocket, WebSocketDisconnect, BackgroundTasks
+from fastapi import FastAPI, Request, HTTPException, Query, BackgroundTasks
 from fastapi.responses import HTMLResponse, JSONResponse, FileResponse
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.middleware.gzip import GZipMiddleware
-from fastapi.responses import HTMLResponse, FileResponse 
+
 # Async HTTP
 import aiohttp
 from aiohttp import ClientTimeout, TCPConnector
@@ -77,13 +77,12 @@ except ImportError:
     print("⚠️ pycoingecko not available")
 
 # ============================================================
-# GERÇEK ML MODELLERİ - TENSORFLOW / KERAS
+# TENSORFLOW / KERAS
 # ============================================================
 try:
     import tensorflow as tf
     from tensorflow.keras.models import Sequential, load_model, Model
     from tensorflow.keras.layers import LSTM, Dense, Dropout, Input, LayerNormalization, MultiHeadAttention, GlobalAveragePooling1D
-    from tensorflow.keras.layers import Embedding, Flatten, Concatenate, Add, Bidirectional
     from tensorflow.keras.optimizers import Adam
     from tensorflow.keras.callbacks import EarlyStopping, ModelCheckpoint, ReduceLROnPlateau
     from tensorflow.keras.metrics import AUC, Precision, Recall
@@ -135,7 +134,7 @@ except ImportError:
     print("⚠️ Scikit-learn not available - 'pip install scikit-learn'")
 
 # ============================================================
-# LOGGING SETUP
+# LOGGING SETUP (EN ÜSTE - Config'ten ÖNCE)
 # ============================================================
 def setup_logging():
     """Production-grade logging"""
@@ -167,7 +166,7 @@ def setup_logging():
 logger = setup_logging()
 
 # ============================================================
-# CONFIGURATION
+# CONFIGURATION (Logging'ten Hemen SONRA)
 # ============================================================
 class Config:
     """System configuration"""
@@ -219,43 +218,7 @@ class Config:
     ONLINE_UPDATE_INTERVAL = 3600
 
 # ============================================================
-# RATE LIMITER
-# ============================================================
-class RateLimiter:
-    """Simple rate limiter per source"""
-    
-    def __init__(self):
-        self.requests: Dict[str, deque] = defaultdict(lambda: deque(maxlen=Config.RATE_LIMIT_REQUESTS))
-        self.locks: Dict[str, asyncio.Lock] = defaultdict(asyncio.Lock)
-    
-    async def acquire(self, source: str) -> bool:
-        """Check if request is allowed"""
-        async with self.locks[source]:
-            now = time.time()
-            window_start = now - Config.RATE_LIMIT_WINDOW
-            
-            # Remove old requests
-            while self.requests[source] and self.requests[source][0] < window_start:
-                self.requests[source].popleft()
-            
-            # Check limit
-            if len(self.requests[source]) >= Config.RATE_LIMIT_REQUESTS:
-                return False
-            
-            # Add new request
-            self.requests[source].append(now)
-            return True
-    
-    async def wait_if_needed(self, source: str, max_wait: float = 5.0):
-        """Wait until rate limit allows"""
-        start = time.time()
-        while not await self.acquire(source):
-            if time.time() - start > max_wait:
-                raise Exception(f"Rate limit exceeded for {source}")
-            await asyncio.sleep(0.5)
-
-# ============================================================
-# ENUMS & DATA CLASSES
+# ENUMS & DATA CLASSES (Config'ten SONRA)
 # ============================================================
 class DataSource(Enum):
     CRYPTO_EXCHANGE = "crypto_exchange"
@@ -318,6 +281,42 @@ class Candle:
     close: float
     volume: float
     source: str
+
+# ============================================================
+# RATE LIMITER
+# ============================================================
+class RateLimiter:
+    """Simple rate limiter per source"""
+    
+    def __init__(self):
+        self.requests: Dict[str, deque] = defaultdict(lambda: deque(maxlen=Config.RATE_LIMIT_REQUESTS))
+        self.locks: Dict[str, asyncio.Lock] = defaultdict(asyncio.Lock)
+    
+    async def acquire(self, source: str) -> bool:
+        """Check if request is allowed"""
+        async with self.locks[source]:
+            now = time.time()
+            window_start = now - Config.RATE_LIMIT_WINDOW
+            
+            # Remove old requests
+            while self.requests[source] and self.requests[source][0] < window_start:
+                self.requests[source].popleft()
+            
+            # Check limit
+            if len(self.requests[source]) >= Config.RATE_LIMIT_REQUESTS:
+                return False
+            
+            # Add new request
+            self.requests[source].append(now)
+            return True
+    
+    async def wait_if_needed(self, source: str, max_wait: float = 5.0):
+        """Wait until rate limit allows"""
+        start = time.time()
+        while not await self.acquire(source):
+            if time.time() - start > max_wait:
+                raise Exception(f"Rate limit exceeded for {source}")
+            await asyncio.sleep(0.5)
 
 # ============================================================
 # DATA FETCHER - HAVUZİÇİ SİSTEM (FAILOVER)
@@ -525,30 +524,6 @@ class MultiSourceDataFetcher:
         except Exception as e:
             logger.error(f"Yahoo Finance error: {str(e)}")
             raise
-            # ============================================================
-# ZİYARETÇİ SAYACI ENDPOINT (backend.py'ye EKLENECEK)
-# ============================================================
-visitor_tracker = defaultdict(lambda: datetime.min)
-visitor_count = 0
-
-@app.get("/api/visitors")
-async def get_visitors(request: Request):
-    """Get unique visitor count"""
-    global visitor_count
-    
-    client_ip = request.client.host or "unknown"
-    last_visit = visitor_tracker[client_ip]
-    now = datetime.utcnow()
-    
-    if (now - last_visit) > timedelta(hours=24):
-        visitor_count += 1
-        visitor_tracker[client_ip] = now
-    
-    return {
-        "success": True,
-        "count": visitor_count,
-        "your_ip": client_ip
-    }
     
     async def _fetch_from_crypto_exchange(self, symbol: str, interval: str, limit: int, exchange: str) -> List[Candle]:
         """Kripto borsalarından veri çek (mock - gerçek API entegrasyonu eklenebilir)"""
@@ -2451,7 +2426,16 @@ class MarketStructureAnalyzer:
             return {}
 
 # ============================================================
-# FASTAPI APPLICATION
+# ZİYARETÇİ SAYACI
+# ============================================================
+from collections import defaultdict
+from datetime import datetime, timedelta
+
+visitor_tracker = defaultdict(lambda: datetime.min)
+visitor_count = 0
+
+# ============================================================
+# FASTAPI APPLICATION (TÜM CLASS'LARDAN SONRA)
 # ============================================================
 app = FastAPI(
     title="ICTSMARTPRO ULTIMATE v9.0",
@@ -2474,14 +2458,11 @@ data_fetcher = MultiSourceDataFetcher()
 ml_engine = MLEngine()
 startup_time = time.time()
 
-
 # ============================================================
 # ENDPOINTS
 # ============================================================
 
- 
-
-@app.get("/", response_class=HTMLResponse)  # ← response_class EKLE!
+@app.get("/", response_class=HTMLResponse)
 async def root():
     """Serve index.html as homepage"""
     html_path = os.path.join(os.path.dirname(__file__), "templates", "index.html")
@@ -2497,10 +2478,29 @@ async def root():
     <head><title>ICTSMARTPRO</title></head>
     <body>
         <h1>🚀 ICTSMARTPRO TRADING BOT v9.0</h1>
-    
+        <p>API is running. Use /docs for Swagger documentation.</p>
     </body>
     </html>
     """)
+
+@app.get("/api/visitors")
+async def get_visitors(request: Request):
+    """Get unique visitor count"""
+    global visitor_count
+    
+    client_ip = request.client.host or "unknown"
+    last_visit = visitor_tracker[client_ip]
+    now = datetime.utcnow()
+    
+    if (now - last_visit) > timedelta(hours=24):
+        visitor_count += 1
+        visitor_tracker[client_ip] = now
+    
+    return {
+        "success": True,
+        "count": visitor_count,
+        "your_ip": client_ip
+    }
 
 @app.get("/health")
 async def health_check():
