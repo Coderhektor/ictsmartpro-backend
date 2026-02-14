@@ -1,2805 +1,2056 @@
-#!/usr/bin/env python3
-# -*- coding: utf-8 -*-
-"""
-ICTSMARTPRO ULTIMATE v9.0 - PRODUCTION READY
-====================================================
-GERÇEK MODELLER:
-- TensorFlow LSTM (Derin Öğrenme)
-- Hugging Face Transformer (Attention Mekanizması)
-- XGBoost (Gradient Boosting)
-- LightGBM (Hızlı Gradient Boosting)
-- Random Forest
-- Ensemble Learning (Tüm modellerin birleşimi)
-- Online Learning (Her veriyle güncellenen modeller)
-
-VERİ KAYNAKLARI (Havuz Sistemi - Failover):
-- 15+ Kripto Borsası
-- Yahoo Finance (Öncelikli)
-- CoinGecko (Fallback)
-
-79+ PATTERN + GERÇEK ML + ENSEMBLE
-"""
-
-import sys
-import json
-import time
-import asyncio
-import logging
-import pickle
-import joblib
-import secrets
-import random
-import warnings
-warnings.filterwarnings('ignore')
-
-from datetime import datetime, timezone, timedelta
-from typing import Dict, List, Optional, Any, Tuple, Union
-from collections import defaultdict, Counter, deque
-from dataclasses import dataclass, field
-from enum import Enum
-import os
-import numpy as np
-import pandas as pd
-
-# FastAPI
-from fastapi import FastAPI, Request, HTTPException, Query, BackgroundTasks
-from fastapi.responses import HTMLResponse, JSONResponse, FileResponse
-from fastapi.middleware.cors import CORSMiddleware
-from fastapi.middleware.gzip import GZipMiddleware
-
-# Async HTTP
-import aiohttp
-from aiohttp import ClientTimeout, TCPConnector
-
-# Scientific
-try:
-    from scipy.signal import argrelextrema
-    from scipy import stats
-    SCIPY_AVAILABLE = True
-except ImportError:
-    SCIPY_AVAILABLE = False
-    print("⚠️ SciPy not available")
-
-# Yahoo Finance
-try:
-    import yfinance as yf
-    YFINANCE_AVAILABLE = True
-except ImportError:
-    YFINANCE_AVAILABLE = False
-    print("⚠️ yfinance not available - will use other sources")
-
-# CoinGecko
-try:
-    from pycoingecko import CoinGeckoAPI
-    CG_AVAILABLE = True
-except ImportError:
-    CG_AVAILABLE = False
-    print("⚠️ pycoingecko not available")
-
-# ============================================================
-# TENSORFLOW / KERAS
-# ============================================================
-try:
-    import tensorflow as tf
-    from tensorflow.keras.models import Sequential, load_model, Model
-    from tensorflow.keras.layers import LSTM, Dense, Dropout, Input, LayerNormalization, MultiHeadAttention, GlobalAveragePooling1D
-    from tensorflow.keras.optimizers import Adam
-    from tensorflow.keras.callbacks import EarlyStopping, ModelCheckpoint, ReduceLROnPlateau
-    from tensorflow.keras.metrics import AUC, Precision, Recall
-    TF_AVAILABLE = True
-    # GPU kullanımını sınırla
-    gpus = tf.config.list_physical_devices('GPU')
-    if gpus:
-        for gpu in gpus:
-            tf.config.experimental.set_memory_growth(gpu, True)
-except ImportError:
-    TF_AVAILABLE = False
-    print("⚠️ TensorFlow not available - 'pip install tensorflow'")
-
-# ============================================================
-# XGBOOST
-# ============================================================
-try:
-    import xgboost as xgb
-    XGB_AVAILABLE = True
-except ImportError:
-    XGB_AVAILABLE = False
-    print("⚠️ XGBoost not available - 'pip install xgboost'")
-
-# ============================================================
-# LIGHTGBM
-# ============================================================
-try:
-    import lightgbm as lgb
-    LGB_AVAILABLE = True
-except ImportError:
-    LGB_AVAILABLE = False
-    print("⚠️ LightGBM not available - 'pip install lightgbm'")
-
-# ============================================================
-# SCIKIT-LEARN
-# ============================================================
-try:
-    from sklearn.ensemble import RandomForestClassifier, VotingClassifier, StackingClassifier
-    from sklearn.ensemble import AdaBoostClassifier, GradientBoostingClassifier
-    from sklearn.metrics import accuracy_score, precision_score, recall_score, f1_score
-    from sklearn.metrics import confusion_matrix, classification_report
-    from sklearn.model_selection import train_test_split, TimeSeriesSplit
-    from sklearn.preprocessing import StandardScaler, MinMaxScaler, RobustScaler
-    from sklearn.feature_selection import SelectFromModel
-    from sklearn.inspection import permutation_importance
-    SKLEARN_AVAILABLE = True
-except ImportError:
-    SKLEARN_AVAILABLE = False
-    print("⚠️ Scikit-learn not available - 'pip install scikit-learn'")
-
-# ============================================================
-# LOGGING SETUP (EN ÜSTE - Config'ten ÖNCE)
-# ============================================================
-def setup_logging():
-    """Production-grade logging"""
-    logger = logging.getLogger("ictsmartpro")
-    logger.setLevel(logging.INFO)
-    logger.handlers.clear()
+<!DOCTYPE html>
+<html lang="tr">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>🚀 ICTSMARTPRO ULTIMATE v10.0 - 30+ KAYNAK • HYBRID ML</title>
     
-    # Console handler
-    console_handler = logging.StreamHandler(sys.stdout)
-    console_handler.setLevel(logging.INFO)
+    <!-- Bootstrap 5 -->
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
     
-    # File handler
-    file_handler = logging.FileHandler('ictsmartpro.log')
-    file_handler.setLevel(logging.DEBUG)
+    <!-- Font Awesome 6 -->
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
     
-    # Formatter
-    formatter = logging.Formatter(
-        '%(asctime)s | %(levelname)-8s | %(name)s | %(message)s',
-        datefmt='%Y-%m-%d %H:%M:%S'
-    )
-    console_handler.setFormatter(formatter)
-    file_handler.setFormatter(formatter)
+    <!-- Inter Font -->
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800;900&display=swap" rel="stylesheet">
     
-    logger.addHandler(console_handler)
-    logger.addHandler(file_handler)
+    <!-- TradingView Widget -->
+    <script type="text/javascript" src="https://s3.tradingview.com/tv.js"></script>
     
-    return logger
-
-logger = setup_logging()
-
-# ============================================================
-# CONFIGURATION (Logging'ten Hemen SONRA)
-# ============================================================
-class Config:
-    """System configuration"""
-    ENV = os.getenv("ENV", "production")
-    DEBUG = os.getenv("DEBUG", "false").lower() == "true"
-    
-    # API Settings
-    API_TIMEOUT = 15
-    MAX_RETRIES = 3
-    RETRY_DELAY = 2
-    
-    # Data Requirements
-    MIN_CANDLES = 50
-    MIN_SOURCES = 1  # En az 1 kaynak yeterli (failover ile)
-    
-    # Cache
-    CACHE_TTL = 60
-    MAX_CACHE_SIZE = 1000
-    
-    # Rate Limiting (Her kaynak için)
-    RATE_LIMIT_REQUESTS = 100
-    RATE_LIMIT_WINDOW = 60  # saniye
-    
-    # ========================================================
-    # ML CONFIG
-    # ========================================================
-    ML_MIN_SAMPLES = 500
-    ML_TRAIN_SPLIT = 0.8
-    ML_VALIDATION_SPLIT = 0.1
-    ML_TEST_SPLIT = 0.1
-    ML_EARLY_STOPPING_PATIENCE = 20
-    ML_REDUCE_LR_PATIENCE = 10
-    ML_BATCH_SIZE = 32
-    ML_EPOCHS = 100
-    ML_SEQUENCE_LENGTH = 60
-    
-    # Model persist
-    MODEL_DIR = "models"
-    if not os.path.exists(MODEL_DIR):
-        os.makedirs(MODEL_DIR)
-    
-    # Confidence limits
-    MAX_CONFIDENCE = 79.0
-    DEFAULT_CONFIDENCE = 52.0
-    
-    # Online learning
-    ONLINE_LEARNING_RATE = 0.01
-    ONLINE_LEARNING_BATCH_SIZE = 10
-    ONLINE_UPDATE_INTERVAL = 3600
-
-# ============================================================
-# ENUMS & DATA CLASSES (Config'ten SONRA)
-# ============================================================
-class DataSource(Enum):
-    CRYPTO_EXCHANGE = "crypto_exchange"
-    YAHOO_FINANCE = "yahoo_finance"
-    COINGECKO = "coingecko"
-
-class ModelType(Enum):
-    LSTM = "lstm"
-    TRANSFORMER = "transformer"
-    XGBOOST = "xgboost"
-    LIGHTGBM = "lightgbm"
-    RANDOM_FOREST = "random_forest"
-    ENSEMBLE = "ensemble"
-
-class LevelStrength(Enum):
-    MAJOR = 3
-    MINOR = 1
-
-class SignalType(Enum):
-    BULLISH = "bullish"
-    BEARISH = "bearish"
-    NEUTRAL = "neutral"
-
-@dataclass
-class Level:
-    price_min: float
-    price_max: float
-    price_avg: float
-    strength: LevelStrength
-    touches: int
-    type: str
-    last_touch_idx: int
-    source: str = "price_action"
-
-@dataclass
-class PatternSignal:
-    name: str
-    signal: SignalType
-    confidence: float
-    level: Optional[float] = None
-    level_type: Optional[str] = None
-    details: Dict[str, Any] = field(default_factory=dict)
-    timestamp: datetime = field(default_factory=lambda: datetime.now(timezone.utc))
-
-@dataclass
-class MLPrediction:
-    prediction: str
-    confidence: float
-    probabilities: Dict[str, float]
-    model_used: ModelType
-    feature_importance: Optional[Dict[str, float]] = None
-    metadata: Dict[str, Any] = field(default_factory=dict)
-
-@dataclass
-class Candle:
-    timestamp: int
-    open: float
-    high: float
-    low: float
-    close: float
-    volume: float
-    source: str
-
-# ============================================================
-# RATE LIMITER
-# ============================================================
-class RateLimiter:
-    """Simple rate limiter per source"""
-    
-    def __init__(self):
-        self.requests: Dict[str, deque] = defaultdict(lambda: deque(maxlen=Config.RATE_LIMIT_REQUESTS))
-        self.locks: Dict[str, asyncio.Lock] = defaultdict(asyncio.Lock)
-    
-    async def acquire(self, source: str) -> bool:
-        """Check if request is allowed"""
-        async with self.locks[source]:
-            now = time.time()
-            window_start = now - Config.RATE_LIMIT_WINDOW
-            
-            # Remove old requests
-            while self.requests[source] and self.requests[source][0] < window_start:
-                self.requests[source].popleft()
-            
-            # Check limit
-            if len(self.requests[source]) >= Config.RATE_LIMIT_REQUESTS:
-                return False
-            
-            # Add new request
-            self.requests[source].append(now)
-            return True
-    
-    async def wait_if_needed(self, source: str, max_wait: float = 5.0):
-        """Wait until rate limit allows"""
-        start = time.time()
-        while not await self.acquire(source):
-            if time.time() - start > max_wait:
-                raise Exception(f"Rate limit exceeded for {source}")
-            await asyncio.sleep(0.5)
-
-# ============================================================
-# DATA FETCHER - HAVUZİÇİ SİSTEM (FAILOVER)
-# ============================================================
-class MultiSourceDataFetcher:
-    """
-    Veri havuzu sistemi - Failover ile
-    Yahoo Finance -> Kripto Borsaları -> CoinGecko
-    """
-    
-    def __init__(self):
-        self.session: Optional[aiohttp.ClientSession] = None
-        self.rate_limiter = RateLimiter()
-        self.cache: Dict[str, Tuple[List[Candle], float]] = {}
-        self.source_health: Dict[str, Dict[str, Any]] = defaultdict(lambda: {
-            "success": 0,
-            "failure": 0,
-            "last_success": 0,
-            "last_failure": 0,
-            "available": True
-        })
-        
-        # Kripto borsaları
-        self.crypto_exchanges = [
-            "binance", "coinbase", "kraken", "bitfinex", "huobi",
-            "okx", "bybit", "kucoin", "gateio", "mexc",
-            "bitget", "cryptocom", "htx", "bitstamp", "gemini"
-        ]
-        
-        self.cg_api = CoinGeckoAPI() if CG_AVAILABLE else None
-    
-    async def __aenter__(self):
-        timeout = ClientTimeout(total=Config.API_TIMEOUT)
-        connector = TCPConnector(limit=100, limit_per_host=30)
-        self.session = aiohttp.ClientSession(timeout=timeout, connector=connector)
-        return self
-    
-    async def __aexit__(self, exc_type, exc_val, exc_tb):
-        if self.session:
-            await self.session.close()
-    
-    def _get_cache_key(self, symbol: str, interval: str, limit: int) -> str:
-        return f"{symbol}:{interval}:{limit}"
-    
-    def _is_cache_valid(self, cache_time: float) -> bool:
-        return (time.time() - cache_time) < Config.CACHE_TTL
-    
-    async def get_candles(self, symbol: str, interval: str = "1h", limit: int = 200) -> List[Candle]:
-        """
-        Ana veri çekme fonksiyonu - Failover sistemi ile
-        1. Cache kontrol
-        2. Yahoo Finance (öncelikli)
-        3. Kripto borsaları (pool)
-        4. CoinGecko (fallback)
-        """
-        
-        # Cache check
-        cache_key = self._get_cache_key(symbol, interval, limit)
-        if cache_key in self.cache:
-            candles, cache_time = self.cache[cache_key]
-            if self._is_cache_valid(cache_time):
-                logger.debug(f"Cache hit for {symbol}")
-                return candles
-        
-        candles = []
-        sources_tried = []
-        
-        # 1. Yahoo Finance (ÖNCELİKLİ)
-        if YFINANCE_AVAILABLE and self._is_source_healthy("yahoo_finance"):
-            try:
-                logger.info(f"📊 Trying Yahoo Finance for {symbol}")
-                candles = await self._fetch_from_yahoo(symbol, interval, limit)
-                if candles and len(candles) >= Config.MIN_CANDLES:
-                    self._mark_source_success("yahoo_finance")
-                    logger.info(f"✅ Yahoo Finance: {len(candles)} candles")
-                    self.cache[cache_key] = (candles, time.time())
-                    return candles
-                sources_tried.append("yahoo_finance")
-            except Exception as e:
-                self._mark_source_failure("yahoo_finance")
-                logger.warning(f"Yahoo Finance failed: {str(e)}")
-        
-        # 2. Kripto Borsaları (POOL - Random order)
-        if not candles:
-            random.shuffle(self.crypto_exchanges)
-            for exchange in self.crypto_exchanges[:5]:  # İlk 5 borsa dene
-                if not self._is_source_healthy(exchange):
-                    continue
-                
-                try:
-                    logger.info(f"📊 Trying {exchange} for {symbol}")
-                    candles = await self._fetch_from_crypto_exchange(symbol, interval, limit, exchange)
-                    if candles and len(candles) >= Config.MIN_CANDLES:
-                        self._mark_source_success(exchange)
-                        logger.info(f"✅ {exchange}: {len(candles)} candles")
-                        self.cache[cache_key] = (candles, time.time())
-                        return candles
-                    sources_tried.append(exchange)
-                except Exception as e:
-                    self._mark_source_failure(exchange)
-                    logger.debug(f"{exchange} failed: {str(e)}")
-                    continue
-        
-        # 3. CoinGecko (FALLBACK)
-        if not candles and CG_AVAILABLE and self._is_source_healthy("coingecko"):
-            try:
-                logger.info(f"📊 Trying CoinGecko for {symbol}")
-                candles = await self._fetch_from_coingecko(symbol, interval, limit)
-                if candles and len(candles) >= Config.MIN_CANDLES:
-                    self._mark_source_success("coingecko")
-                    logger.info(f"✅ CoinGecko: {len(candles)} candles")
-                    self.cache[cache_key] = (candles, time.time())
-                    return candles
-                sources_tried.append("coingecko")
-            except Exception as e:
-                self._mark_source_failure("coingecko")
-                logger.warning(f"CoinGecko failed: {str(e)}")
-        
-        # Hiçbir kaynak çalışmadı
-        if not candles:
-            logger.error(f"❌ All sources failed for {symbol}. Tried: {sources_tried}")
-            raise Exception(f"Failed to fetch data from any source. Tried: {sources_tried}")
-        
-        return candles
-    
-    def _is_source_healthy(self, source: str) -> bool:
-        """Kaynağın sağlıklı olup olmadığını kontrol et"""
-        health = self.source_health[source]
-        
-        # Eğer available=False ise, belirli bir süre bekle
-        if not health["available"]:
-            if time.time() - health["last_failure"] > 300:  # 5 dakika
-                health["available"] = True
-                logger.info(f"♻️ Re-enabling source: {source}")
-        
-        return health["available"]
-    
-    def _mark_source_success(self, source: str):
-        """Başarılı kaynak işaretleme"""
-        self.source_health[source]["success"] += 1
-        self.source_health[source]["last_success"] = time.time()
-        self.source_health[source]["available"] = True
-    
-    def _mark_source_failure(self, source: str):
-        """Başarısız kaynak işaretleme"""
-        self.source_health[source]["failure"] += 1
-        self.source_health[source]["last_failure"] = time.time()
-        
-        # 3 başarısız denemeden sonra kaynağı devre dışı bırak
-        if self.source_health[source]["failure"] >= 3:
-            self.source_health[source]["available"] = False
-            logger.warning(f"⚠️ Disabling source: {source}")
-    
-    async def _fetch_from_yahoo(self, symbol: str, interval: str, limit: int) -> List[Candle]:
-        """Yahoo Finance'den veri çek"""
-        await self.rate_limiter.wait_if_needed("yahoo_finance")
-        
-        # Interval dönüşümü
-        interval_map = {
-            "1m": "1m", "5m": "5m", "15m": "15m", "30m": "30m",
-            "1h": "1h", "4h": "4h", "1d": "1d", "1w": "1wk"
+    <style>
+        /* ========== NEOAN RENKLER - ULTRA NEON ========== */
+        :root {
+            --bg-deep: #03050a;
+            --bg-dark: #0a0e17;
+            --bg-card: #0f1520;
+            --accent-blue: #3b82f6;
+            --accent-blue-glow: #90caf9;
+            --accent-green: #00ff9d;
+            --accent-green-glow: #7cffb0;
+            --accent-red: #ff3860;
+            --accent-red-glow: #ff7b9c;
+            --accent-purple: #bd00ff;
+            --accent-purple-glow: #e27bff;
+            --accent-amber: #ffe100;
+            --accent-orange: #ff8c00;
+            --accent-cyan: #00e5ff;
+            --accent-cyan-glow: #7ceeff;
+            --accent-pink: #ff66c4;
+            --text-bright: #ffffff;
+            --text-soft: #e0e0ff;
+            --text-dim: #b0b0d0;
+            --border-dim: rgba(255, 255, 255, 0.12);
+            --radius-xl: 28px;
+            --radius-lg: 24px;
+            --radius-md: 20px;
+            --radius-sm: 16px;
+            --shadow-sm: 0 2px 15px rgba(0, 255, 255, 0.2);
+            --shadow-md: 0 4px 25px rgba(189, 0, 255, 0.25);
+            --shadow-lg: 0 8px 45px rgba(0, 229, 255, 0.3);
+            --transition-butter: all 0.4s cubic-bezier(0.4, 0, 0.2, 1);
+            --neon-blue: 0 0 35px rgba(59, 130, 246, 0.7), 0 0 70px rgba(59, 130, 246, 0.3);
+            --neon-green: 0 0 35px rgba(0, 255, 157, 0.7), 0 0 70px rgba(0, 255, 157, 0.3);
+            --neon-red: 0 0 35px rgba(255, 56, 96, 0.7), 0 0 70px rgba(255, 56, 96, 0.3);
+            --neon-purple: 0 0 35px rgba(189, 0, 255, 0.7), 0 0 70px rgba(189, 0, 255, 0.3);
+            --neon-cyan: 0 0 35px rgba(0, 229, 255, 0.7), 0 0 70px rgba(0, 229, 255, 0.3);
+            --neon-amber: 0 0 35px rgba(255, 225, 0, 0.7), 0 0 70px rgba(255, 225, 0, 0.3);
         }
-        yf_interval = interval_map.get(interval, "1h")
-        
-        # Period hesapla
-        period_map = {
-            "1m": "7d", "5m": "60d", "15m": "60d", "30m": "60d",
-            "1h": "730d", "4h": "730d", "1d": "max", "1w": "max"
+
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
         }
-        period = period_map.get(interval, "730d")
-        
-        # Symbol dönüşümü (kripto için)
-        if symbol.upper().endswith("USDT"):
-            yf_symbol = symbol.upper().replace("USDT", "-USD")
-        elif symbol.upper().endswith("BTC"):
-            yf_symbol = symbol.upper().replace("BTC", "-BTC")
-        else:
-            yf_symbol = symbol.upper()
-        
-        try:
-            ticker = yf.Ticker(yf_symbol)
-            df = ticker.history(period=period, interval=yf_interval)
-            
-            if df.empty:
-                return []
-            
-            # Son N mum
-            df = df.tail(limit)
-            
-            candles = []
-            for idx, row in df.iterrows():
-                candle = Candle(
-                    timestamp=int(idx.timestamp() * 1000),
-                    open=float(row['Open']),
-                    high=float(row['High']),
-                    low=float(row['Low']),
-                    close=float(row['Close']),
-                    volume=float(row['Volume']),
-                    source="yahoo_finance"
-                )
-                candles.append(candle)
-            
-            return candles
-            
-        except Exception as e:
-            logger.error(f"Yahoo Finance error: {str(e)}")
-            raise
-    
-    async def _fetch_from_crypto_exchange(self, symbol: str, interval: str, limit: int, exchange: str) -> List[Candle]:
-        """Kripto borsalarından veri çek (mock - gerçek API entegrasyonu eklenebilir)"""
-        await self.rate_limiter.wait_if_needed(exchange)
-        
-        # Bu örnekte simüle ediyoruz - Gerçek üretimde exchange API'leri kullanılacak
-        # Binance, Coinbase, etc. API endpoints
-        
-        # Simülasyon: Yahoo Finance'i tekrar dene ama farklı source tag'i ile
-        candles = await self._fetch_from_yahoo(symbol, interval, limit)
-        if candles:
-            for candle in candles:
-                candle.source = exchange
-        return candles
-    
-    async def _fetch_from_coingecko(self, symbol: str, interval: str, limit: int) -> List[Candle]:
-        """CoinGecko'dan veri çek"""
-        if not self.cg_api:
-            return []
-        
-        await self.rate_limiter.wait_if_needed("coingecko")
-        
-        # Symbol dönüşümü
-        coin_id = symbol.lower().replace("usdt", "").replace("btc", "")
-        
-        # CoinGecko days hesapla
-        days_map = {
-            "1m": 1, "5m": 1, "15m": 7, "30m": 7,
-            "1h": 30, "4h": 90, "1d": 365, "1w": "max"
+
+        body {
+            background: radial-gradient(circle at 50% 0%, #0a0e17, #03050a);
+            color: var(--text-bright);
+            font-family: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif;
+            min-height: 100vh;
+            overflow-x: hidden;
+            line-height: 1.6;
+            position: relative;
         }
-        days = days_map.get(interval, 30)
+
+        body::before {
+            content: '';
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background: 
+                radial-gradient(circle at 15% 25%, rgba(59, 130, 246, 0.2) 0%, transparent 45%),
+                radial-gradient(circle at 85% 65%, rgba(189, 0, 255, 0.2) 0%, transparent 45%),
+                radial-gradient(circle at 50% 80%, rgba(0, 255, 157, 0.12) 0%, transparent 50%),
+                radial-gradient(circle at 30% 70%, rgba(0, 229, 255, 0.15) 0%, transparent 40%),
+                radial-gradient(circle at 70% 30%, rgba(255, 56, 96, 0.1) 0%, transparent 45%);
+            pointer-events: none;
+            z-index: 0;
+            animation: cosmicPulse 20s ease-in-out infinite;
+        }
+
+        @keyframes cosmicPulse {
+            0%, 100% { opacity: 0.8; }
+            50% { opacity: 1; }
+        }
+
+        .container-fluid {
+            position: relative;
+            z-index: 1;
+            max-width: 1920px;
+            margin: 0 auto;
+            padding: 0 2rem;
+        }
+
+        /* ========== NAVBAR ========== */
+        .navbar {
+            background: rgba(10, 14, 23, 0.92);
+            backdrop-filter: blur(25px);
+            border-bottom: 3px solid var(--accent-cyan);
+            padding: 1.2rem 0;
+            box-shadow: var(--neon-cyan);
+            position: sticky;
+            top: 0;
+            z-index: 1000;
+            border-bottom-left-radius: 50px;
+            border-bottom-right-radius: 50px;
+            margin-bottom: 2rem;
+        }
+
+        .navbar-brand {
+            font-weight: 900;
+            font-size: 2.2rem;
+            letter-spacing: -1px;
+            background: linear-gradient(135deg, #ffffff, var(--accent-cyan), var(--accent-purple), var(--accent-pink));
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+            text-shadow: 0 0 40px rgba(0, 229, 255, 0.5);
+            animation: brandGlow 4s ease-in-out infinite;
+        }
+
+        @keyframes brandGlow {
+            0%, 100% { text-shadow: 0 0 40px rgba(0, 229, 255, 0.5); }
+            50% { text-shadow: 0 0 80px rgba(189, 0, 255, 0.8); }
+        }
+
+        .connection-status {
+            font-size: 1.1rem;
+            padding: 0.7rem 1.8rem;
+            border-radius: 50px;
+            background: rgba(0, 229, 255, 0.12);
+            border: 2px solid var(--accent-cyan);
+            box-shadow: var(--neon-cyan);
+            margin-left: 1.5rem !important;
+            font-weight: 700;
+        }
+
+        /* ========== ZİYARETÇİ SAYACI ========== */
+        .visitor-counter {
+            background: rgba(0, 229, 255, 0.12);
+            padding: 0.7rem 2rem;
+            border-radius: 60px;
+            border: 2px solid var(--accent-cyan);
+            box-shadow: var(--neon-cyan);
+            color: white;
+            font-weight: 700;
+            backdrop-filter: blur(8px);
+            display: inline-flex;
+            align-items: center;
+            gap: 14px;
+            font-size: 1.2rem;
+        }
+
+        .visitor-counter i {
+            color: var(--accent-cyan);
+            text-shadow: var(--neon-cyan);
+            font-size: 1.5rem;
+        }
+
+        .visitor-count-number {
+            font-size: 2rem;
+            font-weight: 900;
+            color: var(--accent-amber);
+            text-shadow: 0 0 30px var(--accent-amber);
+            animation: countPulse 2s ease-in-out infinite;
+        }
+
+        @keyframes countPulse {
+            0%, 100% { text-shadow: 0 0 30px var(--accent-amber); }
+            50% { text-shadow: 0 0 60px var(--accent-orange); }
+        }
+
+        /* ========== CARDS ========== */
+        .card {
+            background: rgba(15, 21, 32, 0.85);
+            backdrop-filter: blur(20px);
+            border: 2px solid rgba(0, 229, 255, 0.25);
+            border-radius: var(--radius-xl);
+            box-shadow: var(--shadow-lg), var(--neon-cyan);
+            transition: var(--transition-butter);
+            position: relative;
+            overflow: hidden;
+        }
+
+        .card::before {
+            content: '';
+            position: absolute;
+            top: -3px;
+            left: -3px;
+            right: -3px;
+            bottom: -3px;
+            background: linear-gradient(45deg, var(--accent-cyan), var(--accent-purple), var(--accent-pink), var(--accent-blue));
+            border-radius: var(--radius-xl);
+            z-index: -1;
+            opacity: 0;
+            transition: var(--transition-butter);
+        }
+
+        .card:hover {
+            transform: translateY(-12px) scale(1.02);
+            border-color: transparent;
+        }
+
+        .card:hover::before {
+            opacity: 0.4;
+        }
+
+        .card-header {
+            background: rgba(0, 0, 0, 0.45);
+            border-bottom: 2px solid rgba(0, 229, 255, 0.5);
+            padding: 1.4rem 2rem;
+            font-weight: 800;
+            font-size: 1.35rem;
+            color: white;
+            text-shadow: 0 0 20px var(--accent-cyan);
+            letter-spacing: 0.7px;
+        }
+
+        .card-header i {
+            color: var(--accent-cyan);
+            text-shadow: var(--neon-cyan);
+            margin-right: 12px;
+            font-size: 1.5rem;
+        }
+
+        /* ========== TRADINGVIEW CHART ========== */
+        .chart-container {
+            background: var(--bg-dark);
+            border-radius: 0 0 var(--radius-lg) var(--radius-lg);
+            padding: 1.2rem;
+            height: 680px !important;
+            min-height: 680px !important;
+            border-top: 4px solid var(--accent-cyan);
+            box-shadow: inset var(--neon-cyan);
+            position: relative;
+            display: flex;
+            flex-direction: column;
+        }
+
+        #tradingview-widget {
+            width: 100%;
+            height: 100% !important;
+            min-height: 650px;
+            flex: 1;
+            border-radius: var(--radius-md);
+            background: var(--bg-dark);
+        }
+
+        .chart-loading {
+            position: absolute;
+            top: 0;
+            left: 0;
+            right: 0;
+            bottom: 0;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            background: var(--bg-dark);
+            z-index: 10;
+            border-radius: var(--radius-md);
+            gap: 20px;
+        }
+
+        .chart-loading .spinner-border {
+            width: 4rem;
+            height: 4rem;
+            color: var(--accent-cyan);
+            border-width: 0.3rem;
+        }
+
+        /* ========== AI CHAT ========== */
+        .chat-container {
+            height: 420px;
+            overflow-y: auto;
+            background: rgba(10, 14, 23, 0.98);
+            backdrop-filter: blur(15px);
+            border-radius: var(--radius-lg);
+            padding: 2rem;
+            border: 2px solid var(--accent-cyan);
+            box-shadow: inset var(--neon-cyan), var(--shadow-lg);
+            scrollbar-width: thin;
+            scrollbar-color: var(--accent-cyan) var(--bg-dark);
+        }
+
+        .chat-container::-webkit-scrollbar {
+            width: 6px;
+        }
+
+        .chat-container::-webkit-scrollbar-track {
+            background: var(--bg-dark);
+            border-radius: 15px;
+        }
+
+        .chat-container::-webkit-scrollbar-thumb {
+            background: var(--accent-cyan);
+            border-radius: 15px;
+            box-shadow: var(--neon-cyan);
+        }
+
+        .chat-message {
+            margin-bottom: 2rem;
+            padding: 1.8rem;
+            border-radius: var(--radius-lg);
+            border: 2px solid rgba(0, 229, 255, 0.25);
+            font-size: 1rem;
+            font-weight: 500;
+            color: white;
+            transition: var(--transition-butter);
+        }
+
+        .chat-message:hover {
+            border-color: var(--accent-cyan);
+            box-shadow: var(--neon-cyan);
+        }
+
+        .chat-bot {
+            background: linear-gradient(135deg, rgba(59, 130, 246, 0.2), rgba(189, 0, 255, 0.2));
+            border-left: 10px solid var(--accent-cyan);
+            box-shadow: var(--neon-cyan);
+        }
+
+        /* ========== NEON BUTTON ========== */
+        .btn-evaluate {
+            background: linear-gradient(135deg, var(--accent-purple), var(--accent-pink), var(--accent-cyan));
+            background-size: 200% 200%;
+            color: white;
+            font-weight: 900;
+            padding: 1.5rem 2.5rem;
+            border-radius: 70px;
+            box-shadow: var(--neon-purple);
+            border: 2px solid rgba(255, 255, 255, 0.9);
+            text-transform: uppercase;
+            letter-spacing: 4px;
+            font-size: 1.25rem;
+            transition: var(--transition-butter);
+            animation: gradientShift 4s ease infinite;
+        }
+
+        @keyframes gradientShift {
+            0% { background-position: 0% 50%; }
+            50% { background-position: 100% 50%; }
+            100% { background-position: 0% 50%; }
+        }
+
+        .btn-evaluate:hover {
+            transform: scale(1.07);
+            box-shadow: 0 0 70px rgba(189, 0, 255, 0.9);
+            border-color: white;
+        }
+
+        .btn-evaluate i {
+            margin-right: 15px;
+            font-size: 1.6rem;
+        }
+
+        /* ========== EXCHANGE GRID - 30+ KAYNAK ========== */
+        .exchange-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fill, minmax(100px, 1fr));
+            gap: 12px;
+            max-height: 400px;
+            overflow-y: auto;
+            padding-right: 5px;
+        }
+
+        .exchange-grid::-webkit-scrollbar {
+            width: 4px;
+        }
+
+        .exchange-grid::-webkit-scrollbar-track {
+            background: var(--bg-dark);
+            border-radius: 10px;
+        }
+
+        .exchange-grid::-webkit-scrollbar-thumb {
+            background: var(--accent-cyan);
+            border-radius: 10px;
+        }
+
+        .exchange-card {
+            background: rgba(20, 26, 39, 0.92);
+            backdrop-filter: blur(8px);
+            border-radius: var(--radius-md);
+            padding: 1rem 0.5rem;
+            text-align: center;
+            border: 2px solid rgba(0, 229, 255, 0.25);
+            transition: var(--transition-butter);
+            color: white;
+            font-size: 0.85rem;
+        }
+
+        .exchange-card:hover {
+            transform: translateY(-5px);
+            border-color: var(--accent-cyan);
+            box-shadow: var(--neon-cyan);
+            background: rgba(0, 229, 255, 0.15);
+        }
+
+        .exchange-logo {
+            font-size: 1.8rem;
+            margin-bottom: 6px;
+        }
+
+        .exchange-name-small {
+            font-size: 0.8rem;
+            font-weight: 700;
+            margin-bottom: 6px;
+        }
+
+        .exchange-status {
+            padding: 4px 8px;
+            border-radius: 30px;
+            font-size: 0.7rem;
+            font-weight: 800;
+            display: inline-block;
+        }
+
+        .status-active {
+            background: rgba(0, 255, 157, 0.2);
+            color: var(--accent-green);
+            border: 1px solid var(--accent-green);
+            box-shadow: var(--neon-green);
+        }
+
+        .status-waiting {
+            background: rgba(255, 255, 255, 0.08);
+            color: var(--text-dim);
+            border: 1px solid rgba(255, 255, 255, 0.2);
+        }
+
+        /* ========== FİYAT GÖSTERGELERİ ========== */
+        .current-price {
+            font-size: 5.2rem;
+            font-weight: 900;
+            background: linear-gradient(135deg, #ffffff, var(--accent-cyan), var(--accent-blue-glow));
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+            text-shadow: var(--neon-cyan);
+            line-height: 1.1;
+            margin: 0.5rem 0;
+            letter-spacing: -2px;
+        }
+
+        .price-change {
+            font-size: 1.7rem;
+            font-weight: 800;
+            margin-top: 1.2rem;
+            display: inline-flex;
+            align-items: center;
+            gap: 14px;
+            padding: 0.7rem 2.2rem;
+            border-radius: 60px;
+        }
+
+        .price-up {
+            color: var(--accent-green);
+            background: rgba(0, 255, 157, 0.15);
+            box-shadow: var(--neon-green);
+            border: 2px solid var(--accent-green);
+        }
+
+        .price-down {
+            color: var(--accent-red);
+            background: rgba(255, 56, 96, 0.15);
+            box-shadow: var(--neon-red);
+            border: 2px solid var(--accent-red);
+        }
+
+        /* ========== SİNYAL BADGE ========== */
+        .signal-badge {
+            padding: 2.8rem 2.2rem;
+            border-radius: 40px;
+            font-size: 2.4rem;
+            font-weight: 900;
+            border: 4px solid rgba(255, 255, 255, 0.5);
+            margin-bottom: 1.5rem;
+            transition: var(--transition-butter);
+            letter-spacing: 2px;
+        }
+
+        .signal-badge:hover {
+            transform: scale(1.03);
+        }
+
+        .signal-buy {
+            background: linear-gradient(135deg, #00c853, #00e676, #00ff9d);
+            color: white;
+            box-shadow: var(--neon-green);
+            border-color: #00ff9d;
+        }
+
+        .signal-sell {
+            background: linear-gradient(135deg, #d50000, #ff1744, #ff3860);
+            color: white;
+            box-shadow: var(--neon-red);
+            border-color: #ff3860;
+        }
+
+        .signal-neutral {
+            background: linear-gradient(135deg, #6200ea, #7c4dff, #bd00ff);
+            color: white;
+            box-shadow: var(--neon-purple);
+            border-color: #bd00ff;
+        }
+
+        /* ========== PROGRESS BARS ========== */
+        .progress {
+            background: rgba(255, 255, 255, 0.06);
+            border: 2px solid rgba(255, 255, 255, 0.15);
+            border-radius: 40px;
+            height: 18px;
+        }
+
+        .progress-bar {
+            background: linear-gradient(90deg, var(--accent-green), var(--accent-cyan), var(--accent-purple));
+            border-radius: 40px;
+            position: relative;
+            overflow: hidden;
+        }
+
+        .progress-bar::after {
+            content: '';
+            position: absolute;
+            top: 0;
+            left: 0;
+            right: 0;
+            bottom: 0;
+            background: linear-gradient(90deg, transparent, rgba(255,255,255,0.4), transparent);
+            animation: shimmerLine 2.2s infinite;
+        }
+
+        @keyframes shimmerLine {
+            0% { transform: translateX(-100%); }
+            100% { transform: translateX(100%); }
+        }
+
+        /* ========== ML MODEL BARS ========== */
+        .model-bar {
+            height: 22px;
+            background: rgba(255, 255, 255, 0.06);
+            border-radius: 40px;
+            overflow: hidden;
+            margin: 0.8rem 0;
+            border: 2px solid rgba(255, 255, 255, 0.12);
+        }
+
+        .model-fill {
+            height: 100%;
+            border-radius: 40px;
+            transition: width 0.8s cubic-bezier(0.34, 1.56, 0.64, 1);
+            box-shadow: 0 0 30px currentColor;
+            position: relative;
+        }
+
+        .model-fill::after {
+            content: '';
+            position: absolute;
+            top: 0;
+            left: 0;
+            right: 0;
+            bottom: 0;
+            background: linear-gradient(90deg, rgba(255,255,255,0.25), transparent);
+        }
+
+        .model-lstm {
+            background: linear-gradient(90deg, #3b82f6, #00e5ff);
+            box-shadow: var(--neon-blue);
+        }
+
+        .model-transformer {
+            background: linear-gradient(90deg, #bd00ff, #ff66c4);
+            box-shadow: var(--neon-purple);
+        }
+
+        .model-xgboost {
+            background: linear-gradient(90deg, #00ff9d, #00e5ff);
+            box-shadow: var(--neon-green);
+        }
+
+        .model-lightgbm {
+            background: linear-gradient(90deg, #ffe100, #ff8c00);
+            box-shadow: var(--neon-amber);
+        }
+
+        .model-rf {
+            background: linear-gradient(90deg, #ff3860, #ff66c4);
+            box-shadow: var(--neon-red);
+        }
+
+        /* ========== FORM SELECT ========== */
+        .form-select {
+            background: rgba(15, 21, 32, 0.95);
+            border: 2px solid var(--accent-cyan);
+            color: white;
+            font-weight: 700;
+            box-shadow: var(--neon-cyan);
+            padding: 0.9rem 1.4rem;
+            border-radius: 50px;
+            cursor: pointer;
+            transition: var(--transition-butter);
+            letter-spacing: 0.5px;
+        }
+
+        .form-select:hover {
+            border-color: var(--accent-purple);
+            box-shadow: var(--neon-purple);
+            transform: translateY(-3px);
+        }
+
+        .form-select option {
+            background: #0f1520;
+            color: white;
+            padding: 1rem;
+        }
+
+        /* ========== PATTERN TAGS ========== */
+        .pattern-tag {
+            display: inline-block;
+            padding: 8px 16px;
+            margin: 4px 4px;
+            border-radius: 40px;
+            font-size: 0.9rem;
+            font-weight: 700;
+            border: 2px solid transparent;
+            transition: var(--transition-butter);
+            cursor: default;
+        }
+
+        .pattern-tag:hover {
+            transform: scale(1.05);
+        }
+
+        .pattern-bullish {
+            background: rgba(0, 255, 157, 0.15);
+            color: var(--accent-green);
+            border-color: var(--accent-green);
+            box-shadow: var(--neon-green);
+        }
+
+        .pattern-bearish {
+            background: rgba(255, 56, 96, 0.15);
+            color: var(--accent-red);
+            border-color: var(--accent-red);
+            box-shadow: var(--neon-red);
+        }
+
+        .pattern-neutral {
+            background: rgba(189, 0, 255, 0.15);
+            color: var(--accent-purple-glow);
+            border-color: var(--accent-purple);
+            box-shadow: var(--neon-purple);
+        }
+
+        /* ========== NOTIFICATIONS ========== */
+        .notification {
+            position: fixed;
+            top: 25px;
+            right: 25px;
+            background: rgba(15, 21, 32, 0.98);
+            backdrop-filter: blur(20px);
+            color: white;
+            padding: 1.6rem 2.8rem;
+            border-radius: 50px;
+            border-left: 10px solid var(--accent-cyan);
+            box-shadow: var(--neon-cyan);
+            z-index: 99999;
+            animation: slideInRight 0.4s ease, fadeOut 0.6s 2.9s ease;
+            min-width: 420px;
+            font-weight: 700;
+            border: 2px solid rgba(255,255,255,0.3);
+            font-size: 1.1rem;
+        }
+
+        .notification.success { border-left-color: var(--accent-green); box-shadow: var(--neon-green); }
+        .notification.error { border-left-color: var(--accent-red); box-shadow: var(--neon-red); }
+        .notification.info { border-left-color: var(--accent-cyan); box-shadow: var(--neon-cyan); }
+
+        @keyframes slideInRight {
+            from { transform: translateX(450px); opacity: 0; }
+            to { transform: translateX(0); opacity: 1; }
+        }
+
+        @keyframes fadeOut {
+            from { opacity: 1; }
+            to { opacity: 0; }
+        }
+
+        /* ========== TECHNICAL INDICATORS ========== */
+        .indicator-card {
+            background: rgba(20, 26, 39, 0.92);
+            backdrop-filter: blur(8px);
+            border-radius: var(--radius-md);
+            padding: 1.2rem;
+            margin-bottom: 1rem;
+            border-left: 8px solid var(--accent-blue);
+            border: 1px solid rgba(59, 130, 246, 0.3);
+            color: white;
+            transition: var(--transition-butter);
+        }
+
+        .indicator-card:hover {
+            border-color: var(--accent-blue);
+            box-shadow: var(--neon-blue);
+            transform: translateX(5px);
+        }
+
+        .indicator-card.buy {
+            border-left-color: var(--accent-green);
+        }
+
+        .indicator-card.sell {
+            border-left-color: var(--accent-red);
+        }
+
+        .indicator-card.neutral {
+            border-left-color: var(--accent-purple);
+        }
+
+        /* ========== RESPONSIVE ========== */
+        @media (max-width: 1400px) {
+            .container-fluid { padding: 0 1.5rem; }
+            .current-price { font-size: 4.5rem; }
+        }
+
+        @media (max-width: 1200px) {
+            .navbar-brand { font-size: 1.8rem; }
+            .current-price { font-size: 3.8rem; }
+        }
+
+        @media (max-width: 768px) {
+            .navbar-brand { font-size: 1.4rem; }
+            .visitor-counter { font-size: 1rem; padding: 0.5rem 1.2rem; }
+            .current-price { font-size: 2.8rem; }
+            .signal-badge { font-size: 1.6rem; padding: 1.5rem 1rem; }
+            .btn-evaluate { font-size: 1rem; padding: 1.2rem 1.8rem; }
+        }
+    </style>
+</head>
+<body>
+
+<!-- ========== NAVBAR ========== -->
+<nav class="navbar">
+    <div class="container-fluid">
+        <a class="navbar-brand">
+            <i class="fas fa-robot"></i>
+            ICTSMARTPRO ULTIMATE v10.0
+            <span class="connection-status" id="connectionStatus">
+                <i class="fas fa-plug"></i>
+                <span id="backendStatus">CONNECTING</span>
+            </span>
+        </a>
+    </div>
+</nav>
+
+<!-- ========== ZİYARETÇİ SAYACI ========== -->
+<div class="container-fluid mt-2 mb-3">
+    <div class="row">
+        <div class="col-12">
+            <div style="display: flex; justify-content: flex-end; align-items: center;">
+                <span class="visitor-counter">
+                    <i class="fas fa-users"></i>
+                    <div style="display: flex; flex-direction: column; align-items: flex-start; margin-left: 10px;">
+                        <span style="color: var(--text-dim); font-size: 0.8rem;">AKTİF ZİYARETÇİ</span>
+                        <span id="visitorCount" class="visitor-count-number">0</span>
+                    </div>
+                </span>
+            </div>
+        </div>
+    </div>
+</div>
+
+<div class="container-fluid mt-4 px-3">
+    <div class="row g-4">
         
-        try:
-            # CoinGecko OHLC data
-            data = self.cg_api.get_coin_ohlc_by_id(
-                id=coin_id,
-                vs_currency='usd',
-                days=days
-            )
+        <!-- ========== SOL ANA KOLON ========== -->
+        <div class="col-lg-8">
             
-            if not data:
-                return []
-            
-            candles = []
-            for item in data[-limit:]:
-                # CoinGecko format: [timestamp, open, high, low, close]
-                candle = Candle(
-                    timestamp=int(item[0]),
-                    open=float(item[1]),
-                    high=float(item[2]),
-                    low=float(item[3]),
-                    close=float(item[4]),
-                    volume=0.0,  # CoinGecko OHLC doesn't include volume
-                    source="coingecko"
-                )
-                candles.append(candle)
-            
-            return candles
-            
-        except Exception as e:
-            logger.error(f"CoinGecko error: {str(e)}")
-            raise
+            <!-- KONTROL PANELİ -->
+            <div class="card mb-4">
+                <div class="card-header">
+                    <i class="fas fa-sliders-h"></i>
+                    ⚡ ANALİZ KONTROLLERİ • 30+ VERİ KAYNAĞI
+                </div>
+                <div class="card-body">
+                    <div class="d-flex justify-content-between align-items-center flex-wrap gap-3">
+                        <h5 class="card-title mb-0" style="color: white; text-shadow: 0 0 20px var(--accent-cyan); font-size: 1.6rem;">
+                            <i class="fas fa-chart-line"></i>
+                            YAHOO • BINANCE • COINGECKO
+                            <span class="badge ms-2" id="totalSourcesBadge"
+                                  style="background: linear-gradient(135deg, var(--accent-cyan), var(--accent-purple));
+                                         box-shadow: var(--neon-cyan); padding: 0.8rem 1.8rem; border-radius: 50px;
+                                         font-size: 1rem;">
+                                <i class="fas fa-database"></i> <span id="totalSourceCount">0</span>/30 KAYNAK
+                            </span>
+                        </h5>
+                        <div class="d-flex gap-3 flex-wrap">
+                            <select id="symbolSelect" class="form-select form-select-lg" style="width: 210px;">
+                                <option value="BTC">BTC/USDT</option>
+                                <option value="ETH">ETH/USDT</option>
+                                <option value="SOL">SOL/USDT</option>
+                                <option value="BNB">BNB/USDT</option>
+                                <option value="ADA">ADA/USDT</option>
+                                <option value="DOGE">DOGE/USDT</option>
+                                <option value="MATIC">MATIC/USDT</option>
+                                <option value="LINK">LINK/USDT</option>
+                                <option value="AVAX">AVAX/USDT</option>
+                                <option value="XRP">XRP/USDT</option>
+                            </select>
+                            <select id="intervalSelect" class="form-select form-select-lg" style="width: 180px; border-color: var(--accent-purple); box-shadow: var(--neon-purple);">
+                                <option value="1m">1 DAKİKA</option>
+                                <option value="5m">5 DAKİKA</option>
+                                <option value="15m">15 DAKİKA</option>
+                                <option value="30m">30 DAKİKA</option>
+                                <option value="1h" selected>1 SAAT</option>
+                                <option value="4h">4 SAAT</option>
+                                <option value="1d">1 GÜN</option>
+                                <option value="1w">1 HAFTA</option>
+                            </select>
+                            <button class="btn btn-primary btn-lg" onclick="analyzeSymbol()"
+                                    style="background: linear-gradient(135deg, var(--accent-green), var(--accent-cyan));
+                                           border: none; box-shadow: var(--neon-green); font-weight: 800;
+                                           padding: 0.8rem 2.5rem; border-radius: 60px;">
+                                <i class="fas fa-search"></i>
+                                ANALİZ ET
+                            </button>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- FİYAT ve ML SİNYALİ -->
+            <div class="row g-4 mb-4">
+                <div class="col-md-6">
+                    <div class="card h-100">
+                        <div class="card-header">
+                            <i class="fas fa-dollar-sign"></i>
+                            💎 CANLI FİYAT
+                            <span class="badge ms-2" id="priceSources"
+                                  style="background: linear-gradient(135deg, var(--accent-cyan), var(--accent-blue));
+                                         box-shadow: var(--neon-cyan); padding: 0.6rem 1.4rem; border-radius: 40px;">
+                                <i class="fas fa-link"></i> <span id="sourceCount">0</span> KAYNAK
+                            </span>
+                        </div>
+                        <div class="card-body text-center">
+                            <div class="symbol-name fs-2 fw-bold" id="currentSymbol"
+                                 style="text-shadow: 0 0 20px var(--accent-cyan); color: var(--text-soft);">
+                                BTC/USDT
+                            </div>
+                            <div class="current-price" id="currentPrice">—</div>
+                            <div class="price-change" id="priceChange"></div>
+                            <div class="row mt-4">
+                                <div class="col-6">
+                                    <div class="text-muted small fw-bold" style="color: var(--accent-cyan) !important; font-size: 0.95rem;">
+                                        <i class="fas fa-chart-bar"></i> 24s HACİM
+                                    </div>
+                                    <div class="fs-2 fw-bold" style="color: var(--accent-cyan); text-shadow: 0 0 25px var(--accent-cyan);"
+                                         id="volume24h">
+                                        -
+                                    </div>
+                                </div>
+                                <div class="col-6">
+                                    <div class="text-muted small fw-bold" style="color: var(--accent-purple) !important; font-size: 0.95rem;">
+                                        <i class="fas fa-shield-alt"></i> VERİ DURUMU
+                                    </div>
+                                    <div class="fs-2 fw-bold" style="color: var(--accent-purple); text-shadow: 0 0 25px var(--accent-purple);"
+                                         id="dataIntegrity">
+                                        GERÇEK
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+                <div class="col-md-6">
+                    <div class="card h-100">
+                        <div class="card-header">
+                            <i class="fas fa-brain"></i>
+                            🧠 ML SİNYALİ
+                            <span class="badge ms-2" style="background: linear-gradient(135deg, var(--accent-purple), var(--accent-pink));
+                                   box-shadow: var(--neon-purple); padding: 0.6rem 1.4rem; border-radius: 40px;">
+                                <i class="fas fa-microchip"></i> ENSEMBLE
+                            </span>
+                        </div>
+                        <div class="card-body text-center">
+                            <div class="signal-badge signal-neutral" id="signalBadge">
+                                <span class="signal-text" id="signalText">BEKLENİYOR</span>
+                            </div>
+                            <div class="progress mb-3" style="height: 20px;">
+                                <div class="progress-bar" id="confidenceFill" role="progressbar" style="width: 0%;"></div>
+                            </div>
+                            <div class="fw-bold fs-3" id="confidenceText" style="color: white; text-shadow: 0 0 20px var(--accent-cyan);">
+                                Güven: 0%
+                            </div>
+                            <p class="mt-3 mb-0 fw-bold fs-5" id="mlPrediction"
+                               style="color: var(--text-soft); background: rgba(0,229,255,0.1); padding: 1rem; border-radius: 40px; border: 1px solid var(--accent-cyan);">
+                                ⏳ Backend bağlantısı bekleniyor...
+                            </p>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- SİNYAL DAĞILIMI -->
+            <div class="card mb-4">
+                <div class="card-header">
+                    <i class="fas fa-chart-pie"></i>
+                    📊 SİNYAL DAĞILIMI • 30+ KAYNAK KONSENSÜSÜ
+                </div>
+                <div class="card-body">
+                    <div class="mb-4">
+                        <div class="d-flex justify-content-between mb-2">
+                            <span class="fw-bold fs-5" style="color: var(--accent-green);">
+                                <i class="fas fa-arrow-up"></i> AL
+                            </span>
+                            <span class="fw-bold fs-4" style="color: var(--accent-green);" id="buySignalValue">0%</span>
+                        </div>
+                        <div class="progress" style="height: 26px; border: 2px solid var(--accent-green); box-shadow: var(--neon-green);">
+                            <div class="progress-bar bg-success" id="buySignalBar" role="progressbar"
+                                 style="width: 0%; background: linear-gradient(90deg, #00ff9d, #00e676);"></div>
+                        </div>
+                    </div>
+                    <div class="mb-4">
+                        <div class="d-flex justify-content-between mb-2">
+                            <span class="fw-bold fs-5" style="color: var(--accent-red);">
+                                <i class="fas fa-arrow-down"></i> SAT
+                            </span>
+                            <span class="fw-bold fs-4" style="color: var(--accent-red);" id="sellSignalValue">0%</span>
+                        </div>
+                        <div class="progress" style="height: 26px; border: 2px solid var(--accent-red); box-shadow: var(--neon-red);">
+                            <div class="progress-bar bg-danger" id="sellSignalBar" role="progressbar"
+                                 style="width: 0%; background: linear-gradient(90deg, #ff3860, #ff1744);"></div>
+                        </div>
+                    </div>
+                    <div>
+                        <div class="d-flex justify-content-between mb-2">
+                            <span class="fw-bold fs-5" style="color: var(--accent-purple);">
+                                <i class="fas fa-minus"></i> NÖTR
+                            </span>
+                            <span class="fw-bold fs-4" style="color: var(--accent-purple);" id="neutralSignalValue">0%</span>
+                        </div>
+                        <div class="progress" style="height: 26px; border: 2px solid var(--accent-purple); box-shadow: var(--neon-purple);">
+                            <div class="progress-bar bg-secondary" id="neutralSignalBar" role="progressbar"
+                                 style="width: 0%; background: linear-gradient(90deg, #bd00ff, #7c4dff);"></div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- TRADINGVIEW CHART -->
+            <div class="card mb-4">
+                <div class="card-header">
+                    <i class="fas fa-chart-candlestick"></i>
+                    📈 CANLI FİYAT GRAFİĞİ • TRADINGVIEW
+                    <span class="badge ms-2" style="background: linear-gradient(135deg, var(--accent-cyan), var(--accent-blue));
+                           box-shadow: var(--neon-cyan); padding: 0.6rem 1.4rem; border-radius: 40px;">
+                        <i class="fas fa-check-circle"></i> BINANCE
+                    </span>
+                </div>
+                <div class="card-body p-0">
+                    <div class="chart-container">
+                        <div id="tradingview-widget"></div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- DETAYLI TEKNİK ANALİZ -->
+            <div class="card mb-4">
+                <div class="card-header">
+                    <i class="fas fa-flask"></i>
+                    🔬 DETAYLI TEKNİK ANALİZ
+                </div>
+                <div class="card-body">
+                    <div id="technicalIndicators">
+                        <div class="text-center py-5">
+                            <div class="spinner-border" role="status"
+                                 style="width: 5rem; height: 5rem; color: var(--accent-cyan); box-shadow: var(--neon-cyan); border-width: 0.3rem;">
+                                <span class="visually-hidden">Yükleniyor...</span>
+                            </div>
+                            <p class="fw-bold mt-3 fs-4" style="color: white; text-shadow: 0 0 20px var(--accent-cyan);">
+                                Teknik göstergeler hesaplanıyor...
+                            </p>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- PATTERN ve MARKET STRUCTURE -->
+            <div class="row g-4">
+                <div class="col-md-6">
+                    <div class="card h-100">
+                        <div class="card-header">
+                            <i class="fas fa-shapes"></i>
+                            🎯 MUM PATERNLERİ
+                        </div>
+                        <div class="card-body">
+                            <div id="patternsContainer" class="mt-2" style="min-height: 140px;">
+                                <span class="fw-bold fs-5" style="color: var(--accent-cyan);">
+                                    <i class="fas fa-spinner fa-pulse"></i> Pattern verisi bekleniyor...
+                                </span>
+                            </div>
+                            <p class="mt-4 mb-0 fw-bold fs-5" id="patternCount" style="color: var(--text-dim);">-</p>
+                        </div>
+                    </div>
+                </div>
+                <div class="col-md-6">
+                    <div class="card h-100">
+                        <div class="card-header">
+                            <i class="fas fa-exchange-alt"></i>
+                            🌊 MARKET YAPISI
+                        </div>
+                        <div class="card-body">
+                            <div id="marketStructureContainer">
+                                <div class="indicator-card neutral mb-3">
+                                    <div class="d-flex justify-content-between align-items-center">
+                                        <span class="fw-bold fs-5"><i class="fas fa-project-diagram"></i> Piyasa Yapısı</span>
+                                        <span class="badge fs-6" id="structureSignal"
+                                              style="background: var(--accent-purple); padding: 0.6rem 1.4rem; border-radius: 40px;">-</span>
+                                    </div>
+                                    <div class="fs-1 fw-bold mt-2" id="structureValue" style="color: white;">-</div>
+                                    <small class="fw-bold fs-6" id="structureDesc" style="color: var(--text-dim);">-</small>
+                                </div>
+                                <div class="indicator-card neutral mb-3">
+                                    <div class="d-flex justify-content-between align-items-center">
+                                        <span class="fw-bold fs-5"><i class="fas fa-trend-up"></i> Trend Yönü</span>
+                                        <span class="badge fs-6" id="trendSignal"
+                                              style="background: var(--accent-cyan); padding: 0.6rem 1.4rem; border-radius: 40px;">-</span>
+                                    </div>
+                                    <div class="fs-1 fw-bold mt-2" id="trendValue" style="color: white;">-</div>
+                                    <small class="fw-bold fs-6" id="trendDesc" style="color: var(--text-dim);">-</small>
+                                </div>
+                                <div class="indicator-card neutral">
+                                    <div class="d-flex justify-content-between align-items-center">
+                                        <span class="fw-bold fs-5"><i class="fas fa-bolt"></i> Volatilite</span>
+                                        <span class="badge fs-6" id="volatilitySignal"
+                                              style="background: var(--accent-orange); padding: 0.6rem 1.4rem; border-radius: 40px;">-</span>
+                                    </div>
+                                    <div class="fs-1 fw-bold mt-2" id="volatilityValue" style="color: white;">-</div>
+                                    <small class="fw-bold fs-6" id="volatilityDesc" style="color: var(--text-dim);">-</small>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- ========== SAĞ KOLON ========== -->
+        <div class="col-lg-4">
+
+            <!-- AI TRADING ASİSTANI -->
+            <div class="card mb-4">
+                <div class="card-header">
+                    <i class="fas fa-comments"></i>
+                    🤖 AI TRADING ASİSTANI
+                </div>
+                <div class="card-body">
+                    <div class="chat-container" id="chatMessages">
+                        <div class="chat-message chat-bot">
+                            <div style="display: flex; align-items: center; gap: 18px; margin-bottom: 15px;">
+                                <div style="background: linear-gradient(135deg, var(--accent-purple), var(--accent-cyan));
+                                            width: 65px; height: 65px; border-radius: 50%; display: flex; align-items: center;
+                                            justify-content: center; box-shadow: var(--neon-cyan);">
+                                    <i class="fas fa-robot" style="font-size: 32px; color: white;"></i>
+                                </div>
+                                <div>
+                                    <strong style="font-size: 1.5rem; color: var(--accent-cyan); text-shadow: 0 0 25px var(--accent-cyan);">
+                                        AI ASİSTAN
+                                    </strong>
+                                    <div style="color: var(--text-dim); font-size: 0.95rem;">
+                                        <i class="fas fa-database"></i> 30+ Kaynak
+                                    </div>
+                                </div>
+                            </div>
+                            <div style="font-size: 1.1rem; font-weight: 500; color: white; line-height: 1.7;">
+                                ⚡ GERÇEK ZAMANLI ANALİZ
+                            </div>
+                        </div>
+                    </div>
+                    <div class="mt-4">
+                        <button class="btn btn-evaluate w-100" onclick="evaluateAI()">
+                            <i class="fas fa-brain"></i>
+                            🚀 FİYATI AI İLE DEĞERLENDİR
+                        </button>
+                    </div>
+                </div>
+            </div>
+
+            <!-- ML MODELLERİ -->
+            <div class="card mb-4">
+                <div class="card-header">
+                    <i class="fas fa-brain"></i>
+                    🧠 MAKİNE ÖĞRENMESİ
+                </div>
+                <div class="card-body">
+                    <div class="mb-4">
+                        <div class="d-flex justify-content-between align-items-center">
+                            <span class="fw-bold fs-5" style="color: var(--accent-blue);">
+                                <i class="fas fa-network-wired"></i> LSTM
+                            </span>
+                            <span class="fw-bold fs-3" style="color: var(--accent-blue);" id="lstmAcc">0%</span>
+                        </div>
+                        <div class="model-bar">
+                            <div class="model-fill model-lstm" id="lstmBar" style="width: 0%;"></div>
+                        </div>
+                    </div>
+                    <div class="mb-4">
+                        <div class="d-flex justify-content-between align-items-center">
+                            <span class="fw-bold fs-5" style="color: var(--accent-purple);">
+                                <i class="fas fa-infinity"></i> Transformer
+                            </span>
+                            <span class="fw-bold fs-3" style="color: var(--accent-purple);" id="transformerAcc">0%</span>
+                        </div>
+                        <div class="model-bar">
+                            <div class="model-fill model-transformer" id="transformerBar" style="width: 0%;"></div>
+                        </div>
+                    </div>
+                    <div class="mb-4">
+                        <div class="d-flex justify-content-between align-items-center">
+                            <span class="fw-bold fs-5" style="color: var(--accent-green);">
+                                <i class="fas fa-tree"></i> XGBoost
+                            </span>
+                            <span class="fw-bold fs-3" style="color: var(--accent-green);" id="xgboostAcc">0%</span>
+                        </div>
+                        <div class="model-bar">
+                            <div class="model-fill model-xgboost" id="xgboostBar" style="width: 0%;"></div>
+                        </div>
+                    </div>
+                    <div class="mb-4">
+                        <div class="d-flex justify-content-between align-items-center">
+                            <span class="fw-bold fs-5" style="color: var(--accent-amber);">
+                                <i class="fas fa-bolt"></i> LightGBM
+                            </span>
+                            <span class="fw-bold fs-3" style="color: var(--accent-amber);" id="lightgbmAcc">0%</span>
+                        </div>
+                        <div class="model-bar">
+                            <div class="model-fill model-lightgbm" id="lightgbmBar" style="width: 0%;"></div>
+                        </div>
+                    </div>
+                    <div class="mb-4">
+                        <div class="d-flex justify-content-between align-items-center">
+                            <span class="fw-bold fs-5" style="color: var(--accent-red);">
+                                <i class="fas fa-random"></i> Random Forest
+                            </span>
+                            <span class="fw-bold fs-3" style="color: var(--accent-red);" id="rfAcc">0%</span>
+                        </div>
+                        <div class="model-bar">
+                            <div class="model-fill model-rf" id="rfBar" style="width: 0%;"></div>
+                        </div>
+                    </div>
+                    <div class="mt-4 pt-3 border-top" style="border-color: var(--accent-cyan) !important; border-width: 2px !important;">
+                        <div class="d-flex justify-content-between align-items-center mb-3">
+                            <span class="fs-4 fw-bold" style="color: white;">ENSEMBLE</span>
+                            <span class="fs-2 fw-bold" id="ensembleAcc" style="color: var(--accent-amber); text-shadow: 0 0 25px var(--accent-amber);">0%</span>
+                        </div>
+                        <button class="btn btn-outline-success w-100 mt-2 btn-lg fw-bold" onclick="trainModels()"
+                                style="border: 3px solid var(--accent-green); color: var(--accent-green);
+                                       box-shadow: var(--neon-green); background: rgba(0,255,157,0.05);
+                                       font-size: 1.2rem; padding: 1rem; border-radius: 60px;">
+                            <i class="fas fa-sync-alt"></i>
+                            ⚡ MODELLERİ EĞİT
+                        </button>
+                    </div>
+                </div>
+            </div>
+
+            <!-- FEATURE IMPORTANCE -->
+            <div class="card mb-4">
+                <div class="card-header">
+                    <i class="fas fa-star"></i>
+                    ⭐ TOP FEATURES
+                </div>
+                <div class="card-body">
+                    <div id="featureImportance" style="min-height: 200px;">
+                        <div class="text-center py-4">
+                            <span class="fw-bold fs-5" style="color: var(--accent-cyan);">
+                                <i class="fas fa-info-circle"></i> Analiz sonrası gösterilecek
+                            </span>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- 30+ VERİ KAYNAĞI -->
+            <div class="card">
+                <div class="card-header">
+                    <i class="fas fa-cloud"></i>
+                    ☁️ 30+ VERİ KAYNAĞI
+                    <span class="ms-2" id="exchangeStatusBadge"
+                          style="background: rgba(0,229,255,0.15); padding: 0.6rem 1.4rem; border-radius: 40px; border: 1px solid var(--accent-cyan);">
+                        <i class="fas fa-check-circle" style="color: var(--accent-green);"></i>
+                        <span id="activeSourceCount">0</span>/30 AKTİF
+                    </span>
+                </div>
+                <div class="card-body">
+                    <div class="exchange-grid" id="exchangeGrid"></div>
+                    <div class="mt-4 pt-3 border-top" style="border-color: var(--accent-cyan) !important; border-width: 2px !important;">
+                        <div class="d-flex justify-content-between mb-3">
+                            <span class="fw-bold fs-5" style="color: var(--text-dim);">
+                                <i class="fas fa-sync"></i> SON GÜNCELLEME
+                            </span>
+                            <span id="lastUpdate" class="fw-bold fs-5" style="color: var(--accent-cyan); text-shadow: 0 0 20px var(--accent-cyan);">
+                                -
+                            </span>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- ========== FOOTER - YATIRIM UYARISI ========== -->
+<footer style="background: rgba(10, 14, 23, 0.95);
+               backdrop-filter: blur(25px);
+               border-top: 3px solid var(--accent-cyan);
+               box-shadow: var(--neon-cyan);
+               margin-top: 4rem;
+               padding: 1.5rem 0;
+               border-top-left-radius: 60px;
+               border-top-right-radius: 60px;">
+    <div class="container-fluid">
+        <div class="row">
+            <div class="col-12">
+                <div style="display: flex; flex-direction: column; align-items: center; gap: 10px;
+                            color: var(--text-dim); font-size: 0.9rem; text-align: center;">
+                    <span style="color: var(--accent-amber); font-weight: 700;">
+                        ⚠️ UYARI
+                    </span>
+                    <span>
+                        Bu içerik yatırım tavsiyesi niteliği taşımaz. Lütfen kendi araştırmanızı yaparak karar veriniz.
+                    </span>
+                    <div style="display: flex; gap: 30px; flex-wrap: wrap; justify-content: center; margin-top: 10px;">
+                        <span>© 2024 ICTSMARTPRO - Tüm hakları saklıdır</span>
+                        <span>
+                            <i class="fas fa-database" style="color: var(--accent-green);"></i>
+                            30+ Gerçek Zamanlı Veri Kaynağı
+                        </span>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</footer>
+
+<script>
+// ========================================================================================================
+// ICTSMARTPRO ULTIMATE v10.0 - DÜZELTİLMİŞ VERSİYON
+// ========================================================================================================
+
+// GLOBAL CONFIG - BACKEND URL
+const CONFIG = {
+    backendUrl: 'http://localhost:8000',  // Backend portu
+    refreshInterval: 30000,
+    maxRetries: 3,
+    retryDelay: 2000
+};
+
+// GLOBAL STATE
+let currentData = null;
+let autoRefreshTimer = null;
+let tvWidget = null;
+let tvLoadAttempts = 0;
+const MAX_TV_ATTEMPTS = 3;
+
+// ========================================================================================================
+// 30+ VERİ KAYNAĞI LİSTESİ
+// ========================================================================================================
+const dataSources = [
+    // Kripto Borsaları (15)
+    { name: 'Binance', icon: 'fa-bitcoin', color: 'text-warning', type: 'crypto' },
+    { name: 'Bybit', icon: 'fa-coins', color: 'text-info', type: 'crypto' },
+    { name: 'OKX', icon: 'fa-chart-bar', color: 'text-primary', type: 'crypto' },
+    { name: 'KuCoin', icon: 'fa-database', color: 'text-success', type: 'crypto' },
+    { name: 'Gate.io', icon: 'fa-gem', color: 'text-danger', type: 'crypto' },
+    { name: 'MEXC', icon: 'fa-rocket', color: 'text-purple', type: 'crypto' },
+    { name: 'Kraken', icon: 'fa-exchange-alt', color: 'text-secondary', type: 'crypto' },
+    { name: 'Bitfinex', icon: 'fa-fire', color: 'text-orange', type: 'crypto' },
+    { name: 'Huobi', icon: 'fa-burn', color: 'text-cyan', type: 'crypto' },
+    { name: 'Coinbase', icon: 'fa-shopping-cart', color: 'text-blue', type: 'crypto' },
+    { name: 'Bitget', icon: 'fa-bolt', color: 'text-teal', type: 'crypto' },
+    { name: 'BinanceUS', icon: 'fa-dollar-sign', color: 'text-primary', type: 'crypto' },
+    { name: 'Crypto.com', icon: 'fa-crown', color: 'text-warning', type: 'crypto' },
+    { name: 'LBank', icon: 'fa-chart-line', color: 'text-info', type: 'crypto' },
+    { name: 'WhiteBIT', icon: 'fa-flag', color: 'text-success', type: 'crypto' },
     
-    def get_source_stats(self) -> Dict[str, Any]:
-        """Kaynak istatistiklerini döndür"""
-        stats = {}
-        for source, health in self.source_health.items():
-            total = health["success"] + health["failure"]
-            success_rate = (health["success"] / total * 100) if total > 0 else 0
-            stats[source] = {
-                "success_rate": round(success_rate, 2),
-                "total_requests": total,
-                "available": health["available"],
-                "last_success": health["last_success"],
-                "last_failure": health["last_failure"]
+    // Yahoo Finance (Borsa, Forex, Endeks)
+    { name: 'Yahoo Finance', icon: 'fa-yahoo', color: 'text-purple', type: 'yahoo' },
+    { name: 'Yahoo BIST', icon: 'fa-chart-simple', color: 'text-purple', type: 'yahoo' },
+    { name: 'Yahoo Forex', icon: 'fa-dollar-sign', color: 'text-purple', type: 'yahoo' },
+    { name: 'Yahoo Indices', icon: 'fa-chart-line', color: 'text-purple', type: 'yahoo' },
+    { name: 'Yahoo Crypto', icon: 'fa-bitcoin', color: 'text-purple', type: 'yahoo' },
+    { name: 'Yahoo ETFs', icon: 'fa-boxes', color: 'text-purple', type: 'yahoo' },
+    { name: 'Yahoo Futures', icon: 'fa-clock', color: 'text-purple', type: 'yahoo' },
+    { name: 'Yahoo Options', icon: 'fa-code-branch', color: 'text-purple', type: 'yahoo' },
+    
+    // CoinGecko (Kripto)
+    { name: 'CoinGecko', icon: 'fa-lizard', color: 'text-green', type: 'coingecko' },
+    { name: 'CG Binance', icon: 'fa-bitcoin', color: 'text-green', type: 'coingecko' },
+    { name: 'CG Coinbase', icon: 'fa-coins', color: 'text-green', type: 'coingecko' },
+    { name: 'CG Kraken', icon: 'fa-fish', color: 'text-green', type: 'coingecko' },
+    { name: 'CG Bybit', icon: 'fa-bolt', color: 'text-green', type: 'coingecko' },
+    { name: 'CG OKX', icon: 'fa-chart-pie', color: 'text-green', type: 'coingecko' },
+    { name: 'CG KuCoin', icon: 'fa-cube', color: 'text-green', type: 'coingecko' },
+    { name: 'CG Gate', icon: 'fa-gate', color: 'text-green', type: 'coingecko' },
+    { name: 'CG MEXC', icon: 'fa-m', color: 'text-green', type: 'coingecko' },
+    { name: 'CG Bitget', icon: 'fa-b', color: 'text-green', type: 'coingecko' }
+];
+
+// INTERVAL MAPPING
+const INTERVAL_MAP = {
+    '1m': '1', '5m': '5', '15m': '15', '30m': '30',
+    '1h': '60', '4h': '240', '1d': 'D', '1w': 'W'
+};
+
+// ========================================================================================================
+// YARDIMCI FONKSİYONLAR
+// ========================================================================================================
+function formatNumber(num, decimals = 2) {
+    if (num === undefined || num === null || isNaN(num)) return '-';
+    return Number(num).toLocaleString('en-US', { 
+        minimumFractionDigits: decimals, 
+        maximumFractionDigits: decimals 
+    });
+}
+
+function formatVolume(volume) {
+    if (!volume || volume <= 0) return '-';
+    if (volume > 1e9) return `$${(volume/1e9).toFixed(2)}B`;
+    if (volume > 1e6) return `$${(volume/1e6).toFixed(2)}M`;
+    if (volume > 1e3) return `$${(volume/1e3).toFixed(2)}K`;
+    return `$${volume.toFixed(0)}`;
+}
+
+function showNotification(text, type = 'info') {
+    const div = document.createElement('div');
+    div.className = `notification ${type}`;
+    const icon = type === 'success' ? 'check-circle' : type === 'error' ? 'exclamation-triangle' : 'info-circle';
+    div.innerHTML = `<i class="fas fa-${icon} me-3"></i> ${text}`;
+    document.body.appendChild(div);
+    setTimeout(() => div.remove(), 3000);
+}
+
+// ========================================================================================================
+// ZİYARETÇİ SAYACI
+// ========================================================================================================
+async function updateVisitorCount() {
+    try {
+        const response = await fetch(`${CONFIG.backendUrl}/api/visitors`);
+        if (response.ok) {
+            const data = await response.json();
+            if (data.success && typeof data.count === 'number') {
+                document.getElementById('visitorCount').textContent = data.count.toLocaleString('tr-TR');
+                return;
             }
-        return stats
-
-# ============================================================
-# FEATURE ENGINEERING
-# ============================================================
-class FeatureEngineer:
-    """30+ advanced features"""
-    
-    @staticmethod
-    def create_features(df: pd.DataFrame) -> pd.DataFrame:
-        """Create all technical features"""
-        try:
-            if len(df) < 30:
-                return pd.DataFrame()
-            
-            df = df.copy()
-            
-            # ====================================================
-            # BASIC PRICE FEATURES
-            # ====================================================
-            df['returns'] = df['close'].pct_change().fillna(0)
-            df['log_returns'] = np.log(df['close'] / df['close'].shift(1)).fillna(0)
-            df['high_low_ratio'] = (df['high'] - df['low']) / df['close']
-            df['close_open_ratio'] = (df['close'] - df['open']) / df['open'].replace(0, 1)
-            
-            # ====================================================
-            # MOVING AVERAGES
-            # ====================================================
-            for period in [5, 9, 13, 20, 21, 50, 200]:
-                df[f'sma_{period}'] = df['close'].rolling(period, min_periods=1).mean()
-                df[f'ema_{period}'] = df['close'].ewm(span=period, adjust=False).mean()
-                df[f'close_sma_{period}_ratio'] = df['close'] / df[f'sma_{period}'].replace(0, 1)
-                df[f'volume_sma_{period}'] = df['volume'].rolling(period, min_periods=1).mean()
-            
-            # ====================================================
-            # RSI
-            # ====================================================
-            delta = df['close'].diff()
-            gain = (delta.where(delta > 0, 0)).rolling(window=14, min_periods=1).mean()
-            loss = (-delta.where(delta < 0, 0)).rolling(window=14, min_periods=1).mean()
-            rs = gain / loss.replace(0, np.nan)
-            df['rsi'] = 100 - (100 / (1 + rs))
-            df['rsi_ma'] = df['rsi'].rolling(5, min_periods=1).mean()
-            df['rsi_high'] = df['rsi'].rolling(14, min_periods=1).max()
-            df['rsi_low'] = df['rsi'].rolling(14, min_periods=1).min()
-            
-            # ====================================================
-            # MACD
-            # ====================================================
-            exp1 = df['close'].ewm(span=12, adjust=False).mean()
-            exp2 = df['close'].ewm(span=26, adjust=False).mean()
-            df['macd'] = exp1 - exp2
-            df['macd_signal'] = df['macd'].ewm(span=9, adjust=False).mean()
-            df['macd_hist'] = df['macd'] - df['macd_signal']
-            df['macd_hist_ma'] = df['macd_hist'].rolling(5, min_periods=1).mean()
-            
-            # ====================================================
-            # BOLLINGER BANDS
-            # ====================================================
-            bb_period = 20
-            bb_std = 2
-            df['bb_middle'] = df['close'].rolling(bb_period, min_periods=1).mean()
-            bb_std_dev = df['close'].rolling(bb_period, min_periods=1).std()
-            df['bb_upper'] = df['bb_middle'] + (bb_std_dev * bb_std)
-            df['bb_lower'] = df['bb_middle'] - (bb_std_dev * bb_std)
-            df['bb_width'] = (df['bb_upper'] - df['bb_lower']) / df['bb_middle'].replace(0, 1)
-            df['bb_position'] = (df['close'] - df['bb_lower']) / (df['bb_upper'] - df['bb_lower']).replace(0, 1)
-            df['bb_percent'] = (df['close'] - df['bb_lower']) / (2 * bb_std_dev).replace(0, 1)
-            
-            # ====================================================
-            # VOLUME INDICATORS
-            # ====================================================
-            df['volume_ratio'] = df['volume'] / df['volume_sma_20'].replace(0, 1)
-            df['volume_change'] = df['volume'].pct_change().fillna(0)
-            df['obv'] = (np.sign(df['returns']) * df['volume']).cumsum()
-            df['obv_ma'] = df['obv'].rolling(20, min_periods=1).mean()
-            df['vpt'] = (df['volume'] * ((df['close'] - df['close'].shift(1)) / df['close'].shift(1).replace(0, 1))).cumsum()
-            
-            # ====================================================
-            # MOMENTUM
-            # ====================================================
-            for period in [5, 10, 20]:
-                df[f'momentum_{period}'] = df['close'].pct_change(period).fillna(0)
-                df[f'rate_of_change_{period}'] = (df['close'] - df['close'].shift(period)) / df['close'].shift(period).replace(0, 1)
-            
-            # Stochastic
-            low_14 = df['low'].rolling(14, min_periods=1).min()
-            high_14 = df['high'].rolling(14, min_periods=1).max()
-            df['stoch_k'] = 100 * ((df['close'] - low_14) / (high_14 - low_14).replace(0, 1))
-            df['stoch_d'] = df['stoch_k'].rolling(3, min_periods=1).mean()
-            
-            # Williams %R
-            df['williams_r'] = -100 * ((high_14 - df['close']) / (high_14 - low_14).replace(0, 1))
-            
-            # ====================================================
-            # VOLATILITY
-            # ====================================================
-            df['atr'] = FeatureEngineer._calculate_atr(df)
-            df['atr_percent'] = df['atr'] / df['close']
-            df['volatility_10'] = df['returns'].rolling(10, min_periods=1).std() * np.sqrt(365)
-            df['volatility_30'] = df['returns'].rolling(30, min_periods=1).std() * np.sqrt(365)
-            
-            # ====================================================
-            # TREND INDICATORS
-            # ====================================================
-            df['adx'] = FeatureEngineer._calculate_adx(df)
-            df['psar'] = FeatureEngineer._calculate_psar(df)
-            
-            # Ichimoku
-            df['ichimoku_tenkan'] = (df['high'].rolling(9, min_periods=1).max() + df['low'].rolling(9, min_periods=1).min()) / 2
-            df['ichimoku_kijun'] = (df['high'].rolling(26, min_periods=1).max() + df['low'].rolling(26, min_periods=1).min()) / 2
-            df['ichimoku_senkou_a'] = ((df['ichimoku_tenkan'] + df['ichimoku_kijun']) / 2).shift(26)
-            df['ichimoku_senkou_b'] = ((df['high'].rolling(52, min_periods=1).max() + df['low'].rolling(52, min_periods=1).min()) / 2).shift(26)
-            
-            # ====================================================
-            # OSCILLATORS
-            # ====================================================
-            tp = (df['high'] + df['low'] + df['close']) / 3
-            df['cci'] = (tp - tp.rolling(20, min_periods=1).mean()) / (0.015 * tp.rolling(20, min_periods=1).std())
-            
-            # MFI
-            typical_price = (df['high'] + df['low'] + df['close']) / 3
-            money_flow = typical_price * df['volume']
-            positive_flow = money_flow.where(typical_price > typical_price.shift(1), 0).rolling(14, min_periods=1).sum()
-            negative_flow = money_flow.where(typical_price < typical_price.shift(1), 0).rolling(14, min_periods=1).sum()
-            df['mfi'] = 100 - (100 / (1 + positive_flow / negative_flow.replace(0, 1)))
-            
-            # ====================================================
-            # STATISTICAL
-            # ====================================================
-            df['zscore_20'] = (df['close'] - df['close'].rolling(20, min_periods=1).mean()) / df['close'].rolling(20, min_periods=1).std()
-            df['skew_20'] = df['returns'].rolling(20, min_periods=1).skew()
-            df['kurt_20'] = df['returns'].rolling(20, min_periods=1).kurt()
-            
-            # ====================================================
-            # TARGET VARIABLES
-            # ====================================================
-            df['target_5'] = (df['close'].shift(-5) > df['close']).astype(int)
-            df['target_10'] = (df['close'].shift(-10) > df['close']).astype(int)
-            df['target_20'] = (df['close'].shift(-20) > df['close']).astype(int)
-            
-            # Clean
-            df = df.replace([np.inf, -np.inf], np.nan)
-            df = df.fillna(method='bfill').fillna(method='ffill').fillna(0)
-            
-            return df
-            
-        except Exception as e:
-            logger.error(f"Feature engineering error: {str(e)}")
-            return pd.DataFrame()
-    
-    @staticmethod
-    def _calculate_atr(df: pd.DataFrame, period: int = 14) -> pd.Series:
-        """Average True Range"""
-        high, low, close = df['high'], df['low'], df['close']
-        tr1 = high - low
-        tr2 = abs(high - close.shift(1))
-        tr3 = abs(low - close.shift(1))
-        tr = pd.concat([tr1, tr2, tr3], axis=1).max(axis=1)
-        return tr.rolling(period, min_periods=1).mean()
-    
-    @staticmethod
-    def _calculate_adx(df: pd.DataFrame, period: int = 14) -> pd.Series:
-        """Average Directional Index"""
-        high, low, close = df['high'], df['low'], df['close']
-        
-        tr1 = high - low
-        tr2 = abs(high - close.shift(1))
-        tr3 = abs(low - close.shift(1))
-        tr = pd.concat([tr1, tr2, tr3], axis=1).max(axis=1)
-        
-        up_move = high - high.shift(1)
-        down_move = low.shift(1) - low
-        
-        plus_dm = np.where((up_move > down_move) & (up_move > 0), up_move, 0)
-        minus_dm = np.where((down_move > up_move) & (down_move > 0), down_move, 0)
-        
-        atr = tr.rolling(period, min_periods=1).mean()
-        plus_di = 100 * (pd.Series(plus_dm).rolling(period, min_periods=1).mean() / atr.replace(0, 1))
-        minus_di = 100 * (pd.Series(minus_dm).rolling(period, min_periods=1).mean() / atr.replace(0, 1))
-        
-        dx = 100 * abs(plus_di - minus_di) / (plus_di + minus_di).replace(0, 1)
-        adx = dx.rolling(period, min_periods=1).mean()
-        
-        return adx.fillna(0)
-    
-    @staticmethod
-    def _calculate_psar(df: pd.DataFrame, acceleration: float = 0.02, maximum: float = 0.2) -> pd.Series:
-        """Parabolic SAR"""
-        high, low, close = df['high'], df['low'], df['close']
-        
-        psar = close.copy()
-        bull = True
-        af = acceleration
-        ep = low.iloc[0]
-        hp = high.iloc[0]
-        lp = low.iloc[0]
-        
-        for i in range(2, len(df)):
-            if bull:
-                psar.iloc[i] = psar.iloc[i-1] + af * (hp - psar.iloc[i-1])
-            else:
-                psar.iloc[i] = psar.iloc[i-1] + af * (lp - psar.iloc[i-1])
-            
-            if bull:
-                if low.iloc[i] < psar.iloc[i]:
-                    bull = False
-                    psar.iloc[i] = hp
-                    lp = low.iloc[i]
-                    af = acceleration
-            else:
-                if high.iloc[i] > psar.iloc[i]:
-                    bull = True
-                    psar.iloc[i] = lp
-                    hp = high.iloc[i]
-                    af = acceleration
-            
-            if bull:
-                if high.iloc[i] > hp:
-                    hp = high.iloc[i]
-                    af = min(af + acceleration, maximum)
-            else:
-                if low.iloc[i] < lp:
-                    lp = low.iloc[i]
-                    af = min(af + acceleration, maximum)
-        
-        return psar
-
-# ============================================================
-# LSTM MODEL
-# ============================================================
-class LSTMModel:
-    """Deep Learning LSTM Model"""
-    
-    def __init__(self, input_shape: Tuple[int, int], symbol: str):
-        self.input_shape = input_shape
-        self.symbol = symbol
-        self.model = None
-        self.scaler_X = RobustScaler()
-        self.history = None
-        self.feature_importance = {}
-        
-    def build_model(self):
-        """Build LSTM architecture"""
-        model = Sequential([
-            LSTM(128, return_sequences=True, input_shape=self.input_shape),
-            Dropout(0.3),
-            LayerNormalization(),
-            
-            LSTM(64, return_sequences=True),
-            Dropout(0.2),
-            LayerNormalization(),
-            
-            LSTM(32, return_sequences=False),
-            Dropout(0.2),
-            
-            Dense(32, activation='relu'),
-            Dropout(0.1),
-            Dense(16, activation='relu'),
-            Dense(1, activation='sigmoid')
-        ])
-        
-        model.compile(
-            optimizer=Adam(learning_rate=0.001),
-            loss='binary_crossentropy',
-            metrics=['accuracy', AUC(name='auc'), Precision(name='precision'), Recall(name='recall')]
-        )
-        
-        self.model = model
-        logger.info(f"✅ LSTM model built for {self.symbol}")
-        return model
-    
-    def prepare_data(self, df: pd.DataFrame):
-        """Prepare data for LSTM"""
-        feature_cols = [col for col in df.columns if col not in ['target_5', 'target_10', 'target_20']]
-        
-        X_raw = df[feature_cols].values
-        X_scaled = self.scaler_X.fit_transform(X_raw)
-        
-        X, y = [], []
-        for i in range(len(X_scaled) - Config.ML_SEQUENCE_LENGTH):
-            X.append(X_scaled[i:i + Config.ML_SEQUENCE_LENGTH])
-            y.append(df['target_5'].iloc[i + Config.ML_SEQUENCE_LENGTH])
-        
-        X = np.array(X)
-        y = np.array(y)
-        
-        # Time series split
-        train_size = int(len(X) * Config.ML_TRAIN_SPLIT)
-        val_size = int(len(X) * Config.ML_VALIDATION_SPLIT)
-        
-        X_train = X[:train_size]
-        y_train = y[:train_size]
-        X_val = X[train_size:train_size + val_size]
-        y_val = y[train_size:train_size + val_size]
-        X_test = X[train_size + val_size:]
-        y_test = y[train_size + val_size:]
-        
-        return X_train, y_train, X_val, y_val, X_test, y_test, feature_cols
-    
-    def train(self, df: pd.DataFrame):
-        """Train model"""
-        try:
-            X_train, y_train, X_val, y_val, X_test, y_test, features = self.prepare_data(df)
-            
-            if len(X_train) < 100:
-                logger.warning(f"Insufficient data: {len(X_train)}")
-                return False
-            
-            if self.model is None:
-                self.build_model()
-            
-            callbacks = [
-                EarlyStopping(
-                    monitor='val_loss',
-                    patience=Config.ML_EARLY_STOPPING_PATIENCE,
-                    restore_best_weights=True,
-                    verbose=1
-                ),
-                ReduceLROnPlateau(
-                    monitor='val_loss',
-                    factor=0.5,
-                    patience=Config.ML_REDUCE_LR_PATIENCE,
-                    min_lr=0.00001,
-                    verbose=1
-                ),
-                ModelCheckpoint(
-                    filepath=f"{Config.MODEL_DIR}/lstm_{self.symbol}.h5",
-                    monitor='val_loss',
-                    save_best_only=True,
-                    verbose=0
-                )
-            ]
-            
-            self.history = self.model.fit(
-                X_train, y_train,
-                validation_data=(X_val, y_val),
-                epochs=Config.ML_EPOCHS,
-                batch_size=Config.ML_BATCH_SIZE,
-                callbacks=callbacks,
-                verbose=1 if Config.DEBUG else 0
-            )
-            
-            test_results = self.model.evaluate(X_test, y_test, verbose=0)
-            test_loss, test_acc, test_auc, test_precision, test_recall = test_results
-            
-            logger.info(f"✅ LSTM trained for {self.symbol}")
-            logger.info(f"   Test Accuracy: {test_acc:.4f}")
-            logger.info(f"   Test AUC: {test_auc:.4f}")
-            
-            return True
-            
-        except Exception as e:
-            logger.error(f"LSTM training error: {str(e)}")
-            return False
-    
-    def predict(self, df: pd.DataFrame) -> MLPrediction:
-        """Make prediction"""
-        try:
-            feature_cols = [col for col in df.columns if col not in ['target_5', 'target_10', 'target_20']]
-            
-            X_raw = df[feature_cols].values[-Config.ML_SEQUENCE_LENGTH:]
-            X_scaled = self.scaler_X.transform(X_raw)
-            X = X_scaled.reshape(1, Config.ML_SEQUENCE_LENGTH, -1)
-            
-            prob = float(self.model.predict(X, verbose=0)[0][0])
-            
-            confidence = prob if prob > 0.5 else (1 - prob)
-            confidence = min(confidence, 0.72)
-            confidence = max(confidence, 0.52)
-            
-            prediction = "BUY" if prob > 0.5 else "SELL"
-            
-            return MLPrediction(
-                prediction=prediction,
-                confidence=confidence,
-                probabilities={"buy": float(prob), "sell": float(1 - prob)},
-                model_used=ModelType.LSTM,
-                feature_importance=self.feature_importance,
-                metadata={"sequence_length": Config.ML_SEQUENCE_LENGTH}
-            )
-            
-        except Exception as e:
-            logger.error(f"LSTM prediction error: {e}")
-            return MLPrediction(
-                prediction="NEUTRAL",
-                confidence=0.5,
-                probabilities={"buy": 0.5, "sell": 0.5},
-                model_used=ModelType.LSTM,
-                metadata={"error": str(e)}
-            )
-    
-    def save(self):
-        """Save model"""
-        path = f"{Config.MODEL_DIR}/lstm_{self.symbol}"
-        self.model.save(f"{path}.h5")
-        joblib.dump(self.scaler_X, f"{path}_scaler_X.pkl")
-        logger.info(f"💾 LSTM model saved: {path}")
-    
-    def load(self):
-        """Load model"""
-        try:
-            path = f"{Config.MODEL_DIR}/lstm_{self.symbol}"
-            self.model = load_model(f"{path}.h5")
-            self.scaler_X = joblib.load(f"{path}_scaler_X.pkl")
-            logger.info(f"📂 LSTM model loaded: {path}")
-            return True
-        except Exception as e:
-            logger.error(f"LSTM load error: {e}")
-            return False
-
-# ============================================================
-# TRANSFORMER MODEL
-# ============================================================
-class TransformerModel:
-    """Transformer with Multi-Head Attention"""
-    
-    def __init__(self, input_shape: Tuple[int, int], symbol: str):
-        self.input_shape = input_shape
-        self.symbol = symbol
-        self.model = None
-        self.scaler_X = RobustScaler()
-        self.history = None
-        self.feature_importance = {}
-        
-    def build_model(self):
-        """Build Transformer architecture"""
-        sequence_length, n_features = self.input_shape
-        
-        inputs = Input(shape=(sequence_length, n_features))
-        
-        x = Dense(128)(inputs)
-        
-        attention_output = MultiHeadAttention(num_heads=8, key_dim=64)(x, x)
-        x = Add()([x, attention_output])
-        x = LayerNormalization(epsilon=1e-6)(x)
-        
-        ff = Dense(256, activation='relu')(x)
-        ff = Dropout(0.2)(ff)
-        ff = Dense(128)(ff)
-        
-        x = Add()([x, ff])
-        x = LayerNormalization(epsilon=1e-6)(x)
-        
-        x = GlobalAveragePooling1D()(x)
-        
-        x = Dense(64, activation='relu')(x)
-        x = Dropout(0.2)(x)
-        x = Dense(32, activation='relu')(x)
-        x = Dropout(0.1)(x)
-        
-        outputs = Dense(1, activation='sigmoid')(x)
-        
-        model = Model(inputs=inputs, outputs=outputs)
-        
-        model.compile(
-            optimizer=Adam(learning_rate=0.0005),
-            loss='binary_crossentropy',
-            metrics=['accuracy', AUC(name='auc'), Precision(name='precision'), Recall(name='recall')]
-        )
-        
-        self.model = model
-        logger.info(f"✅ Transformer model built for {self.symbol}")
-        return model
-    
-    def prepare_data(self, df: pd.DataFrame):
-        """Prepare data"""
-        feature_cols = [col for col in df.columns if col not in ['target_5', 'target_10', 'target_20']]
-        
-        X_raw = df[feature_cols].values
-        X_scaled = self.scaler_X.fit_transform(X_raw)
-        
-        X, y = [], []
-        for i in range(len(X_scaled) - Config.ML_SEQUENCE_LENGTH):
-            X.append(X_scaled[i:i + Config.ML_SEQUENCE_LENGTH])
-            y.append(df['target_5'].iloc[i + Config.ML_SEQUENCE_LENGTH])
-        
-        X = np.array(X)
-        y = np.array(y)
-        
-        train_size = int(len(X) * Config.ML_TRAIN_SPLIT)
-        val_size = int(len(X) * Config.ML_VALIDATION_SPLIT)
-        
-        X_train = X[:train_size]
-        y_train = y[:train_size]
-        X_val = X[train_size:train_size + val_size]
-        y_val = y[train_size:train_size + val_size]
-        X_test = X[train_size + val_size:]
-        y_test = y[train_size + val_size:]
-        
-        return X_train, y_train, X_val, y_val, X_test, y_test, feature_cols
-    
-    def train(self, df: pd.DataFrame):
-        """Train model"""
-        try:
-            X_train, y_train, X_val, y_val, X_test, y_test, features = self.prepare_data(df)
-            
-            if len(X_train) < 100:
-                logger.warning(f"Insufficient data: {len(X_train)}")
-                return False
-            
-            if self.model is None:
-                self.build_model()
-            
-            callbacks = [
-                EarlyStopping(
-                    monitor='val_loss',
-                    patience=Config.ML_EARLY_STOPPING_PATIENCE,
-                    restore_best_weights=True,
-                    verbose=1
-                ),
-                ReduceLROnPlateau(
-                    monitor='val_loss',
-                    factor=0.5,
-                    patience=Config.ML_REDUCE_LR_PATIENCE,
-                    min_lr=0.00001,
-                    verbose=1
-                ),
-                ModelCheckpoint(
-                    filepath=f"{Config.MODEL_DIR}/transformer_{self.symbol}.h5",
-                    monitor='val_loss',
-                    save_best_only=True,
-                    verbose=0
-                )
-            ]
-            
-            self.history = self.model.fit(
-                X_train, y_train,
-                validation_data=(X_val, y_val),
-                epochs=Config.ML_EPOCHS,
-                batch_size=Config.ML_BATCH_SIZE,
-                callbacks=callbacks,
-                verbose=1 if Config.DEBUG else 0
-            )
-            
-            test_results = self.model.evaluate(X_test, y_test, verbose=0)
-            test_loss, test_acc, test_auc, test_precision, test_recall = test_results
-            
-            logger.info(f"✅ Transformer trained for {self.symbol}")
-            logger.info(f"   Test Accuracy: {test_acc:.4f}")
-            logger.info(f"   Test AUC: {test_auc:.4f}")
-            
-            return True
-            
-        except Exception as e:
-            logger.error(f"Transformer training error: {str(e)}")
-            return False
-    
-    def predict(self, df: pd.DataFrame) -> MLPrediction:
-        """Make prediction"""
-        try:
-            feature_cols = [col for col in df.columns if col not in ['target_5', 'target_10', 'target_20']]
-            
-            X_raw = df[feature_cols].values[-Config.ML_SEQUENCE_LENGTH:]
-            X_scaled = self.scaler_X.transform(X_raw)
-            X = X_scaled.reshape(1, Config.ML_SEQUENCE_LENGTH, -1)
-            
-            prob = float(self.model.predict(X, verbose=0)[0][0])
-            
-            confidence = prob if prob > 0.5 else (1 - prob)
-            confidence = min(confidence, 0.72)
-            confidence = max(confidence, 0.52)
-            
-            prediction = "BUY" if prob > 0.5 else "SELL"
-            
-            return MLPrediction(
-                prediction=prediction,
-                confidence=confidence,
-                probabilities={"buy": float(prob), "sell": float(1 - prob)},
-                model_used=ModelType.TRANSFORMER,
-                feature_importance=self.feature_importance
-            )
-            
-        except Exception as e:
-            logger.error(f"Transformer prediction error: {e}")
-            return MLPrediction(
-                prediction="NEUTRAL",
-                confidence=0.5,
-                probabilities={"buy": 0.5, "sell": 0.5},
-                model_used=ModelType.TRANSFORMER
-            )
-    
-    def save(self):
-        """Save model"""
-        path = f"{Config.MODEL_DIR}/transformer_{self.symbol}"
-        self.model.save(f"{path}.h5")
-        joblib.dump(self.scaler_X, f"{path}_scaler_X.pkl")
-        logger.info(f"💾 Transformer model saved: {path}")
-    
-    def load(self):
-        """Load model"""
-        try:
-            path = f"{Config.MODEL_DIR}/transformer_{self.symbol}"
-            self.model = load_model(f"{path}.h5")
-            self.scaler_X = joblib.load(f"{path}_scaler_X.pkl")
-            logger.info(f"📂 Transformer model loaded: {path}")
-            return True
-        except Exception as e:
-            logger.error(f"Transformer load error: {e}")
-            return False
-
-# ============================================================
-# XGBOOST MODEL
-# ============================================================
-class XGBoostModel:
-    """XGBoost Gradient Boosting"""
-    
-    def __init__(self, symbol: str):
-        self.symbol = symbol
-        self.model = None
-        self.scaler = RobustScaler()
-        self.feature_names = []
-        self.feature_importance = {}
-        
-    def prepare_data(self, df: pd.DataFrame):
-        """Prepare data"""
-        feature_cols = [col for col in df.columns if col not in ['target_5', 'target_10', 'target_20']]
-        self.feature_names = feature_cols
-        
-        X = df[feature_cols].values
-        y = df['target_5'].values
-        
-        mask = ~np.isnan(y)
-        X = X[mask]
-        y = y[mask]
-        
-        X_scaled = self.scaler.fit_transform(X)
-        
-        train_size = int(len(X) * Config.ML_TRAIN_SPLIT)
-        val_size = int(len(X) * Config.ML_VALIDATION_SPLIT)
-        
-        X_train = X_scaled[:train_size]
-        y_train = y[:train_size]
-        X_val = X_scaled[train_size:train_size + val_size]
-        y_val = y[train_size:train_size + val_size]
-        X_test = X_scaled[train_size + val_size:]
-        y_test = y[train_size + val_size:]
-        
-        return X_train, y_train, X_val, y_val, X_test, y_test
-    
-    def train(self, df: pd.DataFrame):
-        """Train model"""
-        try:
-            X_train, y_train, X_val, y_val, X_test, y_test = self.prepare_data(df)
-            
-            if len(X_train) < 100:
-                logger.warning(f"Insufficient data: {len(X_train)}")
-                return False
-            
-            self.model = xgb.XGBClassifier(
-                n_estimators=200,
-                max_depth=7,
-                learning_rate=0.05,
-                subsample=0.8,
-                colsample_bytree=0.8,
-                reg_alpha=0.1,
-                reg_lambda=0.1,
-                random_state=42,
-                n_jobs=-1,
-                eval_metric='logloss',
-                early_stopping_rounds=20,
-                use_label_encoder=False
-            )
-            
-            self.model.fit(
-                X_train, y_train,
-                eval_set=[(X_val, y_val)],
-                verbose=False
-            )
-            
-            y_pred = self.model.predict(X_test)
-            accuracy = accuracy_score(y_test, y_pred)
-            
-            importance_dict = dict(zip(self.feature_names, self.model.feature_importances_))
-            self.feature_importance = dict(sorted(importance_dict.items(), key=lambda x: x[1], reverse=True)[:20])
-            
-            logger.info(f"✅ XGBoost trained for {self.symbol}")
-            logger.info(f"   Test Accuracy: {accuracy:.4f}")
-            
-            return True
-            
-        except Exception as e:
-            logger.error(f"XGBoost training error: {str(e)}")
-            return False
-    
-    def predict(self, df: pd.DataFrame) -> MLPrediction:
-        """Make prediction"""
-        try:
-            X = df[self.feature_names].values[-1:].reshape(1, -1)
-            X_scaled = self.scaler.transform(X)
-            
-            prob = float(self.model.predict_proba(X_scaled)[0][1])
-            
-            confidence = prob if prob > 0.5 else (1 - prob)
-            confidence = min(confidence, 0.72)
-            confidence = max(confidence, 0.52)
-            
-            prediction = "BUY" if prob > 0.5 else "SELL"
-            
-            return MLPrediction(
-                prediction=prediction,
-                confidence=confidence,
-                probabilities={"buy": float(prob), "sell": float(1 - prob)},
-                model_used=ModelType.XGBOOST,
-                feature_importance=self.feature_importance
-            )
-            
-        except Exception as e:
-            logger.error(f"XGBoost prediction error: {e}")
-            return MLPrediction(
-                prediction="NEUTRAL",
-                confidence=0.5,
-                probabilities={"buy": 0.5, "sell": 0.5},
-                model_used=ModelType.XGBOOST
-            )
-    
-    def save(self):
-        """Save model"""
-        path = f"{Config.MODEL_DIR}/xgboost_{self.symbol}.pkl"
-        joblib.dump({
-            'model': self.model,
-            'scaler': self.scaler,
-            'feature_names': self.feature_names,
-            'feature_importance': self.feature_importance
-        }, path)
-        logger.info(f"💾 XGBoost model saved: {path}")
-    
-    def load(self):
-        """Load model"""
-        try:
-            path = f"{Config.MODEL_DIR}/xgboost_{self.symbol}.pkl"
-            data = joblib.load(path)
-            self.model = data['model']
-            self.scaler = data['scaler']
-            self.feature_names = data['feature_names']
-            self.feature_importance = data['feature_importance']
-            logger.info(f"📂 XGBoost model loaded: {path}")
-            return True
-        except Exception as e:
-            logger.error(f"XGBoost load error: {e}")
-            return False
-
-# ============================================================
-# LIGHTGBM MODEL
-# ============================================================
-class LightGBMModel:
-    """LightGBM Fast Gradient Boosting"""
-    
-    def __init__(self, symbol: str):
-        self.symbol = symbol
-        self.model = None
-        self.scaler = RobustScaler()
-        self.feature_names = []
-        self.feature_importance = {}
-        
-    def prepare_data(self, df: pd.DataFrame):
-        """Prepare data"""
-        feature_cols = [col for col in df.columns if col not in ['target_5', 'target_10', 'target_20']]
-        self.feature_names = feature_cols
-        
-        X = df[feature_cols].values
-        y = df['target_5'].values
-        
-        mask = ~np.isnan(y)
-        X = X[mask]
-        y = y[mask]
-        
-        X_scaled = self.scaler.fit_transform(X)
-        
-        X_train, X_test, y_train, y_test = train_test_split(X_scaled, y, test_size=0.2, shuffle=False)
-        
-        return X_train, y_train, X_test, y_test
-    
-    def train(self, df: pd.DataFrame):
-        """Train model"""
-        try:
-            X_train, y_train, X_test, y_test = self.prepare_data(df)
-            
-            if len(X_train) < 100:
-                logger.warning(f"Insufficient data: {len(X_train)}")
-                return False
-            
-            self.model = lgb.LGBMClassifier(
-                n_estimators=200,
-                max_depth=7,
-                learning_rate=0.05,
-                num_leaves=31,
-                subsample=0.8,
-                colsample_bytree=0.8,
-                reg_alpha=0.1,
-                reg_lambda=0.1,
-                random_state=42,
-                n_jobs=-1,
-                verbose=-1
-            )
-            
-            self.model.fit(X_train, y_train)
-            
-            y_pred = self.model.predict(X_test)
-            accuracy = accuracy_score(y_test, y_pred)
-            
-            importance_dict = dict(zip(self.feature_names, self.model.feature_importances_))
-            self.feature_importance = dict(sorted(importance_dict.items(), key=lambda x: x[1], reverse=True)[:20])
-            
-            logger.info(f"✅ LightGBM trained for {self.symbol}")
-            logger.info(f"   Test Accuracy: {accuracy:.4f}")
-            
-            return True
-            
-        except Exception as e:
-            logger.error(f"LightGBM training error: {str(e)}")
-            return False
-    
-    def predict(self, df: pd.DataFrame) -> MLPrediction:
-        """Make prediction"""
-        try:
-            X = df[self.feature_names].values[-1:].reshape(1, -1)
-            X_scaled = self.scaler.transform(X)
-            
-            prob = float(self.model.predict_proba(X_scaled)[0][1])
-            
-            confidence = prob if prob > 0.5 else (1 - prob)
-            confidence = min(confidence, 0.72)
-            confidence = max(confidence, 0.52)
-            
-            prediction = "BUY" if prob > 0.5 else "SELL"
-            
-            return MLPrediction(
-                prediction=prediction,
-                confidence=confidence,
-                probabilities={"buy": float(prob), "sell": float(1 - prob)},
-                model_used=ModelType.LIGHTGBM,
-                feature_importance=self.feature_importance
-            )
-            
-        except Exception as e:
-            logger.error(f"LightGBM prediction error: {e}")
-            return MLPrediction(
-                prediction="NEUTRAL",
-                confidence=0.5,
-                probabilities={"buy": 0.5, "sell": 0.5},
-                model_used=ModelType.LIGHTGBM
-            )
-    
-    def save(self):
-        """Save model"""
-        path = f"{Config.MODEL_DIR}/lightgbm_{self.symbol}.pkl"
-        joblib.dump({
-            'model': self.model,
-            'scaler': self.scaler,
-            'feature_names': self.feature_names,
-            'feature_importance': self.feature_importance
-        }, path)
-        logger.info(f"💾 LightGBM model saved: {path}")
-    
-    def load(self):
-        """Load model"""
-        try:
-            path = f"{Config.MODEL_DIR}/lightgbm_{self.symbol}.pkl"
-            data = joblib.load(path)
-            self.model = data['model']
-            self.scaler = data['scaler']
-            self.feature_names = data['feature_names']
-            self.feature_importance = data['feature_importance']
-            logger.info(f"📂 LightGBM model loaded: {path}")
-            return True
-        except Exception as e:
-            logger.error(f"LightGBM load error: {e}")
-            return False
-
-# ============================================================
-# RANDOM FOREST MODEL
-# ============================================================
-class RandomForestModel:
-    """Random Forest Classifier"""
-    
-    def __init__(self, symbol: str):
-        self.symbol = symbol
-        self.model = None
-        self.scaler = RobustScaler()
-        self.feature_names = []
-        self.feature_importance = {}
-        
-    def prepare_data(self, df: pd.DataFrame):
-        """Prepare data"""
-        feature_cols = [col for col in df.columns if col not in ['target_5', 'target_10', 'target_20']]
-        self.feature_names = feature_cols
-        
-        X = df[feature_cols].values
-        y = df['target_5'].values
-        
-        mask = ~np.isnan(y)
-        X = X[mask]
-        y = y[mask]
-        
-        X_scaled = self.scaler.fit_transform(X)
-        
-        X_train, X_test, y_train, y_test = train_test_split(X_scaled, y, test_size=0.2, shuffle=False)
-        
-        return X_train, y_train, X_test, y_test
-    
-    def train(self, df: pd.DataFrame):
-        """Train model"""
-        try:
-            X_train, y_train, X_test, y_test = self.prepare_data(df)
-            
-            if len(X_train) < 100:
-                logger.warning(f"Insufficient data: {len(X_train)}")
-                return False
-            
-            self.model = RandomForestClassifier(
-                n_estimators=100,
-                max_depth=10,
-                min_samples_split=5,
-                min_samples_leaf=2,
-                max_features='sqrt',
-                random_state=42,
-                n_jobs=-1
-            )
-            
-            self.model.fit(X_train, y_train)
-            
-            y_pred = self.model.predict(X_test)
-            accuracy = accuracy_score(y_test, y_pred)
-            
-            importance_dict = dict(zip(self.feature_names, self.model.feature_importances_))
-            self.feature_importance = dict(sorted(importance_dict.items(), key=lambda x: x[1], reverse=True)[:20])
-            
-            logger.info(f"✅ Random Forest trained for {self.symbol}")
-            logger.info(f"   Test Accuracy: {accuracy:.4f}")
-            
-            return True
-            
-        except Exception as e:
-            logger.error(f"Random Forest training error: {str(e)}")
-            return False
-    
-    def predict(self, df: pd.DataFrame) -> MLPrediction:
-        """Make prediction"""
-        try:
-            X = df[self.feature_names].values[-1:].reshape(1, -1)
-            X_scaled = self.scaler.transform(X)
-            
-            prob = float(self.model.predict_proba(X_scaled)[0][1])
-            
-            confidence = prob if prob > 0.5 else (1 - prob)
-            confidence = min(confidence, 0.72)
-            confidence = max(confidence, 0.52)
-            
-            prediction = "BUY" if prob > 0.5 else "SELL"
-            
-            return MLPrediction(
-                prediction=prediction,
-                confidence=confidence,
-                probabilities={"buy": float(prob), "sell": float(1 - prob)},
-                model_used=ModelType.RANDOM_FOREST,
-                feature_importance=self.feature_importance
-            )
-            
-        except Exception as e:
-            logger.error(f"Random Forest prediction error: {e}")
-            return MLPrediction(
-                prediction="NEUTRAL",
-                confidence=0.5,
-                probabilities={"buy": 0.5, "sell": 0.5},
-                model_used=ModelType.RANDOM_FOREST
-            )
-    
-    def save(self):
-        """Save model"""
-        path = f"{Config.MODEL_DIR}/random_forest_{self.symbol}.pkl"
-        joblib.dump({
-            'model': self.model,
-            'scaler': self.scaler,
-            'feature_names': self.feature_names,
-            'feature_importance': self.feature_importance
-        }, path)
-        logger.info(f"💾 Random Forest model saved: {path}")
-    
-    def load(self):
-        """Load model"""
-        try:
-            path = f"{Config.MODEL_DIR}/random_forest_{self.symbol}.pkl"
-            data = joblib.load(path)
-            self.model = data['model']
-            self.scaler = data['scaler']
-            self.feature_names = data['feature_names']
-            self.feature_importance = data['feature_importance']
-            logger.info(f"📂 Random Forest model loaded: {path}")
-            return True
-        except Exception as e:
-            logger.error(f"Random Forest load error: {e}")
-            return False
-
-# ============================================================
-# ENSEMBLE MODEL
-# ============================================================
-class EnsembleModel:
-    """Ensemble all models with weighted voting"""
-    
-    def __init__(self, symbol: str):
-        self.symbol = symbol
-        self.models = {}
-        self.weights = {
-            ModelType.LSTM: 0.25,
-            ModelType.TRANSFORMER: 0.25,
-            ModelType.XGBOOST: 0.20,
-            ModelType.LIGHTGBM: 0.15,
-            ModelType.RANDOM_FOREST: 0.15
         }
-        
-    def add_model(self, model_type: ModelType, model):
-        """Add model to ensemble"""
-        self.models[model_type] = model
-    
-    def predict(self, df: pd.DataFrame) -> MLPrediction:
-        """Ensemble prediction"""
-        predictions = []
-        confidences = []
-        model_outputs = {}
-        
-        for model_type, model in self.models.items():
-            if model is not None:
-                try:
-                    pred = model.predict(df)
-                    predictions.append((pred.prediction, self.weights[model_type]))
-                    confidences.append(pred.confidence * self.weights[model_type])
-                    model_outputs[model_type.value] = {
-                        'prediction': pred.prediction,
-                        'confidence': pred.confidence,
-                        'probabilities': pred.probabilities
-                    }
-                except Exception as e:
-                    logger.debug(f"Ensemble error {model_type}: {e}")
-        
-        if not predictions:
-            return MLPrediction(
-                prediction="NEUTRAL",
-                confidence=0.5,
-                probabilities={"buy": 0.5, "sell": 0.5},
-                model_used=ModelType.ENSEMBLE
-            )
-        
-        # Weighted voting
-        buy_votes = sum(weight for pred, weight in predictions if pred == "BUY")
-        sell_votes = sum(weight for pred, weight in predictions if pred == "SELL")
-        
-        if buy_votes > sell_votes:
-            final_pred = "BUY"
-            confidence = sum(confidences)
-        elif sell_votes > buy_votes:
-            final_pred = "SELL"
-            confidence = sum(confidences)
-        else:
-            final_pred = "NEUTRAL"
-            confidence = 0.55
-        
-        confidence = min(confidence, 0.75)
-        confidence = max(confidence, 0.50)
-        
-        avg_buy_prob = np.mean([out.get('probabilities', {}).get('buy', 0.5) for out in model_outputs.values()])
-        
-        return MLPrediction(
-            prediction=final_pred,
-            confidence=float(confidence),
-            probabilities={"buy": float(avg_buy_prob), "sell": float(1 - avg_buy_prob)},
-            model_used=ModelType.ENSEMBLE,
-            metadata={
-                "model_outputs": model_outputs,
-                "weights": {k.value: v for k, v in self.weights.items()},
-                "buy_votes": float(buy_votes),
-                "sell_votes": float(sell_votes)
-            }
-        )
-
-# ============================================================
-# ML ENGINE - MANAGE ALL MODELS
-# ============================================================
-class MLEngine:
-    """Central ML Engine - manage all models"""
-    
-    def __init__(self):
-        self.models: Dict[str, Dict[ModelType, Any]] = defaultdict(dict)
-        self.ensembles: Dict[str, EnsembleModel] = {}
-        self.feature_engineer = FeatureEngineer()
-        self.stats = {
-            ModelType.LSTM: {"accuracy": 0, "total_predictions": 0},
-            ModelType.TRANSFORMER: {"accuracy": 0, "total_predictions": 0},
-            ModelType.XGBOOST: {"accuracy": 0, "total_predictions": 0},
-            ModelType.LIGHTGBM: {"accuracy": 0, "total_predictions": 0},
-            ModelType.RANDOM_FOREST: {"accuracy": 0, "total_predictions": 0},
-            ModelType.ENSEMBLE: {"accuracy": 0, "total_predictions": 0}
-        }
-    
-    async def train_all_models(self, symbol: str, df: pd.DataFrame) -> Dict[ModelType, bool]:
-        """Train all available models"""
-        logger.info(f"🧠 Training ALL models for {symbol}...")
-        
-        df_features = self.feature_engineer.create_features(df)
-        if df_features.empty or len(df_features) < Config.ML_MIN_SAMPLES:
-            logger.warning(f"Insufficient features: {len(df_features)}")
-            return {}
-        
-        results = {}
-        input_shape = (Config.ML_SEQUENCE_LENGTH, len([c for c in df_features.columns if c not in ['target_5', 'target_10', 'target_20']]))
-        
-        # LSTM
-        if TF_AVAILABLE:
-            try:
-                lstm_model = LSTMModel(input_shape, symbol)
-                if lstm_model.train(df_features):
-                    self.models[symbol][ModelType.LSTM] = lstm_model
-                    lstm_model.save()
-                    results[ModelType.LSTM] = True
-                    if lstm_model.history:
-                        last_acc = lstm_model.history.history['val_accuracy'][-1]
-                        self.stats[ModelType.LSTM]["accuracy"] = min(float(last_acc) * 100, 68.0)
-            except Exception as e:
-                logger.error(f"LSTM training failed: {e}")
-                results[ModelType.LSTM] = False
-        
-        # Transformer
-        if TF_AVAILABLE:
-            try:
-                transformer_model = TransformerModel(input_shape, symbol)
-                if transformer_model.train(df_features):
-                    self.models[symbol][ModelType.TRANSFORMER] = transformer_model
-                    transformer_model.save()
-                    results[ModelType.TRANSFORMER] = True
-                    if transformer_model.history:
-                        last_acc = transformer_model.history.history['val_accuracy'][-1]
-                        self.stats[ModelType.TRANSFORMER]["accuracy"] = min(float(last_acc) * 100, 68.0)
-            except Exception as e:
-                logger.error(f"Transformer training failed: {e}")
-                results[ModelType.TRANSFORMER] = False
-        
-        # XGBoost
-        if XGB_AVAILABLE:
-            try:
-                xgb_model = XGBoostModel(symbol)
-                if xgb_model.train(df_features):
-                    self.models[symbol][ModelType.XGBOOST] = xgb_model
-                    xgb_model.save()
-                    results[ModelType.XGBOOST] = True
-                    self.stats[ModelType.XGBOOST]["accuracy"] = 65.0
-            except Exception as e:
-                logger.error(f"XGBoost training failed: {e}")
-                results[ModelType.XGBOOST] = False
-        
-        # LightGBM
-        if LGB_AVAILABLE:
-            try:
-                lgb_model = LightGBMModel(symbol)
-                if lgb_model.train(df_features):
-                    self.models[symbol][ModelType.LIGHTGBM] = lgb_model
-                    lgb_model.save()
-                    results[ModelType.LIGHTGBM] = True
-                    self.stats[ModelType.LIGHTGBM]["accuracy"] = 64.0
-            except Exception as e:
-                logger.error(f"LightGBM training failed: {e}")
-                results[ModelType.LIGHTGBM] = False
-        
-        # Random Forest
-        if SKLEARN_AVAILABLE:
-            try:
-                rf_model = RandomForestModel(symbol)
-                if rf_model.train(df_features):
-                    self.models[symbol][ModelType.RANDOM_FOREST] = rf_model
-                    rf_model.save()
-                    results[ModelType.RANDOM_FOREST] = True
-                    self.stats[ModelType.RANDOM_FOREST]["accuracy"] = 63.0
-            except Exception as e:
-                logger.error(f"Random Forest training failed: {e}")
-                results[ModelType.RANDOM_FOREST] = False
-        
-        # Ensemble
-        if self.models[symbol]:
-            ensemble = EnsembleModel(symbol)
-            for model_type, model in self.models[symbol].items():
-                ensemble.add_model(model_type, model)
-            self.ensembles[symbol] = ensemble
-            results[ModelType.ENSEMBLE] = True
-            self.stats[ModelType.ENSEMBLE]["accuracy"] = 70.0
-        
-        logger.info(f"✅ Training completed for {symbol}: {len(results)} models")
-        return results
-    
-    def predict_ensemble(self, symbol: str, df: pd.DataFrame) -> MLPrediction:
-        """Ensemble prediction"""
-        if symbol in self.ensembles:
-            df_features = self.feature_engineer.create_features(df)
-            if not df_features.empty:
-                pred = self.ensembles[symbol].predict(df_features)
-                self.stats[ModelType.ENSEMBLE]["total_predictions"] += 1
-                return pred
-        
-        if symbol in self.models and self.models[symbol]:
-            first_model = next(iter(self.models[symbol].values()))
-            df_features = self.feature_engineer.create_features(df)
-            if not df_features.empty:
-                return first_model.predict(df_features)
-        
-        return MLPrediction(
-            prediction="NEUTRAL",
-            confidence=0.5,
-            probabilities={"buy": 0.5, "sell": 0.5},
-            model_used=ModelType.ENSEMBLE,
-            metadata={"error": "No model available"}
-        )
-    
-    def get_feature_importance(self, symbol: str) -> Dict[str, float]:
-        """Get aggregated feature importance"""
-        if symbol in self.models:
-            importance = {}
-            for model_type, model in self.models[symbol].items():
-                if hasattr(model, 'feature_importance'):
-                    for feat, val in model.feature_importance.items():
-                        importance[feat] = importance.get(feat, 0) + val
-            return dict(sorted(importance.items(), key=lambda x: x[1], reverse=True)[:20])
-        return {}
-    
-    def get_stats(self) -> Dict[str, float]:
-        """Get model statistics"""
-        return {
-            "lstm": round(self.stats[ModelType.LSTM]["accuracy"], 1),
-            "transformer": round(self.stats[ModelType.TRANSFORMER]["accuracy"], 1),
-            "xgboost": round(self.stats[ModelType.XGBOOST]["accuracy"], 1),
-            "lightgbm": round(self.stats[ModelType.LIGHTGBM]["accuracy"], 1),
-            "random_forest": round(self.stats[ModelType.RANDOM_FOREST]["accuracy"], 1),
-            "ensemble": round(self.stats[ModelType.ENSEMBLE]["accuracy"], 1)
-        }
-
-# ============================================================
-# PATTERN DETECTOR - 79+ PATTERNS
-# ============================================================
-class AdvancedPatternDetector:
-    """79+ Pattern Detection"""
-    
-    def __init__(self, df: pd.DataFrame):
-        self.df = df.copy()
-        self.signals: List[PatternSignal] = []
-        
-    def scan_all_patterns(self) -> List[PatternSignal]:
-        """Scan all patterns"""
-        
-        # Candlestick patterns
-        self._detect_doji()
-        self._detect_hammer()
-        self._detect_shooting_star()
-        self._detect_engulfing()
-        self._detect_morning_star()
-        self._detect_evening_star()
-        self._detect_three_white_soldiers()
-        self._detect_three_black_crows()
-        
-        # Chart patterns
-        self._detect_double_top_bottom()
-        self._detect_head_and_shoulders()
-        self._detect_triangles()
-        self._detect_wedges()
-        self._detect_flags()
-        
-        # Trend patterns
-        self._detect_trend_lines()
-        self._detect_channels()
-        
-        # Volume patterns
-        self._detect_volume_patterns()
-        
-        # Divergence
-        self._detect_divergences()
-        
-        return sorted(self.signals, key=lambda x: x.confidence, reverse=True)
-    
-    def _detect_doji(self):
-        """Doji candlestick"""
-        for i in range(len(self.df) - 1, max(len(self.df) - 10, 0), -1):
-            row = self.df.iloc[i]
-            body = abs(row['close'] - row['open'])
-            range_size = row['high'] - row['low']
-            
-            if range_size > 0 and body / range_size < 0.1:
-                signal = SignalType.NEUTRAL
-                confidence = 0.55
-                
-                self.signals.append(PatternSignal(
-                    name="Doji",
-                    signal=signal,
-                    confidence=confidence,
-                    level=float(row['close'])
-                ))
-                break
-    
-    def _detect_hammer(self):
-        """Hammer pattern"""
-        for i in range(len(self.df) - 1, max(len(self.df) - 10, 0), -1):
-            row = self.df.iloc[i]
-            body = abs(row['close'] - row['open'])
-            lower_shadow = min(row['open'], row['close']) - row['low']
-            upper_shadow = row['high'] - max(row['open'], row['close'])
-            
-            if lower_shadow > body * 2 and upper_shadow < body * 0.3:
-                self.signals.append(PatternSignal(
-                    name="Hammer",
-                    signal=SignalType.BULLISH,
-                    confidence=0.62,
-                    level=float(row['close'])
-                ))
-                break
-    
-    def _detect_shooting_star(self):
-        """Shooting star pattern"""
-        for i in range(len(self.df) - 1, max(len(self.df) - 10, 0), -1):
-            row = self.df.iloc[i]
-            body = abs(row['close'] - row['open'])
-            upper_shadow = row['high'] - max(row['open'], row['close'])
-            lower_shadow = min(row['open'], row['close']) - row['low']
-            
-            if upper_shadow > body * 2 and lower_shadow < body * 0.3:
-                self.signals.append(PatternSignal(
-                    name="Shooting Star",
-                    signal=SignalType.BEARISH,
-                    confidence=0.62,
-                    level=float(row['close'])
-                ))
-                break
-    
-    def _detect_engulfing(self):
-        """Bullish/Bearish engulfing"""
-        if len(self.df) < 2:
-            return
-        
-        for i in range(len(self.df) - 1, max(len(self.df) - 10, 0), -1):
-            if i < 1:
-                continue
-            
-            curr = self.df.iloc[i]
-            prev = self.df.iloc[i-1]
-            
-            # Bullish engulfing
-            if (prev['close'] < prev['open'] and 
-                curr['close'] > curr['open'] and
-                curr['open'] < prev['close'] and
-                curr['close'] > prev['open']):
-                
-                self.signals.append(PatternSignal(
-                    name="Bullish Engulfing",
-                    signal=SignalType.BULLISH,
-                    confidence=0.65,
-                    level=float(curr['close'])
-                ))
-                break
-            
-            # Bearish engulfing
-            if (prev['close'] > prev['open'] and
-                curr['close'] < curr['open'] and
-                curr['open'] > prev['close'] and
-                curr['close'] < prev['open']):
-                
-                self.signals.append(PatternSignal(
-                    name="Bearish Engulfing",
-                    signal=SignalType.BEARISH,
-                    confidence=0.65,
-                    level=float(curr['close'])
-                ))
-                break
-    
-    def _detect_morning_star(self):
-        """Morning star pattern"""
-        if len(self.df) < 3:
-            return
-        
-        for i in range(len(self.df) - 1, max(len(self.df) - 10, 0), -1):
-            if i < 2:
-                continue
-            
-            c1 = self.df.iloc[i-2]
-            c2 = self.df.iloc[i-1]
-            c3 = self.df.iloc[i]
-            
-            if (c1['close'] < c1['open'] and
-                abs(c2['close'] - c2['open']) < (c1['high'] - c1['low']) * 0.3 and
-                c3['close'] > c3['open'] and
-                c3['close'] > (c1['open'] + c1['close']) / 2):
-                
-                self.signals.append(PatternSignal(
-                    name="Morning Star",
-                    signal=SignalType.BULLISH,
-                    confidence=0.68,
-                    level=float(c3['close'])
-                ))
-                break
-    
-    def _detect_evening_star(self):
-        """Evening star pattern"""
-        if len(self.df) < 3:
-            return
-        
-        for i in range(len(self.df) - 1, max(len(self.df) - 10, 0), -1):
-            if i < 2:
-                continue
-            
-            c1 = self.df.iloc[i-2]
-            c2 = self.df.iloc[i-1]
-            c3 = self.df.iloc[i]
-            
-            if (c1['close'] > c1['open'] and
-                abs(c2['close'] - c2['open']) < (c1['high'] - c1['low']) * 0.3 and
-                c3['close'] < c3['open'] and
-                c3['close'] < (c1['open'] + c1['close']) / 2):
-                
-                self.signals.append(PatternSignal(
-                    name="Evening Star",
-                    signal=SignalType.BEARISH,
-                    confidence=0.68,
-                    level=float(c3['close'])
-                ))
-                break
-    
-    def _detect_three_white_soldiers(self):
-        """Three white soldiers"""
-        if len(self.df) < 3:
-            return
-        
-        for i in range(len(self.df) - 1, max(len(self.df) - 10, 0), -1):
-            if i < 2:
-                continue
-            
-            c1 = self.df.iloc[i-2]
-            c2 = self.df.iloc[i-1]
-            c3 = self.df.iloc[i]
-            
-            if (c1['close'] > c1['open'] and
-                c2['close'] > c2['open'] and
-                c3['close'] > c3['open'] and
-                c2['close'] > c1['close'] and
-                c3['close'] > c2['close']):
-                
-                self.signals.append(PatternSignal(
-                    name="Three White Soldiers",
-                    signal=SignalType.BULLISH,
-                    confidence=0.70,
-                    level=float(c3['close'])
-                ))
-                break
-    
-    def _detect_three_black_crows(self):
-        """Three black crows"""
-        if len(self.df) < 3:
-            return
-        
-        for i in range(len(self.df) - 1, max(len(self.df) - 10, 0), -1):
-            if i < 2:
-                continue
-            
-            c1 = self.df.iloc[i-2]
-            c2 = self.df.iloc[i-1]
-            c3 = self.df.iloc[i]
-            
-            if (c1['close'] < c1['open'] and
-                c2['close'] < c2['open'] and
-                c3['close'] < c3['open'] and
-                c2['close'] < c1['close'] and
-                c3['close'] < c2['close']):
-                
-                self.signals.append(PatternSignal(
-                    name="Three Black Crows",
-                    signal=SignalType.BEARISH,
-                    confidence=0.70,
-                    level=float(c3['close'])
-                ))
-                break
-    
-    def _detect_double_top_bottom(self):
-        """Double top/bottom patterns"""
-        if len(self.df) < 50:
-            return
-        
-        highs = self.df['high'].rolling(5).max()
-        lows = self.df['low'].rolling(5).min()
-        
-        # Simplified detection
-        recent_high = highs.iloc[-20:].max()
-        recent_low = lows.iloc[-20:].min()
-        
-        high_touches = (highs.iloc[-20:] >= recent_high * 0.99).sum()
-        low_touches = (lows.iloc[-20:] <= recent_low * 1.01).sum()
-        
-        if high_touches >= 2:
-            self.signals.append(PatternSignal(
-                name="Double Top",
-                signal=SignalType.BEARISH,
-                confidence=0.63,
-                level=float(recent_high)
-            ))
-        
-        if low_touches >= 2:
-            self.signals.append(PatternSignal(
-                name="Double Bottom",
-                signal=SignalType.BULLISH,
-                confidence=0.63,
-                level=float(recent_low)
-            ))
-    
-    def _detect_head_and_shoulders(self):
-        """Head and shoulders pattern"""
-        if len(self.df) < 50:
-            return
-        
-        # Simplified detection using peaks
-        if SCIPY_AVAILABLE:
-            peaks = argrelextrema(self.df['high'].values, np.greater, order=5)[0]
-            
-            if len(peaks) >= 3:
-                # Last 3 peaks
-                last_peaks = peaks[-3:]
-                heights = [self.df['high'].iloc[p] for p in last_peaks]
-                
-                # Head should be higher than shoulders
-                if heights[1] > heights[0] and heights[1] > heights[2]:
-                    self.signals.append(PatternSignal(
-                        name="Head and Shoulders",
-                        signal=SignalType.BEARISH,
-                        confidence=0.66,
-                        level=float(heights[1])
-                    ))
-    
-    def _detect_triangles(self):
-        """Triangle patterns"""
-        if len(self.df) < 30:
-            return
-        
-        recent = self.df.tail(30)
-        highs_trend = np.polyfit(range(len(recent)), recent['high'], 1)[0]
-        lows_trend = np.polyfit(range(len(recent)), recent['low'], 1)[0]
-        
-        # Ascending triangle
-        if abs(highs_trend) < 0.01 and lows_trend > 0:
-            self.signals.append(PatternSignal(
-                name="Ascending Triangle",
-                signal=SignalType.BULLISH,
-                confidence=0.60,
-                level=float(recent['close'].iloc[-1])
-            ))
-        
-        # Descending triangle
-        if abs(lows_trend) < 0.01 and highs_trend < 0:
-            self.signals.append(PatternSignal(
-                name="Descending Triangle",
-                signal=SignalType.BEARISH,
-                confidence=0.60,
-                level=float(recent['close'].iloc[-1])
-            ))
-    
-    def _detect_wedges(self):
-        """Wedge patterns"""
-        if len(self.df) < 30:
-            return
-        
-        recent = self.df.tail(30)
-        highs_trend = np.polyfit(range(len(recent)), recent['high'], 1)[0]
-        lows_trend = np.polyfit(range(len(recent)), recent['low'], 1)[0]
-        
-        # Rising wedge
-        if highs_trend > 0 and lows_trend > 0 and highs_trend < lows_trend:
-            self.signals.append(PatternSignal(
-                name="Rising Wedge",
-                signal=SignalType.BEARISH,
-                confidence=0.58,
-                level=float(recent['close'].iloc[-1])
-            ))
-        
-        # Falling wedge
-        if highs_trend < 0 and lows_trend < 0 and abs(highs_trend) < abs(lows_trend):
-            self.signals.append(PatternSignal(
-                name="Falling Wedge",
-                signal=SignalType.BULLISH,
-                confidence=0.58,
-                level=float(recent['close'].iloc[-1])
-            ))
-    
-    def _detect_flags(self):
-        """Flag patterns"""
-        if len(self.df) < 20:
-            return
-        
-        recent = self.df.tail(20)
-        returns = recent['close'].pct_change()
-        
-        # Strong move followed by consolidation
-        first_half_volatility = returns.head(10).std()
-        second_half_volatility = returns.tail(10).std()
-        
-        if first_half_volatility > second_half_volatility * 2:
-            trend = returns.head(10).mean()
-            
-            if trend > 0:
-                self.signals.append(PatternSignal(
-                    name="Bull Flag",
-                    signal=SignalType.BULLISH,
-                    confidence=0.59,
-                    level=float(recent['close'].iloc[-1])
-                ))
-            elif trend < 0:
-                self.signals.append(PatternSignal(
-                    name="Bear Flag",
-                    signal=SignalType.BEARISH,
-                    confidence=0.59,
-                    level=float(recent['close'].iloc[-1])
-                ))
-    
-    def _detect_trend_lines(self):
-        """Trend line support/resistance"""
-        if len(self.df) < 20:
-            return
-        
-        recent = self.df.tail(20)
-        close_prices = recent['close'].values
-        
-        # Linear regression
-        x = np.arange(len(close_prices))
-        slope, intercept = np.polyfit(x, close_prices, 1)
-        
-        if slope > 0:
-            self.signals.append(PatternSignal(
-                name="Uptrend",
-                signal=SignalType.BULLISH,
-                confidence=0.56,
-                level=float(close_prices[-1])
-            ))
-        elif slope < 0:
-            self.signals.append(PatternSignal(
-                name="Downtrend",
-                signal=SignalType.BEARISH,
-                confidence=0.56,
-                level=float(close_prices[-1])
-            ))
-    
-    def _detect_channels(self):
-        """Price channels"""
-        if len(self.df) < 20:
-            return
-        
-        recent = self.df.tail(20)
-        
-        # Channel width
-        channel_width = recent['high'].max() - recent['low'].min()
-        avg_range = (recent['high'] - recent['low']).mean()
-        
-        if channel_width < avg_range * 5:
-            current_position = (recent['close'].iloc[-1] - recent['low'].min()) / channel_width
-            
-            if current_position > 0.8:
-                self.signals.append(PatternSignal(
-                    name="Channel Top",
-                    signal=SignalType.BEARISH,
-                    confidence=0.54,
-                    level=float(recent['close'].iloc[-1])
-                ))
-            elif current_position < 0.2:
-                self.signals.append(PatternSignal(
-                    name="Channel Bottom",
-                    signal=SignalType.BULLISH,
-                    confidence=0.54,
-                    level=float(recent['close'].iloc[-1])
-                ))
-    
-    def _detect_volume_patterns(self):
-        """Volume analysis"""
-        if len(self.df) < 20:
-            return
-        
-        recent = self.df.tail(20)
-        avg_volume = recent['volume'].mean()
-        current_volume = recent['volume'].iloc[-1]
-        
-        if current_volume > avg_volume * 2:
-            price_change = recent['close'].iloc[-1] - recent['close'].iloc[-2]
-            
-            if price_change > 0:
-                self.signals.append(PatternSignal(
-                    name="Volume Surge (Bullish)",
-                    signal=SignalType.BULLISH,
-                    confidence=0.57,
-                    level=float(recent['close'].iloc[-1])
-                ))
-            elif price_change < 0:
-                self.signals.append(PatternSignal(
-                    name="Volume Surge (Bearish)",
-                    signal=SignalType.BEARISH,
-                    confidence=0.57,
-                    level=float(recent['close'].iloc[-1])
-                ))
-    
-    def _detect_divergences(self):
-        """RSI and MACD divergences"""
-        if len(self.df) < 30:
-            return
-        
-        # Calculate RSI
-        delta = self.df['close'].diff()
-        gain = (delta.where(delta > 0, 0)).rolling(window=14).mean()
-        loss = (-delta.where(delta < 0, 0)).rolling(window=14).mean()
-        rs = gain / loss.replace(0, np.nan)
-        rsi = 100 - (100 / (1 + rs))
-        
-        # Recent data
-        recent_prices = self.df['close'].tail(20).values
-        recent_rsi = rsi.tail(20).values
-        
-        # Price trend
-        price_trend = np.polyfit(range(len(recent_prices)), recent_prices, 1)[0]
-        rsi_trend = np.polyfit(range(len(recent_rsi)), recent_rsi, 1)[0]
-        
-        # Bullish divergence: price down, RSI up
-        if price_trend < 0 and rsi_trend > 0:
-            self.signals.append(PatternSignal(
-                name="Bullish RSI Divergence",
-                signal=SignalType.BULLISH,
-                confidence=0.64,
-                level=float(recent_prices[-1])
-            ))
-        
-        # Bearish divergence: price up, RSI down
-        if price_trend > 0 and rsi_trend < 0:
-            self.signals.append(PatternSignal(
-                name="Bearish RSI Divergence",
-                signal=SignalType.BEARISH,
-                confidence=0.64,
-                level=float(recent_prices[-1])
-            ))
-
-# ============================================================
-# TECHNICAL ANALYZER
-# ============================================================
-class TechnicalAnalyzer:
-    """Technical analysis summary"""
-    
-    @staticmethod
-    def analyze(df: pd.DataFrame) -> Dict[str, Any]:
-        """Perform technical analysis"""
-        try:
-            current = df.iloc[-1]
-            
-            # Moving averages
-            sma_20 = df['close'].rolling(20).mean().iloc[-1]
-            sma_50 = df['close'].rolling(50).mean().iloc[-1] if len(df) >= 50 else None
-            sma_200 = df['close'].rolling(200).mean().iloc[-1] if len(df) >= 200 else None
-            
-            # RSI
-            delta = df['close'].diff()
-            gain = (delta.where(delta > 0, 0)).rolling(window=14).mean()
-            loss = (-delta.where(delta < 0, 0)).rolling(window=14).mean()
-            rs = gain / loss.replace(0, np.nan)
-            rsi = (100 - (100 / (1 + rs))).iloc[-1]
-            
-            # MACD
-            exp1 = df['close'].ewm(span=12, adjust=False).mean()
-            exp2 = df['close'].ewm(span=26, adjust=False).mean()
-            macd = (exp1 - exp2).iloc[-1]
-            macd_signal = (exp1 - exp2).ewm(span=9, adjust=False).mean().iloc[-1]
-            
-            # Bollinger Bands
-            bb_middle = df['close'].rolling(20).mean().iloc[-1]
-            bb_std = df['close'].rolling(20).std().iloc[-1]
-            bb_upper = bb_middle + (2 * bb_std)
-            bb_lower = bb_middle - (2 * bb_std)
-            
-            return {
-                "price": float(current['close']),
-                "volume": float(current['volume']),
-                "sma_20": float(sma_20) if not np.isnan(sma_20) else None,
-                "sma_50": float(sma_50) if sma_50 and not np.isnan(sma_50) else None,
-                "sma_200": float(sma_200) if sma_200 and not np.isnan(sma_200) else None,
-                "rsi": float(rsi) if not np.isnan(rsi) else 50.0,
-                "macd": float(macd) if not np.isnan(macd) else 0.0,
-                "macd_signal": float(macd_signal) if not np.isnan(macd_signal) else 0.0,
-                "bb_upper": float(bb_upper) if not np.isnan(bb_upper) else None,
-                "bb_middle": float(bb_middle) if not np.isnan(bb_middle) else None,
-                "bb_lower": float(bb_lower) if not np.isnan(bb_lower) else None
-            }
-        except Exception as e:
-            logger.error(f"Technical analysis error: {e}")
-            return {}
-
-# ============================================================
-# MARKET STRUCTURE ANALYZER
-# ============================================================
-class MarketStructureAnalyzer:
-    """Market structure analysis"""
-    
-    @staticmethod
-    def analyze(df: pd.DataFrame) -> Dict[str, Any]:
-        """Analyze market structure"""
-        try:
-            # Trend
-            sma_20 = df['close'].rolling(20).mean()
-            current_price = df['close'].iloc[-1]
-            
-            if current_price > sma_20.iloc[-1]:
-                trend = "bullish"
-            elif current_price < sma_20.iloc[-1]:
-                trend = "bearish"
-            else:
-                trend = "neutral"
-            
-            # Volatility
-            returns = df['close'].pct_change()
-            volatility = returns.std() * np.sqrt(365)
-            
-            # Volume trend
-            volume_ma = df['volume'].rolling(20).mean()
-            volume_trend = "increasing" if df['volume'].iloc[-1] > volume_ma.iloc[-1] else "decreasing"
-            
-            return {
-                "trend": trend,
-                "volatility": float(volatility) if not np.isnan(volatility) else 0.0,
-                "volume_trend": volume_trend,
-                "support": float(df['low'].tail(20).min()),
-                "resistance": float(df['high'].tail(20).max())
-            }
-        except Exception as e:
-            logger.error(f"Market structure analysis error: {e}")
-            return {}
-
-# ============================================================
-# ZİYARETÇİ SAYACI
-# ============================================================
-from collections import defaultdict
-from datetime import datetime, timedelta
-
-visitor_tracker = defaultdict(lambda: datetime.min)
-visitor_count = 0
-
-# ============================================================
-# FASTAPI APPLICATION (TÜM CLASS'LARDAN SONRA)
-# ============================================================
-app = FastAPI(
-    title="ICTSMARTPRO ULTIMATE v9.0",
-    description="Production-Ready ML Trading System",
-    version="9.0.0"
-)
-
-# Middleware
-app.add_middleware(
-    CORSMiddleware,
-    allow_origins=["*"],
-    allow_credentials=True,
-    allow_methods=["*"],
-    allow_headers=["*"],
-)
-app.add_middleware(GZipMiddleware, minimum_size=1000)
-
-# Global instances
-data_fetcher = MultiSourceDataFetcher()
-ml_engine = MLEngine()
-startup_time = time.time()
-
-# ============================================================
-# ENDPOINTS
-# ============================================================
-
-@app.get("/", response_class=HTMLResponse)
-async def root():
-    """Serve index.html as homepage"""
-    html_path = os.path.join(os.path.dirname(__file__), "templates", "index.html")
-    
-    # templates/index.html varsa göster
-    if os.path.exists(html_path):
-        return FileResponse(html_path)
-    
-    # yoksa fallback HTML göster
-    return HTMLResponse("""
-    <!DOCTYPE html>
-    <html>
-    <head><title>ICTSMARTPRO</title></head>
-    <body>
-        <h1>🚀 ICTSMARTPRO TRADING BOT v9.0</h1>
-        <p>API is running. Use /docs for Swagger documentation.</p>
-    </body>
-    </html>
-    """)
-######################################
-# main.py'ye EKLE (app tanımından sonra, diğer endpoint'lerin yanına)
-
-@app.get("/dashboard", response_class=HTMLResponse)
-async def dashboard():
-    """Dashboard sayfasını göster"""
-    dashboard_path = os.path.join(os.path.dirname(__file__), "templates", "dashboard.html")
-    
-    if os.path.exists(dashboard_path):
-        return FileResponse(dashboard_path)
-    else:
-        return HTMLResponse("""
-        <!DOCTYPE html>
-        <html>
-        <head><title>Dashboard</title></head>
-        <body>
-            <h1>📊 Dashboard</h1>
-            <p>Dashboard sayfası hazırlanıyor...</p>
-            <a href="/">Ana Sayfaya Dön</a>
-        </body>
-        </html>
-        """)
-@app.get("/api/visitors")
-async def get_visitors(request: Request):
-    """Get unique visitor count"""
-    global visitor_count
-    
-    client_ip = request.client.host or "unknown"
-    last_visit = visitor_tracker[client_ip]
-    now = datetime.utcnow()
-    
-    if (now - last_visit) > timedelta(hours=24):
-        visitor_count += 1
-        visitor_tracker[client_ip] = now
-    
-    return {
-        "success": True,
-        "count": visitor_count,
-        "your_ip": client_ip
+        document.getElementById('visitorCount').textContent = '0';
+    } catch (error) {
+        console.error('Visitor count error:', error);
+        document.getElementById('visitorCount').textContent = '0';
     }
+}
 
-@app.get("/health")
-async def health_check():
-    """Health check"""
-    uptime = time.time() - startup_time
-    return {
-        "status": "healthy",
-        "version": "9.0.0",
-        "uptime_seconds": int(uptime),
-        "dependencies": {
-            "tensorflow": TF_AVAILABLE,
-            "xgboost": XGB_AVAILABLE,
-            "lightgbm": LGB_AVAILABLE,
-            "sklearn": SKLEARN_AVAILABLE,
-            "yfinance": YFINANCE_AVAILABLE,
-            "coingecko": CG_AVAILABLE
-        },
-        "models_loaded": len(ml_engine.models),
-        "ensembles": len(ml_engine.ensembles)
+// ========================================================================================================
+// 30+ KAYNAK GRID RENDER
+// ========================================================================================================
+function renderDataSourceGrid() {
+    const grid = document.getElementById('exchangeGrid');
+    if (!grid) return;
+    
+    grid.innerHTML = dataSources.map(source => {
+        // DÜZELTİLDİ: Source ID oluşturma - noktaları ve boşlukları temizle
+        const sourceId = source.name
+            .toLowerCase()
+            .replace(/\s+/g, '')
+            .replace(/\./g, '')
+            .replace(/\//g, '');
+        
+        return `
+            <div class="exchange-card" id="source-${sourceId}">
+                <div class="exchange-logo ${source.color}"><i class="fas ${source.icon}"></i></div>
+                <div class="exchange-name-small">${source.name}</div>
+                <div class="exchange-status status-waiting" id="status-${sourceId}">
+                    BEKLENİYOR
+                </div>
+            </div>
+        `;
+    }).join('');
+    
+    document.getElementById('totalSourceCount').textContent = dataSources.length;
+    document.getElementById('activeSourceCount').textContent = '0';
+}
+
+// ========================================================================================================
+// BACKEND HEALTH CHECK
+// ========================================================================================================
+async function checkBackendHealth() {
+    try {
+        console.log('🔍 Checking backend at:', CONFIG.backendUrl + '/health');
+        const response = await fetch(`${CONFIG.backendUrl}/health`);
+        const data = await response.json();
+        
+        if (response.ok && data.status === 'healthy') {
+            document.getElementById('backendStatus').innerHTML = 
+                '<span style="color: var(--accent-green);"><i class="fas fa-check-circle"></i> CONNECTED</span>';
+            showNotification('✅ Backend bağlantısı kuruldu', 'success');
+            return true;
+        } else {
+            throw new Error('Backend not healthy');
+        }
+    } catch (error) {
+        console.error('Backend health check failed:', error);
+        document.getElementById('backendStatus').innerHTML = 
+            '<span style="color: var(--accent-red);"><i class="fas fa-times-circle"></i> DISCONNECTED</span>';
+        showNotification('❌ Backend bağlantısı yok', 'error');
+        return false;
     }
+}
 
-@app.get("/api/analyze/{symbol}")
-async def analyze_symbol(
-    symbol: str,
-    interval: str = Query(default="1h", regex="^(1m|5m|15m|30m|1h|4h|1d|1w)$"),
-    limit: int = Query(default=200, ge=100, le=1000),
-    use_ml: bool = Query(default=True),
-    ml_model: str = Query(default="ensemble")
-):
-    """Analyze symbol with ML"""
-    
-    logger.info(f"🔍 Analyzing {symbol} ({interval})")
-    
-    try:
-        # Fetch data (with failover)
-        async with data_fetcher as fetcher:
-            candles = await fetcher.get_candles(symbol, interval, limit)
+// ========================================================================================================
+// TRADINGVIEW CHART - DÜZELTİLDİ
+// ========================================================================================================
+function ensureTradingViewScript() {
+    return new Promise((resolve, reject) => {
+        if (typeof TradingView !== 'undefined') {
+            resolve();
+            return;
+        }
         
-        if not candles or len(candles) < Config.MIN_CANDLES:
-            raise HTTPException(status_code=422, detail="Insufficient data")
-        
-        # Convert to DataFrame
-        df = pd.DataFrame([
-            {
-                'timestamp': c.timestamp,
-                'open': c.open,
-                'high': c.high,
-                'low': c.low,
-                'close': c.close,
-                'volume': c.volume,
-                'source': c.source
-            }
-            for c in candles
-        ])
-        df['timestamp'] = pd.to_datetime(df['timestamp'], unit='ms')
-        df = df.set_index('timestamp')
-        
-        # Pattern detection
-        pattern_detector = AdvancedPatternDetector(df)
-        patterns = pattern_detector.scan_all_patterns()
-        
-        # ML Prediction
-        ml_prediction = None
-        if use_ml:
-            if ml_model == "ensemble":
-                ml_prediction = ml_engine.predict_ensemble(symbol, df)
-            elif ml_model in ["lstm", "transformer", "xgboost", "lightgbm", "random_forest"]:
-                model_type = ModelType[ml_model.upper()]
-                if symbol in ml_engine.models and model_type in ml_engine.models[symbol]:
-                    df_features = ml_engine.feature_engineer.create_features(df)
-                    if not df_features.empty:
-                        ml_prediction = ml_engine.models[symbol][model_type].predict(df_features)
-        
-        # Feature importance
-        feature_importance = ml_engine.get_feature_importance(symbol) if use_ml else {}
-        
-        # Technical analysis
-        technical = TechnicalAnalyzer.analyze(df)
-        
-        # Market structure
-        market_structure = MarketStructureAnalyzer.analyze(df)
-        
-        # Price data
-        current_price = float(df['close'].iloc[-1])
-        prev_price = float(df['close'].iloc[-2]) if len(df) > 1 else current_price
-        change_percent = ((current_price - prev_price) / prev_price * 100) if prev_price != 0 else 0
-        
-        response = {
-            "success": True,
-            "symbol": symbol,
-            "interval": interval,
-            "timestamp": datetime.now(timezone.utc).isoformat(),
-            
-            "price_data": {
-                "current": round(current_price, 4),
-                "previous": round(prev_price, 4),
-                "change_percent": round(change_percent, 2),
-                "source_count": len(df['source'].unique()) if 'source' in df.columns else 0,
-                "primary_source": df['source'].iloc[-1] if 'source' in df.columns else "unknown"
-            },
-            
-            "ml_prediction": {
-                "prediction": ml_prediction.prediction if ml_prediction else "NEUTRAL",
-                "confidence": min(ml_prediction.confidence * 100, Config.MAX_CONFIDENCE) if ml_prediction else Config.DEFAULT_CONFIDENCE,
-                "probabilities": ml_prediction.probabilities if ml_prediction else {"buy": 0.5, "sell": 0.5},
-                "model_used": ml_prediction.model_used.value if ml_prediction else "none",
-                "feature_importance": list(feature_importance.keys())[:10] if feature_importance else []
-            } if use_ml else None,
-            
-            "ml_stats": ml_engine.get_stats(),
-            
-            "patterns": [
-                {
-                    "name": p.name,
-                    "signal": p.signal.value,
-                    "confidence": round(p.confidence * 100, 1),
-                    "level": p.level
+        // Script zaten eklenmiş mi kontrol et
+        if (document.querySelector('script[src*="tv.js"]')) {
+            // Script var ama yüklenmemiş olabilir, bekle
+            const checkInterval = setInterval(() => {
+                if (typeof TradingView !== 'undefined') {
+                    clearInterval(checkInterval);
+                    resolve();
                 }
-                for p in patterns[:15]
-            ],
+            }, 100);
             
-            "pattern_count": len(patterns),
-            "technical_indicators": technical,
-            "market_structure": market_structure,
+            // Timeout
+            setTimeout(() => {
+                clearInterval(checkInterval);
+                reject(new Error("TradingView load timeout"));
+            }, 5000);
+            return;
+        }
+        
+        const script = document.createElement('script');
+        script.src = 'https://s3.tradingview.com/tv.js';
+        script.async = true;
+        
+        script.onload = () => {
+            console.log("✅ TradingView loaded");
+            resolve();
+        };
+        
+        script.onerror = () => reject(new Error("TradingView script failed"));
+        document.head.appendChild(script);
+    });
+}
+
+async function loadTradingView() {
+    const container = document.getElementById('tradingview-widget');
+    if (!container) return;
+    
+    const symbol = document.getElementById('symbolSelect').value + 'USDT';
+    const interval = document.getElementById('intervalSelect').value;
+    const tvInterval = INTERVAL_MAP[interval] || '60';
+    
+    // Show loading
+    container.innerHTML = `
+        <div class="chart-loading">
+            <div class="spinner-border" role="status"></div>
+            <p class="fw-bold fs-4" style="color: var(--accent-cyan);">Yükleniyor...</p>
+        </div>
+    `;
+    
+    try {
+        await ensureTradingViewScript();
+        
+        if (tvWidget) {
+            try { tvWidget.remove(); } catch (e) {}
+            tvWidget = null;
+        }
+        
+        container.innerHTML = '';
+        await new Promise(resolve => setTimeout(resolve, 300));
+        
+        tvWidget = new TradingView.widget({
+            width: '100%',
+            height: '100%',
+            symbol: `BINANCE:${symbol}`,
+            interval: tvInterval,
+            timezone: 'Etc/UTC',
+            theme: 'dark',
+            style: '1',
+            locale: 'tr',
+            toolbar_bg: '#0a0e17',
+            enable_publishing: false,
+            allow_symbol_change: true,
+            container_id: 'tradingview-widget',
+            autosize: true,
+            studies: ["RSI@tv-basicstudies", "MACD@tv-basicstudies", "BB@tv-basicstudies"],
+            disabled_features: ["header_widget"],
+            loading_screen: { backgroundColor: "#0a0e17" }
+        });
+        
+        tvWidget.onChartReady(() => {
+            console.log("✅ Chart ready");
+            tvLoadAttempts = 0;
+        });
+        
+    } catch (error) {
+        console.error('TradingView error:', error);
+        if (tvLoadAttempts < MAX_TV_ATTEMPTS) {
+            tvLoadAttempts++;
+            setTimeout(loadTradingView, 2000);
+        } else {
+            container.innerHTML = `
+                <div class="chart-loading">
+                    <p class="fw-bold fs-4" style="color: var(--accent-red);">
+                        <i class="fas fa-exclamation-triangle"></i> TradingView yüklenemedi
+                    </p>
+                </div>
+            `;
+        }
+    }
+}
+
+// ========================================================================================================
+// MAIN ANALYSIS - DÜZELTİLDİ
+// ========================================================================================================
+async function analyzeSymbol(silent = false) {
+    const symbol = document.getElementById('symbolSelect').value;
+    const interval = document.getElementById('intervalSelect').value;
+    
+    if (!silent) showNotification(`📊 ${symbol}/USDT analiz ediliyor...`, 'info');
+    
+    try {
+        // DÜZELTİLDİ: URL yapısı backend ile uyumlu
+        const url = `${CONFIG.backendUrl}/api/analyze/${symbol}?interval=${interval}&limit=200&use_ml=true&ml_model=ensemble`;
+        console.log('📡 Fetching:', url);
+        
+        const response = await fetch(url);
+        
+        if (!response.ok) {
+            const errorText = await response.text();
+            throw new Error(`HTTP ${response.status}: ${errorText}`);
+        }
+        
+        const data = await response.json();
+        console.log('📊 Data received:', data);
+        
+        if (data.success) {
+            currentData = data;
+            updateDashboard(data);
             
-            "data_source_stats": data_fetcher.get_source_stats()
+            // DÜZELTİLDİ: Kaynak durumlarını güncelle
+            updateSourceStatusFromData(data);
+            
+            if (!silent) showNotification(`✅ Analiz tamamlandı`, 'success');
+        } else {
+            throw new Error('API returned success: false');
         }
         
-        logger.info(f"✅ Analysis complete: {len(patterns)} patterns, ML: {ml_prediction.prediction if ml_prediction else 'N/A'}")
-        return response
-        
-    except Exception as e:
-        logger.error(f"❌ Analysis failed: {str(e)}", exc_info=True)
-        raise HTTPException(status_code=500, detail=str(e))
+    } catch (error) {
+        console.error('Analysis error:', error);
+        if (!silent) showNotification(`❌ Analiz başarısız: ${error.message}`, 'error');
+    }
+}
 
-@app.post("/api/train/{symbol}")
-async def train_models(
-    symbol: str,
-    background_tasks: BackgroundTasks,
-    interval: str = Query(default="1h"),
-    limit: int = Query(default=1000)
-):
-    """Train all models"""
+// ========================================================================================================
+// KAYNAK DURUMU GÜNCELLE - DÜZELTİLDİ
+// ========================================================================================================
+function updateSourceStatusFromData(data) {
+    // Aktif kaynak sayısını güncelle
+    if (data.price_data && data.price_data.source_count) {
+        document.getElementById('activeSourceCount').textContent = data.price_data.source_count;
+        document.getElementById('sourceCount').textContent = data.price_data.source_count;
+    }
     
-    logger.info(f"🧠 Training models for {symbol}")
-    
-    try:
-        # Fetch data
-        async with data_fetcher as fetcher:
-            candles = await fetcher.get_candles(symbol, interval, limit)
+    // Kaynak istatistikleri varsa
+    if (data.data_source_stats) {
+        const sources = data.data_source_stats;
         
-        if not candles or len(candles) < Config.ML_MIN_SAMPLES:
-            raise HTTPException(status_code=400, detail=f"Insufficient data: {len(candles) if candles else 0}")
-        
-        # Convert to DataFrame
-        df = pd.DataFrame([
-            {
-                'timestamp': c.timestamp,
-                'open': c.open,
-                'high': c.high,
-                'low': c.low,
-                'close': c.close,
-                'volume': c.volume
+        dataSources.forEach(source => {
+            const sourceId = source.name
+                .toLowerCase()
+                .replace(/\s+/g, '')
+                .replace(/\./g, '')
+                .replace(/\//g, '');
+            
+            const statusEl = document.getElementById(`status-${sourceId}`);
+            if (!statusEl) return;
+            
+            // Kaynak sağlıklı mı kontrol et
+            let isActive = false;
+            if (source.type === 'yahoo' && sources.yahoo_finance && sources.yahoo_finance.available) {
+                isActive = true;
+            } else if (source.type === 'coingecko' && sources.coingecko && sources.coingecko.available) {
+                isActive = true;
+            } else if (source.type === 'crypto' && sources[source.name.toLowerCase()] && 
+                       sources[source.name.toLowerCase()].available) {
+                isActive = true;
             }
-            for c in candles
-        ])
-        df['timestamp'] = pd.to_datetime(df['timestamp'], unit='ms')
-        df = df.set_index('timestamp')
-        
-        # Train models (async in background)
-        results = await ml_engine.train_all_models(symbol, df)
-        
-        return {
-            "success": True,
-            "symbol": symbol,
-            "results": {k.value: v for k, v in results.items()},
-            "stats": ml_engine.get_stats(),
-            "timestamp": datetime.now(timezone.utc).isoformat()
-        }
-        
-    except Exception as e:
-        logger.error(f"❌ Training failed: {str(e)}", exc_info=True)
-        raise HTTPException(status_code=500, detail=str(e))
-
-@app.get("/api/models/{symbol}")
-async def get_models_info(symbol: str):
-    """Get model information"""
-    
-    models_info = {}
-    
-    if symbol in ml_engine.models:
-        for model_type, model in ml_engine.models[symbol].items():
-            models_info[model_type.value] = {
-                "available": True,
-                "has_feature_importance": hasattr(model, 'feature_importance'),
-                "type": str(type(model).__name__)
+            
+            if (isActive) {
+                statusEl.className = 'exchange-status status-active';
+                statusEl.innerHTML = 'AKTİF';
+            } else {
+                statusEl.className = 'exchange-status status-waiting';
+                statusEl.innerHTML = 'BEKLENİYOR';
             }
+        });
+    }
+}
+
+// ========================================================================
+// DASHBOARD UPDATE - ANA FONKSİYON (DÜZELTİLDİ)
+// ========================================================================
+function updateDashboard(data) {
+    if (!data || !data.success) return;
     
-    if symbol in ml_engine.ensembles:
-        models_info["ensemble"] = {
-            "available": True,
-            "model_count": len([m for m in ml_engine.ensembles[symbol].models.values() if m is not None]),
-            "weights": {k.value: v for k, v in ml_engine.ensembles[symbol].weights.items()}
+    console.log('🔄 Updating dashboard with:', data);
+    
+    // ===== PRICE UPDATE =====
+    if (data.price_data) {
+        const price = data.price_data.current;
+        const change = data.price_data.change_percent;
+        const volume = data.price_data.volume;
+        
+        document.getElementById('currentSymbol').textContent = data.symbol.replace('USDT', '/USDT');
+        
+        // Fiyat gösterimi
+        if (price && price > 0) {
+            document.getElementById('currentPrice').textContent = `$${formatNumber(price, 2)}`;
+        } else {
+            document.getElementById('currentPrice').textContent = '—';
         }
-    
-    return {
-        "success": True,
-        "symbol": symbol,
-        "models": models_info,
-        "stats": ml_engine.get_stats()
+        
+        // Değişim yüzdesi
+        const changeEl = document.getElementById('priceChange');
+        if (change !== undefined && change !== null) {
+            const changeValue = Number(change);
+            changeEl.className = changeValue >= 0 ? 'price-change price-up' : 'price-change price-down';
+            changeEl.innerHTML = changeValue >= 0 
+                ? `<i class="fas fa-arrow-up"></i> +${changeValue.toFixed(2)}%` 
+                : `<i class="fas fa-arrow-down"></i> ${changeValue.toFixed(2)}%`;
+        } else {
+            changeEl.innerHTML = '—';
+        }
+        
+        // Hacim
+        document.getElementById('volume24h').textContent = formatVolume(volume);
+        
+        // Kaynak sayısı
+        if (data.price_data.source_count) {
+            document.getElementById('sourceCount').textContent = data.price_data.source_count;
+        }
     }
-
-@app.get("/api/feature-importance/{symbol}")
-async def get_feature_importance(symbol: str, top_n: int = 20):
-    """Get feature importance"""
     
-    importance = ml_engine.get_feature_importance(symbol)
-    top_features = dict(list(importance.items())[:top_n])
-    
-    return {
-        "success": True,
-        "symbol": symbol,
-        "feature_importance": top_features,
-        "total_features": len(importance)
+    // ===== ML PREDICTION =====
+    if (data.ml_prediction) {
+        const pred = data.ml_prediction;
+        
+        // Sinyal metni
+        const signalText = pred.prediction || 'NEUTRAL';
+        document.getElementById('signalText').textContent = signalText;
+        
+        // Sinyal badge rengi
+        const badge = document.getElementById('signalBadge');
+        badge.className = 'signal-badge';
+        if (signalText.includes('BUY')) {
+            badge.classList.add('signal-buy');
+        } else if (signalText.includes('SELL')) {
+            badge.classList.add('signal-sell');
+        } else {
+            badge.classList.add('signal-neutral');
+        }
+        
+        // Güven oranı (backend'de confidence yüzde olarak geliyor)
+        const confidence = pred.confidence || 0;
+        document.getElementById('confidenceFill').style.width = confidence + '%';
+        document.getElementById('confidenceText').textContent = `Güven: %${confidence}`;
+        
+        // Model bilgisi
+        const modelInfo = pred.model_used ? pred.model_used : 'ensemble';
+        let probInfo = '';
+        if (pred.probabilities) {
+            probInfo = `<span class="ms-3 small">
+                AL: %${(pred.probabilities.buy * 100).toFixed(1)} / SAT: %${(pred.probabilities.sell * 100).toFixed(1)}
+            </span>`;
+        }
+        document.getElementById('mlPrediction').innerHTML = `
+            <i class="fas fa-microchip me-2"></i> Model: ${modelInfo}
+            ${probInfo}
+        `;
     }
-
-@app.get("/api/data-sources/stats")
-async def get_data_source_stats():
-    """Get data source statistics"""
     
-    return {
-        "success": True,
-        "sources": data_fetcher.get_source_stats(),
-        "timestamp": datetime.now(timezone.utc).isoformat()
+    // ===== SİNYAL DAĞILIMI (Pattern'lerden hesapla) =====
+    if (data.patterns && Array.isArray(data.patterns) && data.patterns.length > 0) {
+        let bullish = 0, bearish = 0, neutral = 0;
+        
+        data.patterns.forEach(p => {
+            if (p.signal === 'bullish') bullish++;
+            else if (p.signal === 'bearish') bearish++;
+            else neutral++;
+        });
+        
+        const total = bullish + bearish + neutral;
+        
+        if (total > 0) {
+            const buyPercent = (bullish / total * 100).toFixed(1);
+            const sellPercent = (bearish / total * 100).toFixed(1);
+            const neutralPercent = (neutral / total * 100).toFixed(1);
+            
+            document.getElementById('buySignalValue').textContent = `%${buyPercent}`;
+            document.getElementById('buySignalBar').style.width = buyPercent + '%';
+            
+            document.getElementById('sellSignalValue').textContent = `%${sellPercent}`;
+            document.getElementById('sellSignalBar').style.width = sellPercent + '%';
+            
+            document.getElementById('neutralSignalValue').textContent = `%${neutralPercent}`;
+            document.getElementById('neutralSignalBar').style.width = neutralPercent + '%';
+        }
     }
-
-# ============================================================
-# STARTUP
-# ============================================================
-@app.on_event("startup")
-async def startup_event():
-    logger.info("=" * 80)
-    logger.info("🚀 ICTSMARTPRO ULTIMATE v9.0 - PRODUCTION READY")
-    logger.info("=" * 80)
-    logger.info(f"Environment: {Config.ENV}")
-    logger.info(f"Debug: {Config.DEBUG}")
-    logger.info("")
-    logger.info("ML Models:")
-    logger.info(f"  TensorFlow: {'✅' if TF_AVAILABLE else '❌'}")
-    logger.info(f"  XGBoost: {'✅' if XGB_AVAILABLE else '❌'}")
-    logger.info(f"  LightGBM: {'✅' if LGB_AVAILABLE else '❌'}")
-    logger.info(f"  Scikit-learn: {'✅' if SKLEARN_AVAILABLE else '❌'}")
-    logger.info("")
-    logger.info("Data Sources:")
-    logger.info(f"  Yahoo Finance: {'✅' if YFINANCE_AVAILABLE else '❌'}")
-    logger.info(f"  CoinGecko: {'✅' if CG_AVAILABLE else '❌'}")
-    logger.info(f"  Crypto Exchanges: {len(data_fetcher.crypto_exchanges)}")
-    logger.info("")
-    logger.info(f"Max Confidence: {Config.MAX_CONFIDENCE}%")
-    logger.info(f"Model Directory: {Config.MODEL_DIR}")
-    logger.info(f"Rate Limiting: Enabled")
-    logger.info(f"Failover: Enabled")
-    logger.info("=" * 80)
-
-# ============================================================
-# MAIN
-# ============================================================
-if __name__ == "__main__":
-    import uvicorn
     
-    port = int(os.getenv("PORT", 8000))
-    logger.info(f"🌐 Starting server on port {port}")
+    // ===== ML STATS =====
+    if (data.ml_stats) {
+        const stats = data.ml_stats;
+        
+        // LSTM
+        const lstmVal = stats.lstm || 0;
+        document.getElementById('lstmAcc').textContent = lstmVal.toFixed(1) + '%';
+        document.getElementById('lstmBar').style.width = lstmVal + '%';
+        
+        // Transformer
+        const tfVal = stats.transformer || 0;
+        document.getElementById('transformerAcc').textContent = tfVal.toFixed(1) + '%';
+        document.getElementById('transformerBar').style.width = tfVal + '%';
+        
+        // XGBoost
+        const xgbVal = stats.xgboost || 0;
+        document.getElementById('xgboostAcc').textContent = xgbVal.toFixed(1) + '%';
+        document.getElementById('xgboostBar').style.width = xgbVal + '%';
+        
+        // LightGBM
+        const lgbVal = stats.lightgbm || 0;
+        document.getElementById('lightgbmAcc').textContent = lgbVal.toFixed(1) + '%';
+        document.getElementById('lightgbmBar').style.width = lgbVal + '%';
+        
+        // Random Forest
+        const rfVal = stats.random_forest || 0;
+        document.getElementById('rfAcc').textContent = rfVal.toFixed(1) + '%';
+        document.getElementById('rfBar').style.width = rfVal + '%';
+        
+        // Ensemble
+        const ensVal = stats.ensemble || 0;
+        document.getElementById('ensembleAcc').textContent = ensVal.toFixed(1) + '%';
+    }
     
-    uvicorn.run(
-        "main:app",
-        host="0.0.0.0",
-        port=port,
-        reload=Config.DEBUG,
-        log_level="info",
-        access_log=True
-    )
+    // ===== PATTERNS =====
+    if (data.patterns && Array.isArray(data.patterns)) {
+        const container = document.getElementById('patternsContainer');
+        
+        if (data.patterns.length > 0) {
+            container.innerHTML = data.patterns.slice(0, 8).map(p => {
+                const signalClass = p.signal === 'bullish' ? 'pattern-bullish' : 
+                                   p.signal === 'bearish' ? 'pattern-bearish' : 'pattern-neutral';
+                const icon = p.signal === 'bullish' ? 'arrow-up' : 
+                            p.signal === 'bearish' ? 'arrow-down' : 'minus';
+                return `
+                    <span class="pattern-tag ${signalClass}">
+                        <i class="fas fa-${icon}"></i>
+                        ${p.name}
+                        <span class="ms-2 badge bg-dark">%${p.confidence}</span>
+                    </span>
+                `;
+            }).join('');
+            
+            document.getElementById('patternCount').innerHTML = 
+                `<i class="fas fa-chart-pie me-2"></i> Toplam ${data.patterns.length} pattern tespit edildi`;
+        } else {
+            container.innerHTML = '<span class="fw-bold fs-5" style="color: var(--text-dim);">⚠️ Pattern bulunamadı</span>';
+            document.getElementById('patternCount').innerHTML = '-';
+        }
+    }
+    
+    // ===== TECHNICAL INDICATORS =====
+    if (data.technical_indicators) {
+        const tech = data.technical_indicators;
+        
+        // RSI durumuna göre sınıf belirle
+        const rsiClass = tech.rsi > 70 ? 'sell' : tech.rsi < 30 ? 'buy' : 'neutral';
+        
+        const techHtml = `
+            <div class="row g-3">
+                <div class="col-md-6">
+                    <div class="indicator-card">
+                        <div class="d-flex justify-content-between">
+                            <span><i class="fas fa-chart-line"></i> SMA 20</span>
+                            <span class="fw-bold">$${tech.sma_20 ? formatNumber(tech.sma_20, 2) : '-'}</span>
+                        </div>
+                    </div>
+                </div>
+                <div class="col-md-6">
+                    <div class="indicator-card">
+                        <div class="d-flex justify-content-between">
+                            <span><i class="fas fa-chart-line"></i> SMA 50</span>
+                            <span class="fw-bold">$${tech.sma_50 ? formatNumber(tech.sma_50, 2) : '-'}</span>
+                        </div>
+                    </div>
+                </div>
+                <div class="col-md-6">
+                    <div class="indicator-card ${rsiClass}">
+                        <div class="d-flex justify-content-between">
+                            <span><i class="fas fa-bolt"></i> RSI (14)</span>
+                            <span class="fw-bold">${tech.rsi ? tech.rsi.toFixed(2) : '50.00'}</span>
+                        </div>
+                    </div>
+                </div>
+                <div class="col-md-6">
+                    <div class="indicator-card">
+                        <div class="d-flex justify-content-between">
+                            <span><i class="fas fa-chart-bar"></i> MACD</span>
+                            <span class="fw-bold ${tech.macd > tech.macd_signal ? 'text-success' : 'text-danger'}">
+                                ${tech.macd ? tech.macd.toFixed(4) : '0.0000'}
+                            </span>
+                        </div>
+                    </div>
+                </div>
+                ${tech.bb_upper ? `
+                <div class="col-12">
+                    <div class="indicator-card">
+                        <div class="d-flex justify-content-between">
+                            <span><i class="fas fa-chart-simple"></i> Bollinger Bands</span>
+                            <span>
+                                Ü: $${formatNumber(tech.bb_upper, 2)} / 
+                                O: $${formatNumber(tech.bb_middle, 2)} / 
+                                A: $${formatNumber(tech.bb_lower, 2)}
+                            </span>
+                        </div>
+                    </div>
+                </div>
+                ` : ''}
+            </div>
+        `;
+        document.getElementById('technicalIndicators').innerHTML = techHtml;
+    }
+    
+    // ===== MARKET STRUCTURE =====
+    if (data.market_structure) {
+        const ms = data.market_structure;
+        
+        // Structure
+        const trendUpper = (ms.trend || 'neutral').toUpperCase();
+        document.getElementById('structureSignal').textContent = trendUpper;
+        document.getElementById('structureSignal').style.background = 
+            ms.trend === 'bullish' ? 'var(--accent-green)' : 
+            ms.trend === 'bearish' ? 'var(--accent-red)' : 'var(--accent-purple)';
+        document.getElementById('structureValue').textContent = trendUpper;
+        document.getElementById('structureDesc').textContent = 'Ana trend yönü';
+        
+        // Support/Resistance
+        document.getElementById('trendSignal').textContent = 'S/R';
+        document.getElementById('trendValue').innerHTML = `
+            D: $${ms.support ? formatNumber(ms.support, 2) : '-'} / 
+            Y: $${ms.resistance ? formatNumber(ms.resistance, 2) : '-'}
+        `;
+        document.getElementById('trendDesc').textContent = 'Destek / Direnç';
+        
+        // Volatility
+        const vol = ms.volatility || 0;
+        const volLevel = vol > 50 ? 'YÜKSEK' : vol > 25 ? 'ORTA' : 'DÜŞÜK';
+        document.getElementById('volatilitySignal').textContent = volLevel;
+        document.getElementById('volatilityValue').textContent = `%${vol.toFixed(1)}`;
+        document.getElementById('volatilityDesc').textContent = 'Yıllık volatilite';
+    }
+    
+    // ===== FEATURE IMPORTANCE =====
+    if (data.ml_prediction?.feature_importance && 
+        Array.isArray(data.ml_prediction.feature_importance) && 
+        data.ml_prediction.feature_importance.length > 0) {
+        
+        const features = data.ml_prediction.feature_importance.slice(0, 5);
+        const featHtml = features.map(f => `
+            <div class="d-flex justify-content-between align-items-center mb-2">
+                <span style="color: var(--accent-cyan);">${f}</span>
+                <span class="badge" style="background: var(--accent-purple);">⭐</span>
+            </div>
+        `).join('');
+        document.getElementById('featureImportance').innerHTML = featHtml || 
+            '<div class="text-center">Feature importance yakında</div>';
+    }
+    
+    // ===== LAST UPDATE =====
+    document.getElementById('lastUpdate').textContent = new Date().toLocaleTimeString('tr-TR');
+}
+
+// ========================================================================
+// AI EVALUATION
+// ========================================================================
+function evaluateAI() {
+    if (!currentData) {
+        showNotification('⚠️ Önce analiz yapın', 'error');
+        return;
+    }
+    
+    const chatDiv = document.getElementById('chatMessages');
+    const msg = document.createElement('div');
+    msg.className = 'chat-message chat-bot';
+    
+    const prediction = currentData.ml_prediction?.prediction || 'NEUTRAL';
+    const confidence = currentData.ml_prediction?.confidence || 0;
+    const patternCount = currentData.patterns?.length || 0;
+    const price = currentData.price_data?.current || 0;
+    const rsi = currentData.technical_indicators?.rsi || 50;
+    
+    // SADECE GERÇEK VERİLERLE YORUM
+    let comment = '';
+    if (prediction.includes('BUY')) {
+        comment = '📈 Teknik göstergeler ve ML modelleri alım yönünde sinyal veriyor.';
+        if (rsi < 30) comment += ' RSI aşırı satım bölgesinde.';
+    } else if (prediction.includes('SELL')) {
+        comment = '📉 Satış baskısı artıyor. ML modelleri %' + confidence + ' güvenle düşüş bekliyor.';
+        if (rsi > 70) comment += ' RSI aşırı alım bölgesinde.';
+    } else {
+        comment = '⚖️ Piyasa nötr bölgede. Belirgin bir sinyal yok.';
+    }
+    
+    msg.innerHTML = `
+        <div style="display: flex; align-items: center; gap: 15px; margin-bottom: 15px;">
+            <div style="background: linear-gradient(135deg, var(--accent-purple), var(--accent-cyan));
+                        width: 50px; height: 50px; border-radius: 50%; display: flex; align-items: center;
+                        justify-content: center; box-shadow: var(--neon-cyan);">
+                <i class="fas fa-brain" style="font-size: 24px;"></i>
+            </div>
+            <div>
+                <strong style="color: var(--accent-cyan);">AI DEĞERLENDİRME</strong>
+                <div style="font-size: 0.8rem;">${new Date().toLocaleTimeString('tr-TR')}</div>
+            </div>
+        </div>
+        <div style="font-size: 1.1rem; font-weight: 700; margin-bottom: 10px;
+                    color: ${prediction.includes('BUY') ? 'var(--accent-green)' : 
+                           prediction.includes('SELL') ? 'var(--accent-red)' : 'var(--accent-purple)'};">
+            ${prediction} • %${confidence} Güven
+        </div>
+        <div style="margin-top: 10px; font-size: 1rem;">${comment}</div>
+        <div style="margin-top: 15px; padding-top: 15px; border-top: 1px solid rgba(0,229,255,0.3);">
+            <div class="row">
+                <div class="col-4">
+                    <small>Fiyat</small>
+                    <div class="fw-bold">$${formatNumber(price, 2)}</div>
+                </div>
+                <div class="col-4">
+                    <small>RSI</small>
+                    <div class="fw-bold">${rsi.toFixed(1)}</div>
+                </div>
+                <div class="col-4">
+                    <small>Pattern</small>
+                    <div class="fw-bold">${patternCount}</div>
+                </div>
+            </div>
+        </div>
+    `;
+    
+    chatDiv.appendChild(msg);
+    chatDiv.scrollTop = chatDiv.scrollHeight;
+}
+
+// ========================================================================
+// TRAIN MODELS
+// ========================================================================
+async function trainModels() {
+    const symbol = document.getElementById('symbolSelect').value;
+    showNotification('🧠 Modeller eğitiliyor...', 'info');
+    
+    try {
+        const response = await fetch(`${CONFIG.backendUrl}/api/train/${symbol}?interval=1h&limit=1000`, { 
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' }
+        });
+        
+        if (response.ok) {
+            const data = await response.json();
+            showNotification('✅ Eğitim tamamlandı', 'success');
+            // 3 saniye sonra analizi yenile
+            setTimeout(() => analyzeSymbol(true), 3000);
+        } else {
+            throw new Error('Training failed');
+        }
+    } catch (error) {
+        console.error('Training error:', error);
+        showNotification('❌ Eğitim başarısız', 'error');
+    }
+}
+
+// ========================================================================
+// INIT
+// ========================================================================
+document.addEventListener('DOMContentLoaded', async function() {
+    console.log('🚀 ICTSMARTPRO ULTIMATE v10.0 Starting...');
+    console.log('📡 Backend URL:', CONFIG.backendUrl);
+    
+    // Render 30+ sources
+    renderDataSourceGrid();
+    
+    // Check backend
+    const connected = await checkBackendHealth();
+    
+    if (connected) {
+        await updateVisitorCount();
+        setInterval(updateVisitorCount, 30000);
+    }
+    
+    // TradingView
+    await loadTradingView();
+    
+    // First analysis
+    setTimeout(() => analyzeSymbol(true), 1000);
+    
+    // Auto refresh
+    autoRefreshTimer = setInterval(() => {
+        if (document.visibilityState === 'visible') analyzeSymbol(true);
+    }, CONFIG.refreshInterval);
+});
+
+// Event listeners
+document.getElementById('symbolSelect').addEventListener('change', () => {
+    loadTradingView();
+    analyzeSymbol(false);
+});
+
+document.getElementById('intervalSelect').addEventListener('change', () => {
+    loadTradingView();
+    analyzeSymbol(false);
+});
+
+// Cleanup
+window.addEventListener('beforeunload', () => {
+    if (autoRefreshTimer) clearInterval(autoRefreshTimer);
+    if (tvWidget) try { tvWidget.remove(); } catch(e) {}
+});
+</script>
+</body>
+</html>
