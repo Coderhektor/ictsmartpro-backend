@@ -2482,7 +2482,28 @@ async def root():
     </body>
     </html>
     """)
+######################################
+# main.py'ye EKLE (app tanımından sonra, diğer endpoint'lerin yanına)
 
+@app.get("/dashboard", response_class=HTMLResponse)
+async def dashboard():
+    """Dashboard sayfasını göster"""
+    dashboard_path = os.path.join(os.path.dirname(__file__), "templates", "dashboard.html")
+    
+    if os.path.exists(dashboard_path):
+        return FileResponse(dashboard_path)
+    else:
+        return HTMLResponse("""
+        <!DOCTYPE html>
+        <html>
+        <head><title>Dashboard</title></head>
+        <body>
+            <h1>📊 Dashboard</h1>
+            <p>Dashboard sayfası hazırlanıyor...</p>
+            <a href="/">Ana Sayfaya Dön</a>
+        </body>
+        </html>
+        """)
 @app.get("/api/visitors")
 async def get_visitors(request: Request):
     """Get unique visitor count"""
