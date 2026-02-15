@@ -2,10 +2,10 @@
 # -*- coding: utf-8 -*-
 """
 ICTSMARTPRO ULTIMATE v9.1 - PRODUCTION READY
-15+ Exchange + Yahoo Finance Failover + Rate Limiting + Prometheus
+15+ Exchange + Yahoo Finance Failover
 NO MOCK DATA - ZERO SYNTHETIC DATA
 Real confidence caps: MAX 79%
-Redis removed - Simplified version
+Prometheus removed - Simplified version
 """
 
 import os
@@ -24,18 +24,10 @@ from collections import defaultdict
 import traceback
 
 # FastAPI
-from fastapi import FastAPI, Request, HTTPException, Query, WebSocket, WebSocketDisconnect, Depends
+from fastapi import FastAPI, Request, HTTPException, Query, WebSocket, WebSocketDisconnect
 from fastapi.responses import HTMLResponse, JSONResponse, FileResponse, RedirectResponse
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.middleware.gzip import GZipMiddleware
-from fastapi.staticfiles import StaticFiles
-
-# Rate Limiting & Cache (Redis kaldırıldı, memory cache kullanılacak)
-from fastapi_limiter import FastAPILimiter
-from fastapi_limiter.depends import RateLimiter
-
-# Metrics
-from prometheus_fastapi_instrumentator import Instrumentator
 
 # Error Tracking
 import sentry_sdk
@@ -152,13 +144,8 @@ class Config:
     OPTIMAL_CANDLES = 100
     MIN_EXCHANGES = 2
     
-    # Cache - Memory cache (Redis kaldırıldı)
+    # Cache - Memory cache (Redis yok, Prometheus yok)
     CACHE_TTL = 30  # seconds
-    USE_REDIS = False  # Redis devre dışı
-    
-    # Rate Limiting - Memory based (Redis olmadan çalışır)
-    RATE_LIMIT_CALLS = 30
-    RATE_LIMIT_PERIOD = 60
     
     # Signal Confidence - REALISTIC CAPS!
     MAX_CONFIDENCE = 79.0
@@ -193,7 +180,7 @@ class Config:
     MODEL_DIR = "models"
 
 # ========================================================================================================
-# MEMORY CACHE MANAGER (Redis yerine)
+# MEMORY CACHE MANAGER (Prometheus yok, Redis yok)
 # ========================================================================================================
 class MemoryCache:
     """Simple in-memory cache with TTL"""
@@ -1639,7 +1626,7 @@ class MLEngine:
 # ========================================================================================================
 app = FastAPI(
     title="ICTSMARTPRO ULTIMATE v9.1",
-    description="Production-ready crypto analysis with 15+ exchanges + Yahoo Finance failover + Rate Limiting + Prometheus",
+    description="Production-ready crypto analysis with 15+ exchanges + Yahoo Finance failover",
     version="9.1.0",
     docs_url="/docs" if Config.DEBUG else None,
     redoc_url=None
@@ -1660,12 +1647,8 @@ app.add_middleware(
 
 app.add_middleware(GZipMiddleware, minimum_size=1000)
 
-# Prometheus metrics
-instrumentator = Instrumentator()
-instrumentator.instrument(app).expose(app)
-
 # Global instances
-cache = MemoryCache()  # Redis yerine MemoryCache
+cache = MemoryCache()  # Memory cache
 data_fetcher = ExchangeDataFetcher(cache)
 ml_engine = MLEngine()
 startup_time = time.time()
@@ -1682,14 +1665,11 @@ visitor_count = 0
 @app.on_event("startup")
 async def startup_event():
     logger.info("=" * 80)
-    logger.info("🚀 ICTSMARTPRO ULTIMATE v9.1 STARTING UP (Redis simplified)")
+    logger.info("🚀 ICTSMARTPRO ULTIMATE v9.1 STARTING UP (Simplified - No Redis, No Prometheus)")
     logger.info("=" * 80)
     
     # Initialize memory cache
     await cache.init()
-    
-    # Rate Limiter - Redis olmadan çalışmaz, memory rate limiter kullan
-    logger.info("⚠️ Rate limiting disabled (Redis not available)")
     
     # Initialize HTTP session
     try:
@@ -1795,7 +1775,7 @@ async def get_exchanges(request: Request):
     }
 
 # ========================================================================================================
-# MAIN ANALYSIS ENDPOINT (Rate Limiting devre dışı)
+# MAIN ANALYSIS ENDPOINT
 # ========================================================================================================
 
 @app.get("/api/analyze/{symbol}")
@@ -2135,7 +2115,7 @@ async def root():
         <html>
         <head><title>ICTSMARTPRO v9.1</title></head>
         <body style="font-family: system-ui; background: #0a0e1a; color: white; padding: 2rem;">
-            <h1 style="color: #00e5ff;">🚀 ICTSMARTPRO ULTIMATE v9.1 (Redis simplified)</h1>
+            <h1 style="color: #00e5ff;">🚀 ICTSMARTPRO ULTIMATE v9.1 (Simplified)</h1>
             <p>Dashboard file not found. Please ensure templates/dashboard.html exists.</p>
             <p>API is running. Use <a href="/docs" style="color: #00ff9d;">/docs</a> for API documentation.</p>
             <hr style="border-color: #00e5ff;">
@@ -2145,9 +2125,7 @@ async def root():
                 <li>✅ ML Available: {ML_AVAILABLE}</li>
                 <li>✅ Active Sources: {len(data_fetcher.active_sources)}</li>
                 <li>✅ Max Confidence: {Config.MAX_CONFIDENCE}%</li>
-                <li>⚠️ Rate Limiting: Disabled (Redis not available)</li>
             </ul>
-            <p><a href="/metrics" style="color: #bd00ff;">📊 Prometheus Metrics</a></p>
         </body>
         </html>
         """)
@@ -2168,9 +2146,8 @@ if __name__ == "__main__":
     host = os.getenv("HOST", "0.0.0.0")
     
     logger.info(f"🌐 Starting server on {host}:{port}")
-    logger.info(f"📊 Prometheus metrics available at {host}:{port}/metrics")
     logger.info(f"📚 API docs at {host}:{port}/docs" if Config.DEBUG else "📚 API docs disabled in production")
-    logger.info("⚠️ Redis disabled - using memory cache")
+    logger.info("✅ Simplified version - No Redis, No Prometheus, No Rate Limiting")
     
     uvicorn.run(
         "main:app",
