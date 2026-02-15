@@ -1,3 +1,4 @@
+ 
 # Web / API temel paketler
 fastapi >= 0.115.0
 uvicorn[standard] >= 0.30.0
@@ -18,23 +19,16 @@ torchvision == 0.18.1+cpu
 transformers >= 4.45.0
 
 # Teknik analiz & finans
-yfinance >= 0.2.40          # güncel sürümler 0.2.x familyasından, stabil olanı seçtim
-pandas-ta >= 0.3.14b0       # numba'yı sevmiyorsan yorum satırına al → # pandas-ta >= 0.3.14b0
+yfinance >= 0.2.40
+# pandas-ta >= 0.3.14b0  # İsteğe bağlı, numba sorun çıkarırsa yorum satırı
 
-# Görüntü & görselleştirme
-opencv-python-headless >= 4.10.0
+# Görüntü & görselleştirme (dashboard için)
 pillow >= 10.4.0
-plotly >= 5.24.0
+jinja2 >= 3.1.4
 
-# Yardımcı / performans / limit / log
+# Yardımcı / performans / log
 pydantic >= 2.9.0
-rich >= 13.8.0
 loguru >= 0.7.2
 psutil >= 6.0.0
-aiocache >= 0.12.1
 python-multipart == 0.0.12
-jinja2 >= 3.1.4
-fastapi-limiter == 0.1.6
-redis >= 5.0.1
-pycoingecko
- 
+
