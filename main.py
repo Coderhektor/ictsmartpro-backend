@@ -5,7 +5,7 @@ ICTSMARTPRO ULTIMATE v9.1 - PRODUCTION READY
 15+ Exchange + Yahoo Finance Failover
 NO MOCK DATA - ZERO SYNTHETIC DATA
 Real confidence caps: MAX 79%
-Prometheus removed - Simplified version
+Simplified version - No Redis, No Prometheus, No Rate Limiting
 """
 
 import os
@@ -94,7 +94,7 @@ class ProductionLogger:
             )
             file_handler.setFormatter(file_format)
             self.logger.addHandler(file_handler)
-        except:
+        except Exception as e:
             pass
         
         # Create models directory
@@ -144,7 +144,7 @@ class Config:
     OPTIMAL_CANDLES = 100
     MIN_EXCHANGES = 2
     
-    # Cache - Memory cache (Redis yok, Prometheus yok)
+    # Cache - Memory cache (Redis yok)
     CACHE_TTL = 30  # seconds
     
     # Signal Confidence - REALISTIC CAPS!
@@ -180,7 +180,7 @@ class Config:
     MODEL_DIR = "models"
 
 # ========================================================================================================
-# MEMORY CACHE MANAGER (Prometheus yok, Redis yok)
+# MEMORY CACHE MANAGER
 # ========================================================================================================
 class MemoryCache:
     """Simple in-memory cache with TTL"""
@@ -227,7 +227,33 @@ class MemoryCache:
         return False
 
 # ========================================================================================================
-# REQUEST ID MIDDLEWARE
+# FASTAPI APPLICATION - ÖNCE TANIMLA!
+# ========================================================================================================
+app = FastAPI(
+    title="ICTSMARTPRO ULTIMATE v9.1",
+    description="Production-ready crypto analysis with 15+ exchanges + Yahoo Finance failover",
+    version="9.1.0",
+    docs_url="/docs" if Config.DEBUG else None,
+    redoc_url=None
+)
+
+# Add Sentry middleware if in production
+if SENTRY_DSN and os.getenv("ENV") == "production":
+    app.add_middleware(SentryAsgiMiddleware)
+
+# CORS
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["*"] if Config.DEBUG else ["https://ictsmartpro.ai"],
+    allow_credentials=True,
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
+
+app.add_middleware(GZipMiddleware, minimum_size=1000)
+
+# ========================================================================================================
+# REQUEST ID MIDDLEWARE - app tanımlandıktan SONRA!
 # ========================================================================================================
 @app.middleware("http")
 async def add_request_id(request: Request, call_next):
@@ -243,6 +269,19 @@ async def add_request_id(request: Request, call_next):
     logging.request_id = 'N/A'
     
     return response
+
+# ========================================================================================================
+# GLOBAL INSTANCES - app tanımlandıktan SONRA!
+# ========================================================================================================
+cache = MemoryCache()
+data_fetcher = None  # Will be initialized in startup
+ml_engine = MLEngine()
+startup_time = time.time()
+websocket_connections = set()  # WebSocket bağlantılarını takip et
+
+# Visitor tracking
+visitor_tracker = defaultdict(lambda: datetime.min)
+visitor_count = 0
 
 # ========================================================================================================
 # ENHANCED EXCHANGE DATA FETCHER WITH FAILOVER
@@ -1057,8 +1096,8 @@ class MarketStructureAnalyzer:
                 "trend_strength": "UNKNOWN",
                 "volatility": "UNKNOWN",
                 "volatility_index": 100.0,
-                "support_levels": [],
-                "resistance_levels": [],
+                "support": 0,
+                "resistance": 0,
                 "hh_hl_confirmed": False,
                 "description": "Insufficient data for structure analysis"
             }
@@ -1622,54 +1661,22 @@ class MLEngine:
         }
 
 # ========================================================================================================
-# FASTAPI APPLICATION
-# ========================================================================================================
-app = FastAPI(
-    title="ICTSMARTPRO ULTIMATE v9.1",
-    description="Production-ready crypto analysis with 15+ exchanges + Yahoo Finance failover",
-    version="9.1.0",
-    docs_url="/docs" if Config.DEBUG else None,
-    redoc_url=None
-)
-
-# Add Sentry middleware if in production
-if SENTRY_DSN and os.getenv("ENV") == "production":
-    app.add_middleware(SentryAsgiMiddleware)
-
-# CORS
-app.add_middleware(
-    CORSMiddleware,
-    allow_origins=["*"] if Config.DEBUG else ["https://ictsmartpro.ai"],
-    allow_credentials=True,
-    allow_methods=["*"],
-    allow_headers=["*"],
-)
-
-app.add_middleware(GZipMiddleware, minimum_size=1000)
-
-# Global instances
-cache = MemoryCache()  # Memory cache
-data_fetcher = ExchangeDataFetcher(cache)
-ml_engine = MLEngine()
-startup_time = time.time()
-websocket_connections = set()  # WebSocket bağlantılarını takip et
-
-# Visitor tracking
-visitor_tracker = defaultdict(lambda: datetime.min)
-visitor_count = 0
-
-# ========================================================================================================
 # STARTUP & SHUTDOWN
 # ========================================================================================================
 
 @app.on_event("startup")
 async def startup_event():
+    global data_fetcher
+    
     logger.info("=" * 80)
     logger.info("🚀 ICTSMARTPRO ULTIMATE v9.1 STARTING UP (Simplified - No Redis, No Prometheus)")
     logger.info("=" * 80)
     
     # Initialize memory cache
     await cache.init()
+    
+    # Initialize data fetcher with cache
+    data_fetcher = ExchangeDataFetcher(cache)
     
     # Initialize HTTP session
     try:
@@ -1713,7 +1720,7 @@ async def health_check(request: Request):
         "uptime_seconds": int(uptime),
         "ml_available": ML_AVAILABLE,
         "cache_type": "memory",
-        "active_sources": list(data_fetcher.active_sources) if data_fetcher.active_sources else [],
+        "active_sources": list(data_fetcher.active_sources) if data_fetcher and data_fetcher.active_sources else [],
         "active_websockets": len(websocket_connections),
         "max_confidence": Config.MAX_CONFIDENCE
     }
@@ -1741,15 +1748,16 @@ async def get_visitors(request: Request):
 async def get_exchanges(request: Request):
     exchanges = []
     
-    for name, status in data_fetcher.exchange_status.items():
-        exchanges.append({
-            "name": name,
-            "active": status.get("active", False),
-            "success_rate": status.get("success", 0) / max(status.get("success", 0) + status.get("fail", 0), 1) * 100 if status.get("success", 0) + status.get("fail", 0) > 0 else 0,
-            "last_success": status.get("last_success", 0),
-            "last_error": status.get("last_error"),
-            "weight": Config.EXCHANGE_WEIGHTS.get(name, 0.5)
-        })
+    if data_fetcher:
+        for name, status in data_fetcher.exchange_status.items():
+            exchanges.append({
+                "name": name,
+                "active": status.get("active", False),
+                "success_rate": status.get("success", 0) / max(status.get("success", 0) + status.get("fail", 0), 1) * 100 if status.get("success", 0) + status.get("fail", 0) > 0 else 0,
+                "last_success": status.get("last_success", 0),
+                "last_error": status.get("last_error"),
+                "weight": Config.EXCHANGE_WEIGHTS.get(name, 0.5)
+            })
     
     all_exchange_names = list(Config.EXCHANGE_WEIGHTS.keys())
     for name in all_exchange_names:
@@ -1769,8 +1777,8 @@ async def get_exchanges(request: Request):
         "success": True,
         "timestamp": datetime.now(timezone.utc).isoformat(),
         "request_id": request.state.request_id,
-        "active_sources": list(data_fetcher.active_sources),
-        "last_successful_source": data_fetcher.last_successful_source,
+        "active_sources": list(data_fetcher.active_sources) if data_fetcher and data_fetcher.active_sources else [],
+        "last_successful_source": data_fetcher.last_successful_source if data_fetcher else None,
         "exchanges": exchanges
     }
 
@@ -1859,7 +1867,7 @@ async def analyze_symbol(
                 "change_24h": round(change_24h, 2),
                 "volume_24h": round(float(df['volume'].sum()), 2),
                 "source_count": len(set(c['exchange'] for c in candles)),
-                "active_sources": list(data_fetcher.active_sources)
+                "active_sources": list(data_fetcher.active_sources) if data_fetcher and data_fetcher.active_sources else []
             },
             
             "signal": signal,
@@ -1986,7 +1994,7 @@ async def websocket_endpoint(websocket: WebSocket, symbol: str):
                                 "high": float(current_candle['high']),
                                 "low": float(current_candle['low']),
                                 "source_count": current_candle.get('source_count', 1),
-                                "active_sources": list(data_fetcher.active_sources) if data_fetcher.active_sources else []
+                                "active_sources": list(data_fetcher.active_sources) if data_fetcher and data_fetcher.active_sources else []
                             }
                         })
                         
@@ -2073,8 +2081,8 @@ async def chat(request: Request):
         elif "hh" in message or "hl" in message or "higher high" in message:
             responses.append("Higher highs and higher lows confirm uptrend. Lower highs and lower lows confirm downtrend.")
         elif "exchange" in message or "source" in message:
-            active = len(data_fetcher.active_sources) if data_fetcher.active_sources else 0
-            responses.append(f"Data from {active} active exchanges including {', '.join(list(data_fetcher.active_sources)[:3]) if data_fetcher.active_sources else 'none'}.")
+            active = len(data_fetcher.active_sources) if data_fetcher and data_fetcher.active_sources else 0
+            responses.append(f"Data from {active} active exchanges including {', '.join(list(data_fetcher.active_sources)[:3]) if data_fetcher and data_fetcher.active_sources else 'none'}.")
         elif "hello" in message or "hi" in message:
             responses.append(f"Analyzing {symbol.replace('USDT', '/USDT')}. Ask about RSI, MACD, support/resistance, or HH/HL confirmation.")
         else:
@@ -2123,7 +2131,7 @@ async def root():
             <ul>
                 <li>✅ Cache: Memory (TTL: {Config.CACHE_TTL}s)</li>
                 <li>✅ ML Available: {ML_AVAILABLE}</li>
-                <li>✅ Active Sources: {len(data_fetcher.active_sources)}</li>
+                <li>✅ Active Sources: {len(data_fetcher.active_sources) if data_fetcher else 0}</li>
                 <li>✅ Max Confidence: {Config.MAX_CONFIDENCE}%</li>
             </ul>
         </body>
