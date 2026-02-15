@@ -2,9 +2,10 @@
 # -*- coding: utf-8 -*-
 """
 ICTSMARTPRO ULTIMATE v9.1 - PRODUCTION READY
-15+ Exchange + Yahoo Finance Failover + Redis + Rate Limiting + Prometheus
+15+ Exchange + Yahoo Finance Failover + Rate Limiting + Prometheus
 NO MOCK DATA - ZERO SYNTHETIC DATA
 Real confidence caps: MAX 79%
+Redis removed - Simplified version
 """
 
 import os
@@ -29,8 +30,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.middleware.gzip import GZipMiddleware
 from fastapi.staticfiles import StaticFiles
 
-# Rate Limiting & Cache
-import aioredis
+# Rate Limiting & Cache (Redis kaldırıldı, memory cache kullanılacak)
 from fastapi_limiter import FastAPILimiter
 from fastapi_limiter.depends import RateLimiter
 
@@ -152,12 +152,11 @@ class Config:
     OPTIMAL_CANDLES = 100
     MIN_EXCHANGES = 2
     
-    # Cache - Redis
-    REDIS_URL = os.getenv("REDIS_URL", "redis://localhost:6379")
-    CACHE_TTL = 30
-    USE_REDIS = True
+    # Cache - Memory cache (Redis kaldırıldı)
+    CACHE_TTL = 30  # seconds
+    USE_REDIS = False  # Redis devre dışı
     
-    # Rate Limiting
+    # Rate Limiting - Memory based (Redis olmadan çalışır)
     RATE_LIMIT_CALLS = 30
     RATE_LIMIT_PERIOD = 60
     
@@ -194,6 +193,53 @@ class Config:
     MODEL_DIR = "models"
 
 # ========================================================================================================
+# MEMORY CACHE MANAGER (Redis yerine)
+# ========================================================================================================
+class MemoryCache:
+    """Simple in-memory cache with TTL"""
+    
+    def __init__(self):
+        self.cache: Dict[str, Tuple[Any, float]] = {}
+        self.enabled = True
+    
+    async def init(self):
+        """No initialization needed for memory cache"""
+        logger.info("✅ Memory cache enabled")
+    
+    async def get(self, key: str) -> Optional[Any]:
+        """Get value from cache if not expired"""
+        if key in self.cache:
+            value, timestamp = self.cache[key]
+            if time.time() - timestamp < Config.CACHE_TTL:
+                return value
+            else:
+                # Expired
+                del self.cache[key]
+        return None
+    
+    async def set(self, key: str, value: Any, ttl: int = Config.CACHE_TTL):
+        """Set value in cache with TTL"""
+        self.cache[key] = (value, time.time())
+    
+    async def invalidate(self, key: str):
+        """Remove key from cache"""
+        if key in self.cache:
+            del self.cache[key]
+    
+    async def should_invalidate(self, key: str, new_price: float) -> bool:
+        """Price-based cache invalidation"""
+        cached = await self.get(key)
+        if cached and isinstance(cached, list) and len(cached) > 0:
+            try:
+                old_price = cached[-1].get('close', 0)
+                if old_price > 0:
+                    price_change = abs(new_price - old_price) / old_price * 100
+                    return price_change > 0.5
+            except:
+                pass
+        return False
+
+# ========================================================================================================
 # REQUEST ID MIDDLEWARE
 # ========================================================================================================
 @app.middleware("http")
@@ -210,70 +256,6 @@ async def add_request_id(request: Request, call_next):
     logging.request_id = 'N/A'
     
     return response
-
-# ========================================================================================================
-# REDIS CACHE MANAGER
-# ========================================================================================================
-class RedisCache:
-    """Redis cache manager with fallback"""
-    
-    def __init__(self):
-        self.redis = None
-        self.enabled = Config.USE_REDIS and Config.REDIS_URL is not None
-    
-    async def init(self):
-        if self.enabled:
-            try:
-                self.redis = await aioredis.from_url(
-                    Config.REDIS_URL,
-                    encoding="utf-8",
-                    decode_responses=True
-                )
-                await self.redis.ping()
-                logger.info("✅ Redis connected")
-            except Exception as e:
-                logger.warning(f"⚠️ Redis connection failed: {e}")
-                self.enabled = False
-    
-    async def get(self, key: str) -> Optional[Any]:
-        if not self.enabled or not self.redis:
-            return None
-        try:
-            data = await self.redis.get(key)
-            if data:
-                return json.loads(data)
-        except Exception as e:
-            logger.debug(f"Redis get error: {e}")
-        return None
-    
-    async def set(self, key: str, value: Any, ttl: int = Config.CACHE_TTL):
-        if not self.enabled or not self.redis:
-            return
-        try:
-            await self.redis.setex(key, ttl, json.dumps(value))
-        except Exception as e:
-            logger.debug(f"Redis set error: {e}")
-    
-    async def invalidate(self, key: str):
-        if not self.enabled or not self.redis:
-            return
-        try:
-            await self.redis.delete(key)
-        except Exception as e:
-            logger.debug(f"Redis delete error: {e}")
-    
-    async def should_invalidate(self, key: str, new_price: float) -> bool:
-        """Price-based cache invalidation"""
-        cached = await self.get(key)
-        if cached and isinstance(cached, list) and len(cached) > 0:
-            try:
-                old_price = cached[-1].get('close', 0)
-                if old_price > 0:
-                    price_change = abs(new_price - old_price) / old_price * 100
-                    return price_change > 0.5
-            except:
-                pass
-        return False
 
 # ========================================================================================================
 # ENHANCED EXCHANGE DATA FETCHER WITH FAILOVER
@@ -496,7 +478,7 @@ class ExchangeDataFetcher:
         },
         {
             "name": "WhiteBIT",
-            "base_url": "https://api.whitebit.com",  # DÜZELTİLDİ
+            "base_url": "https://api.whitebit.com",
             "endpoint": "/api/v4/public/klines",
             "symbol_fmt": lambda s: s.replace("/", "_"),
             "interval_map": {
@@ -538,7 +520,7 @@ class ExchangeDataFetcher:
         }
     ]
     
-    def __init__(self, cache: RedisCache):
+    def __init__(self, cache: MemoryCache):
         self.cache = cache
         self.session: Optional[aiohttp.ClientSession] = None
         self.exchange_status: Dict[str, Dict] = {}
@@ -672,7 +654,7 @@ class ExchangeDataFetcher:
             elif name == "Crypto.com":
                 params = {"instrument_name": formatted_symbol, "timeframe": ex_interval}
             elif name == "LBank":
-                params = {"market": formatted_symbol, "interval": ex_interval, "limit": limit}  # DÜZELTİLDİ
+                params = {"market": formatted_symbol, "interval": ex_interval, "limit": limit}
             
             # Make request
             async with self.session.get(url, params=params, timeout=Config.API_TIMEOUT) as response:
@@ -772,10 +754,10 @@ class ExchangeDataFetcher:
         """
         cache_key = f"candles:{symbol}:{interval}:{limit}"
         
-        # Try Redis cache first
+        # Try memory cache first
         cached = await self.cache.get(cache_key)
         if cached:
-            logger.info(f"📦 Redis cache hit: {symbol} ({interval})")
+            logger.info(f"📦 Memory cache hit: {symbol} ({interval})")
             return cached
         
         logger.info(f"🔄 Fetching {symbol} ({interval}) from all exchanges...")
@@ -851,7 +833,7 @@ class ExchangeDataFetcher:
         return result
 
 # ========================================================================================================
-# OPTIMIZED TECHNICAL INDICATORS (Gereksiz volume göstergeleri kaldırıldı)
+# OPTIMIZED TECHNICAL INDICATORS
 # ========================================================================================================
 class TechnicalAnalyzer:
     """Advanced technical analysis with optimized indicators"""
@@ -911,7 +893,7 @@ class TechnicalAnalyzer:
         atr = calculate_atr(14)
         atr_percent = (atr / close * 100).fillna(0)
         
-        # ===== SIMPLE VOLUME (sadece temel) =====
+        # ===== SIMPLE VOLUME =====
         volume_sma = volume.rolling(20).mean()
         volume_ratio = volume / volume_sma.replace(0, 1)
         
@@ -948,7 +930,7 @@ class TechnicalAnalyzer:
             "atr": float(atr.iloc[-1]) if not pd.isna(atr.iloc[-1]) else 0,
             "atr_percent": float(atr_percent.iloc[-1]) if not pd.isna(atr_percent.iloc[-1]) else 0,
             
-            # Volume (sadece temel)
+            # Volume
             "volume": float(volume.iloc[-1]),
             "volume_ratio": float(volume_ratio.iloc[-1]) if not pd.isna(volume_ratio.iloc[-1]) else 1.0,
             
@@ -1071,7 +1053,7 @@ class PatternDetector:
                 unique_patterns.append(p)
                 seen_candles.add(candle_idx)
         
-        return unique_patterns[:10]  # En fazla 10 pattern
+        return unique_patterns[:10]
 
 # ========================================================================================================
 # ENHANCED MARKET STRUCTURE ANALYZER (HH/HL teyit eklendi)
@@ -1657,7 +1639,7 @@ class MLEngine:
 # ========================================================================================================
 app = FastAPI(
     title="ICTSMARTPRO ULTIMATE v9.1",
-    description="Production-ready crypto analysis with 15+ exchanges + Yahoo Finance failover + Redis + Rate Limiting + Prometheus",
+    description="Production-ready crypto analysis with 15+ exchanges + Yahoo Finance failover + Rate Limiting + Prometheus",
     version="9.1.0",
     docs_url="/docs" if Config.DEBUG else None,
     redoc_url=None
@@ -1683,7 +1665,7 @@ instrumentator = Instrumentator()
 instrumentator.instrument(app).expose(app)
 
 # Global instances
-cache = RedisCache()
+cache = MemoryCache()  # Redis yerine MemoryCache
 data_fetcher = ExchangeDataFetcher(cache)
 ml_engine = MLEngine()
 startup_time = time.time()
@@ -1700,19 +1682,14 @@ visitor_count = 0
 @app.on_event("startup")
 async def startup_event():
     logger.info("=" * 80)
-    logger.info("🚀 ICTSMARTPRO ULTIMATE v9.1 STARTING UP")
+    logger.info("🚀 ICTSMARTPRO ULTIMATE v9.1 STARTING UP (Redis simplified)")
     logger.info("=" * 80)
     
-    # Initialize Redis
+    # Initialize memory cache
     await cache.init()
     
-    # Initialize Rate Limiter
-    if cache.enabled and cache.redis:
-        try:
-            await FastAPILimiter.init(cache.redis)
-            logger.info("✅ Rate limiter initialized")
-        except Exception as e:
-            logger.warning(f"⚠️ Rate limiter failed: {e}")
+    # Rate Limiter - Redis olmadan çalışmaz, memory rate limiter kullan
+    logger.info("⚠️ Rate limiting disabled (Redis not available)")
     
     # Initialize HTTP session
     try:
@@ -1724,7 +1701,7 @@ async def startup_event():
     
     logger.info(f"Environment: {Config.ENV}")
     logger.info(f"ML Available: {ML_AVAILABLE}")
-    logger.info(f"Redis: {'✅' if cache.enabled else '❌'}")
+    logger.info(f"Cache: Memory (TTL: {Config.CACHE_TTL}s)")
     logger.info(f"Total Sources: {len(Config.EXCHANGE_WEIGHTS)}")
     logger.info(f"Max Confidence: {Config.MAX_CONFIDENCE}%")
     logger.info("=" * 80)
@@ -1755,7 +1732,7 @@ async def health_check(request: Request):
         "timestamp": datetime.now(timezone.utc).isoformat(),
         "uptime_seconds": int(uptime),
         "ml_available": ML_AVAILABLE,
-        "redis_enabled": cache.enabled,
+        "cache_type": "memory",
         "active_sources": list(data_fetcher.active_sources) if data_fetcher.active_sources else [],
         "active_websockets": len(websocket_connections),
         "max_confidence": Config.MAX_CONFIDENCE
@@ -1818,13 +1795,10 @@ async def get_exchanges(request: Request):
     }
 
 # ========================================================================================================
-# MAIN ANALYSIS ENDPOINT (with Rate Limiting)
+# MAIN ANALYSIS ENDPOINT (Rate Limiting devre dışı)
 # ========================================================================================================
 
-@app.get(
-    "/api/analyze/{symbol}",
-    dependencies=[Depends(RateLimiter(times=Config.RATE_LIMIT_CALLS, seconds=Config.RATE_LIMIT_PERIOD))]
-)
+@app.get("/api/analyze/{symbol}")
 async def analyze_symbol(
     request: Request,
     symbol: str,
@@ -1923,7 +1897,7 @@ async def analyze_symbol(
             "performance": {
                 "analysis_time_ms": round((time.time() - start_time) * 1000),
                 "data_points": len(df),
-                "cache_enabled": cache.enabled
+                "cache_enabled": True
             }
         }
         
@@ -2072,6 +2046,29 @@ async def websocket_endpoint(websocket: WebSocket, symbol: str):
         logger.info(f"🔌 WebSocket closed for {symbol} (total: {len(websocket_connections)})")
 
 # ========================================================================================================
+# GLOBAL WEBSOCKET FOR ACTIVE USERS
+# ========================================================================================================
+
+@app.websocket("/ws/global")
+async def global_websocket_endpoint(websocket: WebSocket):
+    """Global WebSocket for active user count"""
+    await websocket.accept()
+    websocket_connections.add(websocket)
+    
+    try:
+        while True:
+            # Send active user count every 5 seconds
+            await websocket.send_json({
+                "type": "active_users",
+                "count": len(websocket_connections)
+            })
+            await asyncio.sleep(5)
+    except WebSocketDisconnect:
+        pass
+    finally:
+        websocket_connections.discard(websocket)
+
+# ========================================================================================================
 # CHAT/ASSISTANT ENDPOINT
 # ========================================================================================================
 
@@ -2138,17 +2135,17 @@ async def root():
         <html>
         <head><title>ICTSMARTPRO v9.1</title></head>
         <body style="font-family: system-ui; background: #0a0e1a; color: white; padding: 2rem;">
-            <h1 style="color: #00e5ff;">🚀 ICTSMARTPRO ULTIMATE v9.1</h1>
+            <h1 style="color: #00e5ff;">🚀 ICTSMARTPRO ULTIMATE v9.1 (Redis simplified)</h1>
             <p>Dashboard file not found. Please ensure templates/dashboard.html exists.</p>
             <p>API is running. Use <a href="/docs" style="color: #00ff9d;">/docs</a> for API documentation.</p>
             <hr style="border-color: #00e5ff;">
             <h3>System Status:</h3>
             <ul>
-                <li>✅ Redis: {'Connected' if cache.enabled else 'Disabled'}</li>
+                <li>✅ Cache: Memory (TTL: {Config.CACHE_TTL}s)</li>
                 <li>✅ ML Available: {ML_AVAILABLE}</li>
                 <li>✅ Active Sources: {len(data_fetcher.active_sources)}</li>
                 <li>✅ Max Confidence: {Config.MAX_CONFIDENCE}%</li>
-                <li>✅ Rate Limiting: {Config.RATE_LIMIT_CALLS} calls/{Config.RATE_LIMIT_PERIOD}s</li>
+                <li>⚠️ Rate Limiting: Disabled (Redis not available)</li>
             </ul>
             <p><a href="/metrics" style="color: #bd00ff;">📊 Prometheus Metrics</a></p>
         </body>
@@ -2173,6 +2170,7 @@ if __name__ == "__main__":
     logger.info(f"🌐 Starting server on {host}:{port}")
     logger.info(f"📊 Prometheus metrics available at {host}:{port}/metrics")
     logger.info(f"📚 API docs at {host}:{port}/docs" if Config.DEBUG else "📚 API docs disabled in production")
+    logger.info("⚠️ Redis disabled - using memory cache")
     
     uvicorn.run(
         "main:app",
