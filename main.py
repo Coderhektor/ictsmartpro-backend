@@ -94,7 +94,7 @@ class ProductionLogger:
             )
             file_handler.setFormatter(file_format)
             self.logger.addHandler(file_handler)
-        except Exception as e:
+        except Exception:
             pass
         
         # Create models directory
@@ -225,63 +225,6 @@ class MemoryCache:
             except:
                 pass
         return False
-
-# ========================================================================================================
-# FASTAPI APPLICATION - ÖNCE TANIMLA!
-# ========================================================================================================
-app = FastAPI(
-    title="ICTSMARTPRO ULTIMATE v9.1",
-    description="Production-ready crypto analysis with 15+ exchanges + Yahoo Finance failover",
-    version="9.1.0",
-    docs_url="/docs" if Config.DEBUG else None,
-    redoc_url=None
-)
-
-# Add Sentry middleware if in production
-if SENTRY_DSN and os.getenv("ENV") == "production":
-    app.add_middleware(SentryAsgiMiddleware)
-
-# CORS
-app.add_middleware(
-    CORSMiddleware,
-    allow_origins=["*"] if Config.DEBUG else ["https://ictsmartpro.ai"],
-    allow_credentials=True,
-    allow_methods=["*"],
-    allow_headers=["*"],
-)
-
-app.add_middleware(GZipMiddleware, minimum_size=1000)
-
-# ========================================================================================================
-# REQUEST ID MIDDLEWARE - app tanımlandıktan SONRA!
-# ========================================================================================================
-@app.middleware("http")
-async def add_request_id(request: Request, call_next):
-    """Add unique request ID to each request for tracing"""
-    request_id = str(uuid4())[:8]
-    request.state.request_id = request_id
-    logging.request_id = request_id  # Set for logger
-    
-    response = await call_next(request)
-    response.headers["X-Request-ID"] = request_id
-    
-    # Clean up
-    logging.request_id = 'N/A'
-    
-    return response
-
-# ========================================================================================================
-# GLOBAL INSTANCES - app tanımlandıktan SONRA!
-# ========================================================================================================
-cache = MemoryCache()
-data_fetcher = None  # Will be initialized in startup
-ml_engine = MLEngine()
-startup_time = time.time()
-websocket_connections = set()  # WebSocket bağlantılarını takip et
-
-# Visitor tracking
-visitor_tracker = defaultdict(lambda: datetime.min)
-visitor_count = 0
 
 # ========================================================================================================
 # ENHANCED EXCHANGE DATA FETCHER WITH FAILOVER
@@ -1659,6 +1602,63 @@ class MLEngine:
             "precision": round(self.stats["precision"], 1),
             "recall": round(self.stats["recall"], 1)
         }
+
+# ========================================================================================================
+# FASTAPI APPLICATION - TÜM SINIFLARDAN SONRA!
+# ========================================================================================================
+app = FastAPI(
+    title="ICTSMARTPRO ULTIMATE v9.1",
+    description="Production-ready crypto analysis with 15+ exchanges + Yahoo Finance failover",
+    version="9.1.0",
+    docs_url="/docs" if Config.DEBUG else None,
+    redoc_url=None
+)
+
+# Add Sentry middleware if in production
+if SENTRY_DSN and os.getenv("ENV") == "production":
+    app.add_middleware(SentryAsgiMiddleware)
+
+# CORS
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["*"] if Config.DEBUG else ["https://ictsmartpro.ai"],
+    allow_credentials=True,
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
+
+app.add_middleware(GZipMiddleware, minimum_size=1000)
+
+# ========================================================================================================
+# REQUEST ID MIDDLEWARE - app tanımlandıktan SONRA!
+# ========================================================================================================
+@app.middleware("http")
+async def add_request_id(request: Request, call_next):
+    """Add unique request ID to each request for tracing"""
+    request_id = str(uuid4())[:8]
+    request.state.request_id = request_id
+    logging.request_id = request_id  # Set for logger
+    
+    response = await call_next(request)
+    response.headers["X-Request-ID"] = request_id
+    
+    # Clean up
+    logging.request_id = 'N/A'
+    
+    return response
+
+# ========================================================================================================
+# GLOBAL INSTANCES - TÜM SINIFLAR ve APP'TEN SONRA!
+# ========================================================================================================
+cache = MemoryCache()
+data_fetcher = None  # Startup'da initialize edilecek
+ml_engine = MLEngine()  # Artık MLEngine tanımlı!
+startup_time = time.time()
+websocket_connections = set()  # WebSocket bağlantılarını takip et
+
+# Visitor tracking
+visitor_tracker = defaultdict(lambda: datetime.min)
+visitor_count = 0
 
 # ========================================================================================================
 # STARTUP & SHUTDOWN
