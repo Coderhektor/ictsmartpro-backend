@@ -18,6 +18,8 @@ from fastapi.responses import HTMLResponse, JSONResponse, FileResponse
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.middleware.gzip import GZipMiddleware
 from fastapi.staticfiles import StaticFiles
+from fastapi import Request
+from collections import defaultdict
 
 import aiohttp
 from aiohttp import ClientTimeout, TCPConnector
@@ -1148,25 +1150,23 @@ startup_time = time.time()
 # ========================================================================================================
 # ZİYARETÇİ SAYACI - app tanımından SONRA gelmeli!
 # ========================================================================================================
-visitor_tracker = defaultdict(lambda: datetime.min)
-visitor_count = 0
+
+visitor_counts = defaultdict(int)   # IP → ziyaret sayısı
+total_visits = 0
 
 @app.get("/api/visitors")
 async def get_visitors(request: Request):
-    global visitor_count
+    global total_visits
     
     client_ip = request.client.host or "unknown"
-    last_visit = visitor_tracker[client_ip]
-    now = datetime.utcnow()
     
-    if (now - last_visit) > timedelta(hours=24):
-        visitor_count += 1
-        visitor_tracker[client_ip] = now
-        logger.info(f"Yeni ziyaretçi IP: {client_ip} → Toplam: {visitor_count}")
+    visitor_counts[client_ip] += 1
+    total_visits += 1
     
     return {
         "success": True,
-        "count": visitor_count,
+        "total_visits": total_visits,              # tüm ziyaretler toplamı
+        "your_visits": visitor_counts[client_ip],  # bu IP kaç kere geldi
         "your_ip": client_ip
     }
 
