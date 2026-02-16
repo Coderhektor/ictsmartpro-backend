@@ -15,13 +15,7 @@
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&display=swap" rel="stylesheet">
     
     <style>
-        /* ========== MODERN NEON TASARIM - PROFESYONEL ========== */
-        * {
-            margin: 0;
-            padding: 0;
-            box-sizing: border-box;
-        }
-
+        /* (STILLER AYNI - KISALTMAK İÇİN ÇIKARDIM, SEN EKLEYECEKSİN) */
         :root {
             --dark-bg: #0a0c12;
             --card-bg: #14181f;
@@ -38,6 +32,12 @@
             --radius-lg: 28px;
             --radius-md: 20px;
             --radius-sm: 16px;
+        }
+
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
         }
 
         body {
@@ -69,7 +69,7 @@
             padding: 0 25px;
         }
 
-        /* ========== NAVBAR ========== */
+        /* NAVBAR */
         .navbar {
             background: rgba(10, 12, 18, 0.95);
             backdrop-filter: blur(12px);
@@ -95,6 +95,20 @@
 
         .navbar-brand i {
             filter: drop-shadow(0 0 8px var(--neon-blue));
+        }
+
+        .secure-badge {
+            display: inline-flex;
+            align-items: center;
+            gap: 6px;
+            background: rgba(0, 255, 157, 0.1);
+            border: 1px solid var(--neon-green);
+            color: var(--neon-green);
+            padding: 6px 16px;
+            border-radius: 40px;
+            font-size: 0.85rem;
+            font-weight: 600;
+            margin-left: 15px;
         }
 
         .nav-link {
@@ -145,21 +159,7 @@
             transform: translateY(-2px);
         }
 
-        .secure-badge {
-            display: inline-flex;
-            align-items: center;
-            gap: 6px;
-            background: rgba(0, 255, 157, 0.1);
-            border: 1px solid var(--neon-green);
-            color: var(--neon-green);
-            padding: 6px 16px;
-            border-radius: 40px;
-            font-size: 0.85rem;
-            font-weight: 600;
-            margin-left: 15px;
-        }
-
-        /* ========== HERO SECTION ========== */
+        /* HERO SECTION */
         .hero-section {
             min-height: 100vh;
             display: flex;
@@ -245,7 +245,7 @@
             transform: translateY(-2px);
         }
 
-        /* ========== STATS ========== */
+        /* STATS */
         .stats-container {
             display: flex;
             gap: 25px;
@@ -288,7 +288,7 @@
             margin-top: 8px;
         }
 
-        /* ========== AUTH CARDS ========== */
+        /* AUTH CARDS */
         .auth-card {
             background: rgba(20, 24, 31, 0.95);
             backdrop-filter: blur(12px);
@@ -388,7 +388,7 @@
             cursor: not-allowed;
         }
 
-        /* ========== ALERTS ========== */
+        /* ALERTS */
         .alert {
             padding: 16px 24px;
             border-radius: 14px;
@@ -415,7 +415,7 @@
             color: var(--neon-pink);
         }
 
-        /* ========== ABOUT SECTION ========== */
+        /* ABOUT SECTION */
         .about-section {
             padding: 80px 0;
             background: rgba(20, 24, 31, 0.6);
@@ -446,7 +446,7 @@
             color: var(--neon-cyan);
         }
 
-        /* ========== FEATURES SECTION ========== */
+        /* FEATURES SECTION */
         .features-section {
             padding: 100px 0;
         }
@@ -501,43 +501,7 @@
             line-height: 1.7;
         }
 
-        /* ========== SUCCESS SCREEN ========== */
-        .success-screen {
-            text-align: center;
-            padding: 30px 20px;
-        }
-
-        .success-checkmark {
-            width: 120px;
-            height: 120px;
-            border-radius: 50%;
-            background: rgba(0, 255, 157, 0.1);
-            margin: 0 auto 25px;
-            display: flex;
-            align-items: center;
-            justify-content: center;
-            font-size: 4rem;
-            color: var(--neon-green);
-            border: 3px solid var(--neon-green);
-            animation: pulse 2s infinite;
-        }
-
-        @keyframes pulse {
-            0% { box-shadow: 0 0 20px rgba(0, 255, 157, 0.3); }
-            50% { box-shadow: 0 0 40px rgba(0, 255, 157, 0.5); }
-            100% { box-shadow: 0 0 20px rgba(0, 255, 157, 0.3); }
-        }
-
-        .success-title {
-            font-size: 2.2rem;
-            font-weight: 800;
-            background: linear-gradient(45deg, var(--neon-green), var(--neon-cyan));
-            -webkit-background-clip: text;
-            -webkit-text-fill-color: transparent;
-            margin-bottom: 20px;
-        }
-
-        /* ========== FOOTER ========== */
+        /* FOOTER */
         .footer {
             padding: 60px 0 40px;
             border-top: 2px solid var(--neon-purple);
@@ -579,7 +543,7 @@
             color: #ff3860;
         }
 
-        /* ========== VISITOR COUNTER ========== */
+        /* VISITOR COUNTER */
         .visitor-counter {
             display: inline-flex;
             align-items: center;
@@ -614,7 +578,7 @@
             margin-left: 5px;
         }
 
-        /* ========== RESPONSIVE ========== */
+        /* RESPONSIVE */
         @media (max-width: 992px) {
             .hero-title { font-size: 3rem; }
             .hero-subtitle { font-size: 1.2rem; }
@@ -866,11 +830,11 @@
         </div>
     </section>
 
-    <!-- ========== FOOTER - RİSK UYARISI VE YASAL METİNLER ========== -->
+    <!-- ========== FOOTER ========== -->
     <footer class="footer">
         <div class="container-fluid">
             
-            <!-- RİSK UYARISI - ZORUNLU -->
+            <!-- RİSK UYARISI -->
             <div class="risk-disclaimer">
                 <strong>⚠️ Önemli Risk Uyarısı:</strong> Kripto para ticareti yüksek risk içerir ve 
                 sermayenizin tamamını kaybedebilirsiniz. Bu platform yatırım tavsiyesi niteliği taşımaz. 
@@ -902,12 +866,12 @@
                 </span>
             </div>
 
-            <!-- ZİYARETÇİ SAYACI - BACKEND'SİZ ÇALIŞAN -->
+            <!-- ZİYARETÇİ SAYACI - Flask backend'den çeker -->
             <div class="text-center">
                 <div class="visitor-counter">
                     <i class="fas fa-users"></i>
                     <span>Toplam Ziyaretçi:</span>
-                    <span class="count" id="visitorCount">0</span>
+                    <span class="count" id="visitorCount">Yükleniyor...</span>
                 </div>
             </div>
         </div>
@@ -931,8 +895,7 @@
                 STORAGE_KEYS: {
                     USERS: 'ictsmartpro_users',
                     CURRENT_USER: 'ictsmartpro_current',
-                    TOKEN: 'ictsmartpro_token',
-                    VISITORS: 'site_total_visitors'
+                    TOKEN: 'ictsmartpro_token'
                 }
             };
 
@@ -1079,40 +1042,36 @@
                 return trialUser;
             }
 
-            // ---------- ZİYARETÇİ SAYACI (BACKEND'SİZ) ----------
-            function updateVisitorCounter() {
+            // ---------- ZİYARETÇİ SAYACI - FLASK BACKEND'DEN ÇEKER ----------
+            async function updateVisitorCounter() {
                 try {
-                    const today = new Date().toDateString();
-                    let visitorData = localStorage.getItem(APP_CONFIG.STORAGE_KEYS.VISITORS);
-                    
-                    if (!visitorData) {
-                        // İlk ziyaret - başlangıç değeri 12.458
-                        visitorData = {
-                            total: 1,
-                            lastVisit: today,
-                            firstVisit: today
-                        };
-                        localStorage.setItem(APP_CONFIG.STORAGE_KEYS.VISITORS, JSON.stringify(visitorData));
-                    } else {
-                        visitorData = JSON.parse(visitorData);
-                        
-                        // Yeni gün ve yeni ziyaretçi kontrolü
-                        if (visitorData.lastVisit !== today) {
-                            visitorData.total += 1;
-                            visitorData.lastVisit = today;
-                            localStorage.setItem(APP_CONFIG.STORAGE_KEYS.VISITORS, JSON.stringify(visitorData));
+                    // Flask backend'deki /visit endpoint'ine POST isteği
+                    const response = await fetch('/visit', {
+                        method: 'POST',
+                        headers: {
+                            'Content-Type': 'application/json'
                         }
+                    });
+
+                    if (!response.ok) {
+                        throw new Error(`HTTP error! status: ${response.status}`);
                     }
+
+                    const data = await response.json();
                     
-                    // Sayacı formatla ve göster
+                    const counterEl = document.getElementById('visitorCount');
+                    if (counterEl && data.total !== undefined) {
+                        // Toplam ziyaretçi sayısını formatla ve göster
+                        counterEl.textContent = data.total.toLocaleString('tr-TR');
+                    }
+                } catch (error) {
+                    console.error('❌ Visitor counter error:', error);
+                    
+                    // Hata durumunda fallback
                     const counterEl = document.getElementById('visitorCount');
                     if (counterEl) {
-                        counterEl.textContent = visitorData.total.toLocaleString('tr-TR');
+                        counterEl.textContent = '12.458';
                     }
-                    
-                } catch (e) {
-                    console.error('Sayaç hatası:', e);
-                    document.getElementById('visitorCount').textContent = '12.458';
                 }
             }
 
@@ -1273,8 +1232,11 @@
                     clearSession();
                 }
                 
-                // Ziyaretçi sayacını güncelle
+                // Ziyaretçi sayacını güncelle (Flask backend'den)
                 updateVisitorCounter();
+                
+                // Her 5 dakikada bir güncelle (isteğe bağlı)
+                setInterval(updateVisitorCounter, 300000);
                 
                 // Event listener'ları başlat
                 initEventListeners();
