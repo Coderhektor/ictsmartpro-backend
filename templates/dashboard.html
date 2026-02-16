@@ -173,41 +173,6 @@
             box-shadow: var(--neon-red);
         }
 
-        /* ========== ZİYARETÇİ SAYACI ========== */
-        .visitor-counter {
-            background: rgba(0, 229, 255, 0.12);
-            padding: 0.7rem 2rem;
-            border-radius: 60px;
-            border: 2px solid var(--accent-cyan);
-            box-shadow: var(--neon-cyan);
-            color: white;
-            font-weight: 700;
-            backdrop-filter: blur(8px);
-            display: inline-flex;
-            align-items: center;
-            gap: 14px;
-            font-size: 1.2rem;
-        }
-
-        .visitor-counter i {
-            color: var(--accent-cyan);
-            text-shadow: var(--neon-cyan);
-            font-size: 1.5rem;
-        }
-
-        .visitor-count-number {
-            font-size: 2rem;
-            font-weight: 900;
-            color: var(--accent-amber);
-            text-shadow: 0 0 30px var(--accent-amber);
-            animation: countPulse 2s ease-in-out infinite;
-        }
-
-        @keyframes countPulse {
-            0%, 100% { text-shadow: 0 0 30px var(--accent-amber); }
-            50% { text-shadow: 0 0 60px var(--accent-orange); }
-        }
-
         /* ========== CARDS ========== */
         .card {
             background: rgba(15, 21, 32, 0.85);
@@ -788,6 +753,55 @@
             font-weight: 700;
         }
 
+        /* ========== MOBİL İYİLEŞTİRMELERİ ========== */
+        @media (max-width: 768px) {
+            .chart-container {
+                height: 500px !important;
+                min-height: 500px !important;
+                padding: 0.5rem;
+            }
+            
+            #tradingview-widget {
+                min-height: 480px;
+            }
+            
+            .chart-loading .spinner-border {
+                width: 3rem;
+                height: 3rem;
+            }
+            
+            .btn-outline-cyan {
+                padding: 0.8rem 1.5rem;
+                font-size: 1rem;
+            }
+            
+            .current-price {
+                font-size: 2.8rem;
+            }
+            
+            .signal-badge {
+                font-size: 1.6rem;
+                padding: 1.5rem 1rem;
+            }
+            
+            .btn-evaluate {
+                font-size: 1rem;
+                padding: 1.2rem 1.8rem;
+            }
+        }
+
+        /* Tablet için */
+        @media (min-width: 769px) and (max-width: 1024px) {
+            .chart-container {
+                height: 550px !important;
+                min-height: 550px !important;
+            }
+            
+            #tradingview-widget {
+                min-height: 530px;
+            }
+        }
+
         /* ========== RESPONSIVE ========== */
         @media (max-width: 1400px) {
             .container-fluid { padding: 0 1.5rem; }
@@ -797,14 +811,6 @@
         @media (max-width: 1200px) {
             .navbar-brand { font-size: 1.8rem; }
             .current-price { font-size: 3.8rem; }
-        }
-
-        @media (max-width: 768px) {
-            .navbar-brand { font-size: 1.4rem; }
-            .visitor-counter { font-size: 1rem; padding: 0.5rem 1.2rem; }
-            .current-price { font-size: 2.8rem; }
-            .signal-badge { font-size: 1.6rem; padding: 1.5rem 1rem; }
-            .btn-evaluate { font-size: 1rem; padding: 1.2rem 1.8rem; }
         }
     </style>
 </head>
@@ -827,30 +833,6 @@
         </a>
     </div>
 </nav>
-
-<!-- ========== ZİYARETÇİ SAYACI ========== -->
-<div class="container-fluid mt-2 mb-3">
-    <div class="row">
-        <div class="col-12">
-            <div style="display: flex; justify-content: flex-end; align-items: center; gap: 20px;">
-                <span class="visitor-counter">
-                    <i class="fas fa-users"></i>
-                    <div style="display: flex; flex-direction: column; align-items: flex-start; margin-left: 10px;">
-                        <span style="color: var(--text-dim); font-size: 0.8rem;">AKTİF ZİYARETÇİ</span>
-                        <span id="visitorCount" class="visitor-count-number">0</span>
-                    </div>
-                </span>
-                <span class="visitor-counter" id="onlineUsers" style="border-color: var(--accent-green); box-shadow: var(--neon-green);">
-                    <i class="fas fa-user-check" style="color: var(--accent-green);"></i>
-                    <div style="display: flex; flex-direction: column; align-items: flex-start;">
-                        <span style="color: var(--text-dim); font-size: 0.8rem;">ONLINE</span>
-                        <span id="onlineCount" class="visitor-count-number" style="color: var(--accent-green);">0</span>
-                    </div>
-                </span>
-            </div>
-        </div>
-    </div>
-</div>
 
 <div class="container-fluid mt-4 px-3">
     <div class="row g-4">
@@ -1128,48 +1110,10 @@
             </div>
         </div>
 
-        <!-- ========== SAĞ KOLON ========== -->
+        <!-- ========== SAĞ KOLON - ML MODELLERİ ========== -->
         <div class="col-lg-4">
-
-            <!-- AI TRADING ASİSTANI -->
-            <div class="card mb-4">
-                <div class="card-header">
-                    <i class="fas fa-comments"></i>
-                    🤖 AI TRADING ASİSTANI
-                </div>
-                <div class="card-body">
-                    <div class="chat-container" id="chatMessages">
-                        <div class="chat-message chat-bot">
-                            <div style="display: flex; align-items: center; gap: 18px; margin-bottom: 15px;">
-                                <div style="background: linear-gradient(135deg, var(--accent-purple), var(--accent-cyan));
-                                            width: 65px; height: 65px; border-radius: 50%; display: flex; align-items: center;
-                                            justify-content: center; box-shadow: var(--neon-cyan);">
-                                    <i class="fas fa-robot" style="font-size: 32px; color: white;"></i>
-                                </div>
-                                <div>
-                                    <strong style="font-size: 1.5rem; color: var(--accent-cyan); text-shadow: 0 0 25px var(--accent-cyan);">
-                                        AI ASİSTAN
-                                    </strong>
-                                    <div style="color: var(--text-dim); font-size: 0.95rem;">
-                                        <i class="fas fa-database"></i> 30+ Kaynak
-                                    </div>
-                                </div>
-                            </div>
-                            <div style="font-size: 1.1rem; font-weight: 500; color: white; line-height: 1.7;">
-                                ⚡ GERÇEK ZAMANLI ANALİZ
-                            </div>
-                        </div>
-                    </div>
-                    <div class="mt-4">
-                        <button class="btn btn-evaluate w-100" onclick="evaluateAI()">
-                            <i class="fas fa-brain"></i>
-                            🚀 FİYATI AI İLE DEĞERLENDİR
-                        </button>
-                    </div>
-                </div>
-            </div>
-
-            <!-- ML MODELLERİ -->
+            
+            <!-- ML MODELLERİ (SAĞA ALINDI) -->
             <div class="card mb-4">
                 <div class="card-header">
                     <i class="fas fa-brain"></i>
@@ -1241,6 +1185,44 @@
                                        font-size: 1.2rem; padding: 1rem; border-radius: 60px;">
                             <i class="fas fa-sync-alt"></i>
                             ⚡ MODELLERİ EĞİT
+                        </button>
+                    </div>
+                </div>
+            </div>
+
+            <!-- AI TRADING ASİSTANI -->
+            <div class="card mb-4">
+                <div class="card-header">
+                    <i class="fas fa-comments"></i>
+                    🤖 AI TRADING ASİSTANI
+                </div>
+                <div class="card-body">
+                    <div class="chat-container" id="chatMessages">
+                        <div class="chat-message chat-bot">
+                            <div style="display: flex; align-items: center; gap: 18px; margin-bottom: 15px;">
+                                <div style="background: linear-gradient(135deg, var(--accent-purple), var(--accent-cyan));
+                                            width: 65px; height: 65px; border-radius: 50%; display: flex; align-items: center;
+                                            justify-content: center; box-shadow: var(--neon-cyan);">
+                                    <i class="fas fa-robot" style="font-size: 32px; color: white;"></i>
+                                </div>
+                                <div>
+                                    <strong style="font-size: 1.5rem; color: var(--accent-cyan); text-shadow: 0 0 25px var(--accent-cyan);">
+                                        AI ASİSTAN
+                                    </strong>
+                                    <div style="color: var(--text-dim); font-size: 0.95rem;">
+                                        <i class="fas fa-database"></i> 30+ Kaynak
+                                    </div>
+                                </div>
+                            </div>
+                            <div style="font-size: 1.1rem; font-weight: 500; color: white; line-height: 1.7;">
+                                ⚡ GERÇEK ZAMANLI ANALİZ
+                            </div>
+                        </div>
+                    </div>
+                    <div class="mt-4">
+                        <button class="btn btn-evaluate w-100" onclick="evaluateAI()">
+                            <i class="fas fa-brain"></i>
+                            🚀 FİYATI AI İLE DEĞERLENDİR
                         </button>
                     </div>
                 </div>
@@ -1327,9 +1309,8 @@
 
 <script>
 // ==================== CONFIG ====================
- const CONFIG = {
+const CONFIG = {
     backendUrl: window.location.origin,
-    // DEVELOPMENT: ws:// kullan, PRODUCTION: wss:// kullan
     wsUrl: window.location.protocol === 'https:' 
         ? 'wss://' + window.location.host 
         : 'ws://' + window.location.host,
@@ -1338,10 +1319,10 @@
     maxReconnectAttempts: 10,
     apiTimeout: 10000
 };
+
 // ==================== GLOBAL VARS ====================
 let currentData = null;
 let symbolWS = null;
-let globalWS = null;
 let tvWidget = null;
 let tradingViewScriptLoaded = false;
 let reconnectAttempts = 0;
@@ -1415,27 +1396,6 @@ function updateWSStatus(connected) {
     }
 }
 
-// ==================== ZİYARETÇİ SAYACI ====================
-async function updateVisitorCount() {
-    try {
-        const controller = new AbortController();
-        const timeoutId = setTimeout(() => controller.abort(), CONFIG.apiTimeout);
-        
-        const response = await fetch(`${CONFIG.backendUrl}/api/visitors`, { signal: controller.signal });
-        clearTimeout(timeoutId);
-        
-        if (response.ok) {
-            const data = await response.json();
-            if (data.success && typeof data.count === 'number') {
-                document.getElementById('visitorCount').textContent = data.count.toLocaleString('tr-TR');
-            }
-        }
-    } catch (error) {
-        console.error('Visitor count error:', error);
-        document.getElementById('visitorCount').textContent = '0';
-    }
-}
-
 // ==================== 30+ KAYNAK GRID RENDER ====================
 function renderDataSourceGrid() {
     const grid = document.getElementById('exchangeGrid');
@@ -1486,11 +1446,28 @@ async function checkBackendHealth() {
     }
 }
 
-// ==================== TRADINGVIEW CHART ====================
+// ==================== GÜNCELLENMİŞ TRADINGVIEW CHART ====================
 function loadTradingViewScript() {
     return new Promise((resolve, reject) => {
         if (tradingViewScriptLoaded && typeof TradingView !== 'undefined') {
             resolve();
+            return;
+        }
+        
+        if (document.querySelector('script[src*="tradingview"]')) {
+            const checkInterval = setInterval(() => {
+                if (typeof TradingView !== 'undefined') {
+                    clearInterval(checkInterval);
+                    tradingViewScriptLoaded = true;
+                    resolve();
+                }
+            }, 100);
+            
+            setTimeout(() => {
+                clearInterval(checkInterval);
+                reject(new Error("TradingView script timeout"));
+            }, 10000);
+            
             return;
         }
         
@@ -1528,6 +1505,8 @@ async function loadTradingView() {
     const interval = document.getElementById('intervalSelect').value;
     const tvInterval = INTERVAL_MAP[interval] || '60';
     
+    const isMobile = window.innerWidth <= 768;
+    
     container.innerHTML = `
         <div class="chart-loading">
             <div class="spinner-border" role="status"></div>
@@ -1544,7 +1523,17 @@ async function loadTradingView() {
         }
         
         container.innerHTML = '';
-        await new Promise(resolve => setTimeout(resolve, 500));
+        
+        if (isMobile) {
+            await new Promise(resolve => setTimeout(resolve, 300));
+        } else {
+            await new Promise(resolve => setTimeout(resolve, 100));
+        }
+        
+        const containerRect = container.getBoundingClientRect();
+        if (containerRect.height < 100) {
+            container.style.height = isMobile ? '500px' : '650px';
+        }
         
         tvWidget = new TradingView.widget({
             width: '100%',
@@ -1561,23 +1550,80 @@ async function loadTradingView() {
             container_id: 'tradingview-widget',
             autosize: true,
             studies: ["RSI@tv-basicstudies", "MACD@tv-basicstudies", "BB@tv-basicstudies"],
-            disabled_features: ["header_widget", "left_toolbar"],
-            loading_screen: { backgroundColor: "#0a0e17" }
+            disabled_features: [
+                "header_widget", 
+                "left_toolbar",
+                "symbol_search_hot_key"
+            ],
+            loading_screen: { 
+                backgroundColor: "#0a0e17",
+                foregroundColor: "#00e5ff"
+            },
+            overrides: {
+                "paneProperties.background": "#0a0e17",
+                "paneProperties.vertGridProperties.color": "#1a2330",
+                "paneProperties.horzGridProperties.color": "#1a2330"
+            }
         });
+        
+        setTimeout(() => {
+            try {
+                if (tvWidget && tvWidget.chart) {
+                    tvWidget.chart.refresh();
+                }
+                console.log("✅ TradingView widget refreshed");
+            } catch (e) {
+                console.log("Widget refresh error:", e);
+            }
+        }, 2000);
         
         console.log("✅ TradingView widget created for", symbol);
         
     } catch (error) {
         console.error('TradingView error:', error);
+        
         container.innerHTML = `
             <div class="chart-loading">
                 <i class="fas fa-exclamation-triangle" style="font-size: 4rem; color: var(--accent-red);"></i>
                 <p class="fw-bold fs-4" style="color: var(--accent-red);">Grafik yüklenemedi</p>
-                <button class="btn btn-outline-cyan" onclick="loadTradingView()">Tekrar Dene</button>
+                <button class="btn btn-outline-cyan" onclick="retryTradingView()">Tekrar Dene</button>
             </div>
         `;
     }
 }
+
+function retryTradingView() {
+    loadTradingView();
+}
+
+let resizeTimeout;
+window.addEventListener('resize', () => {
+    clearTimeout(resizeTimeout);
+    resizeTimeout = setTimeout(() => {
+        if (document.visibilityState === 'visible') {
+            const container = document.getElementById('tradingview-widget');
+            if (container && container.children.length === 0) {
+                loadTradingView();
+            } else if (tvWidget && tvWidget.chart) {
+                try {
+                    tvWidget.chart.refresh();
+                } catch (e) {}
+            }
+        }
+    }, 500);
+});
+
+window.addEventListener('orientationchange', () => {
+    setTimeout(() => {
+        if (tvWidget && tvWidget.chart) {
+            try {
+                tvWidget.chart.refresh();
+            } catch (e) {}
+        } else {
+            loadTradingView();
+        }
+    }, 300);
+});
 
 // ==================== WEBSOCKETS ====================
 function connectSymbolWS() {
@@ -1868,7 +1914,7 @@ function updateDashboard(data) {
     document.getElementById('lastPriceUpdate').textContent = formatTime(new Date());
 }
 
-// ==================== ANALYZE - DÜZELTİLMİŞ VERSİYON ====================
+// ==================== ANALYZE ====================
 async function analyzeSymbol(force = false) {
     const baseSymbol = document.getElementById('symbolSelect').value;
     const symbol = baseSymbol + 'USDT';
@@ -1922,10 +1968,8 @@ async function analyzeSymbol(force = false) {
             errorMessage = 'Backend sunucusuna bağlanılamıyor';
         }
         
-        // ❌ PRODUCTION'DA ASLA DEMO DATA GÖSTERME!
         showNotification(`❌ Analiz başarısız: ${errorMessage}`, 'error');
         
-        // Eski data varsa onu koru, yoksa tüm değerleri "--" yap
         if (!currentData) {
             document.getElementById('currentPrice').textContent = '—';
             document.getElementById('priceChange').innerHTML = '';
@@ -1958,7 +2002,7 @@ function updateSourceStatus(activeCount) {
     });
 }
 
-// ==================== GÜNCELLENMİŞ AI EVALUATION ====================
+// ==================== AI EVALUATION ====================
 function evaluateAI() {
     if (!currentData) {
         showNotification('⚠️ Önce analiz yapın', 'error');
@@ -2164,7 +2208,7 @@ function evaluateAI() {
     chatDiv.scrollTop = chatDiv.scrollHeight;
 }
 
-// ==================== TRAIN MODELS - DÜZELTİLMİŞ VERSİYON ====================
+// ==================== TRAIN MODELS ====================
 async function trainModels() {
     const baseSymbol = document.getElementById('symbolSelect').value;
     const symbol = baseSymbol + 'USDT';
@@ -2179,10 +2223,8 @@ async function trainModels() {
         if (response.ok) {
             const data = await response.json();
             showNotification('✅ Eğitim tamamlandı', 'success');
-            // Gerçek veriyi çek
             setTimeout(() => analyzeSymbol(true), 3000);
         } else {
-            // ❌ SAKIN sahte başarı mesajı gösterme!
             const errorData = await response.json().catch(() => ({ detail: 'Eğitim başarısız' }));
             showNotification(`❌ Eğitim başarısız: ${errorData.detail || 'Bilinmeyen hata'}`, 'error');
         }
@@ -2210,16 +2252,10 @@ document.addEventListener('DOMContentLoaded', async () => {
     const connected = await checkBackendHealth();
     
     if (connected) {
-        await updateVisitorCount();
-        setInterval(updateVisitorCount, 30000);
-        
-        // Bağlantı varsa hemen analiz yap
         setTimeout(() => analyzeSymbol(), 1000);
     } else {
-        // ❌ PRODUCTION'DA DEMO DATA GÖSTERME!
         showNotification('❌ Sunucuya bağlanılamıyor', 'error');
         
-        // Tüm değerleri "--" yap
         document.getElementById('currentPrice').textContent = '—';
         document.getElementById('priceChange').innerHTML = '';
         document.getElementById('volume24h').textContent = '-';
@@ -2271,12 +2307,19 @@ document.addEventListener('visibilitychange', () => {
         checkBackendHealth().then(connected => {
             if (connected) {
                 analyzeSymbol();
-                updateVisitorCount();
             }
         });
     }
 });
+
+window.addEventListener('load', () => {
+    setTimeout(() => {
+        if (!tvWidget) {
+            console.log('📱 Mobil için TradingView yeniden yükleniyor...');
+            loadTradingView();
+        }
+    }, 2000);
+});
 </script>
 </body>
 </html>
- 
