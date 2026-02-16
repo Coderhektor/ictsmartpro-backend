@@ -1160,7 +1160,7 @@ async def root():
 @app.get("/dashboard", response_class=HTMLResponse)
 async def dashboard():
     """Serve dashboard.html"""
-    html_path = os.path.join(os.path.dirname(__file__), "templates", "dashboard")
+    html_path = os.path.join(os.path.dirname(__file__), "templates", "dashboard.html")
     if os.path.exists(html_path):
         return FileResponse(html_path)
     return HTMLResponse("""
