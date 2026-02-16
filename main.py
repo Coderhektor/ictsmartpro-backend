@@ -421,10 +421,69 @@ class ExchangeDataFetcher:
         return aggregated[-limit:]
 
 # ========================================================================================================
-# TECHNICAL ANALYSIS ENGINE
+# TECHNICAL ANALYSIS ENGINE - HEIKIN ASHI EKLENDİ
 # ========================================================================================================
 class TechnicalAnalyzer:
-    """Calculate technical indicators"""
+    """Calculate technical indicators including Heikin Ashi"""
+    
+    @staticmethod
+    def calculate_heikin_ashi(df: pd.DataFrame) -> Dict[str, Any]:
+        """Heikin Ashi hesaplamaları"""
+        try:
+            if len(df) < 20:
+                return {}
+            
+            # Heikin Ashi close
+            ha_close = (df['open'] + df['high'] + df['low'] + df['close']) / 4
+            
+            # Heikin Ashi open
+            ha_open = ha_close.copy()
+            for i in range(1, len(ha_open)):
+                ha_open.iloc[i] = (ha_open.iloc[i-1] + ha_close.iloc[i-1]) / 2
+            
+            # Heikin Ashi high/low
+            ha_high = pd.concat([df['high'], ha_open, ha_close], axis=1).max(axis=1)
+            ha_low = pd.concat([df['low'], ha_open, ha_close], axis=1).min(axis=1)
+            
+            # Heikin Ashi trend analizi - AĞIRLIKLI!
+            ha_bullish_count = sum(1 for i in range(-8, 0) if ha_close.iloc[i] > ha_open.iloc[i])
+            ha_bearish_count = sum(1 for i in range(-8, 0) if ha_close.iloc[i] < ha_open.iloc[i])
+            
+            ha_trend = "BULLISH" if ha_bullish_count >= 5 else "BEARISH" if ha_bearish_count >= 5 else "NEUTRAL"
+            
+            # Trend gücü - 0-100 arası
+            ha_trend_strength = max(ha_bullish_count, ha_bearish_count) * 12.5  # 8 mumda max 100
+            
+            # Heikin Ashi RSI
+            delta = ha_close.diff()
+            gain = (delta.where(delta > 0, 0)).rolling(window=14).mean()
+            loss = (-delta.where(delta < 0, 0)).rolling(window=14).mean()
+            rs = gain / loss.replace(0, np.nan)
+            ha_rsi = 100 - (100 / (1 + rs))
+            
+            # Renk değişimi (trend dönüş sinyali)
+            ha_color_change = 0
+            if ha_close.iloc[-1] > ha_open.iloc[-1] and ha_close.iloc[-2] <= ha_open.iloc[-2]:
+                ha_color_change = 1  # Kırmızı -> Yeşil
+            elif ha_close.iloc[-1] < ha_open.iloc[-1] and ha_close.iloc[-2] >= ha_open.iloc[-2]:
+                ha_color_change = -1  # Yeşil -> Kırmızı
+            
+            return {
+                "ha_trend": ha_trend,
+                "ha_trend_strength": ha_trend_strength,
+                "ha_close": float(ha_close.iloc[-1]),
+                "ha_open": float(ha_open.iloc[-1]),
+                "ha_high": float(ha_high.iloc[-1]),
+                "ha_low": float(ha_low.iloc[-1]),
+                "ha_rsi": float(ha_rsi.iloc[-1]) if not pd.isna(ha_rsi.iloc[-1]) else 50.0,
+                "ha_color_change": ha_color_change,
+                "ha_bullish_count": ha_bullish_count,
+                "ha_bearish_count": ha_bearish_count
+            }
+            
+        except Exception as e:
+            logger.error(f"Heikin Ashi calculation error: {str(e)}")
+            return {}
     
     @staticmethod
     def calculate_rsi(close: pd.Series, period: int = 14) -> pd.Series:
@@ -488,7 +547,11 @@ class TechnicalAnalyzer:
         volume_ratio = (volume / volume_sma.replace(0, 1)).fillna(1.0)
         volume_trend = "INCREASING" if volume.iloc[-1] > volume_sma.iloc[-1] else "DECREASING"
         
-        return {
+        # Heikin Ashi analizini ekle
+        heikin_ashi = TechnicalAnalyzer.calculate_heikin_ashi(df)
+        
+        # Temel göstergelerle birleştir
+        result = {
             "rsi_value": float(rsi.iloc[-1]),
             "macd_histogram": float(macd_hist.iloc[-1]),
             "bb_position": float(bb_position.iloc[-1]),
@@ -503,6 +566,11 @@ class TechnicalAnalyzer:
             "macd": float(macd.iloc[-1]),
             "macd_signal": float(macd_signal.iloc[-1])
         }
+        
+        # Heikin Ashi'yi ekle
+        result.update(heikin_ashi)
+        
+        return result
 
 # ========================================================================================================
 # PATTERN DETECTOR
@@ -664,10 +732,10 @@ class MarketStructureAnalyzer:
         }
 
 # ========================================================================================================
-# SIGNAL GENERATOR - GERÇEKÇİ GÜVEN DEĞERLERİ
+# SIGNAL GENERATOR - HEIKIN ASHI AĞIRLIĞI ARTIRILDI
 # ========================================================================================================
 class SignalGenerator:
-    """Generate trading signals with realistic confidence levels"""
+    """Generate trading signals with Heikin Ashi weighted"""
     
     @staticmethod
     def generate(
@@ -679,99 +747,116 @@ class SignalGenerator:
         confidences = []
         weights = []
         
-        # ML Prediction - Düşük güven, yüksek weight
+        # HEIKIN ASHI - AĞIRLIK ARTIRILDI!
+        ha_trend = technical.get('ha_trend', 'NEUTRAL')
+        ha_trend_strength = technical.get('ha_trend_strength', 50)
+        ha_rsi = technical.get('ha_rsi', 50)
+        ha_color_change = technical.get('ha_color_change', 0)
+        ha_bullish_count = technical.get('ha_bullish_count', 0)
+        ha_bearish_count = technical.get('ha_bearish_count', 0)
+        
+        # Heikin Ashi trend sinyali - YÜKSEK AĞIRLIK!
+        if ha_trend == 'BULLISH' and ha_trend_strength > 60:
+            signals.append('BUY')
+            confidences.append(0.74)  # %74
+            weights.append(1.8)  # Çok yüksek ağırlık!
+        elif ha_trend == 'BEARISH' and ha_trend_strength > 60:
+            signals.append('SELL')
+            confidences.append(0.74)
+            weights.append(1.8)
+        elif ha_trend == 'BULLISH':
+            signals.append('BUY')
+            confidences.append(0.68)  # %68
+            weights.append(1.5)  # Yüksek ağırlık
+        elif ha_trend == 'BEARISH':
+            signals.append('SELL')
+            confidences.append(0.68)
+            weights.append(1.5)
+        
+        # Heikin Ashi renk değişimi (trend dönüş sinyali)
+        if ha_color_change == 1:  # Kırmızı -> Yeşil
+            signals.append('BUY')
+            confidences.append(0.71)
+            weights.append(1.6)
+        elif ha_color_change == -1:  # Yeşil -> Kırmızı
+            signals.append('SELL')
+            confidences.append(0.71)
+            weights.append(1.6)
+        
+        # Heikin Ashi RSI
+        if ha_rsi < 30:
+            signals.append('BUY')
+            confidences.append(0.66)
+            weights.append(1.3)
+        elif ha_rsi > 70:
+            signals.append('SELL')
+            confidences.append(0.66)
+            weights.append(1.3)
+        
+        # ML Prediction
         if ml_prediction:
             ml_signal = ml_prediction.get('prediction', 'NEUTRAL')
             ml_conf = ml_prediction.get('confidence', 0.55)
-            # ML asla %75'i geçmesin!
             ml_conf = min(ml_conf, 0.72)
             
             if ml_signal != 'NEUTRAL':
                 signals.append(ml_signal)
                 confidences.append(ml_conf)
-                weights.append(1.3)
+                weights.append(1.2)
         
-        # RSI - Aşırı satım/alım bölgeleri
+        # RSI
         rsi = technical.get('rsi_value', 50)
         if rsi < 30:
             signals.append('BUY')
-            confidences.append(0.64)  # %64
-            weights.append(1.1)
+            confidences.append(0.64)
+            weights.append(1.0)
         elif rsi > 70:
             signals.append('SELL')
             confidences.append(0.64)
-            weights.append(1.1)
-        elif rsi < 35:
-            signals.append('BUY')
-            confidences.append(0.58)  # %58
-            weights.append(0.9)
-        elif rsi > 65:
-            signals.append('SELL')
-            confidences.append(0.58)
-            weights.append(0.9)
+            weights.append(1.0)
         
-        # MACD - Sadece güçlü sinyallerde
+        # MACD
         macd_hist = technical.get('macd_histogram', 0)
         if abs(macd_hist) > 15:
             if macd_hist > 0:
                 signals.append('BUY')
-                confidences.append(0.61)  # %61
-                weights.append(1.0)
+                confidences.append(0.61)
+                weights.append(0.9)
             else:
                 signals.append('SELL')
                 confidences.append(0.61)
-                weights.append(1.0)
+                weights.append(0.9)
         
-        # Bollinger Bands - Aşırı bölgeler
+        # Bollinger Bands
         bb_pos = technical.get('bb_position', 50)
         if bb_pos < 15:
             signals.append('BUY')
-            confidences.append(0.56)  # %56
+            confidences.append(0.56)
             weights.append(0.8)
         elif bb_pos > 85:
             signals.append('SELL')
             confidences.append(0.56)
             weights.append(0.8)
-        elif bb_pos < 25:
-            signals.append('BUY')
-            confidences.append(0.52)  # %52
-            weights.append(0.7)
-        elif bb_pos > 75:
-            signals.append('SELL')
-            confidences.append(0.52)
-            weights.append(0.7)
         
-        # Market Structure - En güvenilir sinyal
+        # Market Structure
         structure = market_structure.get('structure', 'Neutral')
         trend = market_structure.get('trend', 'Sideways')
         
         if structure == 'Bullish' and trend == 'Uptrend':
             signals.append('BUY')
-            confidences.append(0.71)  # %71
-            weights.append(1.4)
+            confidences.append(0.71)
+            weights.append(1.3)
         elif structure == 'Bearish' and trend == 'Downtrend':
             signals.append('SELL')
             confidences.append(0.71)
-            weights.append(1.4)
-        elif structure == 'Bullish':
-            signals.append('BUY')
-            confidences.append(0.63)  # %63
-            weights.append(1.2)
-        elif structure == 'Bearish':
-            signals.append('SELL')
-            confidences.append(0.63)
-            weights.append(1.2)
+            weights.append(1.3)
         
         # Volume confirmation
         volume_ratio = technical.get('volume_ratio', 1.0)
-        volume_trend = technical.get('volume_trend', 'DECREASING')
-        
-        if volume_ratio > 1.5 and volume_trend == 'INCREASING':
-            # Volume destekli sinyaller - güven artışı
+        if volume_ratio > 1.5:
             for i in range(len(signals)):
                 if signals[i] in ['BUY', 'SELL']:
                     confidences[i] = min(confidences[i] * 1.05, 0.75)
-                    weights[i] = weights[i] * 1.1
         
         if not signals:
             return {
@@ -796,11 +881,10 @@ class SignalGenerator:
             final_signal = "NEUTRAL"
             avg_conf = Config.DEFAULT_CONFIDENCE
         
-        # Güven sınırlaması - ASLA %80'İ GEÇME!
+        # Güven sınırlaması
         avg_conf = min(avg_conf, Config.MAX_CONFIDENCE)
-        avg_conf = max(avg_conf, 45.0)  # Minimum %45
+        avg_conf = max(avg_conf, 45.0)
         
-        # STRONG_ prefix sadece çok yüksek güvende
         if avg_conf > 73:
             final_signal = "STRONG_" + final_signal
         
@@ -823,14 +907,19 @@ class SignalGenerator:
     ) -> str:
         parts = []
         
+        # Heikin Ashi yorumu ekle
+        ha_trend = technical.get('ha_trend', 'NEUTRAL')
+        ha_trend_strength = technical.get('ha_trend_strength', 50)
+        
+        if ha_trend != 'NEUTRAL':
+            parts.append(f"Heikin Ashi shows {ha_trend} trend (strength: {ha_trend_strength:.0f}%)")
+        
         if signal in ["STRONG_BUY", "BUY"]:
             parts.append("🟢 Bullish signal detected")
             if technical.get('rsi_value', 50) < 35:
                 parts.append("RSI indicates oversold conditions")
             if technical.get('bb_position', 50) < 25:
                 parts.append("Price near lower Bollinger Band")
-            if structure.get('structure') == 'Bullish':
-                parts.append("Bullish market structure")
         
         elif signal in ["STRONG_SELL", "SELL"]:
             parts.append("🔴 Bearish signal detected")
@@ -838,12 +927,9 @@ class SignalGenerator:
                 parts.append("RSI indicates overbought conditions")
             if technical.get('bb_position', 50) > 75:
                 parts.append("Price near upper Bollinger Band")
-            if structure.get('structure') == 'Bearish':
-                parts.append("Bearish market structure")
         
         else:
             parts.append("⚪ Neutral - Wait for clearer signals")
-            parts.append("Monitor RSI and MACD for direction")
         
         if confidence > 70:
             parts.append(f"Higher confidence ({confidence:.0f}%)")
@@ -855,10 +941,7 @@ class SignalGenerator:
         return ". ".join(parts) + "."
 
 # ========================================================================================================
-# ML ENGINE - GERÇEKÇİ PERFORMANS METRİKLERİ
-# ========================================================================================================
- # ========================================================================================================
-# GÜNCELLENMİŞ ML ENGINE - HEIKIN ASHI EKLENDİ
+# ML ENGINE - HEIKIN ASHI EKLENDİ
 # ========================================================================================================
 class MLEngine:
     """Machine Learning prediction engine with Heikin Ashi features"""
@@ -866,7 +949,7 @@ class MLEngine:
     def __init__(self):
         self.models: Dict[str, Any] = {}
         self.feature_columns: Dict[str, List[str]] = {}
-        # Gerçekçi accuracy değerleri - %100 ASLA!
+        # Gerçekçi accuracy değerleri
         self.stats = {
             "lgbm": 63.7,
             "lstm": 61.4,
@@ -922,7 +1005,7 @@ class MLEngine:
             ha_df['ha_macd_signal'] = ha_df['ha_macd'].ewm(span=9, adjust=False).mean()
             ha_df['ha_macd_hist'] = ha_df['ha_macd'] - ha_df['ha_macd_signal']
             
-            # Renk değişimi (trend dönüş sinyali)
+            # Renk değişimi
             ha_df['ha_color_change'] = (ha_df['ha_bullish'] - ha_df['ha_bullish'].shift(1)).fillna(0)
             
             return ha_df
@@ -939,7 +1022,6 @@ class MLEngine:
             
             df = df.copy()
             
-            # 1. ORİJİNAL FİYAT FEATURE'LARI
             # Returns
             df['returns'] = df['close'].pct_change().fillna(0)
             df['log_returns'] = np.log(df['close'] / df['close'].shift(1)).fillna(0)
@@ -985,10 +1067,9 @@ class MLEngine:
             # Volume trend
             df['volume_trend'] = (df['volume'] > df['volume'].shift(1)).astype(int)
             
-            # 2. HEIKIN ASHI FEATURE'LARI
+            # HEIKIN ASHI FEATURE'LARI
             df = self._calculate_heikin_ashi(df)
             
-            # Son olarak tüm NaN'ları temizle
             df = df.fillna(0)
             
             return df
@@ -1009,11 +1090,9 @@ class MLEngine:
                 logger.warning(f"Insufficient data for training: {len(df_features)}")
                 return False
             
-            # Feature columns'u belirle (timestamp, datetime hariç)
             exclude_cols = ['timestamp', 'datetime', 'exchange', 'source_count', 'sources']
             feature_cols = [col for col in df_features.columns if col not in exclude_cols]
             
-            # Hedef değişkeni oluştur (5 periyot sonrası fiyat)
             df_features['target'] = (df_features['close'].shift(-5) > df_features['close']).astype(int)
             df_features = df_features.dropna()
             
@@ -1049,15 +1128,13 @@ class MLEngine:
                 callbacks=[lgb.log_evaluation(0)]
             )
             
-            # Model performansını hesapla
             y_pred = (model.predict(X_val) > 0.5).astype(int)
             accuracy = accuracy_score(y_val, y_pred)
-            accuracy = min(accuracy * 100, 72.0)  # %72 üst sınır
+            accuracy = min(accuracy * 100, 72.0)
             
             self.models[symbol] = model
             self.feature_columns[symbol] = feature_cols
             
-            # Model istatistiklerini güncelle
             self.stats["lgbm"] = accuracy
             self.stats["xgboost"] = min(accuracy + 1.5, 72.0)
             self.stats["lightgbm"] = min(accuracy - 0.5, 72.0)
@@ -1068,7 +1145,6 @@ class MLEngine:
             
         except Exception as e:
             logger.error(f"Training error: {str(e)}")
-            # Demo mod - her zaman True döndür
             self.stats["lgbm"] = 63.7
             self.stats["xgboost"] = 67.4
             self.stats["lightgbm"] = 64.8
@@ -1093,18 +1169,15 @@ class MLEngine:
                     "method": "feature_error"
                 }
             
-            # Heikin Ashi'den trend kontrolü
+            # Heikin Ashi trend kontrolü
             ha_bullish = df_features['ha_bullish'].iloc[-5:].mean() if 'ha_bullish' in df_features.columns else 0.5
             ha_rsi = df_features['ha_rsi'].iloc[-1] if 'ha_rsi' in df_features.columns else 50
-            ha_macd = df_features['ha_macd_hist'].iloc[-1] if 'ha_macd_hist' in df_features.columns else 0
             
-            # ML Prediction - Model var mı kontrol et
             if symbol in self.models and symbol in self.feature_columns:
                 try:
                     model = self.models[symbol]
                     feature_cols = self.feature_columns[symbol]
                     
-                    # Feature setini hazırla
                     available_features = df_features.iloc[-1:].copy()
                     for col in feature_cols:
                         if col not in available_features.columns:
@@ -1113,12 +1186,11 @@ class MLEngine:
                     X_pred = available_features[feature_cols].values
                     prob = model.predict(X_pred)[0]
                     
-                    # Güven sınırlaması
                     confidence = prob if prob > 0.5 else (1 - prob)
                     confidence = min(confidence, 0.72)
                     confidence = max(confidence, 0.52)
                     
-                    # Heikin Ashi trendine göre kararı güçlendir
+                    # Heikin Ashi ile güçlendir
                     if ha_bullish > 0.6 and prob > 0.5:
                         prob = min(prob * 1.05, 0.72)
                     elif ha_bullish < 0.4 and prob < 0.5:
@@ -1141,41 +1213,35 @@ class MLEngine:
             sma_slow = df['close'].rolling(21).mean().iloc[-1]
             current = df['close'].iloc[-1]
             
-            # Heikin Ashi trendi ile birleştir
             if ha_bullish > 0.6 and current > sma_fast:
                 return {
                     "prediction": "BUY",
                     "confidence": 0.62,
-                    "method": "ha_trend",
-                    "ha_trend": float(ha_bullish)
+                    "method": "ha_trend"
                 }
             elif ha_bullish < 0.4 and current < sma_fast:
                 return {
                     "prediction": "SELL",
                     "confidence": 0.62,
-                    "method": "ha_trend",
-                    "ha_trend": float(ha_bullish)
+                    "method": "ha_trend"
                 }
             elif current > sma_fast * 1.02 and sma_fast > sma_slow:
                 return {
                     "prediction": "BUY",
                     "confidence": 0.58,
-                    "method": "sma_trend",
-                    "ha_trend": float(ha_bullish)
+                    "method": "sma_trend"
                 }
             elif current < sma_fast * 0.98 and sma_fast < sma_slow:
                 return {
                     "prediction": "SELL",
                     "confidence": 0.58,
-                    "method": "sma_trend",
-                    "ha_trend": float(ha_bullish)
+                    "method": "sma_trend"
                 }
             else:
                 return {
                     "prediction": "NEUTRAL",
                     "confidence": 0.52,
-                    "method": "ha_neutral",
-                    "ha_trend": float(ha_bullish)
+                    "method": "ha_neutral"
                 }
                 
         except Exception as e:
@@ -1196,7 +1262,7 @@ class MLEngine:
             "lightgbm": round(self.stats.get("lightgbm", 64.8), 1),
             "random_forest": round(self.stats.get("random_forest", 62.3), 1)
         }
- 
+
 # ========================================================================================================
 # SIGNAL DISTRIBUTION ANALYZER
 # ========================================================================================================
@@ -1205,7 +1271,6 @@ class SignalDistributionAnalyzer:
     
     @staticmethod
     def analyze(symbol: str) -> Dict[str, int]:
-        # Gerçekçi dağılım
         base_buy = 32
         base_sell = 33
         base_neutral = 35
@@ -1223,7 +1288,7 @@ class SignalDistributionAnalyzer:
         }
 
 # ========================================================================================================
-# FASTAPI APPLICATION - TEK TANE! (BURASI ÇOK ÖNEMLİ)
+# FASTAPI APPLICATION
 # ========================================================================================================
 app = FastAPI(
     title="ICTSMARTPRO Trading Bot v7.0",
@@ -1258,65 +1323,6 @@ data_fetcher = ExchangeDataFetcher()
 ml_engine = MLEngine()
 websocket_connections = set()
 startup_time = time.time()
-
-# ========================================================================================================
-# ZİYARETÇİ SAYACI - app tanımından SONRA gelmeli!
-# ========================================================================================================
-# ========================================================================================================
-# ZİYARETÇİ SAYACI - BASİT (REDIS'SİZ)
-# ========================================================================================================
-
-# Basit veri yapıları
-visitor_last_seen = {}  # IP -> son görülme zamanı
-daily_visitors = defaultdict(set)  # tarih -> set(IP)
-active_users_cache = {}  # IP -> son aktivite
-
-def get_real_ip(request: Request):
-    xff = request.headers.get("x-forwarded-for")
-    if xff:
-        return xff.split(",")[0].strip()
-    return request.client.host or "unknown"
-
-@app.get("/api/visitors")
-async def get_visitors(request: Request):
-    client_ip = get_real_ip(request)
-    now = datetime.utcnow()
-    today = now.strftime("%Y-%m-%d")
-    
-    # Son ziyaret kontrolü (24 saat)
-    last_seen = visitor_last_seen.get(client_ip)
-    is_new_daily = False
-    
-    if not last_seen:
-        is_new_daily = True
-        daily_visitors[today].add(client_ip)
-    elif (now - last_seen) > timedelta(hours=24):
-        is_new_daily = True
-        daily_visitors[today].add(client_ip)
-    
-    # Son görülme zamanını güncelle
-    visitor_last_seen[client_ip] = now
-    
-    # Aktif kullanıcı olarak işaretle
-    active_users_cache[client_ip] = now
-    
-    # 30 dakikadan eski aktifleri temizle
-    active_users = {
-        ip: time for ip, time in active_users_cache.items()
-        if (now - time) < timedelta(minutes=30)
-    }
-    active_users_cache.clear()
-    active_users_cache.update(active_users)
-    
-    return {
-        "success": True,
-        "unique_visitors_today": len(daily_visitors[today]),
-        "active_users": len(active_users),
-        "total_unique_visitors": sum(len(v) for v in daily_visitors.values()),
-        "your_ip": client_ip,
-        "server_start_date": datetime.utcnow().date().isoformat()
-    }
- 
 
 # ========================================================================================================
 # API ENDPOINTS
@@ -1376,10 +1382,7 @@ async def analyze_symbol(
     interval: str = Query(default="1h", regex="^(1m|5m|15m|30m|1h|4h|1d|1w)$"),
     limit: int = Query(default=100, ge=50, le=500)
 ):
-    """
-    Complete market analysis endpoint with REALISTIC confidence levels
-    Maximum confidence is capped at 79% - NO 100% VALUES!
-    """
+    """Complete market analysis endpoint with Heikin Ashi"""
     symbol = symbol.upper()
     if not symbol.endswith("USDT"):
         symbol = f"{symbol}USDT"
@@ -1400,33 +1403,28 @@ async def analyze_symbol(
         df['timestamp'] = pd.to_datetime(df['timestamp'], unit='ms')
         df = df.set_index('timestamp')
         
-        # Calculate all analysis components
         technical_indicators = TechnicalAnalyzer.analyze(df)
         patterns = PatternDetector.detect(df)
         market_structure = MarketStructureAnalyzer.analyze(df)
         ml_prediction = ml_engine.predict(symbol, df)
         
-        # Generate signal with REALISTIC confidence
         signal = SignalGenerator.generate(
             technical_indicators,
             market_structure,
             ml_prediction
         )
         
-        # FINAL SAFETY CHECK - ASLA %80'İ GEÇME!
         signal["confidence"] = min(signal["confidence"], Config.MAX_CONFIDENCE)
         signal["confidence"] = round(signal["confidence"], 1)
         
         signal_distribution = SignalDistributionAnalyzer.analyze(symbol)
         ml_stats = ml_engine.get_stats()
         
-        # Price Data
         current_price = float(df['close'].iloc[-1])
         prev_price = float(df['close'].iloc[-2]) if len(df) > 1 else current_price
         change_percent = ((current_price - prev_price) / prev_price * 100) if prev_price != 0 else 0.0
         volume_24h = float(df['volume'].sum())
         
-        # Complete response
         response = {
             "success": True,
             "symbol": symbol,
@@ -1442,15 +1440,10 @@ async def analyze_symbol(
             },
             
             "signal": signal,
-            
             "signal_distribution": signal_distribution,
-            
             "technical_indicators": technical_indicators,
-            
             "patterns": patterns,
-            
             "market_structure": market_structure,
-            
             "ml_stats": ml_stats
         }
         
