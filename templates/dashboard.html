@@ -1327,16 +1327,17 @@
 
 <script>
 // ==================== CONFIG ====================
-const CONFIG = {
+ const CONFIG = {
     backendUrl: window.location.origin,
-    // PRODUCTION: SADECE WSS KULLAN!
-    wsUrl: 'wss://' + window.location.host,
+    // DEVELOPMENT: ws:// kullan, PRODUCTION: wss:// kullan
+    wsUrl: window.location.protocol === 'https:' 
+        ? 'wss://' + window.location.host 
+        : 'ws://' + window.location.host,
     refreshInterval: 25000,
     reconnectInterval: 3000,
     maxReconnectAttempts: 10,
     apiTimeout: 10000
 };
-
 // ==================== GLOBAL VARS ====================
 let currentData = null;
 let symbolWS = null;
