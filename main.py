@@ -1151,25 +1151,50 @@ startup_time = time.time()
 # ZİYARETÇİ SAYACI - app tanımından SONRA gelmeli!
 # ========================================================================================================
 
-visitor_counts = defaultdict(int)   # IP → ziyaret sayısı
-total_visits = 0
+# Her deploy'da sıfırlanır, production'da Redis kullanmalısın!
+ip_last_visit = defaultdict(datetime)
+daily_visitors = defaultdict(set)
+start_date = datetime.utcnow().date()
 
 @app.get("/api/visitors")
 async def get_visitors(request: Request):
-    global total_visits
-    
     client_ip = request.client.host or "unknown"
+    now = datetime.utcnow()
+    today_key = now.strftime("%Y-%m-%d")
     
-    visitor_counts[client_ip] += 1
-    total_visits += 1
+    # Son ziyaret kontrolü (24 saat)
+    last_visit = ip_last_visit.get(client_ip)
+    is_new_visitor = False
+    
+    if not last_visit:
+        is_new_visitor = True
+        daily_visitors[today_key].add(client_ip)
+        ip_last_visit[client_ip] = now
+    elif (now - last_visit) > timedelta(hours=24):
+        is_new_visitor = True
+        daily_visitors[today_key].add(client_ip)
+        ip_last_visit[client_ip] = now
+    else:
+        # Ziyaret sayısını artırma, sadece zamanı güncelle
+        ip_last_visit[client_ip] = now
+    
+    # Aktif kullanıcılar (son 30 dakika)
+    active_users = sum(
+        1 for visit_time in ip_last_visit.values()
+        if (now - visit_time) < timedelta(minutes=30)
+    )
+    
+    # Toplam tekil ziyaretçi
+    total_unique = sum(len(v) for v in daily_visitors.values())
     
     return {
         "success": True,
-        "total_visits": total_visits,              # tüm ziyaretler toplamı
-        "your_visits": visitor_counts[client_ip],  # bu IP kaç kere geldi
-        "your_ip": client_ip
+        "unique_visitors_today": len(daily_visitors[today_key]),
+        "active_users": active_users,
+        "total_unique_visitors": total_unique,
+        "your_ip": client_ip,
+        "server_start_date": start_date.isoformat()
     }
-
 # ========================================================================================================
 # API ENDPOINTS
 # ========================================================================================================
