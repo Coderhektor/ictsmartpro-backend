@@ -32,4 +32,4 @@ loguru >= 0.7.2
 psutil >= 6.0.0
 python-multipart == 0.0.12
 sentry-sdk>=2.0.0    # veya en güncel sürüm, mesela ==2.20.0 gibi
-redis==4.6.0
+ 
