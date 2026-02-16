@@ -1410,43 +1410,52 @@ function updateWSStatus(connected) {
  
 // ==================== ZİYARETÇİ SAYACI ====================
 async function updateVisitorCount() {
-    try {
-        const controller = new AbortController();
-        const timeoutId = setTimeout(() => controller.abort(), CONFIG.apiTimeout || 8000);
+const totalEl = document.getElementById('visitorCount');
 
-        const response = await fetch(`${CONFIG.backendUrl}/api/visitors`, {
-            signal: controller.signal,
-            cache: 'no-store',           // her seferinde taze veri gelsin
-            headers: {
-                'Accept': 'application/json'
-            }
-        });
+```
+if (!totalEl) return;
 
-        clearTimeout(timeoutId);
+try {
+    const controller = new AbortController();
+    const timeout = CONFIG.apiTimeout || 8000;
+    const timeoutId = setTimeout(() => controller.abort(), timeout);
 
-        if (!response.ok) {
-            throw new Error(`HTTP hata: ${response.status}`);
+    const response = await fetch(`${CONFIG.backendUrl}/api/visitors`, {
+        method: 'GET',
+        signal: controller.signal,
+        cache: 'no-store',
+        headers: {
+            'Accept': 'application/json'
         }
+    });
 
-        const data = await response.json();
+    clearTimeout(timeoutId);
 
-        if (!data.success) {
-            throw new Error('API success: false');
-        }
-
-        // Sadece toplam ziyaret sayısı (global toplam)
-        const totalElement = document.getElementById('visitorCount');
-        if (totalElement && typeof data.total_visits === 'number') {
-            totalElement.textContent = data.total_visits.toLocaleString('tr-TR');
-        }
-
-    } catch (error) {
-        console.error('Ziyaretçi sayacı hatası:', error);
-
-        const totalEl = document.getElementById('visitorCount');
-        if (totalEl) totalEl.textContent = '—';
+    if (!response.ok) {
+        throw new Error(`HTTP ${response.status}`);
     }
+
+    const data = await response.json();
+
+    if (!data.success) {
+        throw new Error('API success=false');
+    }
+
+    // Backend alan adı ile uyumlu
+    if (typeof data.total_unique_visitors === 'number') {
+        totalEl.textContent = data.total_unique_visitors.toLocaleString('tr-TR');
+    } else {
+        totalEl.textContent = '0';
+    }
+
+} catch (error) {
+    console.error('Ziyaretçi sayacı hatası:', error);
+    totalEl.textContent = '—';
 }
+```
+
+}
+
 // ==================== 30+ KAYNAK GRID RENDER ====================
 function renderDataSourceGrid() {
     const grid = document.getElementById('exchangeGrid');
