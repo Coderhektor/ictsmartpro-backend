@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>🚀 ICTSMARTPRO ULTIMATE v10.0 - 30+ KAYNAK • HYBRID ML</title>
+    <title>🚀 ICTSMARTPRO ULTIMATE v10.0 - 30+ KAYNAK • HYBRID ML + HEIKIN ASHI</title>
     
     <!-- Bootstrap 5 -->
     <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
@@ -1028,13 +1028,54 @@
                 </div>
             </div>
 
-            <!-- DETAYLI TEKNİK ANALİZ -->
+            <!-- DETAYLI TEKNİK ANALİZ + HEIKIN ASHI -->
             <div class="card mb-4">
                 <div class="card-header">
                     <i class="fas fa-flask"></i>
-                    🔬 DETAYLI TEKNİK ANALİZ
+                    🔬 DETAYLI TEKNİK ANALİZ + HEIKIN ASHI
                 </div>
                 <div class="card-body">
+                    <!-- HEIKIN ASHI ÖZET KARTI -->
+                    <div class="row mb-4" id="heikinAshiSummary">
+                        <div class="col-12">
+                            <div class="indicator-card" style="border-left-color: var(--accent-cyan);">
+                                <div class="d-flex justify-content-between align-items-center mb-3">
+                                    <span class="fs-4 fw-bold" style="color: var(--accent-cyan);">
+                                        <i class="fas fa-chart-line me-2"></i>HEIKIN ASHI
+                                    </span>
+                                    <span class="badge fs-6" id="haTrendBadge" style="background: rgba(0,229,255,0.2); padding: 0.8rem 1.5rem;">
+                                        BEKLENİYOR
+                                    </span>
+                                </div>
+                                <div class="row g-3">
+                                    <div class="col-md-4">
+                                        <div class="text-center p-3" style="background: rgba(0,0,0,0.3); border-radius: var(--radius-md);">
+                                            <small class="text-muted d-block">HA Mum Rengi</small>
+                                            <span class="fs-3 fw-bold" id="haColor">—</span>
+                                        </div>
+                                    </div>
+                                    <div class="col-md-4">
+                                        <div class="text-center p-3" style="background: rgba(0,0,0,0.3); border-radius: var(--radius-md);">
+                                            <small class="text-muted d-block">HA RSI</small>
+                                            <span class="fs-3 fw-bold" id="haRsi">—</span>
+                                        </div>
+                                    </div>
+                                    <div class="col-md-4">
+                                        <div class="text-center p-3" style="background: rgba(0,0,0,0.3); border-radius: var(--radius-md);">
+                                            <small class="text-muted d-block">Trend Gücü</small>
+                                            <span class="fs-3 fw-bold" id="haStrength">—</span>
+                                        </div>
+                                    </div>
+                                </div>
+                                <div class="progress mt-3" style="height: 8px;">
+                                    <div class="progress-bar" id="haMomentumBar" role="progressbar" style="width: 0%; background: var(--accent-cyan);"></div>
+                                </div>
+                                <small class="text-muted mt-2 d-block" id="haDesc">Heikin Ashi trend göstergeleri hesaplanıyor...</small>
+                            </div>
+                        </div>
+                    </div>
+                    
+                    <!-- Mevcut Teknik Göstergeler -->
                     <div id="technicalIndicators">
                         <div class="text-center py-5">
                             <div class="spinner-border" role="status"
@@ -1113,7 +1154,7 @@
         <!-- ========== SAĞ KOLON ========== -->
         <div class="col-lg-4">
             
-            <!-- ML MODELLERİ (SAĞA ALINDI) -->
+            <!-- ML MODELLERİ -->
             <div class="card mb-4">
                 <div class="card-header">
                     <i class="fas fa-brain"></i>
@@ -1175,9 +1216,7 @@
                             <div class="model-fill model-rf" id="rfBar" style="width: 0%;"></div>
                         </div>
                     </div>
-                    <div id="mlStats" class="mt-4 pt-3 border-top" style="border-color: var(--accent-cyan) !important; border-width: 2px !important;">
-                        <!-- ML stats will be populated here -->
-                    </div>
+                    <div id="mlStats" class="mt-4 pt-3 border-top" style="border-color: var(--accent-cyan) !important; border-width: 2px !important;"></div>
                     <div class="mt-4">
                         <button class="btn btn-outline-success w-100 mt-2 btn-lg fw-bold" onclick="trainModels()"
                                 style="border: 3px solid var(--accent-green); color: var(--accent-green);
@@ -1446,7 +1485,7 @@ async function checkBackendHealth() {
     }
 }
 
-// ==================== GÜNCELLENMİŞ TRADINGVIEW CHART ====================
+// ==================== TRADINGVIEW CHART ====================
 function loadTradingViewScript() {
     return new Promise((resolve, reject) => {
         if (tradingViewScriptLoaded && typeof TradingView !== 'undefined') {
@@ -1781,6 +1820,70 @@ function updateDashboard(data) {
 
     if (data.technical_indicators) {
         const tech = data.technical_indicators;
+        
+        // HEIKIN ASHI GÖSTERGELERİ
+        if (tech.ha_trend || tech.ha_rsi) {
+            const haColor = tech.ha_trend || (tech.ha_close > tech.ha_open ? 'BULLISH' : 'BEARISH');
+            const haColorEl = document.getElementById('haColor');
+            const haRsiEl = document.getElementById('haRsi');
+            const haStrengthEl = document.getElementById('haStrength');
+            const haTrendBadge = document.getElementById('haTrendBadge');
+            const haDesc = document.getElementById('haDesc');
+            const haMomentumBar = document.getElementById('haMomentumBar');
+            
+            // HA Mum Rengi
+            haColorEl.textContent = haColor;
+            haColorEl.style.color = haColor === 'BULLISH' ? 'var(--accent-green)' : 'var(--accent-red)';
+            
+            // HA Trend Badge
+            haTrendBadge.textContent = haColor;
+            haTrendBadge.style.background = haColor === 'BULLISH' ? 
+                'rgba(0,255,157,0.2)' : 'rgba(255,56,96,0.2)';
+            haTrendBadge.style.color = haColor === 'BULLISH' ? 
+                'var(--accent-green)' : 'var(--accent-red)';
+            
+            // HA RSI
+            const haRsi = tech.ha_rsi || 50;
+            haRsiEl.textContent = haRsi.toFixed(1);
+            haRsiEl.style.color = haRsi > 70 ? 'var(--accent-red)' : 
+                                 haRsi < 30 ? 'var(--accent-green)' : 'white';
+            
+            // HA Trend Gücü
+            const haStrength = tech.ha_trend_strength || 'MODERATE';
+            haStrengthEl.textContent = haStrength;
+            
+            // HA Momentum Bar
+            const haMomentum = tech.ha_momentum || 0;
+            const momentumPercent = Math.min(Math.abs(haMomentum) * 1000, 100);
+            haMomentumBar.style.width = momentumPercent + '%';
+            haMomentumBar.style.background = haMomentum >= 0 ? 
+                'linear-gradient(90deg, var(--accent-green), var(--accent-cyan))' : 
+                'linear-gradient(90deg, var(--accent-red), var(--accent-orange))';
+            
+            // HA Açıklama
+            let haDescription = '';
+            if (haColor === 'BULLISH') {
+                if (haStrength === 'STRONG') {
+                    haDescription = '🚀 Güçlü yükseliş trendi - Ardışık yeşil HA mumları';
+                } else if (haStrength === 'MODERATE') {
+                    haDescription = '📈 Yükseliş trendi - Fiyat HA açılış üzerinde';
+                } else {
+                    haDescription = '⚡ Zayıf yükseliş - Trend dönüşü olabilir';
+                }
+            } else {
+                if (haStrength === 'STRONG') {
+                    haDescription = '🔻 Güçlü düşüş trendi - Ardışık kırmızı HA mumları';
+                } else if (haStrength === 'MODERATE') {
+                    haDescription = '📉 Düşüş trendi - Fiyat HA açılış altında';
+                } else {
+                    haDescription = '⚠️ Zayıf düşüş - Trend dönüşü olabilir';
+                }
+            }
+            
+            haDesc.textContent = haDescription;
+        }
+        
+        // Mevcut teknik göstergeler
         const rsi = tech.rsi_value || 50;
         const rsiClass = rsi > 70 ? 'sell' : rsi < 30 ? 'buy' : 'neutral';
         
@@ -2032,6 +2135,36 @@ function evaluateAI() {
     
     const topPatterns = patterns.slice(0, 5).map(p => `${p.name} (${(p.confidence*100).toFixed(0)}% ${p.direction})`).join(', ');
     
+    // HEIKIN ASHI ANALİZİ
+    const tech = currentData.technical_indicators || {};
+    const haColor = tech.ha_trend || (tech.ha_close > tech.ha_open ? 'BULLISH' : 'BEARISH');
+    const haStrength = tech.ha_trend_strength || 'MODERATE';
+    const haRsi = tech.ha_rsi || 50;
+    
+    let haComment = '';
+    haComment = `
+        <div style="background: rgba(0,229,255,0.1); padding: 12px; border-radius: var(--radius-md); margin-bottom: 10px;">
+            <div style="display: flex; align-items: center; gap: 10px; margin-bottom: 8px;">
+                <i class="fas fa-chart-line" style="color: var(--accent-cyan);"></i>
+                <strong>📊 HEIKIN ASHI ANALİZİ</strong>
+            </div>
+            <div style="display: flex; gap: 15px; margin-bottom: 8px;">
+                <span class="badge" style="background: ${haColor === 'BULLISH' ? 'rgba(0,255,157,0.2)' : 'rgba(255,56,96,0.2)'}; 
+                       color: ${haColor === 'BULLISH' ? 'var(--accent-green)' : 'var(--accent-red)'};">
+                    ${haColor}
+                </span>
+                <span class="badge" style="background: rgba(189,0,255,0.2); color: var(--accent-purple);">
+                    ${haStrength}
+                </span>
+            </div>
+            <div style="font-size: 0.95rem;">
+                • HA RSI: ${haRsi.toFixed(1)} - ${haRsi > 70 ? 'Aşırı alım' : haRsi < 30 ? 'Aşırı satım' : 'Nötr'}<br>
+                • ${haColor === 'BULLISH' ? '✅ Ardışık yeşil mumlar - Trend yukarı' : '⚠️ Ardışık kırmızı mumlar - Trend aşağı'}<br>
+                • Trend gücü: ${haStrength}
+            </div>
+        </div>
+    `;
+    
     let trendAnalysis = '';
     if (trend === 'Uptrend') {
         trendAnalysis = `📈 **YÜKSELİŞ TRENDİ**: ${trendStrength} gücünde`;
@@ -2161,6 +2294,8 @@ function evaluateAI() {
                 </div>
                 <div style="font-size: 0.95rem;">${trendAnalysis}</div>
             </div>
+            
+            ${haComment}
             
             <div style="background: rgba(255,56,96,0.1); padding: 12px; border-radius: var(--radius-md); margin-bottom: 10px;">
                 <div style="display: flex; align-items: center; gap: 10px; margin-bottom: 8px;">
