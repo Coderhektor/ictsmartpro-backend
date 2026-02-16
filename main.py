@@ -77,7 +77,7 @@ class Config:
     CACHE_TTL = 60
     
     # ML
-    ML_MIN_SAMPLES = 500
+    ML_MIN_SAMPLES = 200
     ML_TRAIN_SPLIT = 0.8
     
     # Signal Confidence Limits - GERÇEKÇİ!
