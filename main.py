@@ -1,6 +1,3 @@
-# ────────────────────────────────────────────────────────────────
-# TÜM IMPORT'LAR
-# ────────────────────────────────────────────────────────────────
 import sys
 import json
 import time
@@ -8,19 +5,16 @@ import asyncio
 import logging
 import secrets
 import random
+import os
 from datetime import datetime, timezone, timedelta
 from typing import Dict, List, Optional, Any, Tuple
 from collections import defaultdict, Counter
-import os
- 
 
 from fastapi import FastAPI, Request, HTTPException, Query, WebSocket, WebSocketDisconnect
 from fastapi.responses import HTMLResponse, JSONResponse, FileResponse
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.middleware.gzip import GZipMiddleware
 from fastapi.staticfiles import StaticFiles
-from fastapi import Request
-from collections import defaultdict
 
 import aiohttp
 from aiohttp import ClientTimeout, TCPConnector
@@ -1154,9 +1148,6 @@ startup_time = time.time()
 # ========================================================================================================
 # ZİYARETÇİ SAYACI - BASİT (REDIS'SİZ)
 # ========================================================================================================
-
-from datetime import datetime, timedelta
-from collections import defaultdict
 
 # Basit veri yapıları
 visitor_last_seen = {}  # IP -> son görülme zamanı
