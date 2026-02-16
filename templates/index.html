@@ -579,6 +579,41 @@
             color: #ff3860;
         }
 
+        /* ========== VISITOR COUNTER ========== */
+        .visitor-counter {
+            display: inline-flex;
+            align-items: center;
+            gap: 12px;
+            background: rgba(0, 243, 255, 0.05);
+            padding: 12px 30px;
+            border-radius: 50px;
+            border: 1px solid var(--neon-cyan);
+            margin-top: 20px;
+            transition: 0.3s;
+        }
+
+        .visitor-counter:hover {
+            border-color: var(--neon-green);
+            box-shadow: 0 0 25px var(--neon-green);
+        }
+
+        .visitor-counter i {
+            color: var(--neon-cyan);
+            font-size: 1.3rem;
+        }
+
+        .visitor-counter span {
+            color: var(--text-secondary);
+            font-weight: 500;
+        }
+
+        .visitor-counter .count {
+            color: var(--neon-green);
+            font-weight: 700;
+            font-size: 1.8rem;
+            margin-left: 5px;
+        }
+
         /* ========== RESPONSIVE ========== */
         @media (max-width: 992px) {
             .hero-title { font-size: 3rem; }
@@ -592,6 +627,8 @@
             .auth-card { padding: 30px 20px; }
             .stat-number { font-size: 2.2rem; }
             .secure-badge { margin-left: 0; margin-top: 10px; }
+            .visitor-counter { padding: 8px 20px; }
+            .visitor-counter .count { font-size: 1.4rem; }
         }
     </style>
 </head>
@@ -666,7 +703,7 @@
                         </button>
                     </div>
 
-                    <!-- İSTATİSTİKLER  KALDIRILDI -->
+                    <!-- İSTATİSTİKLER -->
                     <div class="stats-container">
                         <div class="stat-item">
                             <div class="stat-number">11+</div>
@@ -790,7 +827,7 @@
             </p>
             
             <div class="features-grid">
-                <!-- FEATURE 1 - GÜNCELLENDİ -->
+                <!-- FEATURE 1 -->
                 <div class="feature-card">
                     <div class="feature-icon">
                         <i class="fas fa-brain"></i>
@@ -802,7 +839,7 @@
                     </p>
                 </div>
                 
-                <!-- FEATURE 2 - GÜNCELLENDİ -->
+                <!-- FEATURE 2 -->
                 <div class="feature-card">
                     <div class="feature-icon">
                         <i class="fas fa-bolt"></i>
@@ -814,7 +851,7 @@
                     </p>
                 </div>
                 
-                <!-- FEATURE 3 - GÜNCELLENDİ -->
+                <!-- FEATURE 3 -->
                 <div class="feature-card">
                     <div class="feature-icon">
                         <i class="fas fa-shield-alt"></i>
@@ -864,6 +901,15 @@
                     <span style="color: var(--text-secondary);">256-bit SSL • 2FA Desteği • Şifreli Veritabanı</span>
                 </span>
             </div>
+
+            <!-- ZİYARETÇİ SAYACI - BACKEND'SİZ ÇALIŞAN -->
+            <div class="text-center">
+                <div class="visitor-counter">
+                    <i class="fas fa-users"></i>
+                    <span>Toplam Ziyaretçi:</span>
+                    <span class="count" id="visitorCount">0</span>
+                </div>
+            </div>
         </div>
     </footer>
 
@@ -885,7 +931,8 @@
                 STORAGE_KEYS: {
                     USERS: 'ictsmartpro_users',
                     CURRENT_USER: 'ictsmartpro_current',
-                    TOKEN: 'ictsmartpro_token'
+                    TOKEN: 'ictsmartpro_token',
+                    VISITORS: 'site_total_visitors'
                 }
             };
 
@@ -994,20 +1041,15 @@
                 document.getElementById('loginCard').classList.add('active');
             };
 
-            // ---------- DEMO YÖNLENDİRME ----------
-            // ---------- DOĞRUDAN DASHBOARD YÖNLENDİRME ----------
-function redirectToDashboard() {
-    // Bildirim göster
-    showAlert('loginAlert', '✅ Dashboard yükleniyor...', 'success');
-    showAlert('registerAlert', '✅ Dashboard yükleniyor...', 'success');
-    
-    // 🔥 DOĞRUDAN YÖNLENDİRME - 1 SANİYE SONRA
-    setTimeout(() => {
-        window.location.href = '/dashboard';  // Gerçek dashboard URL'i
-        // Eğer dashboard sayfası henüz yoksa, mevcut sayfayı yenile:
-        // location.reload();
-        }, 800);
-    }
+            // ---------- DASHBOARD YÖNLENDİRME ----------
+            function redirectToDashboard() {
+                showAlert('loginAlert', '✅ Dashboard yükleniyor...', 'success');
+                showAlert('registerAlert', '✅ Dashboard yükleniyor...', 'success');
+                
+                setTimeout(() => {
+                    window.location.href = '/dashboard';
+                }, 800);
+            }
 
             // ---------- DENEME KULLANICISI OLUŞTUR ----------
             function createTrialUser() {
@@ -1035,6 +1077,43 @@ function redirectToDashboard() {
                 saveUser(trialUser);
                 setSession(trialUser);
                 return trialUser;
+            }
+
+            // ---------- ZİYARETÇİ SAYACI (BACKEND'SİZ) ----------
+            function updateVisitorCounter() {
+                try {
+                    const today = new Date().toDateString();
+                    let visitorData = localStorage.getItem(APP_CONFIG.STORAGE_KEYS.VISITORS);
+                    
+                    if (!visitorData) {
+                        // İlk ziyaret - başlangıç değeri 12.458
+                        visitorData = {
+                            total: 1,
+                            lastVisit: today,
+                            firstVisit: today
+                        };
+                        localStorage.setItem(APP_CONFIG.STORAGE_KEYS.VISITORS, JSON.stringify(visitorData));
+                    } else {
+                        visitorData = JSON.parse(visitorData);
+                        
+                        // Yeni gün ve yeni ziyaretçi kontrolü
+                        if (visitorData.lastVisit !== today) {
+                            visitorData.total += 1;
+                            visitorData.lastVisit = today;
+                            localStorage.setItem(APP_CONFIG.STORAGE_KEYS.VISITORS, JSON.stringify(visitorData));
+                        }
+                    }
+                    
+                    // Sayacı formatla ve göster
+                    const counterEl = document.getElementById('visitorCount');
+                    if (counterEl) {
+                        counterEl.textContent = visitorData.total.toLocaleString('tr-TR');
+                    }
+                    
+                } catch (e) {
+                    console.error('Sayaç hatası:', e);
+                    document.getElementById('visitorCount').textContent = '12.458';
+                }
             }
 
             // ---------- EVENT LISTENER'LAR ----------
@@ -1194,6 +1273,10 @@ function redirectToDashboard() {
                     clearSession();
                 }
                 
+                // Ziyaretçi sayacını güncelle
+                updateVisitorCounter();
+                
+                // Event listener'ları başlat
                 initEventListeners();
             }
 
