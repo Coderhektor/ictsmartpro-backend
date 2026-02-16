@@ -12,7 +12,7 @@ from datetime import datetime, timezone, timedelta
 from typing import Dict, List, Optional, Any, Tuple
 from collections import defaultdict, Counter
 import os
-import redis
+ 
 
 from fastapi import FastAPI, Request, HTTPException, Query, WebSocket, WebSocketDisconnect
 from fastapi.responses import HTMLResponse, JSONResponse, FileResponse
@@ -1151,22 +1151,17 @@ startup_time = time.time()
 # ========================================================================================================
 # ZİYARETÇİ SAYACI - app tanımından SONRA gelmeli!
 # ========================================================================================================
+# ========================================================================================================
+# ZİYARETÇİ SAYACI - BASİT (REDIS'SİZ)
+# ========================================================================================================
 
- 
-# Redis bağlantısı
-redis_client = redis.Redis(
-    host=os.getenv("REDIS_HOST", "localhost"),
-    port=int(os.getenv("REDIS_PORT", 6379)),
-    db=0,
-    decode_responses=True
-)
+from datetime import datetime, timedelta
+from collections import defaultdict
 
-START_DATE_KEY = "server:start_date"
-
-# Sunucu ilk açıldığında tarihi kaydet (sadece 1 kez)
-if not redis_client.get(START_DATE_KEY):
-    redis_client.set(START_DATE_KEY, datetime.utcnow().date().isoformat())
-
+# Basit veri yapıları
+visitor_last_seen = {}  # IP -> son görülme zamanı
+daily_visitors = defaultdict(set)  # tarih -> set(IP)
+active_users_cache = {}  # IP -> son aktivite
 
 def get_real_ip(request: Request):
     xff = request.headers.get("x-forwarded-for")
@@ -1174,56 +1169,46 @@ def get_real_ip(request: Request):
         return xff.split(",")[0].strip()
     return request.client.host or "unknown"
 
-
 @app.get("/api/visitors")
 async def get_visitors(request: Request):
     client_ip = get_real_ip(request)
     now = datetime.utcnow()
     today = now.strftime("%Y-%m-%d")
-
-    ip_last_visit_key = f"ip:last_visit:{client_ip}"
-    today_visitors_key = f"visitors:{today}"
-    active_users_key = "active:users"
-
-    last_visit_str = redis_client.get(ip_last_visit_key)
-    is_new_visitor = False
-
-    if last_visit_str:
-        last_visit = datetime.fromisoformat(last_visit_str)
-        if (now - last_visit) > timedelta(hours=24):
-            is_new_visitor = True
-    else:
-        is_new_visitor = True
-
-    # Yeni ziyaretçi ise günlük sete ekle
-    if is_new_visitor:
-        redis_client.sadd(today_visitors_key, client_ip)
-
-    # Son ziyaret zamanını güncelle
-    redis_client.set(ip_last_visit_key, now.isoformat())
-
-    # Aktif kullanıcı takibi (30 dk TTL)
-    redis_client.setex(f"active:{client_ip}", timedelta(minutes=30), "1")
-
-    # Aktif kullanıcı sayısı
-    active_users = len(redis_client.keys("active:*"))
-
-    # Bugünkü tekil ziyaretçi
-    unique_today = redis_client.scard(today_visitors_key)
-
-    # Toplam tekil ziyaretçi (tüm günler)
-    total_unique = 0
-    for key in redis_client.keys("visitors:*"):
-        total_unique += redis_client.scard(key)
-
+    
+    # Son ziyaret kontrolü (24 saat)
+    last_seen = visitor_last_seen.get(client_ip)
+    is_new_daily = False
+    
+    if not last_seen:
+        is_new_daily = True
+        daily_visitors[today].add(client_ip)
+    elif (now - last_seen) > timedelta(hours=24):
+        is_new_daily = True
+        daily_visitors[today].add(client_ip)
+    
+    # Son görülme zamanını güncelle
+    visitor_last_seen[client_ip] = now
+    
+    # Aktif kullanıcı olarak işaretle
+    active_users_cache[client_ip] = now
+    
+    # 30 dakikadan eski aktifleri temizle
+    active_users = {
+        ip: time for ip, time in active_users_cache.items()
+        if (now - time) < timedelta(minutes=30)
+    }
+    active_users_cache.clear()
+    active_users_cache.update(active_users)
+    
     return {
         "success": True,
-        "unique_visitors_today": unique_today,
-        "active_users": active_users,
-        "total_unique_visitors": total_unique,
+        "unique_visitors_today": len(daily_visitors[today]),
+        "active_users": len(active_users),
+        "total_unique_visitors": sum(len(v) for v in daily_visitors.values()),
         "your_ip": client_ip,
-        "server_start_date": redis_client.get(START_DATE_KEY)
+        "server_start_date": datetime.utcnow().date().isoformat()
     }
+ 
 
 # ========================================================================================================
 # API ENDPOINTS
