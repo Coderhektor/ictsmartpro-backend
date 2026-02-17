@@ -68,7 +68,7 @@ class Config:
     
     # Data Requirements
     MIN_CANDLES = 50
-    MIN_EXCHANGES = 2
+    MIN_EXCHANGES = 1
     
     # Cache
     CACHE_TTL = 60
