@@ -5,7 +5,6 @@ import asyncio
 import logging
 import secrets
 import random
-import oss
 from datetime import datetime, timezone, timedelta
 from typing import Dict, List, Optional, Any, Tuple
 from collections import defaultdict, Counter
