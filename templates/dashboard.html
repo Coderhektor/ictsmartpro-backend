@@ -2279,7 +2279,42 @@ async function analyzeSymbol(force = false) {
         const response = await fetchWithTimeout(url);
         
         if (!response.ok) {
-            throw new Error(`HTTP ${response.status}`);
+            // HATA DETAYINI ALALIM!
+            let errorDetail = `HTTP ${response.status}`;
+            let errorData = null;
+            
+            try {
+                // Backend'den gelen JSON hatayı almaya çalış
+                errorData = await response.json();
+                console.error('❌ Backend error details:', errorData);
+                
+                if (errorData.detail) {
+                    if (typeof errorData.detail === 'object') {
+                        errorDetail = JSON.stringify(errorData.detail, null, 2);
+                    } else {
+                        errorDetail = errorData.detail;
+                    }
+                } else if (errorData.error) {
+                    errorDetail = errorData.error;
+                }
+            } catch (e) {
+                // JSON parse edilemezse text olarak al
+                try {
+                    const errorText = await response.text();
+                    errorDetail = errorText.substring(0, 300); // İlk 300 karakter
+                } catch (e2) {}
+            }
+            
+            // Konsola detaylı hata bas
+            console.group('🔴 BACKEND ERROR DETAILS');
+            console.log('Status:', response.status);
+            console.log('Status Text:', response.statusText);
+            console.log('URL:', url);
+            console.log('Error Detail:', errorDetail);
+            console.log('Error Data:', errorData);
+            console.groupEnd();
+            
+            throw new Error(`Backend Hatası (${response.status}): ${errorDetail.substring(0, 100)}...`);
         }
         
         const data = await response.json();
@@ -2295,12 +2330,19 @@ async function analyzeSymbol(force = false) {
         
         let errorMessage = error.message;
         if (error.name === 'AbortError') {
-            errorMessage = 'Zaman aşımı';
+            errorMessage = 'İstek zaman aşımına uğradı (15 saniye)';
         } else if (error.message.includes('Failed to fetch')) {
-            errorMessage = 'Sunucuya bağlanılamıyor';
+            errorMessage = 'Sunucuya bağlanılamıyor - Backend çalışmıyor olabilir';
         }
         
-        showNotification(`❌ Analiz başarısız: ${errorMessage}`, 'error');
+        showNotification(`❌ ${errorMessage}`, 'error');
+        
+        // Hata detaylarını konsola yazdır
+        console.log('🔍 HATA TESPİTİ İÇİN BİLGİLER:');
+        console.log('   Symbol:', symbol);
+        console.log('   Interval:', interval);
+        console.log('   URL:', url);
+        console.log('   Time:', new Date().toISOString());
     }
 }
 
