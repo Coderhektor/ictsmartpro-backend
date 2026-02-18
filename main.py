@@ -1615,7 +1615,7 @@ async def health_check():
 @app.get("/api/analyze/{symbol}")
 async def analyze_symbol(
     symbol: str,
-    interval: str = Query(default="1h", regex="^(1m|5m|15m|30m|1h|4h|1d|1w)$"),
+    interval: str = Query(default="1h", pattern="^(1m|5m|15m|30m|1h|4h|1d|1w)$"),
     limit: int = Query(default=100, ge=50, le=500)
 ):
     """Complete market analysis endpoint with Heikin Ashi"""
