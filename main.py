@@ -588,83 +588,77 @@ class ExchangeDataFetcher:
             logger.debug(f"Parse error for {exchange_name}: {str(e)}")
             return []
     
-    def _aggregate_candles(self, all_candles: List[List[Dict]]) -> List[Dict]:
-        """Farklı exchange'lerden gelen mumları birleştir"""
-        if not all_candles:
-            return []
-        
-        # Tüm mumları timestamp'e göre grupla
-        timestamp_map = defaultdict(list)
-        for exchange_data in all_candles:
-            for candle in exchange_data:
-                timestamp_map[candle["timestamp"]].append(candle)
-        
-        aggregated = []
-        for timestamp in sorted(timestamp_map.keys()):
-            candles_at_ts = timestamp_map[timestamp]
-            
-            if len(candles_at_ts) == 1:
-                # Tek kaynak - doğrudan kullan
-                agg_candle = candles_at_ts[0].copy()
-                agg_candle["source_count"] = 1
-                agg_candle["exchange"] = "aggregated"
-                agg_candle["sources"] = [candles_at_ts[0]["exchange"]]
-                aggregated.append(agg_candle)
-            else:
-                # Çoklu kaynak - ağırlıklı ortalama
-                weights = []
-                opens, highs, lows, closes, volumes = [], [], [], [], []
-                sources = []
-                
-                for candle in candles_at_ts:
-                    ex_config = next((e for e in self.EXCHANGES if e["name"] == candle["exchange"]), None)
-                    weight = ex_config["weight"] if ex_config else 0.5
-                    
-                    weights.append(weight)
-                    opens.append(candle["open"] * weight)
-                    highs.append(candle["high"] * weight)
-                    lows.append(candle["low"] * weight)
-                    closes.append(candle["close"] * weight)
-                    volumes.append(candle["volume"] * weight)
-                    sources.append(candle["exchange"])
-                
-                total_weight = sum(weights)
-                
-                if total_weight > 0:
-                    aggregated.append({
-                        "timestamp": timestamp,
-                        "open": sum(opens) / total_weight,
-                        "high": sum(highs) / total_weight,
-                        "low": sum(lows) / total_weight,
-                        "close": sum(closes) / total_weight,
-                        "volume": sum(volumes) / total_weight,
-                        "source_count": len(candles_at_ts),
-                        "sources": sources,
-                        "exchange": "aggregated"
-                    })
-        
-        return aggregated
+ def _aggregate_candles(self, all_candles: List[List[Dict]]) -> List[Dict]:
+    """Farklı exchange'lerden gelen mumları birleştir"""
+    if not all_candles:
+        return []
     
-    def get_exchange_stats(self) -> Dict[str, Any]:
-        """Exchange performans istatistiklerini döndür"""
-        stats = {}
-        for exchange in self.EXCHANGES:
-            name = exchange['name']
-            s = self.stats[name]
-            total = s['success'] + s['fail']
-            success_rate = (s['success'] / total * 100) if total > 0 else 0
+    logger.info(f"🔄 Aggregating {len(all_candles)} exchange data sources")
+    
+    # Tüm mumları timestamp'e göre grupla
+    timestamp_map = defaultdict(list)
+    total_candles = 0
+    
+    for exchange_idx, exchange_data in enumerate(all_candles):
+        if not exchange_data:
+            continue
             
-            stats[name] = {
-                'success': s['success'],
-                'fail': s['fail'],
-                'success_rate': round(success_rate, 1),
-                'last_error': s['last_error'],
-                'avg_time': round(s['total_time'] / max(s['success'], 1), 2),
-                'priority': exchange['priority'],
-                'required': exchange.get('required', False)
-            }
+        total_candles += len(exchange_data)
+        for candle in exchange_data:
+            # candle'ın timestamp'i var mı kontrol et
+            if 'timestamp' not in candle:
+                logger.warning(f"⚠️ Candle missing timestamp: {candle}")
+                continue
+            timestamp_map[candle["timestamp"]].append(candle)
+    
+    logger.info(f"📊 Total {total_candles} candles from {len(all_candles)} sources, {len(timestamp_map)} unique timestamps")
+    
+    aggregated = []
+    for timestamp in sorted(timestamp_map.keys()):
+        candles_at_ts = timestamp_map[timestamp]
         
-        return stats
+        if len(candles_at_ts) == 1:
+            # Tek kaynak - doğrudan kullan
+            agg_candle = candles_at_ts[0].copy()
+            agg_candle["source_count"] = 1
+            agg_candle["exchange"] = "aggregated"
+            agg_candle["sources"] = [candles_at_ts[0]["exchange"]]
+            aggregated.append(agg_candle)
+        else:
+            # Çoklu kaynak - ağırlıklı ortalama
+            weights = []
+            opens, highs, lows, closes, volumes = [], [], [], [], []
+            sources = []
+            
+            for candle in candles_at_ts:
+                ex_config = next((e for e in self.EXCHANGES if e["name"] == candle.get("exchange", "")), None)
+                weight = ex_config["weight"] if ex_config else 0.5
+                
+                weights.append(weight)
+                opens.append(candle.get("open", 0) * weight)
+                highs.append(candle.get("high", 0) * weight)
+                lows.append(candle.get("low", 0) * weight)
+                closes.append(candle.get("close", 0) * weight)
+                volumes.append(candle.get("volume", 0) * weight)
+                sources.append(candle.get("exchange", "unknown"))
+            
+            total_weight = sum(weights)
+            
+            if total_weight > 0:
+                aggregated.append({
+                    "timestamp": timestamp,
+                    "open": sum(opens) / total_weight,
+                    "high": sum(highs) / total_weight,
+                    "low": sum(lows) / total_weight,
+                    "close": sum(closes) / total_weight,
+                    "volume": sum(volumes) / total_weight,
+                    "source_count": len(candles_at_ts),
+                    "sources": sources,
+                    "exchange": "aggregated"
+                })
+    
+    logger.info(f"✅ Aggregated {len(aggregated)} candles")
+    return aggregated
 
 # ========================================================================================================
 # TECHNICAL ANALYSIS ENGINE - HEIKIN ASHI + TÜM GÖSTERGELER
