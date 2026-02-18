@@ -5,7 +5,7 @@ import asyncio
 import logging
 import secrets
 import random
-import os
+import oss
 from datetime import datetime, timezone, timedelta
 from typing import Dict, List, Optional, Any, Tuple
 from collections import defaultdict, Counter
@@ -588,7 +588,7 @@ class ExchangeDataFetcher:
             logger.debug(f"Parse error for {exchange_name}: {str(e)}")
             return []
     
- def _aggregate_candles(self, all_candles: List[List[Dict]]) -> List[Dict]:
+def _aggregate_candles(self, all_candles: List[List[Dict]]) -> List[Dict]:
     """Farklı exchange'lerden gelen mumları birleştir"""
     if not all_candles:
         return []
@@ -605,7 +605,6 @@ class ExchangeDataFetcher:
             
         total_candles += len(exchange_data)
         for candle in exchange_data:
-            # candle'ın timestamp'i var mı kontrol et
             if 'timestamp' not in candle:
                 logger.warning(f"⚠️ Candle missing timestamp: {candle}")
                 continue
