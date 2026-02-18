@@ -1,1156 +1,1204 @@
 <!DOCTYPE html>
 <html lang="tr">
 <head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=yes">
-    <title>🚀 ICTSMARTPRO v8.0 - 30+ BORSA • GERÇEK ZAMANLI</title>
-    
-    <!-- Bootstrap 5 -->
-    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
-    
-    <!-- Font Awesome 6 -->
-    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
-    
-    <!-- Inter Font -->
-    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&display=swap" rel="stylesheet">
-    
-    <!-- TradingView Widget (YÜKLEME SIRASI ÖNEMLİ!) -->
-    <script src="https://s3.tradingview.com/tv.js"></script>
-    
-    <style>
-        /* ========== ANA RENKLER ========== */
-        :root {
-            --bg-deep: #0a0c14;
-            --bg-dark: #11131f;
-            --bg-card: #1a1d2b;
-            --accent-primary: #3b82f6;
-            --accent-success: #10b981;
-            --accent-danger: #ef4444;
-            --accent-warning: #f59e0b;
-            --accent-purple: #8b5cf6;
-            --accent-cyan: #06b6d4;
-            --text-bright: #ffffff;
-            --text-dim: #94a3b8;
-            --border-glow: rgba(59, 130, 246, 0.3);
-            --radius-lg: 20px;
-            --radius-md: 16px;
-            --radius-sm: 12px;
-            --shadow-glow: 0 0 30px rgba(59, 130, 246, 0.2);
-        }
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>ICTSMARTPRO v8.0</title>
+<link href="https://fonts.googleapis.com/css2?family=Space+Mono:wght@400;700&family=Syne:wght@400;600;700;800&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+<script src="https://s3.tradingview.com/tv.js"></script>
 
-        * {
-            margin: 0;
-            padding: 0;
-            box-sizing: border-box;
-        }
+<style>
+/* ===== RESET & ROOT ===== */
+*, *::before, *::after { margin: 0; padding: 0; box-sizing: border-box; }
 
-        body {
-            background: var(--bg-deep);
-            color: var(--text-bright);
-            font-family: 'Inter', sans-serif;
-            min-height: 100vh;
-        }
+:root {
+  --bg:        #080b12;
+  --surface:   #0e1420;
+  --card:      #111827;
+  --border:    #1e2d45;
+  --border-hi: #2563eb;
+  --text:      #e2e8f0;
+  --muted:     #64748b;
+  --blue:      #2563eb;
+  --blue-glow: rgba(37,99,235,0.25);
+  --green:     #10b981;
+  --green-glow:rgba(16,185,129,0.2);
+  --red:       #ef4444;
+  --red-glow:  rgba(239,68,68,0.2);
+  --amber:     #f59e0b;
+  --purple:    #8b5cf6;
+  --cyan:      #22d3ee;
+  --r:         10px;
+  --r-sm:      6px;
+  font-size: 14px;
+}
 
-        /* ========== NAVBAR ========== */
-        .navbar {
-            background: rgba(17, 19, 31, 0.98);
-            backdrop-filter: blur(10px);
-            border-bottom: 2px solid var(--accent-primary);
-            padding: 1rem 0;
-            position: sticky;
-            top: 0;
-            z-index: 1000;
-        }
+body {
+  background: var(--bg);
+  color: var(--text);
+  font-family: 'Syne', sans-serif;
+  min-height: 100vh;
+  line-height: 1.5;
+  overflow-x: hidden;
+}
 
-        .navbar-brand {
-            font-weight: 800;
-            font-size: 1.5rem;
-            background: linear-gradient(135deg, #fff, var(--accent-primary), var(--accent-purple));
-            -webkit-background-clip: text;
-            -webkit-text-fill-color: transparent;
-        }
+/* ===== TOPBAR ===== */
+#topbar {
+  position: sticky; top: 0; z-index: 100;
+  background: rgba(8,11,18,0.92);
+  backdrop-filter: blur(12px);
+  border-bottom: 1px solid var(--border);
+  display: flex; align-items: center; gap: 12px;
+  padding: 0 20px; height: 56px;
+}
 
-        .connection-badge {
-            background: rgba(16, 185, 129, 0.15);
-            border: 1px solid var(--accent-success);
-            color: var(--accent-success);
-            padding: 0.4rem 1rem;
-            border-radius: 30px;
-            font-size: 0.8rem;
-            font-weight: 600;
-            margin-left: 1rem;
-        }
+#topbar .brand {
+  font-size: 1.1rem; font-weight: 800; letter-spacing: -0.02em;
+  color: #fff; white-space: nowrap;
+}
+#topbar .brand span { color: var(--blue); }
 
-        .ws-badge {
-            padding: 0.4rem 1rem;
-            border-radius: 30px;
-            font-size: 0.8rem;
-            font-weight: 600;
-            transition: all 0.3s;
-        }
-        
-        .ws-connected {
-            background: rgba(16, 185, 129, 0.15);
-            border: 1px solid var(--accent-success);
-            color: var(--accent-success);
-        }
-        
-        .ws-disconnected {
-            background: rgba(239, 68, 68, 0.15);
-            border: 1px solid var(--accent-danger);
-            color: var(--accent-danger);
-        }
+.pill {
+  display: inline-flex; align-items: center; gap: 6px;
+  padding: 4px 12px; border-radius: 99px;
+  font-family: 'Space Mono', monospace; font-size: 0.72rem; font-weight: 700;
+  border: 1px solid;
+  transition: all 0.3s;
+}
+.pill.green  { color: var(--green); border-color: var(--green); background: var(--green-glow); }
+.pill.red    { color: var(--red);   border-color: var(--red);   background: var(--red-glow);   }
+.pill.blue   { color: var(--blue);  border-color: var(--blue);  background: var(--blue-glow);  }
+.pill.muted  { color: var(--muted); border-color: var(--border); background: transparent;       }
 
-        /* ========== CARDS ========== */
-        .card {
-            background: rgba(26, 29, 43, 0.95);
-            backdrop-filter: blur(10px);
-            border: 1px solid rgba(59, 130, 246, 0.2);
-            border-radius: var(--radius-lg);
-            box-shadow: var(--shadow-glow);
-            transition: all 0.3s ease;
-            margin-bottom: 1.5rem;
-        }
+.dot {
+  width: 7px; height: 7px; border-radius: 50%;
+  background: currentColor; animation: blink 2s infinite;
+}
+@keyframes blink { 0%,100%{opacity:1} 50%{opacity:0.3} }
 
-        .card:hover {
-            border-color: var(--accent-primary);
-            box-shadow: 0 0 40px rgba(59, 130, 246, 0.3);
-            transform: translateY(-2px);
-        }
+#topbar .sep { width: 1px; height: 24px; background: var(--border); flex-shrink: 0; }
+#topbar .spacer { flex: 1; }
+#topbar .clock { font-family: 'Space Mono',monospace; font-size: 0.78rem; color: var(--muted); }
 
-        .card-header {
-            background: rgba(0, 0, 0, 0.3);
-            border-bottom: 1px solid rgba(59, 130, 246, 0.3);
-            padding: 1rem 1.5rem;
-            font-weight: 700;
-            color: var(--accent-cyan);
-        }
+/* ===== LAYOUT ===== */
+#app {
+  display: grid;
+  grid-template-columns: 1fr 340px;
+  grid-template-rows: auto;
+  gap: 16px;
+  padding: 16px 20px;
+  max-width: 1600px;
+  margin: 0 auto;
+}
 
-        /* ========== CHART ========== */
-        .chart-wrapper {
-            background: var(--bg-dark);
-            border-radius: var(--radius-md);
-            padding: 0.5rem;
-            height: 600px;
-            min-height: 600px;
-            position: relative;
-        }
+@media (max-width: 1024px) {
+  #app { grid-template-columns: 1fr; }
+}
 
-        #tradingview-widget {
-            width: 100%;
-            height: 100%;
-            border-radius: var(--radius-sm);
-        }
+/* ===== CARD ===== */
+.card {
+  background: var(--card);
+  border: 1px solid var(--border);
+  border-radius: var(--r);
+  overflow: hidden;
+}
+.card-head {
+  display: flex; align-items: center; gap: 8px;
+  padding: 12px 16px;
+  border-bottom: 1px solid var(--border);
+  font-weight: 700; font-size: 0.8rem; letter-spacing: 0.06em;
+  text-transform: uppercase; color: var(--muted);
+}
+.card-head i { color: var(--blue); font-size: 0.9rem; }
+.card-head .badge {
+  margin-left: auto;
+  background: var(--border); color: var(--text);
+  padding: 2px 8px; border-radius: 99px;
+  font-size: 0.7rem; font-family: 'Space Mono', monospace;
+}
+.card-body { padding: 16px; }
 
-        .chart-loading {
-            position: absolute;
-            top: 0;
-            left: 0;
-            right: 0;
-            bottom: 0;
-            display: flex;
-            flex-direction: column;
-            align-items: center;
-            justify-content: center;
-            background: var(--bg-dark);
-            z-index: 10;
-            border-radius: var(--radius-sm);
-            gap: 1rem;
-        }
+/* ===== CONTROLS ===== */
+#controls {
+  display: flex; flex-wrap: wrap; align-items: center; gap: 10px;
+  padding: 12px 16px;
+}
 
-        /* ========== FİYAT ========== */
-        .price-large {
-            font-size: 3.5rem;
-            font-weight: 800;
-            background: linear-gradient(135deg, #fff, var(--accent-primary));
-            -webkit-background-clip: text;
-            -webkit-text-fill-color: transparent;
-            line-height: 1.2;
-        }
+select, button {
+  font-family: 'Syne', sans-serif;
+  outline: none; border: none; cursor: pointer;
+}
+select {
+  background: var(--surface);
+  color: var(--text);
+  border: 1px solid var(--border);
+  border-radius: var(--r-sm);
+  padding: 8px 12px;
+  font-size: 0.85rem; font-weight: 600;
+  appearance: none;
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='10' height='6'%3E%3Cpath d='M0 0l5 6 5-6z' fill='%2364748b'/%3E%3C/svg%3E");
+  background-repeat: no-repeat;
+  background-position: right 10px center;
+  padding-right: 28px;
+  transition: border-color 0.2s;
+}
+select:focus { border-color: var(--blue); }
 
-        .price-change {
-            font-size: 1.3rem;
-            font-weight: 700;
-            padding: 0.4rem 1.2rem;
-            border-radius: 30px;
-            display: inline-block;
-        }
+.btn {
+  display: inline-flex; align-items: center; gap: 6px;
+  padding: 8px 20px; border-radius: var(--r-sm);
+  font-size: 0.85rem; font-weight: 700;
+  transition: all 0.2s; cursor: pointer;
+}
+.btn-primary {
+  background: var(--blue); color: #fff;
+  border: 1px solid var(--blue);
+}
+.btn-primary:hover { background: #1d4ed8; }
+.btn-primary:active { transform: scale(0.97); }
+.btn-outline {
+  background: transparent; color: var(--blue);
+  border: 1px solid var(--border);
+}
+.btn-outline:hover { border-color: var(--blue); background: var(--blue-glow); }
 
-        .price-up {
-            background: rgba(16, 185, 129, 0.15);
-            color: var(--accent-success);
-            border: 1px solid var(--accent-success);
-        }
+.spinner {
+  display: inline-block; width: 14px; height: 14px;
+  border: 2px solid rgba(255,255,255,0.3);
+  border-top-color: #fff;
+  border-radius: 50%;
+  animation: spin 0.7s linear infinite;
+}
+@keyframes spin { to { transform: rotate(360deg); } }
 
-        .price-down {
-            background: rgba(239, 68, 68, 0.15);
-            color: var(--accent-danger);
-            border: 1px solid var(--accent-danger);
-        }
+/* ===== PRICE PANEL ===== */
+#pricePanel {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 16px;
+  margin-bottom: 16px;
+}
+@media (max-width: 600px) { #pricePanel { grid-template-columns: 1fr; } }
 
-        /* ========== SİNYAL BADGE ========== */
-        .signal-badge {
-            padding: 1.5rem 1rem;
-            border-radius: 40px;
-            font-size: 1.8rem;
-            font-weight: 800;
-            border: 2px solid transparent;
-            margin-bottom: 1rem;
-        }
+.price-card { position: relative; }
+.price-val {
+  font-family: 'Space Mono', monospace;
+  font-size: 2.4rem; font-weight: 700; line-height: 1;
+  background: linear-gradient(135deg, #fff 40%, var(--blue));
+  -webkit-background-clip: text; -webkit-text-fill-color: transparent;
+  word-break: break-all;
+}
+@media (max-width: 768px) { .price-val { font-size: 1.8rem; } }
 
-        .signal-STRONG_BUY { background: linear-gradient(135deg, #10b981, #059669); }
-        .signal-BUY { background: linear-gradient(135deg, #3b82f6, #2563eb); }
-        .signal-NEUTRAL { background: linear-gradient(135deg, #8b5cf6, #7c3aed); }
-        .signal-SELL { background: linear-gradient(135deg, #ef4444, #dc2626); }
-        .signal-STRONG_SELL { background: linear-gradient(135deg, #dc2626, #b91c1c); }
+.price-sym { font-size: 0.75rem; font-weight: 700; color: var(--muted); letter-spacing: 0.1em; margin-bottom: 8px; }
+.price-chg {
+  display: inline-flex; align-items: center; gap: 4px;
+  padding: 4px 12px; border-radius: 99px;
+  font-family: 'Space Mono', monospace; font-size: 0.8rem; font-weight: 700;
+  margin-top: 12px; margin-bottom: 16px;
+}
+.price-chg.up   { color: var(--green); background: var(--green-glow); border: 1px solid var(--green); }
+.price-chg.down { color: var(--red);   background: var(--red-glow);   border: 1px solid var(--red);   }
+.price-chg.flat { color: var(--muted); background: var(--border);     border: 1px solid var(--border); }
 
-        /* ========== EXCHANGE GRID ========== */
-        .exchange-grid {
-            display: grid;
-            grid-template-columns: repeat(auto-fill, minmax(90px, 1fr));
-            gap: 8px;
-            max-height: 300px;
-            overflow-y: auto;
-            padding-right: 5px;
-        }
+.stat-row { display: flex; justify-content: space-between; align-items: center; padding: 8px 0; border-bottom: 1px solid var(--border); }
+.stat-row:last-child { border-bottom: none; }
+.stat-row .label { font-size: 0.78rem; color: var(--muted); }
+.stat-row .val   { font-family: 'Space Mono', monospace; font-size: 0.82rem; font-weight: 700; }
 
-        .exchange-item {
-            background: rgba(0, 0, 0, 0.3);
-            border: 1px solid rgba(59, 130, 246, 0.2);
-            border-radius: var(--radius-sm);
-            padding: 0.6rem 0.3rem;
-            text-align: center;
-            font-size: 0.75rem;
-            transition: all 0.2s;
-        }
+.flash { animation: flashAnim 0.4s ease; }
+@keyframes flashAnim {
+  0%  { color: var(--cyan); }
+  100%{ color: inherit; }
+}
 
-        .exchange-item.success {
-            border-color: var(--accent-success);
-            background: rgba(16, 185, 129, 0.1);
-        }
+/* ===== SIGNAL ===== */
+.signal-wrap { text-align: center; padding: 8px 0; }
+.signal-label {
+  display: inline-block;
+  padding: 14px 28px; border-radius: var(--r);
+  font-size: 1.2rem; font-weight: 800; letter-spacing: 0.06em;
+  margin-bottom: 16px; text-transform: uppercase; width: 100%;
+  transition: all 0.4s;
+}
+.sig-STRONG_BUY  { background: linear-gradient(135deg,#10b981,#059669); color:#fff; }
+.sig-BUY         { background: linear-gradient(135deg,#2563eb,#1d4ed8); color:#fff; }
+.sig-NEUTRAL     { background: linear-gradient(135deg,#475569,#334155); color:#fff; }
+.sig-SELL        { background: linear-gradient(135deg,#ef4444,#dc2626); color:#fff; }
+.sig-STRONG_SELL { background: linear-gradient(135deg,#dc2626,#b91c1c); color:#fff; }
+.sig-default     { background: var(--border); color: var(--muted); }
 
-        .exchange-item.fail {
-            border-color: var(--accent-danger);
-            opacity: 0.6;
-        }
+.conf-bar-wrap { background: var(--surface); border-radius: 99px; height: 8px; margin: 8px 0; overflow: hidden; }
+.conf-bar { height: 100%; border-radius: 99px; background: var(--blue); transition: width 0.6s ease; }
+.conf-pct { font-family: 'Space Mono', monospace; font-size: 0.78rem; color: var(--muted); }
+.rec-text { font-size: 0.82rem; color: var(--muted); margin-top: 8px; min-height: 20px; line-height: 1.4; }
 
-        .exchange-icon {
-            font-size: 1.2rem;
-            margin-bottom: 4px;
-        }
+/* ===== TRADINGVIEW CHART ===== */
+#chartSection { margin-bottom: 16px; }
 
-        /* ========== İLERLEME ÇUBUKLARI ========== */
-        .progress {
-            background: rgba(255, 255, 255, 0.05);
-            border-radius: 30px;
-            height: 8px;
-            margin: 0.5rem 0;
-        }
+#chartOuter {
+  position: relative;
+  width: 100%;
+  padding-top: 56.25%; /* 16:9 */
+  min-height: 350px;
+  background: var(--surface);
+  border-radius: 0 0 var(--r) var(--r);
+  overflow: hidden;
+}
+@media (min-height: 700px) {
+  #chartOuter { padding-top: 0; height: 500px; }
+}
+@media (max-width: 768px) {
+  #chartOuter { padding-top: 0; height: 300px; }
+}
 
-        .progress-bar {
-            border-radius: 30px;
-            transition: width 0.5s ease;
-        }
+#tvContainer {
+  position: absolute; top: 0; left: 0; width: 100%; height: 100%;
+}
 
-        /* ========== MOBİL ========== */
-        @media (max-width: 768px) {
-            .price-large { font-size: 2.2rem; }
-            .chart-wrapper { height: 400px; min-height: 400px; }
-            .signal-badge { font-size: 1.2rem; padding: 1rem; }
-        }
+#chartSpinner {
+  position: absolute; inset: 0;
+  display: flex; flex-direction: column; align-items: center; justify-content: center;
+  background: var(--surface); gap: 12px;
+  transition: opacity 0.5s;
+  z-index: 5;
+}
+#chartSpinner .spin-big {
+  width: 40px; height: 40px;
+  border: 3px solid var(--border);
+  border-top-color: var(--blue);
+  border-radius: 50%;
+  animation: spin 1s linear infinite;
+}
+#chartSpinner p { color: var(--muted); font-size: 0.82rem; }
+#chartSpinner.hidden { opacity: 0; pointer-events: none; }
 
-        /* ========== ANİMASYONLAR ========== */
-        @keyframes pulse {
-            0%, 100% { opacity: 1; }
-            50% { opacity: 0.7; }
-        }
+/* ===== INDICATOR ROWS ===== */
+.ind-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 10px;
+}
+@media (max-width: 600px) { .ind-grid { grid-template-columns: 1fr; } }
 
-        .loading-pulse {
-            animation: pulse 1.5s infinite;
-        }
+.ind-box {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--r-sm);
+  padding: 12px;
+}
+.ind-box .ind-label { font-size: 0.7rem; color: var(--muted); letter-spacing: 0.06em; text-transform: uppercase; margin-bottom: 4px; }
+.ind-box .ind-val   { font-family: 'Space Mono', monospace; font-size: 1.1rem; font-weight: 700; }
+.ind-box .ind-sub   { font-size: 0.72rem; color: var(--muted); margin-top: 2px; }
 
-        .price-flash {
-            animation: flash 0.3s ease;
-        }
+.text-green  { color: var(--green) !important; }
+.text-red    { color: var(--red)   !important; }
+.text-amber  { color: var(--amber) !important; }
+.text-blue   { color: var(--blue)  !important; }
+.text-muted  { color: var(--muted) !important; }
+.text-white  { color: #fff !important; }
 
-        @keyframes flash {
-            0% { text-shadow: 0 0 0 var(--accent-primary); }
-            50% { text-shadow: 0 0 30px var(--accent-primary); }
-            100% { text-shadow: 0 0 0 var(--accent-primary); }
-        }
-    </style>
+/* ===== PATTERNS ===== */
+.pattern-chips { display: flex; flex-wrap: wrap; gap: 6px; min-height: 32px; }
+.chip {
+  padding: 4px 10px; border-radius: 99px;
+  font-size: 0.73rem; font-weight: 700; letter-spacing: 0.03em;
+}
+.chip.bull  { background: var(--green-glow); color: var(--green); border: 1px solid var(--green); }
+.chip.bear  { background: var(--red-glow);   color: var(--red);   border: 1px solid var(--red);   }
+.chip.neut  { background: var(--border);     color: var(--muted); border: 1px solid var(--border); }
+
+/* ===== MARKET STRUCTURE ===== */
+.ms-rows .ms-row {
+  display: flex; justify-content: space-between; align-items: center;
+  padding: 9px 0; border-bottom: 1px solid var(--border);
+}
+.ms-rows .ms-row:last-child { border-bottom: none; }
+.ms-rows .ms-row .ms-label { font-size: 0.78rem; color: var(--muted); }
+.ms-rows .ms-row .ms-val   { font-weight: 700; font-size: 0.85rem; }
+
+/* ===== RIGHT COLUMN ===== */
+#rightCol { display: flex; flex-direction: column; gap: 16px; }
+
+/* ===== ML MODELS ===== */
+.ml-model { margin-bottom: 12px; }
+.ml-model:last-child { margin-bottom: 0; }
+.ml-model .ml-row  { display: flex; justify-content: space-between; margin-bottom: 4px; font-size: 0.8rem; }
+.ml-model .ml-name { color: var(--text); font-weight: 600; }
+.ml-model .ml-pct  { font-family: 'Space Mono', monospace; font-weight: 700; }
+.ml-bar-bg  { background: var(--surface); border-radius: 99px; height: 6px; overflow: hidden; }
+.ml-bar     { height: 100%; border-radius: 99px; transition: width 0.6s ease; }
+.ml-bar.info   { background: var(--cyan); }
+.ml-bar.succ   { background: var(--green); }
+.ml-bar.purp   { background: var(--purple); }
+.ml-bar.warn   { background: var(--amber); }
+
+/* ===== DATA POOL ===== */
+.pool-stat { display: flex; justify-content: space-between; align-items: center; padding: 8px 0; border-bottom: 1px solid var(--border); }
+.pool-stat:last-child { border-bottom: none; }
+.pool-stat .ps-label { font-size: 0.78rem; color: var(--muted); }
+.pool-stat .ps-val   { font-family: 'Space Mono', monospace; font-size: 0.82rem; font-weight: 700; }
+.health-bar { background: var(--surface); border-radius: 99px; height: 8px; margin: 12px 0 8px; overflow: hidden; }
+.health-fill { height: 100%; border-radius: 99px; background: linear-gradient(90deg, var(--blue), var(--green)); transition: width 0.6s ease; }
+
+/* ===== EXCHANGE GRID ===== */
+#exchangeGrid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(80px, 1fr));
+  gap: 6px;
+  max-height: 280px;
+  overflow-y: auto;
+  scrollbar-width: thin;
+  scrollbar-color: var(--border) transparent;
+}
+#exchangeGrid::-webkit-scrollbar { width: 4px; }
+#exchangeGrid::-webkit-scrollbar-thumb { background: var(--border); border-radius: 4px; }
+
+.ex-item {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--r-sm);
+  padding: 8px 4px; text-align: center;
+  transition: all 0.2s;
+}
+.ex-item.ok   { border-color: var(--green); background: var(--green-glow); }
+.ex-item.err  { border-color: var(--red);   opacity: 0.55; }
+.ex-item .ex-name { font-size: 0.65rem; font-weight: 700; display: block; margin-bottom: 4px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; padding: 0 2px; }
+.ex-item .ex-status { font-size: 0.75rem; }
+
+/* ===== AI CHAT ===== */
+#chatBox {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--r-sm);
+  padding: 12px;
+  min-height: 120px; max-height: 200px;
+  overflow-y: auto;
+  margin-bottom: 10px;
+  scrollbar-width: thin;
+}
+.chat-msg {
+  background: rgba(37,99,235,0.08);
+  border: 1px solid var(--border);
+  border-radius: var(--r-sm);
+  padding: 10px 12px;
+  margin-bottom: 8px;
+  font-size: 0.8rem;
+  line-height: 1.5;
+}
+.chat-msg .chat-head { font-weight: 700; color: var(--blue); margin-bottom: 4px; display: flex; align-items: center; gap: 6px; }
+.chat-msg .chat-warn { color: var(--amber); font-size: 0.72rem; margin-top: 6px; }
+.chat-empty { color: var(--muted); font-size: 0.8rem; }
+
+/* ===== ERROR / EMPTY STATES ===== */
+.state-empty { color: var(--muted); font-size: 0.8rem; font-style: italic; }
+
+/* ===== SCROLLBAR ===== */
+* { scrollbar-width: thin; scrollbar-color: var(--border) transparent; }
+::-webkit-scrollbar { width: 5px; height: 5px; }
+::-webkit-scrollbar-thumb { background: var(--border); border-radius: 4px; }
+
+/* ===== RESPONSIVE GRID ===== */
+#leftCol { display: flex; flex-direction: column; gap: 16px; }
+
+/* ===== BOTTOM ROW ===== */
+#bottomRow {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 16px;
+}
+#bottomRow2 {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 16px;
+}
+@media (max-width: 600px) {
+  #bottomRow, #bottomRow2 { grid-template-columns: 1fr; }
+}
+
+/* ===== STATUS ROW ===== */
+#statusRow {
+  display: flex; align-items: center; gap: 8px;
+  padding: 0 20px 12px;
+  max-width: 1600px; margin: 0 auto;
+}
+#statusRow .update-time { font-family:'Space Mono',monospace; font-size:0.72rem; color:var(--muted); margin-left: auto; }
+</style>
 </head>
 <body>
 
-<!-- ========== NAVBAR ========== -->
-<nav class="navbar">
-    <div class="container-fluid px-4">
-        <div class="d-flex align-items-center">
-            <a class="navbar-brand">
-                <i class="fas fa-robot me-2" style="color: var(--accent-primary);"></i>
-                ICTSMARTPRO v8.0
-            </a>
-            <span class="connection-badge" id="backendStatus">
-                <i class="fas fa-circle me-2" style="color: var(--accent-success); font-size: 0.6rem;"></i>
-                BAĞLANDI
-            </span>
-            <span class="ws-badge ms-2" id="wsStatus">
-                <i class="fas fa-wifi me-1"></i>
-                <span id="wsStatusText">WS</span>
-            </span>
-        </div>
-    </div>
-</nav>
-
-<div class="container-fluid px-4 py-3">
-    <div class="row g-4">
-        
-        <!-- ========== SOL KOLON (ANA İÇERİK) ========== -->
-        <div class="col-lg-8">
-            
-            <!-- Kontrol Paneli -->
-            <div class="card">
-                <div class="card-header">
-                    <i class="fas fa-sliders-h me-2"></i>
-                    ANALİZ KONTROLÜ
-                    <span class="badge bg-primary ms-2" id="sourceCount">0/32</span>
-                </div>
-                <div class="card-body">
-                    <div class="d-flex flex-wrap gap-3 align-items-center">
-                        <select id="symbolSelect" class="form-select" style="width: 150px; background: var(--bg-dark); color: white; border: 1px solid var(--accent-primary);">
-                            <option value="BTC">BTC/USDT</option>
-                            <option value="ETH">ETH/USDT</option>
-                            <option value="SOL">SOL/USDT</option>
-                            <option value="BNB">BNB/USDT</option>
-                            <option value="XRP">XRP/USDT</option>
-                            <option value="ADA">ADA/USDT</option>
-                        </select>
-                        
-                        <select id="intervalSelect" class="form-select" style="width: 130px; background: var(--bg-dark); color: white; border: 1px solid var(--accent-primary);">
-                            <option value="1m">1 Dakika</option>
-                            <option value="5m">5 Dakika</option>
-                            <option value="15m">15 Dakika</option>
-                            <option value="30m">30 Dakika</option>
-                            <option value="1h" selected>1 Saat</option>
-                            <option value="4h">4 Saat</option>
-                            <option value="1d">1 Gün</option>
-                            <option value="1w">1 Hafta</option>
-                        </select>
-                        
-                        <button class="btn btn-primary" onclick="analyzeSymbol()" style="background: var(--accent-primary); border: none; padding: 0.6rem 2rem; border-radius: 30px;">
-                            <i class="fas fa-search me-2"></i>
-                            ANALİZ ET
-                        </button>
-                        
-                        <span class="ms-auto text-muted small" id="lastUpdate">
-                            <i class="fas fa-clock me-1"></i> Güncelleniyor...
-                        </span>
-                    </div>
-                </div>
-            </div>
-
-            <!-- Fiyat ve ML Sinyali -->
-            <div class="row g-4">
-                <div class="col-md-6">
-                    <div class="card h-100">
-                        <div class="card-header">
-                            <i class="fas fa-dollar-sign me-2"></i>
-                            CANLI FİYAT
-                        </div>
-                        <div class="card-body text-center">
-                            <div class="text-muted small mb-2" id="currentSymbol">BTC/USDT</div>
-                            <div class="price-large" id="currentPrice">$0.00</div>
-                            <div class="mt-3" id="priceChange"></div>
-                            <div class="row mt-4">
-                                <div class="col-6">
-                                    <div class="text-muted small">24s Hacim</div>
-                                    <div class="fw-bold" id="volume24h">—</div>
-                                </div>
-                                <div class="col-6">
-                                    <div class="text-muted small">Kaynak</div>
-                                    <div class="fw-bold" id="priceSourceCount">0</div>
-                                </div>
-                            </div>
-                        </div>
-                    </div>
-                </div>
-                
-                <div class="col-md-6">
-                    <div class="card h-100">
-                        <div class="card-header">
-                            <i class="fas fa-brain me-2"></i>
-                            ML SİNYALİ
-                        </div>
-                        <div class="card-body">
-                            <div class="signal-badge text-center mb-3" id="signalBadge">
-                                <span id="signalText">ANALİZ BEKLENİYOR</span>
-                            </div>
-                            <div class="progress mb-2">
-                                <div class="progress-bar bg-primary" id="confidenceBar" role="progressbar" style="width: 0%"></div>
-                            </div>
-                            <div class="text-center mb-2 fw-bold" id="confidenceText">%0</div>
-                            <div class="small text-muted" id="recommendation">—</div>
-                        </div>
-                    </div>
-                </div>
-            </div>
-
-            <!-- TradingView Chart -->
-            <div class="card">
-                <div class="card-header">
-                    <i class="fas fa-chart-line me-2"></i>
-                    CANLI GRAFİK
-                    <span class="badge bg-success ms-2" id="chartStatus">TradingView</span>
-                </div>
-                <div class="card-body p-0">
-                    <div class="chart-wrapper" id="chartContainer">
-                        <div id="tradingview-widget"></div>
-                        <div class="chart-loading" id="chartLoading" style="display: none;">
-                            <div class="spinner-border text-primary" style="width: 3rem; height: 3rem;"></div>
-                            <p>Grafik yükleniyor...</p>
-                        </div>
-                    </div>
-                </div>
-            </div>
-
-            <!-- Heikin Ashi ve Teknik Göstergeler -->
-            <div class="row g-4">
-                <div class="col-md-6">
-                    <div class="card">
-                        <div class="card-header">
-                            <i class="fas fa-chart-simple me-2"></i>
-                            HEIKIN ASHI
-                        </div>
-                        <div class="card-body">
-                            <div class="row g-3">
-                                <div class="col-6">
-                                    <div class="p-2" style="background: rgba(0,0,0,0.3); border-radius: 12px;">
-                                        <div class="text-muted small">Trend</div>
-                                        <div class="fw-bold fs-5" id="haTrend">—</div>
-                                    </div>
-                                </div>
-                                <div class="col-6">
-                                    <div class="p-2" style="background: rgba(0,0,0,0.3); border-radius: 12px;">
-                                        <div class="text-muted small">RSI</div>
-                                        <div class="fw-bold fs-5" id="haRsi">—</div>
-                                    </div>
-                                </div>
-                                <div class="col-6">
-                                    <div class="p-2" style="background: rgba(0,0,0,0.3); border-radius: 12px;">
-                                        <div class="text-muted small">Güç</div>
-                                        <div class="fw-bold fs-5" id="haStrength">—</div>
-                                    </div>
-                                </div>
-                                <div class="col-6">
-                                    <div class="p-2" style="background: rgba(0,0,0,0.3); border-radius: 12px;">
-                                        <div class="text-muted small">Renk</div>
-                                        <div class="fw-bold fs-5" id="haColor">⚪</div>
-                                    </div>
-                                </div>
-                            </div>
-                        </div>
-                    </div>
-                </div>
-                
-                <div class="col-md-6">
-                    <div class="card">
-                        <div class="card-header">
-                            <i class="fas fa-flask me-2"></i>
-                            TEKNİK GÖSTERGELER
-                        </div>
-                        <div class="card-body">
-                            <div id="technicalIndicators">
-                                <div class="text-center py-3 loading-pulse">
-                                    <i class="fas fa-spinner fa-spin me-2"></i>Bekleniyor...
-                                </div>
-                            </div>
-                        </div>
-                    </div>
-                </div>
-            </div>
-
-            <!-- Pattern ve Market Yapısı -->
-            <div class="row g-4">
-                <div class="col-md-6">
-                    <div class="card">
-                        <div class="card-header">
-                            <i class="fas fa-shapes me-2"></i>
-                            PATERNLER
-                        </div>
-                        <div class="card-body">
-                            <div id="patterns" class="d-flex flex-wrap gap-2">
-                                <span class="text-muted">—</span>
-                            </div>
-                        </div>
-                    </div>
-                </div>
-                
-                <div class="col-md-6">
-                    <div class="card">
-                        <div class="card-header">
-                            <i class="fas fa-water me-2"></i>
-                            MARKET YAPISI
-                        </div>
-                        <div class="card-body">
-                            <div class="d-flex justify-content-between mb-2">
-                                <span class="text-muted">Trend:</span>
-                                <span class="fw-bold" id="trend">—</span>
-                            </div>
-                            <div class="d-flex justify-content-between mb-2">
-                                <span class="text-muted">Yapı:</span>
-                                <span class="fw-bold" id="structure">—</span>
-                            </div>
-                            <div class="d-flex justify-content-between">
-                                <span class="text-muted">Volatilite:</span>
-                                <span class="fw-bold" id="volatility">—</span>
-                            </div>
-                        </div>
-                    </div>
-                </div>
-            </div>
-        </div>
-
-        <!-- ========== SAĞ KOLON (İSTATİSTİKLER) ========== -->
-        <div class="col-lg-4">
-            
-            <!-- ML Modelleri -->
-            <div class="card">
-                <div class="card-header">
-                    <i class="fas fa-microchip me-2"></i>
-                    ML MODELLERİ
-                </div>
-                <div class="card-body">
-                    <div class="mb-3">
-                        <div class="d-flex justify-content-between">
-                            <span class="text-muted">LightGBM</span>
-                            <span class="fw-bold" id="mlLgbm">0%</span>
-                        </div>
-                        <div class="progress">
-                            <div class="progress-bar bg-info" id="mlLgbmBar" style="width: 0%"></div>
-                        </div>
-                    </div>
-                    
-                    <div class="mb-3">
-                        <div class="d-flex justify-content-between">
-                            <span class="text-muted">XGBoost</span>
-                            <span class="fw-bold" id="mlXgboost">0%</span>
-                        </div>
-                        <div class="progress">
-                            <div class="progress-bar bg-success" id="mlXgboostBar" style="width: 0%"></div>
-                        </div>
-                    </div>
-                    
-                    <div class="mb-3">
-                        <div class="d-flex justify-content-between">
-                            <span class="text-muted">Transformer</span>
-                            <span class="fw-bold" id="mlTransformer">0%</span>
-                        </div>
-                        <div class="progress">
-                            <div class="progress-bar bg-purple" id="mlTransformerBar" style="width: 0%"></div>
-                        </div>
-                    </div>
-                    
-                    <div class="mb-3">
-                        <div class="d-flex justify-content-between">
-                            <span class="text-muted">Random Forest</span>
-                            <span class="fw-bold" id="mlRf">0%</span>
-                        </div>
-                        <div class="progress">
-                            <div class="progress-bar bg-warning" id="mlRfBar" style="width: 0%"></div>
-                        </div>
-                    </div>
-                    
-                    <button class="btn btn-outline-primary w-100 mt-3" onclick="trainModels()">
-                        <i class="fas fa-sync-alt me-2"></i>Modelleri Eğit
-                    </button>
-                </div>
-            </div>
-
-            <!-- Veri Havuzu İstatistikleri -->
-            <div class="card">
-                <div class="card-header">
-                    <i class="fas fa-database me-2"></i>
-                    VERİ HAVUZU
-                </div>
-                <div class="card-body">
-                    <div class="d-flex justify-content-between mb-2">
-                        <span class="text-muted">Toplam Borsa:</span>
-                        <span class="fw-bold" id="poolExchanges">32</span>
-                    </div>
-                    <div class="d-flex justify-content-between mb-2">
-                        <span class="text-muted">Aktif Kaynak:</span>
-                        <span class="fw-bold text-success" id="poolActive">0</span>
-                    </div>
-                    <div class="d-flex justify-content-between mb-3">
-                        <span class="text-muted">Cache TTL:</span>
-                        <span class="fw-bold" id="poolTtl">60s</span>
-                    </div>
-                    
-                    <div class="progress mb-3">
-                        <div class="progress-bar bg-primary" id="poolHealthBar" style="width: 0%"></div>
-                    </div>
-                    
-                    <div class="small text-muted" id="poolLastUpdate">
-                        <i class="fas fa-clock me-1"></i> Son: —
-                    </div>
-                </div>
-            </div>
-
-            <!-- 30+ Borsa Durumu -->
-            <div class="card">
-                <div class="card-header">
-                    <i class="fas fa-cloud me-2"></i>
-                    30+ BORSA DURUMU
-                    <span class="badge bg-primary ms-2" id="exchangeActiveCount">0/32</span>
-                </div>
-                <div class="card-body">
-                    <div class="exchange-grid" id="exchangeGrid"></div>
-                </div>
-            </div>
-
-            <!-- AI Asistan -->
-            <div class="card">
-                <div class="card-header">
-                    <i class="fas fa-robot me-2"></i>
-                    AI ASİSTAN
-                </div>
-                <div class="card-body">
-                    <div id="chatMessages" style="min-height: 150px; max-height: 200px; overflow-y: auto;" class="mb-3">
-                        <div class="text-muted small">
-                            <i class="fas fa-info-circle me-2"></i>Analiz için "DEĞERLENDİR" butonuna tıklayın.
-                        </div>
-                    </div>
-                    <button class="btn btn-primary w-100" onclick="evaluateAI()">
-                        <i class="fas fa-brain me-2"></i>
-                        DEĞERLENDİR
-                    </button>
-                </div>
-            </div>
-        </div>
-    </div>
+<!-- TOPBAR -->
+<div id="topbar">
+  <div class="brand">ICT<span>SMART</span>PRO <span style="color:var(--muted);font-size:0.75rem;font-weight:600;">v8.0</span></div>
+  <div class="sep"></div>
+  <div class="pill green" id="backendPill"><div class="dot"></div><span>BACKEND</span></div>
+  <div class="pill muted" id="wsPill"><i class="fas fa-wifi"></i><span id="wsLabel">WS BAĞLANIYOR</span></div>
+  <div class="spacer"></div>
+  <div class="clock" id="clockEl"></div>
 </div>
 
-<script>
-// ==================== GLOBAL DEĞİŞKENLER ====================
-let currentData = null;
-let ws = null;
-let reconnectAttempts = 0;
-let lastPrice = 0;
-let tvWidget = null;
-let chartRetryCount = 0;
+<!-- STATUS ROW -->
+<div id="statusRow">
+  <span id="sourceCountBadge" class="pill blue"><i class="fas fa-server"></i> 0/32 Borsa</span>
+  <span id="lastUpdateText" class="update-time">Son güncelleme: —</span>
+</div>
 
-// Borsa listesi (main.py'deki EXCHANGES listesi ile aynı)
+<!-- MAIN APP -->
+<div id="app">
+
+  <!-- LEFT COLUMN -->
+  <div id="leftCol">
+
+    <!-- Controls -->
+    <div class="card">
+      <div class="card-head"><i class="fas fa-sliders-h"></i> ANALİZ KONTROLÜ</div>
+      <div id="controls">
+        <select id="symbolSelect">
+          <option value="BTC">BTC/USDT</option>
+          <option value="ETH">ETH/USDT</option>
+          <option value="SOL">SOL/USDT</option>
+          <option value="BNB">BNB/USDT</option>
+          <option value="XRP">XRP/USDT</option>
+          <option value="ADA">ADA/USDT</option>
+          <option value="DOGE">DOGE/USDT</option>
+          <option value="AVAX">AVAX/USDT</option>
+        </select>
+        <select id="intervalSelect">
+          <option value="1m">1 Dakika</option>
+          <option value="5m">5 Dakika</option>
+          <option value="15m">15 Dakika</option>
+          <option value="30m">30 Dakika</option>
+          <option value="1h" selected>1 Saat</option>
+          <option value="4h">4 Saat</option>
+          <option value="1d">1 Gün</option>
+          <option value="1w">1 Hafta</option>
+        </select>
+        <button class="btn btn-primary" id="analyzeBtn" onclick="analyzeSymbol()">
+          <i class="fas fa-search"></i> ANALİZ ET
+        </button>
+      </div>
+    </div>
+
+    <!-- Price + Signal -->
+    <div id="pricePanel">
+
+      <!-- Price Card -->
+      <div class="card price-card">
+        <div class="card-head"><i class="fas fa-dollar-sign"></i> CANLI FİYAT</div>
+        <div class="card-body">
+          <div class="price-sym" id="priceSymLabel">BTC / USDT</div>
+          <div class="price-val" id="priceEl">—</div>
+          <div class="price-chg flat" id="priceChgEl"><i class="fas fa-minus"></i> 0.00%</div>
+          <div class="stat-row" style="margin-top:12px">
+            <span class="label">24s Hacim</span>
+            <span class="val" id="volEl">—</span>
+          </div>
+          <div class="stat-row">
+            <span class="label">Kaynak Sayısı</span>
+            <span class="val" id="srcCountEl">—</span>
+          </div>
+          <div class="stat-row">
+            <span class="label">Yüksek / Düşük</span>
+            <span class="val" id="hiLoEl">— / —</span>
+          </div>
+        </div>
+      </div>
+
+      <!-- Signal Card -->
+      <div class="card">
+        <div class="card-head"><i class="fas fa-brain"></i> ML SİNYALİ</div>
+        <div class="card-body signal-wrap">
+          <div class="signal-label sig-default" id="signalLabel">ANALİZ BEKLENİYOR</div>
+          <div>
+            <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:4px">
+              <span style="font-size:0.75rem;color:var(--muted)">Güven</span>
+              <span class="conf-pct" id="confPct">%0</span>
+            </div>
+            <div class="conf-bar-wrap"><div class="conf-bar" id="confBar" style="width:0%"></div></div>
+          </div>
+          <div class="rec-text" id="recText">—</div>
+        </div>
+      </div>
+
+    </div>
+
+    <!-- TradingView Chart -->
+    <div class="card" id="chartSection">
+      <div class="card-head">
+        <i class="fas fa-chart-candlestick"></i> CANLI GRAFİK
+        <span class="badge" id="chartBadge">TradingView</span>
+      </div>
+      <div id="chartOuter">
+        <div id="tvContainer"></div>
+        <div id="chartSpinner">
+          <div class="spin-big"></div>
+          <p>Grafik yükleniyor...</p>
+        </div>
+      </div>
+    </div>
+
+    <!-- Indicators Row -->
+    <div id="bottomRow">
+      <!-- Heikin Ashi -->
+      <div class="card">
+        <div class="card-head"><i class="fas fa-chart-bar"></i> HEİKİN ASHİ</div>
+        <div class="card-body">
+          <div class="ind-grid">
+            <div class="ind-box">
+              <div class="ind-label">Trend</div>
+              <div class="ind-val" id="haTrend">—</div>
+            </div>
+            <div class="ind-box">
+              <div class="ind-label">RSI</div>
+              <div class="ind-val" id="haRsi">—</div>
+            </div>
+            <div class="ind-box">
+              <div class="ind-label">Güç</div>
+              <div class="ind-val" id="haStr">—</div>
+            </div>
+            <div class="ind-box">
+              <div class="ind-label">Renk</div>
+              <div class="ind-val" id="haColor">⚪</div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Technical -->
+      <div class="card">
+        <div class="card-head"><i class="fas fa-flask"></i> TEKNİK GÖSTERGELER</div>
+        <div class="card-body">
+          <div id="techRows">
+            <div class="state-empty">Analiz bekleniyor...</div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Patterns + Market Structure -->
+    <div id="bottomRow2">
+      <div class="card">
+        <div class="card-head"><i class="fas fa-shapes"></i> PATERNLER</div>
+        <div class="card-body">
+          <div class="pattern-chips" id="patternsEl">
+            <span class="state-empty">—</span>
+          </div>
+        </div>
+      </div>
+
+      <div class="card">
+        <div class="card-head"><i class="fas fa-water"></i> MARKET YAPISI</div>
+        <div class="card-body">
+          <div class="ms-rows" id="msRows">
+            <div class="ms-row"><span class="ms-label">Trend</span><span class="ms-val" id="msTrend">—</span></div>
+            <div class="ms-row"><span class="ms-label">Yapı</span><span class="ms-val" id="msStruct">—</span></div>
+            <div class="ms-row"><span class="ms-label">Volatilite</span><span class="ms-val" id="msVol">—</span></div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+  </div><!-- /leftCol -->
+
+  <!-- RIGHT COLUMN -->
+  <div id="rightCol">
+
+    <!-- ML Models -->
+    <div class="card">
+      <div class="card-head"><i class="fas fa-microchip"></i> ML MODELLERİ</div>
+      <div class="card-body">
+        <div class="ml-model">
+          <div class="ml-row"><span class="ml-name">LightGBM</span><span class="ml-pct" id="lgbmPct">0%</span></div>
+          <div class="ml-bar-bg"><div class="ml-bar info" id="lgbmBar" style="width:0%"></div></div>
+        </div>
+        <div class="ml-model">
+          <div class="ml-row"><span class="ml-name">XGBoost</span><span class="ml-pct" id="xgbPct">0%</span></div>
+          <div class="ml-bar-bg"><div class="ml-bar succ" id="xgbBar" style="width:0%"></div></div>
+        </div>
+        <div class="ml-model">
+          <div class="ml-row"><span class="ml-name">Transformer</span><span class="ml-pct" id="tfPct">0%</span></div>
+          <div class="ml-bar-bg"><div class="ml-bar purp" id="tfBar" style="width:0%"></div></div>
+        </div>
+        <div class="ml-model">
+          <div class="ml-row"><span class="ml-name">Random Forest</span><span class="ml-pct" id="rfPct">0%</span></div>
+          <div class="ml-bar-bg"><div class="ml-bar warn" id="rfBar" style="width:0%"></div></div>
+        </div>
+        <button class="btn btn-outline" style="width:100%;margin-top:14px;justify-content:center" id="trainBtn" onclick="trainModels()">
+          <i class="fas fa-sync-alt"></i> Modelleri Eğit
+        </button>
+      </div>
+    </div>
+
+    <!-- Data Pool -->
+    <div class="card">
+      <div class="card-head"><i class="fas fa-database"></i> VERİ HAVUZU</div>
+      <div class="card-body">
+        <div class="pool-stat"><span class="ps-label">Toplam Borsa</span><span class="ps-val">32</span></div>
+        <div class="pool-stat"><span class="ps-label">Aktif Kaynak</span><span class="ps-val text-green" id="poolActive">—</span></div>
+        <div class="pool-stat"><span class="ps-label">Başarısız</span><span class="ps-val text-red" id="poolFail">—</span></div>
+        <div class="pool-stat"><span class="ps-label">Cache TTL</span><span class="ps-val">60s</span></div>
+        <div class="health-bar"><div class="health-fill" id="healthFill" style="width:0%"></div></div>
+        <div style="font-size:0.72rem;color:var(--muted)" id="poolUpdate">—</div>
+      </div>
+    </div>
+
+    <!-- Exchange Status -->
+    <div class="card">
+      <div class="card-head">
+        <i class="fas fa-cloud"></i> BORSA DURUMU
+        <span class="badge" id="exActiveBadge">0/32</span>
+      </div>
+      <div class="card-body" style="padding:10px">
+        <div id="exchangeGrid"></div>
+      </div>
+    </div>
+
+    <!-- AI Assistant -->
+    <div class="card">
+      <div class="card-head"><i class="fas fa-robot"></i> AI ASİSTAN</div>
+      <div class="card-body">
+        <div id="chatBox">
+          <div class="chat-empty"><i class="fas fa-info-circle"></i> Analiz yaptıktan sonra "Değerlendir" butonuna tıklayın.</div>
+        </div>
+        <button class="btn btn-primary" style="width:100%;justify-content:center" onclick="evaluateAI()">
+          <i class="fas fa-brain"></i> DEĞERLENDİR
+        </button>
+      </div>
+    </div>
+
+  </div><!-- /rightCol -->
+
+</div><!-- /app -->
+
+<script>
+// =============================================
+//  CONSTANTS
+// =============================================
 const EXCHANGES = [
-    "Binance", "Bybit", "OKX", "KuCoin", "Gate.io", "MEXC", "Kraken", 
-    "Bitfinex", "Huobi", "Coinbase", "Bitget", "BinanceUS", "Crypto.com",
-    "Gemini", "Poloniex", "Bittrex", "Bitstamp", "LBank", "AscendEX",
-    "BingX", "Phemex", "WazirX", "CoinEx", "DigiFinex", "XT.com", "ProBit",
-    "BKEX", "Hotbit", "ZB.com", "Bibox", "HitBTC", "EXMO"
+  "Binance","Bybit","OKX","KuCoin","Gate.io","MEXC","Kraken",
+  "Bitfinex","Huobi","Coinbase","Bitget","BinanceUS","Crypto.com",
+  "Gemini","Poloniex","Bittrex","Bitstamp","LBank","AscendEX",
+  "BingX","Phemex","WazirX","CoinEx","DigiFinex","XT.com","ProBit",
+  "BKEX","Hotbit","ZB.com","Bibox","HitBTC","EXMO"
 ];
 
-// ==================== YARDIMCI FONKSİYONLAR ====================
-function formatNumber(num, decimals = 2) {
-    if (num === undefined || num === null || isNaN(num)) return '—';
-    return Number(num).toFixed(decimals);
+// =============================================
+//  STATE
+// =============================================
+let state = {
+  ws: null, wsRetries: 0,
+  tvWidget: null, chartReady: false,
+  currentData: null,
+  lastPrice: null
+};
+
+// =============================================
+//  UTILS
+// =============================================
+function fmt(n, d = 2) {
+  if (n === null || n === undefined || isNaN(n)) return '—';
+  return Number(n).toLocaleString('tr-TR', { minimumFractionDigits: d, maximumFractionDigits: d });
+}
+function fmtVol(v) {
+  if (!v || isNaN(v)) return '—';
+  if (v >= 1e9) return (v / 1e9).toFixed(2) + 'B';
+  if (v >= 1e6) return (v / 1e6).toFixed(2) + 'M';
+  if (v >= 1e3) return (v / 1e3).toFixed(2) + 'K';
+  return Number(v).toFixed(2);
+}
+function fmtTime(d) {
+  d = d || new Date();
+  return d.toLocaleTimeString('tr-TR', { hour: '2-digit', minute: '2-digit', second: '2-digit' });
+}
+function fmtPrice(p) {
+  if (!p) return '—';
+  if (p >= 10000) return '$' + fmt(p, 0);
+  if (p >= 1)     return '$' + fmt(p, 2);
+  return '$' + Number(p).toFixed(6);
+}
+function clamp(v, lo, hi) { return Math.min(hi, Math.max(lo, v)); }
+
+const $ = id => document.getElementById(id);
+const set = (id, val) => { const el = $(id); if (el) el.textContent = val; };
+const setHTML = (id, val) => { const el = $(id); if (el) el.innerHTML = val; };
+
+// =============================================
+//  CLOCK
+// =============================================
+function tickClock() { $('clockEl').textContent = fmtTime(); }
+setInterval(tickClock, 1000); tickClock();
+
+// =============================================
+//  EXCHANGE GRID
+// =============================================
+function buildExchangeGrid() {
+  const grid = $('exchangeGrid');
+  if (!grid) return;
+  grid.innerHTML = EXCHANGES.map(ex => {
+    const id = 'ex_' + ex.toLowerCase().replace(/[^a-z0-9]/g, '');
+    return `<div class="ex-item" id="${id}">
+      <span class="ex-name">${ex}</span>
+      <span class="ex-status" id="${id}_s">⏳</span>
+    </div>`;
+  }).join('');
 }
 
-function formatVolume(vol) {
-    if (!vol) return '—';
-    if (vol >= 1e9) return (vol / 1e9).toFixed(2) + 'B';
-    if (vol >= 1e6) return (vol / 1e6).toFixed(2) + 'M';
-    if (vol >= 1e3) return (vol / 1e3).toFixed(2) + 'K';
-    return vol.toFixed(2);
+function updateExchangeGrid(stats) {
+  if (!stats || typeof stats !== 'object') return;
+  let active = 0, fail = 0;
+  for (const [name, data] of Object.entries(stats)) {
+    const id = 'ex_' + name.toLowerCase().replace(/[^a-z0-9]/g, '');
+    const el = $(id), st = $(id + '_s');
+    if (!el || !st) continue;
+    const ok = (data.success || 0) > 0;
+    const ko = (data.fail    || 0) > 0 && !ok;
+    el.className = 'ex-item' + (ok ? ' ok' : ko ? ' err' : '');
+    st.textContent = ok ? '✅' : ko ? '❌' : '⏳';
+    if (ok) active++;
+    if (ko) fail++;
+  }
+  $('exActiveBadge').textContent = `${active}/32`;
+  $('sourceCountBadge').innerHTML = `<i class="fas fa-server"></i> ${active}/32 Borsa`;
+  set('poolActive', active);
+  set('poolFail', fail);
+  const health = active > 0 ? clamp((active / 32) * 100, 0, 100) : 0;
+  $('healthFill').style.width = health + '%';
+  $('poolUpdate').textContent = 'Güncellendi: ' + fmtTime();
 }
 
-function formatTime(timestamp) {
-    if (!timestamp) return '—';
-    try {
-        return new Date(timestamp).toLocaleTimeString('tr-TR');
-    } catch {
-        return '—';
-    }
-}
+// =============================================
+//  TRADINGVIEW
+// =============================================
+const TV_INTERVAL_MAP = {
+  '1m':'1','5m':'5','15m':'15','30m':'30',
+  '1h':'60','4h':'240','1d':'D','1w':'W'
+};
 
-function showNotification(msg, type = 'info') {
-    // Basit bildirim - console'a yaz
-    console.log(`[${type.toUpperCase()}] ${msg}`);
-}
-
-// ==================== BORSA GRID'İNİ OLUŞTUR ====================
-function renderExchangeGrid() {
-    const grid = document.getElementById('exchangeGrid');
-    if (!grid) return;
-    
-    grid.innerHTML = EXCHANGES.map(ex => {
-        const id = ex.toLowerCase().replace(/[^a-z]/g, '');
-        return `
-            <div class="exchange-item" id="ex-${id}">
-                <div class="exchange-icon">
-                    <i class="fas fa-exchange-alt"></i>
-                </div>
-                <div class="small fw-bold">${ex}</div>
-                <div class="exchange-status" id="status-${id}">⚪</div>
-            </div>
-        `;
-    }).join('');
-}
-
-// ==================== BORSA İSTATİSTİKLERİNİ GÜNCELLE ====================
-function updateExchangeStats(stats) {
-    if (!stats) return;
-    
-    let active = 0;
-    
-    Object.entries(stats).forEach(([name, data]) => {
-        const id = name.toLowerCase().replace(/[^a-z]/g, '');
-        const el = document.getElementById(`ex-${id}`);
-        const statusEl = document.getElementById(`status-${id}`);
-        
-        if (el && statusEl) {
-            if (data.success > 0) {
-                el.classList.add('success');
-                el.classList.remove('fail');
-                statusEl.innerHTML = '✅';
-                statusEl.style.color = '#10b981';
-                active++;
-            } else if (data.fail > 0) {
-                el.classList.add('fail');
-                el.classList.remove('success');
-                statusEl.innerHTML = '❌';
-                statusEl.style.color = '#ef4444';
-            } else {
-                el.classList.remove('success', 'fail');
-                statusEl.innerHTML = '⏳';
-                statusEl.style.color = '#94a3b8';
-            }
-        }
-    });
-    
-    document.getElementById('exchangeActiveCount').textContent = `${active}/${EXCHANGES.length}`;
-    document.getElementById('poolActive').textContent = active;
-}
-
-// ==================== TRADINGVIEW CHART ====================
 function initTradingView() {
-    const symbol = document.getElementById('symbolSelect').value;
-    const interval = document.getElementById('intervalSelect').value;
-    
-    const intervalMap = {
-        '1m': '1', '5m': '5', '15m': '15', '30m': '30',
-        '1h': '60', '4h': '240', '1d': 'D', '1w': 'W'
-    };
-    
-    const container = document.getElementById('tradingview-widget');
-    if (!container) return;
-    
-    // Widget'ı temizle
-    container.innerHTML = '';
-    
-    // Loading göster
-    document.getElementById('chartLoading').style.display = 'flex';
-    
-    try {
-        tvWidget = new TradingView.widget({
-            width: '100%',
-            height: '100%',
-            symbol: `BINANCE:${symbol}USDT`,
-            interval: intervalMap[interval] || '60',
-            timezone: 'Europe/Istanbul',
-            theme: 'dark',
-            style: '1',
-            locale: 'tr',
-            toolbar_bg: '#11131f',
-            enable_publishing: false,
-            hide_top_toolbar: false,
-            hide_legend: false,
-            save_image: false,
-            container_id: 'tradingview-widget',
-            studies: [
-                "RSI@tv-basicstudies",
-                "MACD@tv-basicstudies",
-                "MASimple@tv-basicstudies"
-            ],
-            disabled_features: [
-                "header_symbol_search",
-                "header_saveload",
-                "header_undo_redo",
-                "left_toolbar",
-                "control_bar",
-                "timeframes_toolbar"
-            ],
-            overrides: {
-                "paneProperties.background": "#11131f",
-                "paneProperties.vertGridProperties.color": "#1a1d2b",
-                "paneProperties.horzGridProperties.color": "#1a1d2b"
-            }
-        });
-        
-        // Widget yüklendiğinde loading'i kaldır
+  const sym      = $('symbolSelect').value;
+  const interval = TV_INTERVAL_MAP[$('intervalSelect').value] || '60';
+  const container = $('tvContainer');
+  if (!container) return;
+
+  // Destroy old
+  if (state.tvWidget) {
+    try { state.tvWidget.remove(); } catch(e) {}
+    state.tvWidget = null;
+  }
+  container.innerHTML = '';
+  $('chartSpinner').classList.remove('hidden');
+  state.chartReady = false;
+
+  // Guard: wait for TradingView lib
+  if (typeof TradingView === 'undefined') {
+    setTimeout(initTradingView, 800);
+    return;
+  }
+
+  try {
+    state.tvWidget = new TradingView.widget({
+      autosize:         true,
+      symbol:           `BINANCE:${sym}USDT`,
+      interval:         interval,
+      timezone:         'Europe/Istanbul',
+      theme:            'dark',
+      style:            '1',
+      locale:           'tr',
+      toolbar_bg:       '#0e1420',
+      enable_publishing: false,
+      allow_symbol_change: true,
+      hide_top_toolbar:  false,
+      hide_side_toolbar: false,
+      studies: ['RSI@tv-basicstudies','MACD@tv-basicstudies'],
+      container_id:     'tvContainer',
+      overrides: {
+        'paneProperties.background':              '#0e1420',
+        'paneProperties.vertGridProperties.color':'#1e2d45',
+        'paneProperties.horzGridProperties.color':'#1e2d45',
+      },
+      disabled_features: [
+        'header_saveload','header_undo_redo','header_screenshot',
+        'timeframes_toolbar'
+      ],
+      onready: () => {
+        state.chartReady = true;
         setTimeout(() => {
-            document.getElementById('chartLoading').style.display = 'none';
-        }, 3000);
-        
-    } catch (error) {
-        console.error('TradingView error:', error);
-        document.getElementById('chartLoading').style.display = 'none';
-        container.innerHTML = '<div class="text-center text-danger p-5">Grafik yüklenemedi</div>';
-    }
+          $('chartSpinner').classList.add('hidden');
+        }, 400);
+      }
+    });
+  } catch(e) {
+    console.error('TradingView init error:', e);
+    $('chartSpinner').classList.add('hidden');
+  }
+
+  // Fallback hide spinner
+  setTimeout(() => $('chartSpinner').classList.add('hidden'), 6000);
 }
 
-// ==================== WEBSOCKET BAĞLANTISI ====================
-function connectWebSocket() {
-    const symbol = document.getElementById('symbolSelect').value + 'USDT';
-    const wsUrl = `ws://${window.location.host}/ws/${symbol}`;
-    
-    if (ws) {
-        try { ws.close(); } catch (e) {}
-    }
-    
-    try {
-        ws = new WebSocket(wsUrl);
-        
-        ws.onopen = () => {
-            console.log('WebSocket bağlandı');
-            document.getElementById('wsStatus').className = 'ws-badge ws-connected';
-            document.getElementById('wsStatusText').textContent = 'BAĞLANDI';
-            reconnectAttempts = 0;
-        };
-        
-        ws.onmessage = (e) => {
-            try {
-                const data = JSON.parse(e.data);
-                if (data.type === 'price_update') {
-                    updatePriceFromWS(data);
-                }
-            } catch (error) {
-                console.error('WS mesaj hatası:', error);
-            }
-        };
-        
-        ws.onerror = (error) => {
-            console.error('WebSocket hatası:', error);
-            document.getElementById('wsStatus').className = 'ws-badge ws-disconnected';
-            document.getElementById('wsStatusText').textContent = 'HATA';
-        };
-        
-        ws.onclose = () => {
-            document.getElementById('wsStatus').className = 'ws-badge ws-disconnected';
-            document.getElementById('wsStatusText').textContent = 'KAPALI';
-            
-            if (reconnectAttempts < 5) {
-                reconnectAttempts++;
-                setTimeout(connectWebSocket, 3000);
-            }
-        };
-        
-    } catch (error) {
-        console.error('WebSocket bağlantı hatası:', error);
-    }
+// =============================================
+//  WEBSOCKET
+// =============================================
+function connectWS() {
+  const sym = $('symbolSelect').value + 'USDT';
+  const url = `ws://${location.host}/ws/${sym}`;
+
+  if (state.ws) {
+    try { state.ws.close(); } catch(e) {}
+    state.ws = null;
+  }
+
+  try {
+    const ws = new WebSocket(url);
+    state.ws = ws;
+
+    ws.onopen = () => {
+      state.wsRetries = 0;
+      setPill('wsPill','green','BAĞLANDI');
+      set('wsLabel', 'BAĞLANDI');
+    };
+
+    ws.onmessage = (e) => {
+      try {
+        const d = JSON.parse(e.data);
+        if (d.type === 'price_update') renderWSPrice(d);
+      } catch {}
+    };
+
+    ws.onerror = () => setPill('wsPill','red','HATA');
+
+    ws.onclose = () => {
+      setPill('wsPill','muted','KAPALI');
+      set('wsLabel','KAPALI');
+      if (state.wsRetries < 8) {
+        state.wsRetries++;
+        setTimeout(connectWS, 3000 + state.wsRetries * 1000);
+      }
+    };
+  } catch(e) {
+    console.error('WS error:', e);
+  }
 }
 
-// ==================== FİYAT GÜNCELLEME ====================
-function updatePriceFromWS(data) {
-    const priceEl = document.getElementById('currentPrice');
-    priceEl.classList.add('price-flash');
-    setTimeout(() => priceEl.classList.remove('price-flash'), 300);
-    
-    lastPrice = data.price;
-    priceEl.textContent = '$' + formatNumber(data.price);
-    
-    const changeEl = document.getElementById('priceChange');
-    changeEl.className = data.change_percent >= 0 ? 'price-change price-up' : 'price-change price-down';
-    changeEl.innerHTML = data.change_percent >= 0 
-        ? `↑ +${data.change_percent.toFixed(2)}%` 
-        : `↓ ${data.change_percent.toFixed(2)}%`;
-    
-    document.getElementById('volume24h').textContent = formatVolume(data.volume);
-    document.getElementById('priceSourceCount').textContent = data.source_count || 0;
-    document.getElementById('lastUpdate').innerHTML = `<i class="fas fa-clock me-1"></i> ${formatTime(new Date())}`;
+function setPill(id, cls, label) {
+  const el = $(id);
+  if (!el) return;
+  el.className = 'pill ' + cls;
+  const sp = el.querySelector('span');
+  if (sp) sp.textContent = label;
 }
 
-// ==================== ANALİZ ====================
+function renderWSPrice(d) {
+  const price = d.price;
+  const chgPct = d.change_percent;
+
+  // Flash if changed
+  const priceEl = $('priceEl');
+  if (state.lastPrice !== price) {
+    priceEl.classList.remove('flash');
+    void priceEl.offsetWidth;
+    priceEl.classList.add('flash');
+    state.lastPrice = price;
+  }
+  priceEl.textContent = fmtPrice(price);
+
+  const chgEl = $('priceChgEl');
+  if (chgEl) {
+    const up = chgPct >= 0;
+    chgEl.className = 'price-chg ' + (up ? 'up' : 'down');
+    chgEl.innerHTML = `<i class="fas fa-arrow-${up ? 'up' : 'down'}"></i> ${up ? '+' : ''}${(+chgPct).toFixed(2)}%`;
+  }
+
+  if (d.volume) set('volEl', fmtVol(d.volume));
+  if (d.source_count !== undefined) set('srcCountEl', d.source_count);
+
+  set('lastUpdateText', 'Son güncelleme: ' + fmtTime());
+}
+
+// =============================================
+//  ANALYZE
+// =============================================
 async function analyzeSymbol() {
-    const symbol = document.getElementById('symbolSelect').value + 'USDT';
-    const interval = document.getElementById('intervalSelect').value;
-    
-    showNotification('Analiz başlatıldı...', 'info');
-    
-    try {
-        const response = await fetch(`/api/analyze/${symbol}?interval=${interval}&limit=200`);
-        
-        if (!response.ok) {
-            throw new Error(`HTTP ${response.status}`);
-        }
-        
-        const data = await response.json();
-        
-        if (data.success) {
-            currentData = data;
-            updateDashboard(data);
-            showNotification('Analiz tamamlandı', 'success');
-        } else {
-            throw new Error(data.detail || 'Analiz başarısız');
-        }
-        
-    } catch (error) {
-        console.error('Analiz hatası:', error);
-        showNotification('Analiz hatası: ' + error.message, 'error');
-    }
+  const sym      = $('symbolSelect').value + 'USDT';
+  const interval = $('intervalSelect').value;
+  const btn      = $('analyzeBtn');
+
+  btn.innerHTML = '<div class="spinner"></div> Analiz Ediliyor...';
+  btn.disabled = true;
+
+  try {
+    const res = await fetch(`/api/analyze/${sym}?interval=${interval}&limit=200`);
+    if (!res.ok) throw new Error(`HTTP ${res.status}`);
+    const data = await res.json();
+    if (!data.success) throw new Error(data.detail || 'Başarısız');
+    state.currentData = data;
+    renderDashboard(data);
+  } catch(e) {
+    console.error('Analyze error:', e);
+    // Show error in signal
+    $('signalLabel').textContent = 'HATA: ' + e.message;
+    $('signalLabel').className = 'signal-label sig-NEUTRAL';
+  } finally {
+    btn.innerHTML = '<i class="fas fa-search"></i> ANALİZ ET';
+    btn.disabled = false;
+  }
 }
 
-// ==================== DASHBOARD GÜNCELLEME ====================
-function updateDashboard(data) {
-    if (!data || !data.success) return;
-    
-    // Fiyat bilgileri
-    if (data.price_data) {
-        document.getElementById('currentPrice').textContent = '$' + formatNumber(data.price_data.current);
-        document.getElementById('volume24h').textContent = formatVolume(data.price_data.volume_24h);
-        document.getElementById('priceSourceCount').textContent = data.price_data.source_count || 0;
-        document.getElementById('currentSymbol').textContent = data.symbol.replace('USDT', '/USDT');
-    }
-    
-    // Sinyal
-    if (data.signal) {
-        const signal = data.signal.signal || 'NEUTRAL';
-        const confidence = data.signal.confidence || 50;
-        
-        const badge = document.getElementById('signalBadge');
-        badge.className = `signal-badge text-center signal-${signal}`;
-        document.getElementById('signalText').textContent = signal.replace('_', ' ');
-        
-        document.getElementById('confidenceBar').style.width = confidence + '%';
-        document.getElementById('confidenceText').textContent = '%' + confidence;
-        document.getElementById('recommendation').textContent = data.signal.recommendation || '';
-    }
-    
-    // Sinyal dağılımı
-    if (data.signal_distribution) {
-        // Dashboard'da gösterim yok ama ileride eklenebilir
-    }
-    
-    // Teknik göstergeler
-    if (data.technical_indicators) {
-        const tech = data.technical_indicators;
-        
-        // Heikin Ashi
-        if (tech.ha_trend) {
-            document.getElementById('haTrend').textContent = tech.ha_trend;
-            document.getElementById('haRsi').textContent = tech.ha_rsi?.toFixed(1) || '—';
-            document.getElementById('haStrength').textContent = tech.ha_trend_strength?.toFixed(0) + '%' || '—';
-            document.getElementById('haColor').innerHTML = tech.ha_color_change === 1 ? '🟢' : tech.ha_color_change === -1 ? '🔴' : '⚪';
-        }
-        
-        // Teknik gösterge kartları
-        let techHtml = '';
-        if (tech.rsi_value) {
-            techHtml += `
-                <div class="d-flex justify-content-between mb-2">
-                    <span class="text-muted">RSI</span>
-                    <span class="fw-bold">${tech.rsi_value.toFixed(1)}</span>
-                </div>
-            `;
-        }
-        if (tech.macd_histogram) {
-            techHtml += `
-                <div class="d-flex justify-content-between mb-2">
-                    <span class="text-muted">MACD</span>
-                    <span class="fw-bold ${tech.macd_histogram > 0 ? 'text-success' : 'text-danger'}">
-                        ${tech.macd_histogram > 0 ? '+' : ''}${tech.macd_histogram.toFixed(4)}
-                    </span>
-                </div>
-            `;
-        }
-        if (tech.bb_position) {
-            techHtml += `
-                <div class="d-flex justify-content-between mb-2">
-                    <span class="text-muted">Bollinger %</span>
-                    <span class="fw-bold">${tech.bb_position.toFixed(1)}%</span>
-                </div>
-            `;
-        }
-        if (tech.volume_ratio) {
-            techHtml += `
-                <div class="d-flex justify-content-between mb-2">
-                    <span class="text-muted">Hacim Oranı</span>
-                    <span class="fw-bold">${tech.volume_ratio.toFixed(2)}x</span>
-                </div>
-            `;
-        }
-        document.getElementById('technicalIndicators').innerHTML = techHtml || '<div class="text-muted">Veri yok</div>';
-    }
-    
-    // Patternler
-    if (data.patterns && data.patterns.length > 0) {
-        const patternHtml = data.patterns.slice(0, 5).map(p => `
-            <span class="badge ${p.direction === 'bullish' ? 'bg-success' : p.direction === 'bearish' ? 'bg-danger' : 'bg-secondary'}">
-                ${p.name}
-            </span>
-        `).join('');
-        document.getElementById('patterns').innerHTML = patternHtml;
-    }
-    
-    // Market yapısı
-    if (data.market_structure) {
-        const ms = data.market_structure;
-        document.getElementById('trend').textContent = ms.trend || '—';
-        document.getElementById('structure').textContent = ms.structure || '—';
-        document.getElementById('volatility').textContent = ms.volatility || '—';
-    }
-    
-    // ML istatistikleri
-    if (data.ml_stats) {
-        const stats = data.ml_stats;
-        
-        document.getElementById('mlLgbm').textContent = (stats.lightgbm || 0).toFixed(1) + '%';
-        document.getElementById('mlLgbmBar').style.width = (stats.lightgbm || 0) + '%';
-        
-        document.getElementById('mlXgboost').textContent = (stats.xgboost || 0).toFixed(1) + '%';
-        document.getElementById('mlXgboostBar').style.width = (stats.xgboost || 0) + '%';
-        
-        document.getElementById('mlTransformer').textContent = (stats.transformer || 0).toFixed(1) + '%';
-        document.getElementById('mlTransformerBar').style.width = (stats.transformer || 0) + '%';
-        
-        document.getElementById('mlRf').textContent = (stats.random_forest || 0).toFixed(1) + '%';
-        document.getElementById('mlRfBar').style.width = (stats.random_forest || 0) + '%';
-    }
-    
-    // Borsa istatistiklerini al ve güncelle
-    fetchExchangeStats();
-    
-    // Son güncelleme zamanı
-    document.getElementById('lastUpdate').innerHTML = `<i class="fas fa-clock me-1"></i> ${formatTime(new Date())}`;
-}
+// =============================================
+//  RENDER DASHBOARD
+// =============================================
+function renderDashboard(d) {
+  if (!d) return;
 
-// ==================== BORSA İSTATİSTİKLERİ ====================
-async function fetchExchangeStats() {
-    try {
-        const response = await fetch('/api/exchange-stats');
-        const data = await response.json();
-        
-        if (data.success) {
-            updateExchangeStats(data.stats);
-            
-            // Veri havuzu bilgileri
-            const totalSuccess = Object.values(data.stats).reduce((acc, s) => acc + (s.success || 0), 0);
-            const totalFail = Object.values(data.stats).reduce((acc, s) => acc + (s.fail || 0), 0);
-            const health = (totalSuccess / (totalSuccess + totalFail || 1)) * 100;
-            
-            document.getElementById('poolHealthBar').style.width = health + '%';
-            document.getElementById('poolLastUpdate').innerHTML = `<i class="fas fa-clock me-1"></i> Son: ${formatTime(new Date())}`;
-        }
-    } catch (error) {
-        console.error('Exchange stats error:', error);
-    }
-}
+  // Symbol label
+  const sym = (d.symbol || 'BTC/USDT').replace('USDT', ' / USDT');
+  set('priceSymLabel', sym);
 
-// ==================== MODEL EĞİTİMİ ====================
-async function trainModels() {
-    const symbol = document.getElementById('symbolSelect').value + 'USDT';
-    
-    showNotification('Modeller eğitiliyor...', 'info');
-    
-    try {
-        const response = await fetch(`/api/train/${symbol}`, {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' }
-        });
-        
-        if (response.ok) {
-            showNotification('Eğitim tamamlandı!', 'success');
-            setTimeout(analyzeSymbol, 2000);
-        } else {
-            showNotification('Eğitim başarısız', 'error');
-        }
-        
-    } catch (error) {
-        console.error('Training error:', error);
-        showNotification('Eğitim hatası', 'error');
-    }
-}
+  // Price
+  if (d.price_data) {
+    const pd = d.price_data;
+    const priceEl = $('priceEl');
+    priceEl.textContent = fmtPrice(pd.current);
+    priceEl.classList.remove('flash');
+    void priceEl.offsetWidth;
+    priceEl.classList.add('flash');
 
-// ==================== AI DEĞERLENDİRME ====================
-function evaluateAI() {
-    if (!currentData) {
-        showNotification('Önce analiz yapın', 'warning');
-        return;
+    // Change %
+    const chg = pd.change_24h ?? null;
+    const chgEl = $('priceChgEl');
+    if (chgEl && chg !== null) {
+      const up = chg >= 0;
+      chgEl.className = 'price-chg ' + (up ? 'up' : 'down');
+      chgEl.innerHTML = `<i class="fas fa-arrow-${up ? 'up' : 'down'}"></i> ${up ? '+' : ''}${(+chg).toFixed(2)}%`;
     }
-    
-    const chatDiv = document.getElementById('chatMessages');
-    const msg = document.createElement('div');
-    msg.className = 'mb-2 p-2 rounded';
-    msg.style.background = 'rgba(59, 130, 246, 0.1)';
-    
-    const signal = currentData.signal?.signal || 'NEUTRAL';
-    const confidence = currentData.signal?.confidence || 0;
-    const price = currentData.price_data?.current || 0;
-    const rsi = currentData.technical_indicators?.rsi_value || 50;
-    
-    let analysis = '';
-    if (confidence > 70) {
-        analysis = 'Güçlü sinyal, işlem hacmi yüksek';
-    } else if (confidence > 60) {
-        analysis = 'Orta seviye sinyal, teyit beklenmeli';
+
+    if (pd.volume_24h !== undefined) set('volEl', fmtVol(pd.volume_24h));
+    if (pd.source_count !== undefined) set('srcCountEl', pd.source_count);
+
+    const hi = pd.high_24h ? fmtPrice(pd.high_24h) : '—';
+    const lo = pd.low_24h  ? fmtPrice(pd.low_24h)  : '—';
+    set('hiLoEl', `${hi} / ${lo}`);
+  }
+
+  // Signal
+  if (d.signal) {
+    const s = d.signal;
+    const sig = (s.signal || 'NEUTRAL').toUpperCase();
+    const conf = Number(s.confidence || 0);
+    const lbl = $('signalLabel');
+    lbl.textContent = sig.replace(/_/g, ' ');
+    lbl.className = 'signal-label sig-' + sig;
+    $('confBar').style.width = clamp(conf, 0, 100) + '%';
+    set('confPct', '%' + Math.round(conf));
+    set('recText', s.recommendation || '—');
+  }
+
+  // Heikin Ashi + Technical
+  if (d.technical_indicators) {
+    const t = d.technical_indicators;
+
+    // HA
+    const haColorVal = t.ha_color_change === 1 ? '🟢' : t.ha_color_change === -1 ? '🔴' : '⚪';
+    set('haTrend', t.ha_trend || '—');
+    set('haRsi',   t.ha_rsi   ? fmt(t.ha_rsi, 1) : '—');
+    set('haStr',   t.ha_trend_strength ? fmt(t.ha_trend_strength, 0) + '%' : '—');
+    set('haColor', haColorVal);
+
+    // Technical rows
+    const rows = [];
+    if (t.rsi_value !== undefined)   rows.push(['RSI', fmt(t.rsi_value, 1), rsiColor(t.rsi_value)]);
+    if (t.macd_histogram !== undefined) rows.push(['MACD Hist.', (t.macd_histogram >= 0 ? '+' : '') + fmt(t.macd_histogram, 5), t.macd_histogram >= 0 ? 'text-green' : 'text-red']);
+    if (t.bb_position !== undefined) rows.push(['Bollinger %', fmt(t.bb_position, 1) + '%', '']);
+    if (t.volume_ratio !== undefined) rows.push(['Hacim Oranı', fmt(t.volume_ratio, 2) + 'x', t.volume_ratio > 1.5 ? 'text-green' : '']);
+    if (t.stoch_k !== undefined) rows.push(['Stochastic K', fmt(t.stoch_k, 1), '']);
+    if (t.atr !== undefined) rows.push(['ATR', fmt(t.atr, 4), 'text-amber']);
+    if (t.ema20 !== undefined) rows.push(['EMA 20', fmtPrice(t.ema20), 'text-blue']);
+    if (t.ema50 !== undefined) rows.push(['EMA 50', fmtPrice(t.ema50), 'text-blue']);
+
+    if (rows.length) {
+      setHTML('techRows', rows.map(([lbl, val, cls]) =>
+        `<div class="stat-row"><span class="label">${lbl}</span><span class="val ${cls}">${val}</span></div>`
+      ).join(''));
     } else {
-        analysis = 'Zayıf sinyal, temkinli olunmalı';
+      setHTML('techRows', '<span class="state-empty">Veri yok</span>');
     }
-    
-    msg.innerHTML = `
-        <div class="small">
-            <i class="fas fa-robot me-2" style="color: var(--accent-primary);"></i>
-            <strong>AI Analizi</strong><br>
-            Sinyal: ${signal.replace('_', ' ')} (${confidence}%)<br>
-            Fiyat: $${formatNumber(price)} | RSI: ${rsi.toFixed(1)}<br>
-            ${analysis}<br>
-            <span class="text-muted">⚠️ Yatırım tavsiyesi değildir</span>
-        </div>
-    `;
-    
-    chatDiv.appendChild(msg);
-    chatDiv.scrollTop = chatDiv.scrollHeight;
+  }
+
+  // Patterns
+  if (d.patterns && d.patterns.length > 0) {
+    setHTML('patternsEl', d.patterns.slice(0, 8).map(p => {
+      const cls = p.direction === 'bullish' ? 'bull' : p.direction === 'bearish' ? 'bear' : 'neut';
+      return `<span class="chip ${cls}">${p.name}</span>`;
+    }).join(''));
+  } else {
+    setHTML('patternsEl', '<span class="state-empty">Patern bulunamadı</span>');
+  }
+
+  // Market structure
+  if (d.market_structure) {
+    const ms = d.market_structure;
+    set('msTrend',  ms.trend      || '—');
+    set('msStruct', ms.structure  || '—');
+    set('msVol',    ms.volatility || '—');
+  }
+
+  // ML stats
+  if (d.ml_stats) {
+    const ms = d.ml_stats;
+    const pairs = [
+      ['lgbm', 'lightgbm'], ['xgb', 'xgboost'],
+      ['tf', 'transformer'], ['rf', 'random_forest']
+    ];
+    pairs.forEach(([key, field]) => {
+      const v = Number(ms[field] || 0);
+      set(`${key}Pct`, fmt(v, 1) + '%');
+      $(`${key}Bar`).style.width = clamp(v, 0, 100) + '%';
+    });
+  }
+
+  // Update time
+  set('lastUpdateText', 'Son güncelleme: ' + fmtTime());
+
+  // Fetch exchange stats after analysis
+  fetchExchangeStats();
 }
 
-// ==================== EVENT LISTENER'LAR ====================
-document.getElementById('symbolSelect').addEventListener('change', () => {
-    connectWebSocket();
-    initTradingView();
-    analyzeSymbol();
-});
+function rsiColor(v) {
+  if (v >= 70) return 'text-red';
+  if (v <= 30) return 'text-green';
+  return '';
+}
 
-document.getElementById('intervalSelect').addEventListener('change', () => {
-    initTradingView();
-    analyzeSymbol();
-});
+// =============================================
+//  EXCHANGE STATS
+// =============================================
+async function fetchExchangeStats() {
+  try {
+    const res = await fetch('/api/exchange-stats');
+    if (!res.ok) return;
+    const d = await res.json();
+    if (d.success && d.stats) updateExchangeGrid(d.stats);
+  } catch(e) {
+    console.error('Exchange stats error:', e);
+  }
+}
 
-// ==================== BAŞLANGIÇ ====================
-window.addEventListener('load', async () => {
-    console.log('🚀 ICTSMARTPRO v8.0 başlatılıyor...');
-    
-    // Borsa grid'ini oluştur
-    renderExchangeGrid();
-    
-    // TradingView'i başlat
-    initTradingView();
-    
-    // WebSocket bağlantısı
-    connectWebSocket();
-    
-    // Backend durumunu kontrol et
-    try {
-        const health = await fetch('/health');
-        if (health.ok) {
-            document.getElementById('backendStatus').innerHTML = '<i class="fas fa-circle me-2" style="color: #10b981; font-size: 0.6rem;"></i>BAĞLANDI';
-        }
-    } catch (error) {
-        document.getElementById('backendStatus').innerHTML = '<i class="fas fa-circle me-2" style="color: #ef4444; font-size: 0.6rem;"></i>BAĞLANTI YOK';
+// =============================================
+//  TRAIN
+// =============================================
+async function trainModels() {
+  const sym = $('symbolSelect').value + 'USDT';
+  const btn = $('trainBtn');
+  btn.innerHTML = '<div class="spinner"></div> Eğitiliyor...';
+  btn.disabled = true;
+  try {
+    const res = await fetch(`/api/train/${sym}`, { method: 'POST' });
+    if (res.ok) {
+      btn.innerHTML = '<i class="fas fa-check"></i> Tamamlandı!';
+      setTimeout(analyzeSymbol, 1500);
+    } else {
+      btn.innerHTML = '<i class="fas fa-times"></i> Hata';
     }
-    
-    // İlk analizi yap
-    setTimeout(analyzeSymbol, 1000);
-    
-    // Borsa istatistiklerini düzenli güncelle
-    setInterval(fetchExchangeStats, 30000);
+  } catch(e) {
+    btn.innerHTML = '<i class="fas fa-times"></i> Bağlantı Hatası';
+  } finally {
+    setTimeout(() => {
+      btn.innerHTML = '<i class="fas fa-sync-alt"></i> Modelleri Eğit';
+      btn.disabled = false;
+    }, 3000);
+  }
+}
+
+// =============================================
+//  AI EVALUATE
+// =============================================
+function evaluateAI() {
+  const d = state.currentData;
+  if (!d) {
+    alert('Önce analiz yapın.');
+    return;
+  }
+  const chatBox = $('chatBox');
+  const sig     = d.signal?.signal || 'NEUTRAL';
+  const conf    = d.signal?.confidence || 0;
+  const price   = d.price_data?.current || 0;
+  const rsi     = d.technical_indicators?.rsi_value || 50;
+  const rec     = d.signal?.recommendation || '';
+  const trend   = d.market_structure?.trend || '—';
+  const vol     = d.market_structure?.volatility || '—';
+
+  let comment = '';
+  if (conf > 75) comment = 'Yüksek güven seviyesi – sinyal güçlü görünüyor.';
+  else if (conf > 55) comment = 'Orta güven – ek teyit önerilir.';
+  else comment = 'Düşük güven – temkinli yaklaşılmalı.';
+
+  const div = document.createElement('div');
+  div.className = 'chat-msg';
+  div.innerHTML = `
+    <div class="chat-head"><i class="fas fa-robot"></i> AI Özeti</div>
+    <div><b>Sinyal:</b> ${sig.replace(/_/g,' ')} (%${Math.round(conf)})</div>
+    <div><b>Fiyat:</b> ${fmtPrice(price)} | <b>RSI:</b> ${(+rsi).toFixed(1)}</div>
+    <div><b>Trend:</b> ${trend} | <b>Volatilite:</b> ${vol}</div>
+    ${rec ? `<div><b>Öneri:</b> ${rec}</div>` : ''}
+    <div style="margin-top:6px;color:var(--cyan)">${comment}</div>
+    <div class="chat-warn"><i class="fas fa-triangle-exclamation"></i> Bu bir yatırım tavsiyesi değildir.</div>
+  `;
+  // Clear empty state
+  const empty = chatBox.querySelector('.chat-empty');
+  if (empty) empty.remove();
+
+  chatBox.appendChild(div);
+  chatBox.scrollTop = chatBox.scrollHeight;
+}
+
+// =============================================
+//  EVENT LISTENERS
+// =============================================
+$('symbolSelect').addEventListener('change', () => {
+  initTradingView();
+  connectWS();
+  analyzeSymbol();
 });
+
+$('intervalSelect').addEventListener('change', () => {
+  initTradingView();
+  analyzeSymbol();
+});
+
+// =============================================
+//  INIT
+// =============================================
+async function init() {
+  // Build exchange grid first
+  buildExchangeGrid();
+
+  // Check backend health
+  try {
+    const r = await fetch('/health');
+    if (r.ok) {
+      setPill('backendPill', 'green', 'BACKEND');
+    } else {
+      setPill('backendPill', 'red', 'BACKEND HATA');
+    }
+  } catch {
+    setPill('backendPill', 'red', 'BAĞLANTI YOK');
+  }
+
+  // Init chart (slight delay for DOM settle)
+  setTimeout(initTradingView, 100);
+
+  // Connect WS
+  connectWS();
+
+  // First analysis
+  setTimeout(analyzeSymbol, 800);
+
+  // Periodic exchange stats
+  setInterval(fetchExchangeStats, 30_000);
+}
+
+window.addEventListener('load', init);
 </script>
 </body>
 </html>
