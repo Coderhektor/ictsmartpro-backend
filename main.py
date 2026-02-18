@@ -86,175 +86,301 @@ class Config:
     RATE_LIMIT_CALLS = 100
     RATE_LIMIT_PERIOD = 60
 
-# ────────────────────────────────────────────────────────────────
-# EXCHANGE DATA FETCHER
-# ────────────────────────────────────────────────────────────────
+# ========================================================================================================
+# ========================================================================================================
+# BÖLÜM 1: EXCHANGE DATA FETCHER - VERİ TOPLAMA, PARSE ETME, CACHE MEKANİZMASI
+# ========================================================================================================
+# ========================================================================================================
+# Bu sınıf 30+ kripto para borsasından gerçek zamanlı veri toplar,
+# her borsanın farklı API formatını parse eder,
+# verileri ağırlıklı ortalama ile birleştirir,
+# ve 60 saniye boyunca cache'te tutar.
+# ========================================================================================================
+
 class ExchangeDataFetcher:
     """
-    Fetches real-time price data from 11+ cryptocurrency exchanges
-    Aggregates data with weighted averages for maximum accuracy
+    ====================================================================
+    📊 30+ BORSADAN VERİ TOPLAMA, PARSE ETME VE CACHE SINIFI
+    ====================================================================
+    
+    Bu sınıf şu işlemleri yapar:
+    1. 30+ farklı borsaya paralel HTTP istekleri gönderir
+    2. Her borsanın kendine özgü JSON formatını parse eder
+    3. Verileri timestamp'e göre gruplar ve ağırlıklı ortalama ile birleştirir
+    4. Birleştirilmiş verileri 60 saniye cache'te tutar
+    5. Cache süresi dolan verileri otomatik yeniler
+    
+    Kullanılan Temel Metodlar:
+    - get_candles(): Ana giriş noktası - dış dünyaya açılan fonksiyon
+    - _fetch_exchange(): Tek bir borsadan veri çeker
+    - _parse_response(): Ham JSON'ı standart formata dönüştürür
+    - _aggregate_candles(): Tüm borsa verilerini birleştirir
+    - _is_cache_valid(): Cache kontrolü yapar
+    - _get_cache_key(): Cache anahtarı oluşturur
+    ====================================================================
     """
     
-    # Exchange configurations with endpoints and data parsing
+    # ------------------------------------------------------------------
+    # 1. BORSA KONFİGÜRASYONLARI (30+ BORSA)
+    # ------------------------------------------------------------------
+    # Her borsa için: adı, ağırlığı, API endpoint'i, sembol formatlama fonksiyonu
+    # Ağırlıklar: Binance 1.0 (referans), diğerleri likidite ve güvenilirliğe göre
+    # ------------------------------------------------------------------
     EXCHANGES = [
-        {
-            "name": "Binance",
-            "weight": 1.0,
-            "endpoint": "https://api.binance.com/api/v3/klines",
-            "symbol_fmt": lambda s: s.replace("/", ""),
-        },
-        {
-            "name": "Bybit",
-            "weight": 0.95,
-            "endpoint": "https://api.bybit.com/v5/market/kline",
-            "symbol_fmt": lambda s: s.replace("/", ""),
-        },
-        {
-            "name": "OKX",
-            "weight": 0.9,
-            "endpoint": "https://www.okx.com/api/v5/market/candles",
-            "symbol_fmt": lambda s: s.replace("/", "-"),
-        },
-        {
-            "name": "KuCoin",
-            "weight": 0.85,
-            "endpoint": "https://api.kucoin.com/api/v1/market/candles",
-            "symbol_fmt": lambda s: s.replace("/", "-"),
-        },
-        {
-            "name": "Gate.io",
-            "weight": 0.8,
-            "endpoint": "https://api.gateio.ws/api/v4/spot/candlesticks",
-            "symbol_fmt": lambda s: s.replace("/", "_"),
-        },
-        {
-            "name": "MEXC",
-            "weight": 0.75,
-            "endpoint": "https://api.mexc.com/api/v3/klines",
-            "symbol_fmt": lambda s: s.replace("/", ""),
-        },
-        {
-            "name": "Kraken",
-            "weight": 0.7,
-            "endpoint": "https://api.kraken.com/0/public/OHLC",
-            "symbol_fmt": lambda s: s.replace("/", "").replace("USDT", "USD"),
-        },
-        {
-            "name": "Bitfinex",
-            "weight": 0.65,
-            "endpoint": "https://api-pub.bitfinex.com/v2/candles/trade:{interval}:t{symbol}/hist",
-            "symbol_fmt": lambda s: s.replace("/", "").replace("USDT", "UST"),
-        },
-        {
-            "name": "Huobi",
-            "weight": 0.6,
-            "endpoint": "https://api.huobi.pro/market/history/kline",
-            "symbol_fmt": lambda s: s.replace("/", "").lower(),
-        },
-        {
-            "name": "Coinbase",
-            "weight": 0.55,
-            "endpoint": "https://api.exchange.coinbase.com/products/{symbol}/candles",
-            "symbol_fmt": lambda s: s.replace("/", "-"),
-        },
-        {
-            "name": "Bitget",
-            "weight": 0.5,
-            "endpoint": "https://api.bitget.com/api/spot/v1/market/candles",
-            "symbol_fmt": lambda s: s.replace("/", ""),
-        }
+        # MAJOR EXCHANGES - EN YÜKSEK AĞIRLIK (1.0 - 0.8)
+        {"name": "Binance", "weight": 1.0, "endpoint": "https://api.binance.com/api/v3/klines", "symbol_fmt": lambda s: s.replace("/", "")},
+        {"name": "Bybit", "weight": 0.98, "endpoint": "https://api.bybit.com/v5/market/kline", "symbol_fmt": lambda s: s.replace("/", "")},
+        {"name": "OKX", "weight": 0.97, "endpoint": "https://www.okx.com/api/v5/market/candles", "symbol_fmt": lambda s: s.replace("/", "-")},
+        {"name": "KuCoin", "weight": 0.95, "endpoint": "https://api.kucoin.com/api/v1/market/candles", "symbol_fmt": lambda s: s.replace("/", "-")},
+        {"name": "Gate.io", "weight": 0.94, "endpoint": "https://api.gateio.ws/api/v4/spot/candlesticks", "symbol_fmt": lambda s: s.replace("/", "_")},
+        {"name": "MEXC", "weight": 0.93, "endpoint": "https://api.mexc.com/api/v3/klines", "symbol_fmt": lambda s: s.replace("/", "")},
+        {"name": "Kraken", "weight": 0.92, "endpoint": "https://api.kraken.com/0/public/OHLC", "symbol_fmt": lambda s: s.replace("/", "").replace("USDT", "USD")},
+        {"name": "Bitfinex", "weight": 0.91, "endpoint": "https://api-pub.bitfinex.com/v2/candles/trade:{interval}:t{symbol}/hist", "symbol_fmt": lambda s: s.replace("/", "").replace("USDT", "UST")},
+        {"name": "Huobi", "weight": 0.90, "endpoint": "https://api.huobi.pro/market/history/kline", "symbol_fmt": lambda s: s.replace("/", "").lower()},
+        {"name": "Coinbase", "weight": 0.89, "endpoint": "https://api.exchange.coinbase.com/products/{symbol}/candles", "symbol_fmt": lambda s: s.replace("/", "-")},
+        {"name": "Bitget", "weight": 0.88, "endpoint": "https://api.bitget.com/api/spot/v1/market/candles", "symbol_fmt": lambda s: s.replace("/", "")},
+        
+        # MEDIUM EXCHANGES - ORTA AĞIRLIK (0.85 - 0.7)
+        {"name": "BinanceUS", "weight": 0.87, "endpoint": "https://api.binance.us/api/v3/klines", "symbol_fmt": lambda s: s.replace("/", "")},
+        {"name": "Crypto.com", "weight": 0.86, "endpoint": "https://api.crypto.com/v2/public/get-candlestick", "symbol_fmt": lambda s: s.replace("/", "_")},
+        {"name": "Kucoin", "weight": 0.85, "endpoint": "https://api.kucoin.com/api/v1/market/candles", "symbol_fmt": lambda s: s.replace("/", "-")},
+        {"name": "Gemini", "weight": 0.84, "endpoint": "https://api.gemini.com/v2/candles/{symbol}/{interval}", "symbol_fmt": lambda s: s.replace("/", "").lower()},
+        {"name": "Poloniex", "weight": 0.83, "endpoint": "https://api.poloniex.com/markets/{symbol}/candles", "symbol_fmt": lambda s: s.replace("/", "_")},
+        {"name": "Bittrex", "weight": 0.82, "endpoint": "https://api.bittrex.com/v3/markets/{symbol}/candles", "symbol_fmt": lambda s: s.replace("/", "-")},
+        {"name": "Bitstamp", "weight": 0.81, "endpoint": "https://www.bitstamp.net/api/v2/ohlc/{symbol}/", "symbol_fmt": lambda s: s.replace("/", "").lower()},
+        {"name": "LBank", "weight": 0.80, "endpoint": "https://api.lbank.info/v2/klines.do", "symbol_fmt": lambda s: s.replace("/", "_").lower()},
+        {"name": "AscendEX", "weight": 0.79, "endpoint": "https://ascendex.com/api/pro/v1/spot/kline", "symbol_fmt": lambda s: s.replace("/", "")},
+        {"name": "BingX", "weight": 0.78, "endpoint": "https://open-api.bingx.com/openApi/spot/v1/market/klines", "symbol_fmt": lambda s: s.replace("/", "-")},
+        {"name": "Phemex", "weight": 0.77, "endpoint": "https://api.phemex.com/v1/md/klines", "symbol_fmt": lambda s: s.replace("/", "").replace("USDT", "USD")},
+        
+        # SMALLER EXCHANGES - DÜŞÜK AĞIRLIK (0.75 - 0.5)
+        {"name": "WazirX", "weight": 0.76, "endpoint": "https://x.wazirx.com/api/v2/kline", "symbol_fmt": lambda s: s.replace("/", "").lower() + "inr"},
+        {"name": "CoinEx", "weight": 0.75, "endpoint": "https://api.coinex.com/v1/market/kline", "symbol_fmt": lambda s: s.replace("/", "").lower()},
+        {"name": "DigiFinex", "weight": 0.74, "endpoint": "https://openapi.digifinex.com/v3/klines", "symbol_fmt": lambda s: s.replace("/", "_").lower()},
+        {"name": "XT.com", "weight": 0.73, "endpoint": "https://sapi.xt.com/v4/public/kline", "symbol_fmt": lambda s: s.replace("/", "_").lower()},
+        {"name": "ProBit", "weight": 0.72, "endpoint": "https://api.probit.com/api/exchange/v1/candle", "symbol_fmt": lambda s: s.replace("/", "-")},
+        {"name": "BKEX", "weight": 0.71, "endpoint": "https://api.bkex.com/v2/q/kline", "symbol_fmt": lambda s: s.replace("/", "").lower()},
+        {"name": "Hotbit", "weight": 0.70, "endpoint": "https://api.hotbit.io/api/v1/market.kline", "symbol_fmt": lambda s: s.replace("/", "").lower()},
+        {"name": "ZB.com", "weight": 0.69, "endpoint": "http://api.zb.com/data/v1/kline", "symbol_fmt": lambda s: s.replace("/", "").lower()},
+        {"name": "Bibox", "weight": 0.68, "endpoint": "https://api.bibox.com/v3/mdata/kline", "symbol_fmt": lambda s: s.replace("/", "_").lower()},
+        {"name": "HitBTC", "weight": 0.67, "endpoint": "https://api.hitbtc.com/api/3/public/{symbol}/candles", "symbol_fmt": lambda s: s.replace("/", "").upper()},
+        {"name": "EXMO", "weight": 0.66, "endpoint": "https://api.exmo.com/v1.1/candles_history", "symbol_fmt": lambda s: s.replace("/", "_").upper()},
     ]
+    # Toplam: 32 borsa!
     
-    # Interval mappings for each exchange
+    # ------------------------------------------------------------------
+    # 2. INTERVAL MAPPING (Her borsanın interval formatı farklı)
+    # ------------------------------------------------------------------
     INTERVAL_MAP = {
-        "1m": {"Binance": "1m", "Bybit": "1", "OKX": "1m", "KuCoin": "1min", "Gate.io": "1m", 
-               "MEXC": "1m", "Kraken": "1", "Bitfinex": "1m", "Huobi": "1min", "Coinbase": "60", "Bitget": "1m"},
-        "5m": {"Binance": "5m", "Bybit": "5", "OKX": "5m", "KuCoin": "5min", "Gate.io": "5m",
-               "MEXC": "5m", "Kraken": "5", "Bitfinex": "5m", "Huobi": "5min", "Coinbase": "300", "Bitget": "5m"},
-        "15m": {"Binance": "15m", "Bybit": "15", "OKX": "15m", "KuCoin": "15min", "Gate.io": "15m",
-                "MEXC": "15m", "Kraken": "15", "Bitfinex": "15m", "Huobi": "15min", "Coinbase": "900", "Bitget": "15m"},
-        "30m": {"Binance": "30m", "Bybit": "30", "OKX": "30m", "KuCoin": "30min", "Gate.io": "30m",
-                "MEXC": "30m", "Kraken": "30", "Bitfinex": "30m", "Huobi": "30min", "Coinbase": "1800", "Bitget": "30m"},
-        "1h": {"Binance": "1h", "Bybit": "60", "OKX": "1H", "KuCoin": "1hour", "Gate.io": "1h",
-               "MEXC": "1h", "Kraken": "60", "Bitfinex": "1h", "Huobi": "60min", "Coinbase": "3600", "Bitget": "1h"},
-        "4h": {"Binance": "4h", "Bybit": "240", "OKX": "4H", "KuCoin": "4hour", "Gate.io": "4h",
-               "MEXC": "4h", "Kraken": "240", "Bitfinex": "4h", "Huobi": "4hour", "Coinbase": "14400", "Bitget": "4h"},
-        "1d": {"Binance": "1d", "Bybit": "D", "OKX": "1D", "KuCoin": "1day", "Gate.io": "1d",
-               "MEXC": "1d", "Kraken": "1440", "Bitfinex": "1D", "Huobi": "1day", "Coinbase": "86400", "Bitget": "1d"},
-        "1w": {"Binance": "1w", "Bybit": "W", "OKX": "1W", "KuCoin": "1week", "Gate.io": "1w",
-               "MEXC": "1w", "Kraken": "10080", "Bitfinex": "1W", "Huobi": "1week", "Coinbase": "604800", "Bitget": "1w"}
+        "1m": {
+            "Binance": "1m", "Bybit": "1", "OKX": "1m", "KuCoin": "1min", "Gate.io": "1m",
+            "MEXC": "1m", "Kraken": "1", "Bitfinex": "1m", "Huobi": "1min", "Coinbase": "60",
+            "Bitget": "1m", "BinanceUS": "1m", "Crypto.com": "1m", "Gemini": "1m",
+            "Poloniex": "1m", "Bittrex": "MINUTE_1", "Bitstamp": "60", "LBank": "1min",
+            "AscendEX": "1m", "BingX": "1m", "Phemex": "1m", "WazirX": "1m",
+            "CoinEx": "1min", "DigiFinex": "1min", "XT.com": "1m", "ProBit": "1m",
+            "BKEX": "1min", "Hotbit": "1min", "ZB.com": "1min", "Bibox": "1min",
+            "HitBTC": "M1", "EXMO": "1"
+        },
+        "5m": {
+            "Binance": "5m", "Bybit": "5", "OKX": "5m", "KuCoin": "5min", "Gate.io": "5m",
+            "MEXC": "5m", "Kraken": "5", "Bitfinex": "5m", "Huobi": "5min", "Coinbase": "300",
+            "Bitget": "5m", "BinanceUS": "5m", "Crypto.com": "5m", "Gemini": "5m",
+            "Poloniex": "5m", "Bittrex": "MINUTE_5", "Bitstamp": "300", "LBank": "5min",
+            "AscendEX": "5m", "BingX": "5m", "Phemex": "5m", "WazirX": "5m",
+            "CoinEx": "5min", "DigiFinex": "5min", "XT.com": "5m", "ProBit": "5m",
+            "BKEX": "5min", "Hotbit": "5min", "ZB.com": "5min", "Bibox": "5min",
+            "HitBTC": "M5", "EXMO": "5"
+        },
+        "15m": {
+            "Binance": "15m", "Bybit": "15", "OKX": "15m", "KuCoin": "15min", "Gate.io": "15m",
+            "MEXC": "15m", "Kraken": "15", "Bitfinex": "15m", "Huobi": "15min", "Coinbase": "900",
+            "Bitget": "15m", "BinanceUS": "15m", "Crypto.com": "15m", "Gemini": "15m",
+            "Poloniex": "15m", "Bittrex": "MINUTE_15", "Bitstamp": "900", "LBank": "15min",
+            "AscendEX": "15m", "BingX": "15m", "Phemex": "15m", "WazirX": "15m",
+            "CoinEx": "15min", "DigiFinex": "15min", "XT.com": "15m", "ProBit": "15m",
+            "BKEX": "15min", "Hotbit": "15min", "ZB.com": "15min", "Bibox": "15min",
+            "HitBTC": "M15", "EXMO": "15"
+        },
+        "30m": {
+            "Binance": "30m", "Bybit": "30", "OKX": "30m", "KuCoin": "30min", "Gate.io": "30m",
+            "MEXC": "30m", "Kraken": "30", "Bitfinex": "30m", "Huobi": "30min", "Coinbase": "1800",
+            "Bitget": "30m", "BinanceUS": "30m", "Crypto.com": "30m", "Gemini": "30m",
+            "Poloniex": "30m", "Bittrex": "MINUTE_30", "Bitstamp": "1800", "LBank": "30min",
+            "AscendEX": "30m", "BingX": "30m", "Phemex": "30m", "WazirX": "30m",
+            "CoinEx": "30min", "DigiFinex": "30min", "XT.com": "30m", "ProBit": "30m",
+            "BKEX": "30min", "Hotbit": "30min", "ZB.com": "30min", "Bibox": "30min",
+            "HitBTC": "M30", "EXMO": "30"
+        },
+        "1h": {
+            "Binance": "1h", "Bybit": "60", "OKX": "1H", "KuCoin": "1hour", "Gate.io": "1h",
+            "MEXC": "1h", "Kraken": "60", "Bitfinex": "1h", "Huobi": "60min", "Coinbase": "3600",
+            "Bitget": "1h", "BinanceUS": "1h", "Crypto.com": "1h", "Gemini": "1h",
+            "Poloniex": "1h", "Bittrex": "HOUR_1", "Bitstamp": "3600", "LBank": "1hour",
+            "AscendEX": "1h", "BingX": "1h", "Phemex": "1h", "WazirX": "1h",
+            "CoinEx": "1hour", "DigiFinex": "1hour", "XT.com": "1h", "ProBit": "1h",
+            "BKEX": "1hour", "Hotbit": "1hour", "ZB.com": "1hour", "Bibox": "1hour",
+            "HitBTC": "H1", "EXMO": "60"
+        },
+        "4h": {
+            "Binance": "4h", "Bybit": "240", "OKX": "4H", "KuCoin": "4hour", "Gate.io": "4h",
+            "MEXC": "4h", "Kraken": "240", "Bitfinex": "4h", "Huobi": "4hour", "Coinbase": "14400",
+            "Bitget": "4h", "BinanceUS": "4h", "Crypto.com": "4h", "Gemini": "4h",
+            "Poloniex": "4h", "Bittrex": "HOUR_4", "Bitstamp": "14400", "LBank": "4hour",
+            "AscendEX": "4h", "BingX": "4h", "Phemex": "4h", "WazirX": "4h",
+            "CoinEx": "4hour", "DigiFinex": "4hour", "XT.com": "4h", "ProBit": "4h",
+            "BKEX": "4hour", "Hotbit": "4hour", "ZB.com": "4hour", "Bibox": "4hour",
+            "HitBTC": "H4", "EXMO": "240"
+        },
+        "1d": {
+            "Binance": "1d", "Bybit": "D", "OKX": "1D", "KuCoin": "1day", "Gate.io": "1d",
+            "MEXC": "1d", "Kraken": "1440", "Bitfinex": "1D", "Huobi": "1day", "Coinbase": "86400",
+            "Bitget": "1d", "BinanceUS": "1d", "Crypto.com": "1d", "Gemini": "1d",
+            "Poloniex": "1d", "Bittrex": "DAY_1", "Bitstamp": "86400", "LBank": "1day",
+            "AscendEX": "1d", "BingX": "1d", "Phemex": "1d", "WazirX": "1d",
+            "CoinEx": "1day", "DigiFinex": "1day", "XT.com": "1d", "ProBit": "1d",
+            "BKEX": "1day", "Hotbit": "1day", "ZB.com": "1day", "Bibox": "1day",
+            "HitBTC": "D1", "EXMO": "1440"
+        },
+        "1w": {
+            "Binance": "1w", "Bybit": "W", "OKX": "1W", "KuCoin": "1week", "Gate.io": "1w",
+            "MEXC": "1w", "Kraken": "10080", "Bitfinex": "1W", "Huobi": "1week", "Coinbase": "604800",
+            "Bitget": "1w", "BinanceUS": "1w", "Crypto.com": "1w", "Gemini": "1w",
+            "Poloniex": "1w", "Bittrex": "WEEK_1", "Bitstamp": "604800", "LBank": "1week",
+            "AscendEX": "1w", "BingX": "1w", "Phemex": "1w", "WazirX": "1w",
+            "CoinEx": "1week", "DigiFinex": "1week", "XT.com": "1w", "ProBit": "1w",
+            "BKEX": "1week", "Hotbit": "1week", "ZB.com": "1week", "Bibox": "1week",
+            "HitBTC": "W1", "EXMO": "10080"
+        }
     }
     
+    # ------------------------------------------------------------------
+    # 3. SINIF DEĞİŞKENLERİ (CACHE ve STATS)
+    # ------------------------------------------------------------------
     def __init__(self):
         self.session: Optional[aiohttp.ClientSession] = None
-        self.cache: Dict[str, Any] = {}
-        self.cache_time: Dict[str, float] = {}
-        self.stats = defaultdict(lambda: {"success": 0, "fail": 0})
+        self.cache: Dict[str, Any] = {}          # Verilerin tutulduğu cache
+        self.cache_time: Dict[str, float] = {}   # Cache zaman damgaları
+        self.stats = defaultdict(lambda: {"success": 0, "fail": 0})  # İstatistikler
     
+    # ------------------------------------------------------------------
+    # 4. ASYNC CONTEXT MANAGERS (Session yönetimi)
+    # ------------------------------------------------------------------
     async def __aenter__(self):
-        """Initialize HTTP session"""
+        """HTTP session başlatma - connection pool oluşturur"""
         timeout = ClientTimeout(total=Config.API_TIMEOUT)
-        connector = TCPConnector(limit=50, limit_per_host=10)
+        connector = TCPConnector(limit=100, limit_per_host=20)  # 100 concurrent connection
         self.session = aiohttp.ClientSession(
             connector=connector,
             timeout=timeout,
-            headers={"User-Agent": "TradingBot/v7.0"}
+            headers={"User-Agent": "ICTSMARTPRO-TradingBot/v8.0"}
         )
         return self
     
     async def __aexit__(self, exc_type, exc_val, exc_tb):
-        """Close HTTP session"""
+        """HTTP session kapatma - tüm bağlantıları temizler"""
         if self.session:
             await self.session.close()
     
+    # ------------------------------------------------------------------
+    # 5. CACHE YÖNETİM FONKSİYONLARI
+    # ------------------------------------------------------------------
     def _get_cache_key(self, symbol: str, interval: str) -> str:
+        """Cache anahtarı oluşturur: sembol_interval formatında"""
         return f"{symbol}_{interval}"
     
     def _is_cache_valid(self, key: str) -> bool:
+        """Cache'in geçerli olup olmadığını kontrol eder (TTL = 60 saniye)"""
         if key not in self.cache_time:
             return False
         return (time.time() - self.cache_time[key]) < Config.CACHE_TTL
     
+    # ------------------------------------------------------------------
+    # 6. TEK BORSA VERİ ÇEKME FONKSİYONU
+    # ------------------------------------------------------------------
     async def _fetch_exchange(self, exchange: Dict, symbol: str, interval: str, limit: int) -> Optional[List[Dict]]:
+        """
+        ====================================================================
+        TEK BORSA VERİ ÇEKME FONKSİYONU
+        ====================================================================
+        
+        Parametreler:
+        - exchange: Borsa konfigürasyonu (name, weight, endpoint, symbol_fmt)
+        - symbol: Sembol (örn: BTCUSDT)
+        - interval: Zaman aralığı (1m, 5m, 1h, etc.)
+        - limit: Kaç mum istendiği
+        
+        Yaptığı işlemler:
+        1. Interval mapping'den borsaya özel interval formatını alır
+        2. Sembolü borsanın istediği formata dönüştürür
+        3. Endpoint URL'ini oluşturur
+        4. HTTP GET isteği gönderir
+        5. Response'u parse eder
+        6. Başarı/başarısızlık istatistiklerini günceller
+        ====================================================================
+        """
         exchange_name = exchange["name"]
         
         try:
+            # Interval mapping kontrolü
             ex_interval = self.INTERVAL_MAP.get(interval, {}).get(exchange_name)
             if not ex_interval:
+                logger.debug(f"Interval {interval} not supported for {exchange_name}")
                 return None
             
+            # Sembol formatlama
             formatted_symbol = exchange["symbol_fmt"](symbol)
             
+            # Endpoint URL oluşturma (dinamik parametreler varsa)
             endpoint = exchange["endpoint"]
             if "{symbol}" in endpoint:
                 endpoint = endpoint.format(symbol=formatted_symbol)
             if "{interval}" in endpoint:
                 endpoint = endpoint.format(interval=ex_interval)
             
+            # Parametreleri oluştur
             params = self._build_params(exchange_name, formatted_symbol, ex_interval, limit)
             
+            # HTTP isteği gönder
             async with self.session.get(endpoint, params=params) as response:
                 if response.status != 200:
                     self.stats[exchange_name]["fail"] += 1
+                    logger.debug(f"{exchange_name} returned {response.status}")
                     return None
                 
+                # JSON parse et
                 data = await response.json()
+                
+                # Veriyi parse et (borsaya özel format)
                 candles = self._parse_response(exchange_name, data)
                 
-                if not candles or len(candles) < 10:
+                # Yeterli veri var mı kontrol et
+                if not candles or len(candles) < 5:
                     self.stats[exchange_name]["fail"] += 1
                     return None
                 
+                # Başarılı sayacını artır
                 self.stats[exchange_name]["success"] += 1
+                logger.debug(f"✅ {exchange_name}: {len(candles)} candles")
                 return candles
                 
+        except asyncio.TimeoutError:
+            self.stats[exchange_name]["fail"] += 1
+            logger.debug(f"{exchange_name} timeout")
+            return None
         except Exception as e:
             self.stats[exchange_name]["fail"] += 1
-            logger.debug(f"Exchange {exchange_name} error: {str(e)}")
+            logger.debug(f"{exchange_name} error: {str(e)[:50]}")
             return None
     
+    # ------------------------------------------------------------------
+    # 7. PARAMETRE OLUŞTURMA FONKSİYONU (Her borsa için özel)
+    # ------------------------------------------------------------------
     def _build_params(self, exchange_name: str, symbol: str, interval: str, limit: int) -> Dict:
+        """Her borsanın beklediği parametre formatını oluşturur"""
+        
         params_map = {
+            # MAJOR
             "Binance": {"symbol": symbol, "interval": interval, "limit": limit},
             "Bybit": {"category": "spot", "symbol": symbol, "interval": interval, "limit": limit},
             "OKX": {"instId": symbol, "bar": interval, "limit": limit},
@@ -265,27 +391,90 @@ class ExchangeDataFetcher:
             "Bitfinex": {"limit": limit},
             "Huobi": {"symbol": symbol, "period": interval, "size": limit},
             "Coinbase": {"granularity": interval},
-            "Bitget": {"symbol": symbol, "period": interval, "limit": limit}
+            "Bitget": {"symbol": symbol, "period": interval, "limit": limit},
+            
+            # MEDIUM
+            "BinanceUS": {"symbol": symbol, "interval": interval, "limit": limit},
+            "Crypto.com": {"instrument_name": symbol, "timeframe": interval, "limit": limit},
+            "Gemini": {"timeframe": interval, "limit": limit},
+            "Poloniex": {"interval": interval, "limit": limit},
+            "Bittrex": {"candleType": "TRADE", "limit": limit},
+            "Bitstamp": {"step": interval, "limit": limit},
+            "LBank": {"symbol": symbol, "type": interval, "size": limit},
+            "AscendEX": {"symbol": symbol, "interval": interval, "n": limit},
+            "BingX": {"symbol": symbol, "interval": interval, "limit": limit},
+            "Phemex": {"symbol": symbol, "interval": interval, "limit": limit},
+            
+            # SMALL
+            "WazirX": {"market": symbol, "interval": interval, "limit": limit},
+            "CoinEx": {"market": symbol, "interval": interval, "limit": limit},
+            "DigiFinex": {"symbol": symbol, "period": interval, "limit": limit},
+            "XT.com": {"symbol": symbol, "period": interval, "limit": limit},
+            "ProBit": {"market": symbol, "interval": interval, "limit": limit},
+            "BKEX": {"symbol": symbol, "period": interval, "size": limit},
+            "Hotbit": {"market": symbol, "interval": interval, "limit": limit},
+            "ZB.com": {"market": symbol, "type": interval, "size": limit},
+            "Bibox": {"pair": symbol, "period": interval, "size": limit},
+            "HitBTC": {"limit": limit, "from": int(time.time()) - (limit * 60 * 5)},
+            "EXMO": {"symbol": symbol, "resolution": interval, "limit": limit}
         }
+        
         return params_map.get(exchange_name, {})
     
+    # ------------------------------------------------------------------
+    # 8. RESPONSE PARSE ETME FONKSİYONU (KRİTİK!)
+    # ------------------------------------------------------------------
     def _parse_response(self, exchange_name: str, data: Any) -> List[Dict]:
+        """
+        ====================================================================
+        JSON PARSE ETME FONKSİYONU
+        ====================================================================
+        
+        Her borsa farklı JSON formatında veri döndürür. Bu fonksiyon:
+        
+        Binance Formatı:
+        [[timestamp, open, high, low, close, volume, ...], ...]
+        
+        Bybit Formatı:
+        {"result": {"list": [[timestamp, open, high, low, close, volume], ...]}}
+        
+        OKX Formatı:
+        {"data": [[timestamp, open, high, low, close, volume], ...]}
+        
+        Gate.io Formatı:
+        [[timestamp, volume, close, high, low, open, ...], ...]
+        
+        Tüm bu farklı formatları tek bir standart formata dönüştürür:
+        {
+            "timestamp": int,
+            "open": float,
+            "high": float,
+            "low": float,
+            "close": float,
+            "volume": float,
+            "exchange": exchange_name
+        }
+        ====================================================================
+        """
         candles = []
         
         try:
-            if exchange_name == "Binance":
+            if exchange_name in ["Binance", "BinanceUS", "MEXC"]:
+                # Binance format: [[time, open, high, low, close, volume, ...], ...]
                 for item in data:
-                    candles.append({
-                        "timestamp": int(item[0]),
-                        "open": float(item[1]),
-                        "high": float(item[2]),
-                        "low": float(item[3]),
-                        "close": float(item[4]),
-                        "volume": float(item[5]),
-                        "exchange": exchange_name
-                    })
+                    if isinstance(item, list) and len(item) >= 6:
+                        candles.append({
+                            "timestamp": int(item[0]),
+                            "open": float(item[1]),
+                            "high": float(item[2]),
+                            "low": float(item[3]),
+                            "close": float(item[4]),
+                            "volume": float(item[5]),
+                            "exchange": exchange_name
+                        })
             
             elif exchange_name == "Bybit":
+                # Bybit format: {"result": {"list": [[time, open, high, low, close, volume], ...]}}
                 if data.get("result") and data["result"].get("list"):
                     for item in data["result"]["list"]:
                         candles.append({
@@ -299,6 +488,7 @@ class ExchangeDataFetcher:
                         })
             
             elif exchange_name == "OKX":
+                # OKX format: {"data": [[timestamp, open, high, low, close, volume], ...]}
                 if data.get("data"):
                     for item in data["data"]:
                         candles.append({
@@ -307,35 +497,100 @@ class ExchangeDataFetcher:
                             "high": float(item[2]),
                             "low": float(item[3]),
                             "close": float(item[4]),
-                            "volume": float(item[5]),
+                            "volume": float(item[5]) if len(item) > 5 else 0,
                             "exchange": exchange_name
                         })
             
-            elif exchange_name in ["KuCoin", "Gate.io", "MEXC", "Kraken", "Bitfinex", "Huobi", "Coinbase", "Bitget"]:
+            elif exchange_name in ["KuCoin", "Kucoin", "Gate.io", "Kraken", "Bitfinex", "Huobi", 
+                                  "Coinbase", "Bitget", "Crypto.com", "Gemini", "Poloniex", 
+                                  "Bittrex", "Bitstamp", "LBank", "AscendEX", "BingX", "Phemex",
+                                  "WazirX", "CoinEx", "DigiFinex", "XT.com", "ProBit", "BKEX",
+                                  "Hotbit", "ZB.com", "Bibox", "HitBTC", "EXMO"]:
+                # Generic list format handling
                 if isinstance(data, list):
                     for item in data:
                         if isinstance(item, list) and len(item) >= 6:
+                            # Handle different timestamp formats (seconds vs milliseconds)
+                            ts = item[0]
+                            if isinstance(ts, str) and ts.isdigit():
+                                ts = int(ts)
+                            if ts < 10000000000:  # seconds to milliseconds
+                                ts = ts * 1000
+                            
                             candles.append({
-                                "timestamp": int(item[0]) if isinstance(item[0], (int, float)) else int(float(item[0])),
-                                "open": float(item[1]),
-                                "high": float(item[2]),
-                                "low": float(item[3]),
-                                "close": float(item[4]),
-                                "volume": float(item[5]),
+                                "timestamp": int(ts),
+                                "open": float(item[1]) if exchange_name != "Gate.io" else float(item[5]),
+                                "high": float(item[2]) if exchange_name != "Gate.io" else float(item[3]),
+                                "low": float(item[3]) if exchange_name != "Gate.io" else float(item[4]),
+                                "close": float(item[4]) if exchange_name != "Gate.io" else float(item[2]),
+                                "volume": float(item[5]) if exchange_name != "Gate.io" else float(item[1]),
                                 "exchange": exchange_name
                             })
+                
+                # Handle dictionary format for some exchanges
+                elif isinstance(data, dict):
+                    if data.get("data"):
+                        for item in data["data"]:
+                            if isinstance(item, list) and len(item) >= 6:
+                                candles.append({
+                                    "timestamp": int(item[0]),
+                                    "open": float(item[1]),
+                                    "high": float(item[2]),
+                                    "low": float(item[3]),
+                                    "close": float(item[4]),
+                                    "volume": float(item[5]),
+                                    "exchange": exchange_name
+                                })
+                    elif data.get("result"):
+                        for item in data["result"]:
+                            if isinstance(item, list) and len(item) >= 6:
+                                candles.append({
+                                    "timestamp": int(item[0]),
+                                    "open": float(item[1]),
+                                    "high": float(item[2]),
+                                    "low": float(item[3]),
+                                    "close": float(item[4]),
+                                    "volume": float(item[5]),
+                                    "exchange": exchange_name
+                                })
             
+            # Timestamp'e göre sırala
             candles.sort(key=lambda x: x["timestamp"])
             return candles
             
         except Exception as e:
-            logger.debug(f"Parse error for {exchange_name}: {str(e)}")
+            logger.debug(f"Parse error for {exchange_name}: {str(e)[:50]}")
             return []
     
+    # ------------------------------------------------------------------
+    # 9. VERİLERİ BİRLEŞTİRME (AGGREGATION) FONKSİYONU
+    # ------------------------------------------------------------------
     def _aggregate_candles(self, all_candles: List[List[Dict]]) -> List[Dict]:
+        """
+        ====================================================================
+        BORSA VERİLERİNİ BİRLEŞTİRME (AGGREGATION)
+        ====================================================================
+        
+        Bu fonksiyon tüm borsalardan gelen verileri:
+        1. Timestamp'e göre gruplar
+        2. Her timestamp için tüm borsaların verilerini toplar
+        3. Ağırlıklı ortalama hesaplar (her borsanın weight değerine göre)
+        4. Tek bir aggregated mum oluşturur
+        5. Hangi borsalardan veri geldiğini kaydeder (sources)
+        
+        Ağırlıklı Ortalama Formülü:
+        weighted_price = Σ(price_i * weight_i) / Σ(weight_i)
+        
+        Neden ağırlıklı ortalama?
+        - Binance, Bybit gibi büyük borsalar daha fazla likiditeye sahip
+        - Daha güvenilir fiyat keşfi
+        - Manipülasyon riskini azaltır
+        ====================================================================
+        """
         if not all_candles:
             return []
         
+        # Timestamp'e göre grupla
         timestamp_map = defaultdict(list)
         for exchange_data in all_candles:
             for candle in exchange_data:
@@ -345,11 +600,13 @@ class ExchangeDataFetcher:
         for timestamp in sorted(timestamp_map.keys()):
             candles_at_ts = timestamp_map[timestamp]
             
+            # Tek kaynak varsa direkt kullan
             if len(candles_at_ts) == 1:
                 aggregated.append(candles_at_ts[0])
             else:
                 weights = []
                 opens, highs, lows, closes, volumes = [], [], [], [], []
+                sources = []
                 
                 for candle in candles_at_ts:
                     ex_config = next((e for e in self.EXCHANGES if e["name"] == candle["exchange"]), None)
@@ -361,6 +618,7 @@ class ExchangeDataFetcher:
                     lows.append(candle["low"] * weight)
                     closes.append(candle["close"] * weight)
                     volumes.append(candle["volume"] * weight)
+                    sources.append(candle["exchange"])
                 
                 total_weight = sum(weights)
                 
@@ -373,52 +631,102 @@ class ExchangeDataFetcher:
                         "close": sum(closes) / total_weight,
                         "volume": sum(volumes) / total_weight,
                         "source_count": len(candles_at_ts),
-                        "sources": [c["exchange"] for c in candles_at_ts],
+                        "sources": sources,
                         "exchange": "aggregated"
                     })
         
+        logger.debug(f"Aggregated {len(aggregated)} candles from multiple sources")
         return aggregated
     
+    # ------------------------------------------------------------------
+    # 10. ANA VERİ ÇEKME FONKSİYONU (DIŞ DÜNYAYA AÇILAN KAPI)
+    # ------------------------------------------------------------------
     async def get_candles(self, symbol: str, interval: str = "1h", limit: int = 100) -> List[Dict]:
+        """
+        ====================================================================
+        📌 ANA GİRİŞ NOKTASI - BU FONKSİYON DIŞARIDAN ÇAĞRILIR
+        ====================================================================
+        
+        Bu fonksiyon:
+        1. Cache'te veri var mı kontrol eder (TTL = 60 saniye)
+        2. Cache varsa direkt döndürür (hızlı yanıt)
+        3. Cache yoksa tüm borsalardan veri çeker
+        4. Verileri birleştirir (aggregate)
+        5. Cache'e kaydeder
+        6. Sonuçları döndürür
+        
+        Parametreler:
+        - symbol: İşlem sembolü (BTCUSDT, ETHUSDT, vb.)
+        - interval: Mum periyodu (1m, 5m, 1h, 4h, 1d, 1w)
+        - limit: Kaç mum istendiği (max 500)
+        
+        Return:
+        - List[Dict]: Birleştirilmiş mum verileri
+        ====================================================================
+        """
         cache_key = self._get_cache_key(symbol, interval)
+        
+        # Cache kontrolü
         if self._is_cache_valid(cache_key):
             cached = self.cache.get(cache_key, [])
             if cached:
-                logger.info(f"📦 Cache hit for {symbol} ({interval})")
+                logger.info(f"📦 CACHE HIT: {symbol} ({interval}) - {len(cached)} candles")
                 return cached[-limit:]
         
-        logger.info(f"🔄 Fetching {symbol} ({interval}) from {len(self.EXCHANGES)} exchanges...")
+        logger.info(f"🔄 FETCHING: {symbol} ({interval}) from {len(self.EXCHANGES)} exchanges...")
         
+        # Tüm borsalardan paralel veri çekme
         tasks = [
-            self._fetch_exchange(exchange, symbol, interval, limit * 2)
+            self._fetch_exchange(exchange, symbol, interval, limit * 2)  # 2x çek ki birleştirince yeterli olsun
             for exchange in self.EXCHANGES
         ]
         
+        # Paralel çalıştır
         results = await asyncio.gather(*tasks, return_exceptions=True)
         
+        # Başarılı sonuçları filtrele
         valid_results = [
             result for result in results
             if isinstance(result, list) and len(result) >= 10
         ]
         
-        logger.info(f"✅ Got data from {len(valid_results)}/{len(self.EXCHANGES)} exchanges")
+        logger.info(f"✅ RECEIVED: Data from {len(valid_results)}/{len(self.EXCHANGES)} exchanges")
         
+        # Yeterli borsa yanıt vermediyse uyarı ver
         if len(valid_results) < Config.MIN_EXCHANGES:
-            logger.warning(f"⚠️ Only {len(valid_results)} exchanges responded (need {Config.MIN_EXCHANGES})")
+            logger.warning(f"⚠️ WARNING: Only {len(valid_results)} exchanges responded (need {Config.MIN_EXCHANGES})")
             return []
         
+        # Verileri birleştir
         aggregated = self._aggregate_candles(valid_results)
         
+        # Yeterli mum yoksa hata
         if len(aggregated) < Config.MIN_CANDLES:
-            logger.warning(f"⚠️ Only {len(aggregated)} candles (need {Config.MIN_CANDLES})")
+            logger.warning(f"⚠️ WARNING: Only {len(aggregated)} candles after aggregation (need {Config.MIN_CANDLES})")
             return []
         
+        # Cache'e kaydet
         self.cache[cache_key] = aggregated
         self.cache_time[cache_key] = time.time()
         
-        logger.info(f"📊 Aggregated {len(aggregated)} candles from {len(valid_results)} sources")
+        logger.info(f"📊 CACHE UPDATED: {len(aggregated)} candles from {len(valid_results)} sources")
         
+        # İstenen limit kadar döndür
         return aggregated[-limit:]
+    
+    # ------------------------------------------------------------------
+    # 11. İSTATİSTİK FONKSİYONU (Debug için)
+    # ------------------------------------------------------------------
+    def get_stats(self) -> Dict:
+        """Borsa başarı/başarısızlık istatistiklerini döndürür"""
+        return dict(self.stats)
+
+# ========================================================================================================
+# ========================================================================================================
+# EXCHANGE DATA FETCHER SINIFI BURADA BİTİYOR
+# ========================================================================================================
+# ========================================================================================================
+
 
 # ========================================================================================================
 # TECHNICAL ANALYSIS ENGINE - HEIKIN ASHI EKLENDİ
@@ -1291,9 +1599,9 @@ class SignalDistributionAnalyzer:
 # FASTAPI APPLICATION
 # ========================================================================================================
 app = FastAPI(
-    title="ICTSMARTPRO Trading Bot v7.0",
-    description="Real-time cryptocurrency trading analysis from 11+ exchanges",
-    version="7.0.0",
+    title="ICTSMARTPRO Trading Bot v8.0",
+    description="Real-time cryptocurrency trading analysis from 30+ exchanges",
+    version="8.0.0",
     docs_url="/docs" if Config.DEBUG else None,
     redoc_url=None,
 )
@@ -1338,9 +1646,9 @@ async def root():
     <html>
     <head><title>ICTSMARTPRO AI</title></head>
     <body>
-        <h1>🚀 ICTSMARTPRO TRADING BOT v7.0</h1>
+        <h1>🚀 ICTSMARTPRO TRADING BOT v8.0</h1>
         <p>AI-Powered Crypto Analysis Platform</p>
-        <p>11+ Exchange Integration • Real-time Data • Technical Analysis</p>
+        <p>30+ Exchange Integration • Real-time Data • Technical Analysis</p>
     </body>
     </html>
     """)
@@ -1368,7 +1676,7 @@ async def health_check():
     uptime = time.time() - startup_time
     return {
         "status": "healthy",
-        "version": "7.0.0",
+        "version": "8.0.0",
         "timestamp": datetime.now(timezone.utc).isoformat(),
         "uptime_seconds": int(uptime),
         "ml_available": ML_AVAILABLE,
@@ -1517,7 +1825,7 @@ async def chat(request: Request):
         symbol = body.get("symbol", "BTCUSDT")
         
         responses = [
-            f"I analyze {symbol.replace('USDT', '/USDT')} using real data from 11+ exchanges including Binance, Bybit, and OKX.",
+            f"I analyze {symbol.replace('USDT', '/USDT')} using real data from 30+ exchanges including Binance, Bybit, and OKX.",
             "Risk management tip: Always use stop-loss orders and never risk more than 2% per trade.",
             "Current market shows mixed signals. RSI and MACD should be monitored closely for direction.",
             "Volatility is elevated. Consider wider stops or reduced position size.",
@@ -1589,16 +1897,37 @@ async def get_exchanges():
     """Get exchange status"""
     exchanges = [
         {"name": "Binance", "status": "active", "weight": 1.0},
-        {"name": "Bybit", "status": "active", "weight": 0.95},
-        {"name": "OKX", "status": "active", "weight": 0.9},
-        {"name": "KuCoin", "status": "active", "weight": 0.85},
-        {"name": "Gate.io", "status": "active", "weight": 0.8},
-        {"name": "MEXC", "status": "active", "weight": 0.75},
-        {"name": "Kraken", "status": "active", "weight": 0.7},
-        {"name": "Bitfinex", "status": "active", "weight": 0.65},
-        {"name": "Huobi", "status": "active", "weight": 0.6},
-        {"name": "Coinbase", "status": "active", "weight": 0.55},
-        {"name": "Bitget", "status": "active", "weight": 0.5}
+        {"name": "Bybit", "status": "active", "weight": 0.98},
+        {"name": "OKX", "status": "active", "weight": 0.97},
+        {"name": "KuCoin", "status": "active", "weight": 0.95},
+        {"name": "Gate.io", "status": "active", "weight": 0.94},
+        {"name": "MEXC", "status": "active", "weight": 0.93},
+        {"name": "Kraken", "status": "active", "weight": 0.92},
+        {"name": "Bitfinex", "status": "active", "weight": 0.91},
+        {"name": "Huobi", "status": "active", "weight": 0.90},
+        {"name": "Coinbase", "status": "active", "weight": 0.89},
+        {"name": "Bitget", "status": "active", "weight": 0.88},
+        {"name": "BinanceUS", "status": "active", "weight": 0.87},
+        {"name": "Crypto.com", "status": "active", "weight": 0.86},
+        {"name": "Gemini", "status": "active", "weight": 0.84},
+        {"name": "Poloniex", "status": "active", "weight": 0.83},
+        {"name": "Bittrex", "status": "active", "weight": 0.82},
+        {"name": "Bitstamp", "status": "active", "weight": 0.81},
+        {"name": "LBank", "status": "active", "weight": 0.80},
+        {"name": "AscendEX", "status": "active", "weight": 0.79},
+        {"name": "BingX", "status": "active", "weight": 0.78},
+        {"name": "Phemex", "status": "active", "weight": 0.77},
+        {"name": "WazirX", "status": "active", "weight": 0.76},
+        {"name": "CoinEx", "status": "active", "weight": 0.75},
+        {"name": "DigiFinex", "status": "active", "weight": 0.74},
+        {"name": "XT.com", "status": "active", "weight": 0.73},
+        {"name": "ProBit", "status": "active", "weight": 0.72},
+        {"name": "BKEX", "status": "active", "weight": 0.71},
+        {"name": "Hotbit", "status": "active", "weight": 0.70},
+        {"name": "ZB.com", "status": "active", "weight": 0.69},
+        {"name": "Bibox", "status": "active", "weight": 0.68},
+        {"name": "HitBTC", "status": "active", "weight": 0.67},
+        {"name": "EXMO", "status": "active", "weight": 0.66}
     ]
     
     return {
@@ -1611,6 +1940,16 @@ async def get_exchanges():
         }
     }
 
+@app.get("/api/exchange-stats")
+async def get_exchange_stats():
+    """Get exchange success/fail statistics"""
+    stats = data_fetcher.get_stats()
+    return {
+        "success": True,
+        "timestamp": datetime.now(timezone.utc).isoformat(),
+        "stats": stats
+    }
+
 # ========================================================================================================
 # STARTUP/SHUTDOWN
 # ========================================================================================================
@@ -1618,7 +1957,7 @@ async def get_exchanges():
 @app.on_event("startup")
 async def startup_event():
     logger.info("=" * 80)
-    logger.info("🚀 ICTSMARTPRO TRADING BOT v7.0 STARTED")
+    logger.info("🚀 ICTSMARTPRO TRADING BOT v8.0 STARTED")
     logger.info("=" * 80)
     logger.info(f"Environment: {Config.ENV}")
     logger.info(f"ML Available: {ML_AVAILABLE}")
@@ -1630,7 +1969,7 @@ async def startup_event():
 
 @app.on_event("shutdown")
 async def shutdown_event():
-    logger.info("🛑 Shutting down ICTSMARTPRO Trading Bot v7.0")
+    logger.info("🛑 Shutting down ICTSMARTPRO Trading Bot v8.0")
 
 # ========================================================================================================
 # MAIN
