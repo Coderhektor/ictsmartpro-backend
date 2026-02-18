@@ -2251,7 +2251,9 @@ async def analyze_symbol(
     logger.info(f"🔍 Analyzing {symbol} ({interval}, limit={limit}, force={force_refresh})")
     
     try:
-        # Önce data pool'da var mı kontrol et
+        # DATA FETCH İŞLEMİ
+        logger.info(f"📡 Fetching data for {symbol}...")
+        
         if not force_refresh:
             pool_data = await data_pool.get_symbol_data(symbol, interval, Config.MIN_CANDLES)
             if pool_data:
@@ -2260,32 +2262,43 @@ async def analyze_symbol(
                 exchange_sources = pool_data['exchange_sources']
                 source_count = pool_data['source_count']
             else:
-                # Pool'da yoksa fetch et
+                logger.info(f"🔄 Fetching fresh data for {symbol}...")
                 async with data_fetcher as fetcher:
                     result = await fetcher.fetch_symbol_data(symbol, interval, limit * 2)
                     candles = result['candles']
                     exchange_sources = result['exchange_sources']
                     source_count = result['source_count']
         else:
-            # Force refresh - direkt fetch et
+            logger.info(f"🔄 Force refresh for {symbol}...")
             async with data_fetcher as fetcher:
                 result = await fetcher.fetch_symbol_data(symbol, interval, limit * 2)
                 candles = result['candles']
                 exchange_sources = result['exchange_sources']
                 source_count = result['source_count']
         
+        logger.info(f"✅ Data fetched: {len(candles)} candles from {source_count} sources")
+        
         # DataFrame oluştur
+        logger.info(f"📊 Creating DataFrame...")
         df = pd.DataFrame(candles)
         df['timestamp'] = pd.to_datetime(df['timestamp'], unit='ms')
         df = df.set_index('timestamp')
         
         # Analizler
+        logger.info(f"🔬 Running technical analysis...")
         technical_indicators = TechnicalAnalyzer.analyze(df)
+        
+        logger.info(f"🎯 Detecting patterns...")
         patterns = PatternDetector.detect(df)
+        
+        logger.info(f"📈 Analyzing market structure...")
         market_structure = MarketStructureAnalyzer.analyze(df)
+        
+        logger.info(f"🤖 Getting ML prediction...")
         ml_prediction = ml_engine.predict(symbol, df)
         
         # Sinyal üret
+        logger.info(f"⚡ Generating signal...")
         signal = SignalGenerator.generate(
             technical_indicators,
             market_structure,
@@ -2312,12 +2325,14 @@ async def analyze_symbol(
         # Exchange bilgileri
         exchange_stats = data_fetcher.get_exchange_stats()
         
+        logger.info(f"✅ Analysis complete for {symbol}")
+        
         response = {
             "success": True,
             "symbol": symbol,
             "interval": interval,
             "timestamp": datetime.now(timezone.utc).isoformat(),
-            "data_source": "pool" if not force_refresh and pool_data else "fresh",
+            "data_source": "pool" if not force_refresh and 'pool_data' in locals() and pool_data else "fresh",
             
             "price_data": {
                 "current": round(current_price, 8),
@@ -2327,8 +2342,8 @@ async def analyze_symbol(
                 "volume_24h": round(volume_24h, 2),
                 "high_24h": round(float(df['high'].max()), 8),
                 "low_24h": round(float(df['low'].min()), 8),
-                "source_count": source_count,
-                "exchange_sources": exchange_sources
+                "source_count": source_count if 'source_count' in locals() else 0,
+                "exchange_sources": exchange_sources if 'exchange_sources' in locals() else []
             },
             
             "signal": signal,
@@ -2340,25 +2355,23 @@ async def analyze_symbol(
             "exchange_stats": exchange_stats
         }
         
-        logger.info(f"✅ Analysis complete: {signal['signal']} ({signal['confidence']:.1f}%) from {source_count} exchanges")
+        logger.info(f"✅ Response prepared: {signal['signal']} ({signal['confidence']:.1f}%)")
         return response
         
     except HTTPException:
         raise
     except Exception as e:
-        logger.error(f"❌ Analysis failed: {str(e)}")
+        logger.error(f"❌ CRITICAL ERROR in analyze: {str(e)}")
         import traceback
         traceback.print_exc()
         raise HTTPException(
             status_code=500,
             detail={
-                'error': f"Analysis failed: {str(e)[:200]}",
-                'symbol': symbol,
-                'interval': interval,
-                'timestamp': datetime.now(timezone.utc).isoformat()
+                'error': str(e),
+                'type': type(e).__name__,
+                'traceback': traceback.format_exc().split('\n')
             }
         )
-
 @app.post("/api/train/{symbol}")
 async def train_model(symbol: str):
     """Train ML model on symbol"""
