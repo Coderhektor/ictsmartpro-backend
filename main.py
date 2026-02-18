@@ -5,6 +5,7 @@ import asyncio
 import logging
 import secrets
 import random
+import os  # BU SATIR OLMALI! (oss değil, os)
 from datetime import datetime, timezone, timedelta
 from typing import Dict, List, Optional, Any, Tuple
 from collections import defaultdict, Counter
