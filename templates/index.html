@@ -15,7 +15,6 @@
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&display=swap" rel="stylesheet">
     
     <style>
-        /* (STILLER AYNI - KISALTMAK İÇİN ÇIKARDIM, SEN EKLEYECEKSİN) */
         :root {
             --dark-bg: #0a0c12;
             --card-bg: #14181f;
@@ -543,41 +542,6 @@
             color: #ff3860;
         }
 
-        /* VISITOR COUNTER */
-        .visitor-counter {
-            display: inline-flex;
-            align-items: center;
-            gap: 12px;
-            background: rgba(0, 243, 255, 0.05);
-            padding: 12px 30px;
-            border-radius: 50px;
-            border: 1px solid var(--neon-cyan);
-            margin-top: 20px;
-            transition: 0.3s;
-        }
-
-        .visitor-counter:hover {
-            border-color: var(--neon-green);
-            box-shadow: 0 0 25px var(--neon-green);
-        }
-
-        .visitor-counter i {
-            color: var(--neon-cyan);
-            font-size: 1.3rem;
-        }
-
-        .visitor-counter span {
-            color: var(--text-secondary);
-            font-weight: 500;
-        }
-
-        .visitor-counter .count {
-            color: var(--neon-green);
-            font-weight: 700;
-            font-size: 1.8rem;
-            margin-left: 5px;
-        }
-
         /* RESPONSIVE */
         @media (max-width: 992px) {
             .hero-title { font-size: 3rem; }
@@ -591,8 +555,6 @@
             .auth-card { padding: 30px 20px; }
             .stat-number { font-size: 2.2rem; }
             .secure-badge { margin-left: 0; margin-top: 10px; }
-            .visitor-counter { padding: 8px 20px; }
-            .visitor-counter .count { font-size: 1.4rem; }
         }
     </style>
 </head>
@@ -670,7 +632,7 @@
                     <!-- İSTATİSTİKLER -->
                     <div class="stats-container">
                         <div class="stat-item">
-                            <div class="stat-number">11+</div>
+                            <div class="stat-number">12+</div>
                             <div class="stat-label">Borsa Entegrasyonu</div>
                         </div>
                         <div class="stat-item">
@@ -810,7 +772,7 @@
                     </div>
                     <h3 class="feature-title">Çoklu Borsa Entegrasyonu</h3>
                     <p class="feature-desc">
-                        11+ borsadan WebSocket bağlantısı ile düşük gecikmeli veri akışı. 
+                        12+ borsadan WebSocket bağlantısı ile düşük gecikmeli veri akışı. 
                         Anlık piyasa takibi ve fiyat uyarıları.
                     </p>
                 </div>
@@ -864,15 +826,6 @@
                     <i class="fas fa-check-circle" style="color: var(--neon-green);"></i>
                     <span style="color: var(--text-secondary);">256-bit SSL • 2FA Desteği • Şifreli Veritabanı</span>
                 </span>
-            </div>
-
-            <!-- ZİYARETÇİ SAYACI - Flask backend'den çeker -->
-            <div class="text-center">
-                <div class="visitor-counter">
-                    <i class="fas fa-users"></i>
-           
-                    <span class="count" id="visitorCount">Yükleniyor...</span>
-                </div>
             </div>
         </div>
     </footer>
@@ -1042,9 +995,6 @@
                 return trialUser;
             }
 
-            // ---------- ZİYARETÇİ SAYACI - FLASK BACKEND'DEN ÇEKER ----------
-           
-
             // ---------- EVENT LISTENER'LAR ----------
             function initEventListeners() {
                 // LOGIN
@@ -1201,12 +1151,6 @@
                 } catch (e) {
                     clearSession();
                 }
-                
-                // Ziyaretçi sayacını güncelle (Flask backend'den)
-              
-                
-                // Her 5 dakikada bir güncelle (isteğe bağlı)
-                setInterval(updateVisitorCounter, 300000);
                 
                 // Event listener'ları başlat
                 initEventListeners();
