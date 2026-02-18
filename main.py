@@ -68,7 +68,7 @@ class Config:
     
     # Data Requirements - KESİN KURALLAR!
     MIN_CANDLES = 100  # Minimum 100 mum şart!
-    MIN_EXCHANGES = 1  # Tek borsa yeterli, ama o borsa SAĞLAM veri vermeli
+    MIN_EXCHANGES = 2  # Tek borsa yeterli, ama o borsa SAĞLAM veri vermeli
     REQUIRED_EXCHANGES = ["Binance", "Bybit", "OKX"]  # Öncelikli borsalar
     
     # Cache - Uzun süreli veri havuzu
