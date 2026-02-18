@@ -870,7 +870,7 @@
             <div class="text-center">
                 <div class="visitor-counter">
                     <i class="fas fa-users"></i>
-                    <span>Toplam Ziyaretçi:</span>
+           
                     <span class="count" id="visitorCount">Yükleniyor...</span>
                 </div>
             </div>
@@ -1043,37 +1043,7 @@
             }
 
             // ---------- ZİYARETÇİ SAYACI - FLASK BACKEND'DEN ÇEKER ----------
-            async function updateVisitorCounter() {
-                try {
-                    // Flask backend'deki /visit endpoint'ine POST isteği
-                    const response = await fetch('/visit', {
-                        method: 'POST',
-                        headers: {
-                            'Content-Type': 'application/json'
-                        }
-                    });
-
-                    if (!response.ok) {
-                        throw new Error(`HTTP error! status: ${response.status}`);
-                    }
-
-                    const data = await response.json();
-                    
-                    const counterEl = document.getElementById('visitorCount');
-                    if (counterEl && data.total !== undefined) {
-                        // Toplam ziyaretçi sayısını formatla ve göster
-                        counterEl.textContent = data.total.toLocaleString('tr-TR');
-                    }
-                } catch (error) {
-                    console.error('❌ Visitor counter error:', error);
-                    
-                    // Hata durumunda fallback
-                    const counterEl = document.getElementById('visitorCount');
-                    if (counterEl) {
-                        counterEl.textContent = '1';
-                    }
-                }
-            }
+           
 
             // ---------- EVENT LISTENER'LAR ----------
             function initEventListeners() {
@@ -1233,7 +1203,7 @@
                 }
                 
                 // Ziyaretçi sayacını güncelle (Flask backend'den)
-                updateVisitorCounter();
+              
                 
                 // Her 5 dakikada bir güncelle (isteğe bağlı)
                 setInterval(updateVisitorCounter, 300000);
