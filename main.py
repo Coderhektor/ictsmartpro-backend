@@ -1,7 +1,7 @@
 import sys
 import json
 import time
-import aslio
+import asynci
 import asyncio
 import logging
 import secrets
