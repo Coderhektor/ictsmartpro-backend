@@ -1602,18 +1602,24 @@ function updateExchangeStats(exchangeStats) {
     
     let activeCount = 0;
     
+    // exchangeStats bir obje olmalı, örneğin: { Binance: {...}, Bybit: {...} }
     Object.entries(exchangeStats).forEach(([name, stats]) => {
         const sourceId = name.replace(/[^a-zA-Z0-9]/g, '').toLowerCase();
         const statusEl = document.getElementById(`status-${sourceId}`);
         const cardEl = document.getElementById(`source-${sourceId}`);
         
         if (statusEl && cardEl) {
-            if (stats.success > 0) {
+            // stats objesinin doğru formatta olduğundan emin ol
+            const success = stats.success || 0;
+            const fail = stats.fail || 0;
+            const successRate = stats.success_rate || 0;
+            
+            if (success > 0) {
                 statusEl.className = 'exchange-status status-active';
-                statusEl.innerHTML = `${stats.success_rate || 0}%`;
+                statusEl.innerHTML = `${successRate}%`;
                 activeCount++;
                 cardEl.classList.remove('failed');
-            } else if (stats.fail > 0) {
+            } else if (fail > 0) {
                 statusEl.className = 'exchange-status status-failed';
                 statusEl.innerHTML = 'HATA';
                 cardEl.classList.add('failed');
