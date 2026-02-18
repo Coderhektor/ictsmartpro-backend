@@ -1742,11 +1742,9 @@ async function loadTradingView() {
     
     if (!container || !chartContainer) return;
     
-    // Mobil kontrolü
     isMobile = window.innerWidth <= 768;
     isTablet = window.innerWidth > 768 && window.innerWidth <= 1024;
     
-    // Container yüksekliğini ayarla
     if (isMobile) {
         chartContainer.style.height = '450px';
         chartContainer.style.minHeight = '450px';
@@ -1777,11 +1775,11 @@ async function loadTradingView() {
             tvWidget = null;
         }
         
-        // Küçük bir gecikme
         await new Promise(resolve => setTimeout(resolve, 300));
         
         container.innerHTML = '';
         
+        // YENİ VERSİYON - onChartReady KULLANMA!
         tvWidget = new TradingView.widget({
             width: '100%',
             height: '100%',
@@ -1817,28 +1815,32 @@ async function loadTradingView() {
             }
         });
         
-        // Widget yüklendiğinde
-        tvWidget.onChartReady(() => {
-            console.log("✅ TradingView widget ready");
-            showChartLoading(false);
-            chartRetryCount = 0;
+        // Widget'ın yüklenmesini bekle - setInterval ile kontrol et
+        let checkCount = 0;
+        const checkInterval = setInterval(() => {
+            checkCount++;
             
-            // Mobil için ek optimizasyon
-            if (isMobile) {
-                setTimeout(() => {
-                    try {
-                        if (tvWidget && tvWidget.chart) {
-                            tvWidget.chart.refresh();
-                        }
-                    } catch (e) {}
-                }, 1000);
+            // Widget yüklendiyse
+            if (tvWidget && tvWidget.chart) {
+                clearInterval(checkInterval);
+                console.log("✅ TradingView widget ready");
+                showChartLoading(false);
+                chartRetryCount = 0;
+                
+                if (isMobile) {
+                    setTimeout(() => {
+                        try {
+                            if (tvWidget && tvWidget.chart) {
+                                tvWidget.chart.refresh();
+                            }
+                        } catch (e) {}
+                    }, 1000);
+                }
             }
-        });
-        
-        // Timeout kontrolü
-        if (chartLoadTimer) clearTimeout(chartLoadTimer);
-        chartLoadTimer = setTimeout(() => {
-            if (document.getElementById('chartLoading').style.display !== 'none') {
+            
+            // 10 saniye sonra timeout
+            if (checkCount > 20) {
+                clearInterval(checkInterval);
                 console.log("⚠️ Chart load timeout");
                 showChartLoading(false);
                 container.innerHTML = `
@@ -1851,7 +1853,7 @@ async function loadTradingView() {
                     </div>
                 `;
             }
-        }, 15000);
+        }, 500);
         
     } catch (error) {
         console.error('TradingView error:', error);
@@ -1868,7 +1870,6 @@ async function loadTradingView() {
         `;
     }
 }
-
 function retryTradingView() {
     if (chartRetryCount < CONFIG.maxChartRetries) {
         chartRetryCount++;
@@ -2270,21 +2271,21 @@ async function analyzeSymbol(force = false) {
     const symbol = baseSymbol + 'USDT';
     const interval = document.getElementById('intervalSelect').value;
     
+    // URL'İ BURADA TANIMLA!
+    const url = `${CONFIG.backendUrl}/api/analyze/${symbol}?interval=${interval}&limit=200`;
+    
     try {
         showNotification(`📊 ${baseSymbol}/USDT analiz ediliyor...`, 'info');
         
-        const url = `${CONFIG.backendUrl}/api/analyze/${symbol}?interval=${interval}&limit=200`;
         console.log('🔍 Fetching:', url);
         
         const response = await fetchWithTimeout(url);
         
         if (!response.ok) {
-            // HATA DETAYINI ALALIM!
             let errorDetail = `HTTP ${response.status}`;
             let errorData = null;
             
             try {
-                // Backend'den gelen JSON hatayı almaya çalış
                 errorData = await response.json();
                 console.error('❌ Backend error details:', errorData);
                 
@@ -2298,18 +2299,16 @@ async function analyzeSymbol(force = false) {
                     errorDetail = errorData.error;
                 }
             } catch (e) {
-                // JSON parse edilemezse text olarak al
                 try {
                     const errorText = await response.text();
-                    errorDetail = errorText.substring(0, 300); // İlk 300 karakter
+                    errorDetail = errorText.substring(0, 300);
                 } catch (e2) {}
             }
             
-            // Konsola detaylı hata bas
             console.group('🔴 BACKEND ERROR DETAILS');
             console.log('Status:', response.status);
             console.log('Status Text:', response.statusText);
-            console.log('URL:', url);
+            console.log('URL:', url);  // ARTIK TANIMLI!
             console.log('Error Detail:', errorDetail);
             console.log('Error Data:', errorData);
             console.groupEnd();
@@ -2337,7 +2336,7 @@ async function analyzeSymbol(force = false) {
         
         showNotification(`❌ ${errorMessage}`, 'error');
         
-        // Hata detaylarını konsola yazdır
+        // Hata detaylarını konsola yazdır - url ARTIK TANIMLI!
         console.log('🔍 HATA TESPİTİ İÇİN BİLGİLER:');
         console.log('   Symbol:', symbol);
         console.log('   Interval:', interval);
