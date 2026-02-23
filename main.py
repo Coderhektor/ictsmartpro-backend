@@ -1621,76 +1621,147 @@ async def health_check():
         "debug": Config.DEBUG
     }
 
-@app.get("/api/analyze/{symbol}")
+ 
+@router.get("/api/analyze/{symbol}")
 async def analyze_symbol(
     symbol: str,
-    interval: str = Query(default="1h", regex="^(1m|5m|15m|30m|1h|4h|1d|1w)$"),
-    limit: int = Query(default=100, ge=30, le=500)
+    interval: str = Query(
+        default="1h",
+        regex="^(1m|5m|15m|30m|1h|4h|1d|1w)$",
+        description="Zaman aralığı"
+    ),
+    limit: int = Query(
+        default=100,
+        ge=30,
+        le=500,
+        description="Mum sayısı (30-500 arası)"
+    )
 ):
-    symbol = symbol.upper()
+    symbol = symbol.upper().strip()
     if not symbol.endswith("USDT"):
         symbol = f"{symbol}USDT"
-    
-    logger.info(f"🔍 Analyzing {symbol} ({interval})")
-    
+
+    logger.info(f"🔍 Analyzing {symbol} @ {interval} (limit={limit})")
+
     try:
         async with data_fetcher as fetcher:
             candles = await fetcher.get_candles(symbol, interval, limit)
-        
-        if not candles or len(candles) < Config.MIN_CANDLES:
+
+        if not candles:
+            raise HTTPException(422, "No candle data received from exchange")
+
+        if len(candles) < Config.MIN_CANDLES:
             raise HTTPException(
-                status_code=422,
-                detail=f"Insufficient data. Got {len(candles) if candles else 0} candles"
+                422,
+                f"Insufficient candles. Got {len(candles)}, minimum required: {Config.MIN_CANDLES}"
             )
-        
+
+        # ── DataFrame oluştururken tip güvenliği ──
         df = pd.DataFrame(candles)
-        df['timestamp'] = pd.to_datetime(df['timestamp'], unit='ms')
-        df = df.set_index('timestamp')
-        
-        technical = TechnicalAnalyzer.analyze(df)
-        ict_patterns = ICTPatternDetector.analyze(df)
-        candle_patterns = CandlestickPatternDetector.analyze(df)
-        market_structure = MarketStructureAnalyzer.analyze(df)
-        
-        signal = SignalGenerator.generate(
-            technical,
-            market_structure,
-            ict_patterns,
-            candle_patterns
-        )
-        
-        active_sources = list(df['sources'].iloc[0]) if 'sources' in df.columns else []
-        
+        required_cols = {"open", "high", "low", "close", "volume", "timestamp"}
+        if not required_cols.issubset(df.columns):
+            missing = required_cols - set(df.columns)
+            raise ValueError(f"Missing required columns: {missing}")
+
+        df['timestamp'] = pd.to_datetime(df['timestamp'], unit='ms', errors='coerce')
+        df = df.dropna(subset=['timestamp']).set_index('timestamp').sort_index()
+
+        if len(df) < Config.MIN_CANDLES:
+            raise HTTPException(422, f"After cleaning only {len(df)} candles left")
+
+        # ── Analizleri çalıştırırken try-except ile izole et ──
+        try:
+            technical = TechnicalAnalyzer.analyze(df)
+        except Exception as e:
+            logger.error(f"TechnicalAnalyzer failed: {e}", exc_info=True)
+            technical = {"error": str(e)}
+
+        try:
+            ict_patterns = ICTPatternDetector.analyze(df)
+        except Exception as e:
+            logger.error(f"ICTPatternDetector failed: {e}", exc_info=True)
+            ict_patterns = []
+
+        try:
+            candle_patterns = CandlestickPatternDetector.analyze(df)
+        except Exception as e:
+            logger.error(f"CandlestickPatternDetector failed: {e}", exc_info=True)
+            candle_patterns = []
+
+        try:
+            market_structure = MarketStructureAnalyzer.analyze(df)
+        except Exception as e:
+            logger.error(f"MarketStructureAnalyzer failed: {e}", exc_info=True)
+            market_structure = {}
+
+        # Signal üretimi de güvenli olsun
+        try:
+            signal = SignalGenerator.generate(
+                technical,
+                market_structure,
+                ict_patterns,
+                candle_patterns
+            )
+        except Exception as e:
+            logger.error(f"SignalGenerator failed: {e}", exc_info=True)
+            signal = {"signal": "ERROR", "confidence": 0, "reason": str(e)}
+
+        # ── active_sources çok riskli ── ilk satırda sources yoksa patlar
+        active_sources = []
+        if 'sources' in df.columns:
+            first_sources = df['sources'].iloc[0]
+            if isinstance(first_sources, (list, tuple)):
+                active_sources = list(first_sources)
+            elif isinstance(first_sources, str):
+                active_sources = [first_sources]
+            # float/int gelirse görmezden geliyoruz
+
+        # ── Response ──
+        last_row = df.iloc[-1]
+        first_row = df.iloc[0]
+
         response = {
             "success": True,
             "symbol": symbol,
             "interval": interval,
             "timestamp": datetime.now(timezone.utc).isoformat(),
             "price": {
-                "current": round(float(df['close'].iloc[-1]), 2),
-                "open": round(float(df['open'].iloc[-1]), 2),
-                "high": round(float(df['high'].iloc[-1]), 2),
-                "low": round(float(df['low'].iloc[-1]), 2),
-                "volume": float(df['volume'].sum()),
-                "change_24h": round(float((df['close'].iloc[-1] / df['close'].iloc[0] - 1) * 100), 2)
+                "current": float(last_row["close"]),
+                "open": float(last_row["open"]),
+                "high": float(last_row["high"]),
+                "low": float(last_row["low"]),
+                "volume_24h_approx": float(df["volume"].sum()),
+                "change_percent": round(
+                    (float(last_row["close"]) / float(first_row["close"]) - 1) * 100,
+                    2
+                )
             },
             "signal": signal,
             "technical": technical,
             "ict_patterns": ict_patterns,
-            "candle_patterns": candle_patterns[-10:],
+            "candle_patterns": candle_patterns[-10:] if isinstance(candle_patterns, list) else [],
             "market_structure": market_structure,
             "active_sources": active_sources,
-            "data_points": len(df)
+            "data_points": len(df),
+            "debug": {
+                "df_shape": f"{len(df)} rows × {len(df.columns)} cols",
+                "last_timestamp": df.index[-1].isoformat()
+            }
         }
-        
-        logger.info(f"✅ {symbol} | {signal['signal']} ({signal['confidence']:.1f}%)")
+
+        logger.info(
+            f"✅ {symbol} | {signal.get('signal', 'UNKNOWN')} "
+            f"({signal.get('confidence', 0):.1f}%) | {len(df)} candles"
+        )
+
         return response
-        
+
     except HTTPException:
         raise
     except Exception as e:
-        logger.error(f"❌ Analysis failed: {str(e)}")
-        raise HTTPException(status_code=500, detail=str(e)[:200])
+        logger.exception(f"❌ Analysis failed for {symbol}: {str(e)}")
+        detail = f"Analysis error: {str(e)}"
+        raise HTTPException(status_code=500, detail=detail[:300])
 
 @app.get("/api/price/{symbol}")
 async def get_price(symbol: str):
