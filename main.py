@@ -10,6 +10,7 @@ from datetime import datetime, timezone
 from typing import Dict, List, Optional, Any, Tuple, Set
 from collections import defaultdict
 from contextlib import asynccontextmanager
+from pydantic import BaseModel
 
 import numpy as np
 import pandas as pd
