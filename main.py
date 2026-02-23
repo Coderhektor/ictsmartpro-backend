@@ -1194,6 +1194,9 @@ class MarketStructureAnalyzer:
 # ========================================================================================================
 # SIGNAL GENERATOR - DÜZELTİLMİŞ VERSİYON
 # ========================================================================================================
+# ========================================================================================================
+# SIGNAL GENERATOR - KESİN ÇÖZÜM
+# ========================================================================================================
 class SignalGenerator:
     
     @staticmethod
@@ -1207,7 +1210,7 @@ class SignalGenerator:
         confidences = []
         weights = []
         
-        # Heikin Ashi
+        # ============ HEIKIN ASHI ============
         ha_trend = technical.get('ha_trend', 'NEUTRAL')
         ha_color = technical.get('ha_color_change', 0)
         ha_rsi = technical.get('ha_rsi', 50)
@@ -1241,128 +1244,142 @@ class SignalGenerator:
         
         # ============ ICT PATTERNS - GÜVENLİ ============
         # Fair Value Gaps
-        fvgs = ict_patterns.get('fair_value_gaps', [])
-        if isinstance(fvgs, list):
+        fvgs = ict_patterns.get('fair_value_gaps')
+        if fvgs is not None and isinstance(fvgs, list):
             for fvg in fvgs[:2]:
-                if fvg.get('direction') == 'bullish':
-                    signals.append('BUY')
-                    confidences.append(0.68)
-                    weights.append(1.4)
-                elif fvg.get('direction') == 'bearish':
-                    signals.append('SELL')
-                    confidences.append(0.68)
-                    weights.append(1.4)
+                if isinstance(fvg, dict):
+                    direction = fvg.get('direction', '')
+                    if direction == 'bullish':
+                        signals.append('BUY')
+                        confidences.append(0.68)
+                        weights.append(1.4)
+                    elif direction == 'bearish':
+                        signals.append('SELL')
+                        confidences.append(0.68)
+                        weights.append(1.4)
         
         # Order Blocks
-        obs = ict_patterns.get('order_blocks', [])
-        if isinstance(obs, list):
+        obs = ict_patterns.get('order_blocks')
+        if obs is not None and isinstance(obs, list):
             for ob in obs[:2]:
-                if ob.get('direction') == 'bullish':
-                    signals.append('BUY')
-                    confidences.append(0.70)
-                    weights.append(1.5)
-                elif ob.get('direction') == 'bearish':
-                    signals.append('SELL')
-                    confidences.append(0.70)
-                    weights.append(1.5)
+                if isinstance(ob, dict):
+                    direction = ob.get('direction', '')
+                    if direction == 'bullish':
+                        signals.append('BUY')
+                        confidences.append(0.70)
+                        weights.append(1.5)
+                    elif direction == 'bearish':
+                        signals.append('SELL')
+                        confidences.append(0.70)
+                        weights.append(1.5)
         
         # Break of Structure
-        bos_list = ict_patterns.get('break_of_structure', [])
-        if isinstance(bos_list, list):
+        bos_list = ict_patterns.get('break_of_structure')
+        if bos_list is not None and isinstance(bos_list, list):
             for bos in bos_list:
-                if bos.get('direction') == 'bullish':
-                    signals.append('BUY')
-                    confidences.append(0.71)
-                    weights.append(1.5)
-                elif bos.get('direction') == 'bearish':
-                    signals.append('SELL')
-                    confidences.append(0.71)
-                    weights.append(1.5)
+                if isinstance(bos, dict):
+                    direction = bos.get('direction', '')
+                    if direction == 'bullish':
+                        signals.append('BUY')
+                        confidences.append(0.71)
+                        weights.append(1.5)
+                    elif direction == 'bearish':
+                        signals.append('SELL')
+                        confidences.append(0.71)
+                        weights.append(1.5)
         
         # Change of Character
-        choch_list = ict_patterns.get('change_of_character', [])
-        if isinstance(choch_list, list):
+        choch_list = ict_patterns.get('change_of_character')
+        if choch_list is not None and isinstance(choch_list, list):
             for choch in choch_list:
-                if choch.get('direction') == 'bullish':
-                    signals.append('BUY')
-                    confidences.append(0.72)
-                    weights.append(1.6)
-                elif choch.get('direction') == 'bearish':
-                    signals.append('SELL')
-                    confidences.append(0.72)
-                    weights.append(1.6)
+                if isinstance(choch, dict):
+                    direction = choch.get('direction', '')
+                    if direction == 'bullish':
+                        signals.append('BUY')
+                        confidences.append(0.72)
+                        weights.append(1.6)
+                    elif direction == 'bearish':
+                        signals.append('SELL')
+                        confidences.append(0.72)
+                        weights.append(1.6)
         
         # Liquidity Sweeps
-        sweeps = ict_patterns.get('liquidity_sweeps', [])
-        if isinstance(sweeps, list):
+        sweeps = ict_patterns.get('liquidity_sweeps')
+        if sweeps is not None and isinstance(sweeps, list):
             for sweep in sweeps:
-                direction = sweep.get('direction', '')
-                if 'bullish' in direction:
-                    signals.append('BUY')
-                    confidences.append(0.68)
-                    weights.append(1.3)
-                elif 'bearish' in direction:
-                    signals.append('SELL')
-                    confidences.append(0.68)
-                    weights.append(1.3)
+                if isinstance(sweep, dict):
+                    direction = sweep.get('direction', '')
+                    if 'bullish' in direction:
+                        signals.append('BUY')
+                        confidences.append(0.68)
+                        weights.append(1.3)
+                    elif 'bearish' in direction:
+                        signals.append('SELL')
+                        confidences.append(0.68)
+                        weights.append(1.3)
         
-        # ============ KLASİK PATERNLER - GÜVENLİ ============
-        if isinstance(candle_patterns, list) and len(candle_patterns) > 0:
+        # ============ KLASİK PATERNLER ============
+        if candle_patterns is not None and isinstance(candle_patterns, list):
             for pattern in candle_patterns[-5:]:
-                direction = pattern.get('direction', '')
-                strength = pattern.get('strength', 60)
-                if direction in ['bullish', 'bullish_reversal']:
-                    signals.append('BUY')
-                    confidences.append(strength / 100)
-                    weights.append(1.2)
-                elif direction in ['bearish', 'bearish_reversal']:
-                    signals.append('SELL')
-                    confidences.append(strength / 100)
-                    weights.append(1.2)
+                if isinstance(pattern, dict):
+                    direction = pattern.get('direction', '')
+                    strength = pattern.get('strength', 60)
+                    if direction in ['bullish', 'bullish_reversal']:
+                        signals.append('BUY')
+                        confidences.append(strength / 100)
+                        weights.append(1.2)
+                    elif direction in ['bearish', 'bearish_reversal']:
+                        signals.append('SELL')
+                        confidences.append(strength / 100)
+                        weights.append(1.2)
         
-        # RSI
+        # ============ RSI ============
         rsi = technical.get('rsi', 50)
-        if rsi < 30:
-            signals.append('BUY')
-            confidences.append(0.64)
-            weights.append(1.1)
-        elif rsi > 70:
-            signals.append('SELL')
-            confidences.append(0.64)
-            weights.append(1.1)
+        if isinstance(rsi, (int, float)):
+            if rsi < 30:
+                signals.append('BUY')
+                confidences.append(0.64)
+                weights.append(1.1)
+            elif rsi > 70:
+                signals.append('SELL')
+                confidences.append(0.64)
+                weights.append(1.1)
         
-        # MACD
+        # ============ MACD ============
         macd_hist = technical.get('macd_histogram', 0)
-        if macd_hist > 0:
-            signals.append('BUY')
-            confidences.append(0.62)
-            weights.append(1.0)
-        elif macd_hist < 0:
-            signals.append('SELL')
-            confidences.append(0.62)
-            weights.append(1.0)
+        if isinstance(macd_hist, (int, float)):
+            if macd_hist > 0:
+                signals.append('BUY')
+                confidences.append(0.62)
+                weights.append(1.0)
+            elif macd_hist < 0:
+                signals.append('SELL')
+                confidences.append(0.62)
+                weights.append(1.0)
         
-        # Bollinger
+        # ============ BOLLINGER ============
         bb_pos = technical.get('bb_position', 50)
-        if bb_pos < 15:
-            signals.append('BUY')
-            confidences.append(0.58)
-            weights.append(0.9)
-        elif bb_pos > 85:
-            signals.append('SELL')
-            confidences.append(0.58)
-            weights.append(0.9)
+        if isinstance(bb_pos, (int, float)):
+            if bb_pos < 15:
+                signals.append('BUY')
+                confidences.append(0.58)
+                weights.append(0.9)
+            elif bb_pos > 85:
+                signals.append('SELL')
+                confidences.append(0.58)
+                weights.append(0.9)
         
-        # Market Structure
+        # ============ MARKET STRUCTURE ============
         trend = market_structure.get('trend', 'NEUTRAL')
-        if 'UPTREND' in trend:
-            signals.append('BUY')
-            confidences.append(0.70)
-            weights.append(1.3)
-        elif 'DOWNTREND' in trend:
-            signals.append('SELL')
-            confidences.append(0.70)
-            weights.append(1.3)
+        if isinstance(trend, str):
+            if 'UPTREND' in trend:
+                signals.append('BUY')
+                confidences.append(0.70)
+                weights.append(1.3)
+            elif 'DOWNTREND' in trend:
+                signals.append('SELL')
+                confidences.append(0.70)
+                weights.append(1.3)
         
         # Sinyal yoksa nötr
         if not signals:
@@ -1374,6 +1391,55 @@ class SignalGenerator:
                 "sell_count": 0
             }
         
+        # Ağırlıklı skor hesapla
+        buy_score = 0.0
+        sell_score = 0.0
+        buy_count = 0
+        sell_count = 0
+        
+        for i in range(len(signals)):
+            s = signals[i]
+            c = confidences[i]
+            w = weights[i]
+            
+            if s == 'BUY':
+                buy_score += c * w
+                buy_count += 1
+            elif s == 'SELL':
+                sell_score += c * w
+                sell_count += 1
+        
+        if buy_score > sell_score:
+            final_signal = "BUY"
+            total_score = buy_score + sell_score
+            avg_conf = (buy_score / total_score * 100) if total_score > 0 else Config.DEFAULT_CONFIDENCE
+        elif sell_score > buy_score:
+            final_signal = "SELL"
+            total_score = buy_score + sell_score
+            avg_conf = (sell_score / total_score * 100) if total_score > 0 else Config.DEFAULT_CONFIDENCE
+        else:
+            final_signal = "NEUTRAL"
+            avg_conf = Config.DEFAULT_CONFIDENCE
+        
+        avg_conf = min(float(avg_conf), Config.MAX_CONFIDENCE)
+        avg_conf = max(float(avg_conf), 45.0)
+        
+        if avg_conf > 72 and buy_count > sell_count * 2:
+            final_signal = "STRONG_BUY"
+        elif avg_conf > 72 and sell_count > buy_count * 2:
+            final_signal = "STRONG_SELL"
+        
+        rec = SignalGenerator._generate_recommendation(
+            final_signal, avg_conf, technical, market_structure, ict_patterns
+        )
+        
+        return {
+            "signal": final_signal,
+            "confidence": round(avg_conf, 1),
+            "recommendation": rec,
+            "buy_count": buy_count,
+            "sell_count": sell_count
+        }
         # Ağırlıklı skor hesapla
         buy_score = 0
         sell_score = 0
