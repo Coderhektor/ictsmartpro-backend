@@ -1570,6 +1570,47 @@ async def root():
     </html>
     """, status_code=404)
 
+import os
+from fastapi.responses import HTMLResponse, FileResponse
+
+@app.get("/dashboard", response_class=HTMLResponse)
+async def dashboard():
+    """Dashboard sayfası - dosya yolunu kontrol et"""
+    
+    # Mevcut dizini bul
+    current_dir = os.path.dirname(os.path.abspath(__file__))
+    
+    # Olası tüm yolları dene
+    possible_paths = [
+        os.path.join(current_dir, "templates", "dashboard.html"),
+        os.path.join(current_dir, "dashboard.html"),
+        os.path.join(current_dir, "static", "dashboard.html"),
+        os.path.join(current_dir, "public", "dashboard.html"),
+    ]
+    
+    # Her yolu dene
+    for path in possible_paths:
+        if os.path.exists(path):
+            print(f"✅ Dashboard bulundu: {path}")  # Log'a yaz
+            return FileResponse(path)
+    
+    # Hiçbiri yoksa hata mesajı göster
+    error_html = f"""
+    <html>
+        <body style="background:#0a0b0d; color:#e0e0e0; padding:40px; font-family:sans-serif;">
+            <h1 style="color:#ff4444;">❌ Dashboard Bulunamadı!</h1>
+            <p>Aranan yollar:</p>
+            <ul style="background:#1a1c20; padding:20px; border-radius:10px;">
+                {''.join([f'<li>{path}</li>' for path in possible_paths])}
+            </ul>
+            <p>Mevcut dizin: <strong>{current_dir}</strong></p>
+            <p>Lütfen dosyanın bu yollardan birinde olduğundan emin olun.</p>
+            <a href="/" style="color:#00ff88;">← Ana Sayfaya Dön</a>
+        </body>
+    </html>
+    """
+    return HTMLResponse(content=error_html, status_code=404)
+
 @app.get("/health")
 async def health_check():
     """Health check endpoint"""
