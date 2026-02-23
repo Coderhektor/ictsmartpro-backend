@@ -1554,51 +1554,21 @@ startup_time = time.time()
 
 @app.get("/", response_class=HTMLResponse)
 async def root():
-    """Ana sayfa"""
-    return HTMLResponse("""
-    <!DOCTYPE html>
+    """Ana sayfa - index.html dosyasını açar"""
+    html_path = os.path.join(os.path.dirname(__file__), "templates", "index.html")
+    
+    if os.path.exists(html_path):
+        return FileResponse(html_path)
+    
+    # Dosya yoksa fallback
+    return HTMLResponse(content="""
     <html>
-    <head>
-        <title>ICTSMARTPRO AI v9.0</title>
-        <style>
-            body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; 
-                   margin: 40px; background: #0a0b0d; color: #e0e0e0; line-height: 1.6; }
-            .container { max-width: 800px; margin: 0 auto; }
-            h1 { color: #00ff88; border-bottom: 2px solid #333; padding-bottom: 10px; }
-            .status { background: #1a1c20; padding: 20px; border-radius: 10px; margin: 20px 0; 
-                      border-left: 4px solid #00ff88; }
-            .feature { background: #222; padding: 15px; margin: 10px 0; border-radius: 8px; 
-                      border-left: 4px solid #2563eb; }
-            .endpoint { background: #2a2c30; padding: 10px; border-radius: 5px; 
-                       font-family: monospace; }
-            a { color: #00ff88; text-decoration: none; }
-            a:hover { text-decoration: underline; }
-        </style>
-    </head>
-    <body>
-        <div class="container">
-            <h1>🚀 ICTSMARTPRO AI v9.0</h1>
-            <div class="status">
-                <strong>✅ SYSTEM ONLINE</strong><br>
-                Kraken • Binance • MEXC • Yahoo Finance
-            </div>
-            <div class="feature">
-                <strong>📊 ICT PATTERNS</strong><br>
-                Fair Value Gaps • Order Blocks • Break of Structure • Change of Character • Liquidity Sweeps
-            </div>
-            <div class="feature">
-                <strong>🕯️ HEIKIN ASHI + CANDLESTICK PATTERNS</strong><br>
-                Doji • Hammer • Engulfing • Morning/Evening Star • Three Soldiers/Crows
-            </div>
-            <div class="endpoint">
-                <a href="/docs">📚 API Documentation</a> • 
-                <a href="/health">🔍 Health Check</a> • 
-                <a href="/api/exchanges">🌐 Exchange Status</a>
-            </div>
-        </div>
-    </body>
+        <body>
+            <h1>❌ index.html bulunamadı!</h1>
+            <p>Lütfen templates/index.html dosyasını oluşturun.</p>
+        </body>
     </html>
-    """)
+    """, status_code=404)
 
 @app.get("/health")
 async def health_check():
