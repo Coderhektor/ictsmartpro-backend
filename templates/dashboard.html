@@ -877,9 +877,12 @@ function initTradingView() {
 function connectWS() {
   const sym = $('symbolSelect').value + 'USDT';
   
-  // Production'da wss, development'da ws kullan
+  // Protokolü otomatik belirle
   const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
-  const url = `${protocol}//${window.location.host}/wss/${sym}`;
+  const host = window.location.host;
+  const url = `${protocol}//${host}/wss/${sym}`;
+  
+  console.log('🔌 WebSocket bağlanıyor:', url);
 
   if (state.ws) {
     try { state.ws.close(); } catch(e) {}
@@ -891,30 +894,43 @@ function connectWS() {
     state.ws = ws;
 
     ws.onopen = () => {
+      console.log('✅ WebSocket bağlantısı başarılı');
       state.wsRetries = 0;
-      setPill('wsPill','green','BAĞLANDI');
+      setPill('wsPill', 'green', 'BAĞLANDI');
       set('wsLabel', 'BAĞLANDI');
     };
 
     ws.onmessage = (e) => {
       try {
         const d = JSON.parse(e.data);
-        if (d.type === 'price') renderWSPrice(d);
-      } catch {}
+        if (d.type === 'price') {
+          renderWSPrice(d);
+        }
+      } catch (err) {
+        console.error('WebSocket mesaj hatası:', err);
+      }
     };
 
-    ws.onerror = () => setPill('wsPill','red','HATA');
+    ws.onerror = (e) => {
+      console.error('❌ WebSocket hatası:', e);
+      setPill('wsPill', 'red', 'HATA');
+    };
 
-    ws.onclose = () => {
-      setPill('wsPill','muted','KAPALI');
-      set('wsLabel','KAPALI');
+    ws.onclose = (e) => {
+      console.log('🔌 WebSocket kapandı:', e.code, e.reason);
+      setPill('wsPill', 'muted', 'KAPALI');
+      set('wsLabel', 'KAPALI');
+      
+      // Yeniden bağlan
       if (state.wsRetries < 8) {
         state.wsRetries++;
-        setTimeout(connectWS, 3000 + state.wsRetries * 1000);
+        const delay = 3000 + state.wsRetries * 1000;
+        console.log(`🔄 ${delay/1000}s sonra yeniden bağlanılacak...`);
+        setTimeout(connectWS, delay);
       }
     };
   } catch(e) {
-    console.error('WS error:', e);
+    console.error('WebSocket oluşturma hatası:', e);
   }
 }
 
