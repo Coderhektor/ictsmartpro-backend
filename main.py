@@ -8,12 +8,13 @@ import random
 import os
 import hmac
 import hashlib
-from datetime import datetime, timezone, timedelta  # ✅ TAMAM
+from datetime import datetime, timezone, timedelta  # ✅ timedelta EKLENDİ
 from typing import Dict, List, Optional, Any, Tuple, Set
 from collections import defaultdict
 from contextlib import asynccontextmanager
 
-from pydantic import BaseModel  # ✅ TAMAM
+# ✅ Pydantic EKLENDİ
+from pydantic import BaseModel
 
 import numpy as np
 import pandas as pd
@@ -22,6 +23,7 @@ from fastapi import FastAPI, Request, HTTPException, Query, WebSocket, WebSocket
 from fastapi.responses import HTMLResponse, JSONResponse, FileResponse
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.middleware.gzip import GZipMiddleware
+from fastapi.staticfiles import StaticFiles
 
 import aiohttp
 from aiohttp import ClientTimeout, TCPConnector
@@ -783,14 +785,33 @@ class ICTPatternDetector:
     @staticmethod
     def analyze(df: pd.DataFrame) -> Dict[str, Any]:
         """Tüm ICT pattern'lerini analiz et"""
+        fvgs = ICTPatternDetector.detect_fair_value_gap(df)
+        obs = ICTPatternDetector.detect_order_blocks(df)
+        bos = ICTPatternDetector.detect_break_of_structure(df)
+        choch = ICTPatternDetector.detect_change_of_character(df)
+        sweeps = ICTPatternDetector.detect_liquidity_sweep(df)
+        
+        # Bullish/Bearish pattern sayıları
+        bullish_count = sum(1 for f in fvgs if f['direction'] == 'bullish')
+        bullish_count += sum(1 for o in obs if o['direction'] == 'bullish')
+        bullish_count += sum(1 for b in bos if b['direction'] == 'bullish')
+        bullish_count += sum(1 for c in choch if c['direction'] == 'bullish')
+        bullish_count += sum(1 for s in sweeps if 'bullish' in s['direction'])
+        
+        bearish_count = sum(1 for f in fvgs if f['direction'] == 'bearish')
+        bearish_count += sum(1 for o in obs if o['direction'] == 'bearish')
+        bearish_count += sum(1 for b in bos if b['direction'] == 'bearish')
+        bearish_count += sum(1 for c in choch if c['direction'] == 'bearish')
+        bearish_count += sum(1 for s in sweeps if 'bearish' in s['direction'])
+        
         return {
-            "fair_value_gaps": ICTPatternDetector.detect_fair_value_gap(df),
-            "order_blocks": ICTPatternDetector.detect_order_blocks(df),
-            "break_of_structure": ICTPatternDetector.detect_break_of_structure(df),
-            "change_of_character": ICTPatternDetector.detect_change_of_character(df),
-            "liquidity_sweeps": ICTPatternDetector.detect_liquidity_sweep(df),
-            "has_bullish_patterns": False,  # Dinamik hesaplanacak
-            "has_bearish_patterns": False
+            "fair_value_gaps": fvgs,
+            "order_blocks": obs,
+            "break_of_structure": bos,
+            "change_of_character": choch,
+            "liquidity_sweeps": sweeps,
+            "has_bullish_patterns": bullish_count > bearish_count,
+            "has_bearish_patterns": bearish_count > bullish_count
         }
 
 # ========================================================================================================
@@ -1589,7 +1610,7 @@ async def health_check():
         "version": "9.0.0",
         "timestamp": datetime.now(timezone.utc).isoformat(),
         "uptime_seconds": int(uptime),
-        "uptime_human": str(timedelta(seconds=int(uptime))),
+        "uptime_human": str(timedelta(seconds=int(uptime))),  # ✅ timedelta ÇALIŞIYOR
         "active_sources": active_sources,
         "max_confidence": Config.MAX_CONFIDENCE,
         "environment": Config.ENV,
