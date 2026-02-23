@@ -877,11 +877,12 @@ function initTradingView() {
 function connectWS() {
   const sym = $('symbolSelect').value + 'USDT';
   
-  // DOĞRU: Sayfanın protokolüne göre ws veya wss seç
+  // ===== EN ÖNEMLİ DÜZELTME =====
+  // Sayfanın protokolüne göre ws veya wss seç
   const wsProtocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
   const url = `${wsProtocol}//${window.location.host}/wss/${sym}`;
   
-  console.log('WebSocket bağlanıyor:', url); // Debug için
+  console.log('🔌 WebSocket bağlanıyor:', url); // Debug için
 
   if (state.ws) {
     try { state.ws.close(); } catch(e) {}
