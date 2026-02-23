@@ -2024,7 +2024,7 @@ async def health_check():
         "max_confidence": Config.MAX_CONFIDENCE
     }
 
-@app.get("/api/analyze/{symbol}")
+@app.get("/api/analyze/{symbol}") 
 async def analyze_symbol(
     symbol: str,
     interval: str = Query(default="1h", pattern="^(1m|5m|15m|30m|1h|4h|1d|1w)$"),
@@ -2155,7 +2155,7 @@ async def get_exchanges():
         "total_count": len(ExchangeDataFetcher.EXCHANGES)
     }
 
-@app.websocket("/ws/{symbol}")
+@app.websocket("/wss/{symbol}")
 async def websocket_endpoint(websocket: WebSocket, symbol: str):
     """WebSocket for real-time updates"""
     symbol = symbol.upper()
