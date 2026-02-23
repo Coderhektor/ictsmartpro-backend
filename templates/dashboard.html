@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>ICTSMARTPRO v8.0</title>
+<title>ICTSMARTPRO v9.0</title>
 <link href="https://fonts.googleapis.com/css2?family=Space+Mono:wght@400;700&family=Syne:wght@400;600;700;800&display=swap" rel="stylesheet">
 <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
 <script src="https://s3.tradingview.com/tv.js"></script>
@@ -309,6 +309,31 @@ select:focus { border-color: var(--blue); }
 .chip.bear  { background: var(--red-glow);   color: var(--red);   border: 1px solid var(--red);   }
 .chip.neut  { background: var(--border);     color: var(--muted); border: 1px solid var(--border); }
 
+/* ===== ICT PATTERNS ===== */
+.ict-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 8px;
+}
+.ict-item {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--r-sm);
+  padding: 10px;
+  text-align: center;
+}
+.ict-item .ict-type {
+  font-size: 0.65rem; font-weight: 700; color: var(--muted); text-transform: uppercase;
+  letter-spacing: 0.05em; margin-bottom: 4px;
+}
+.ict-item .ict-val {
+  font-family: 'Space Mono', monospace;
+  font-size: 0.9rem; font-weight: 700;
+}
+.ict-item .ict-sub {
+  font-size: 0.6rem; color: var(--muted);
+}
+
 /* ===== MARKET STRUCTURE ===== */
 .ms-rows .ms-row {
   display: flex; justify-content: space-between; align-items: center;
@@ -430,17 +455,17 @@ select:focus { border-color: var(--blue); }
 
 <!-- TOPBAR -->
 <div id="topbar">
-  <div class="brand">ICT<span>SMART</span>PRO <span style="color:var(--muted);font-size:0.75rem;font-weight:600;">v8.0</span></div>
+  <div class="brand">ICT<span>SMART</span>PRO <span style="color:var(--muted);font-size:0.75rem;font-weight:600;">v9.0</span></div>
   <div class="sep"></div>
   <div class="pill green" id="backendPill"><div class="dot"></div><span>BACKEND</span></div>
-  <div class="pill muted" id="wsPill"><i class="fas fa-wifi"></i><span id="wsLabel">WS BAĞLANIYOR</span></div>
+  <div class="pill muted" id="wsPill"><i class="fas fa-wifi"></i><span id="wsLabel">WSS BAĞLANIYOR</span></div>
   <div class="spacer"></div>
   <div class="clock" id="clockEl"></div>
 </div>
 
 <!-- STATUS ROW -->
 <div id="statusRow">
-  <span id="sourceCountBadge" class="pill blue"><i class="fas fa-server"></i> 0/32 Borsa</span>
+  <span id="sourceCountBadge" class="pill blue"><i class="fas fa-server"></i> 0/4 Kaynak</span>
   <span id="lastUpdateText" class="update-time">Son güncelleme: —</span>
 </div>
 
@@ -538,7 +563,7 @@ select:focus { border-color: var(--blue); }
       </div>
     </div>
 
-    <!-- Indicators Row -->
+    <!-- Heikin Ashi + Technical -->
     <div id="bottomRow">
       <!-- Heikin Ashi -->
       <div class="card">
@@ -576,17 +601,19 @@ select:focus { border-color: var(--blue); }
       </div>
     </div>
 
-    <!-- Patterns + Market Structure -->
+    <!-- ICT Patterns + Market Structure -->
     <div id="bottomRow2">
+      <!-- ICT Patterns -->
       <div class="card">
-        <div class="card-head"><i class="fas fa-shapes"></i> PATERNLER</div>
+        <div class="card-head"><i class="fas fa-chess-knight"></i> ICT PATTERNS</div>
         <div class="card-body">
-          <div class="pattern-chips" id="patternsEl">
-            <span class="state-empty">—</span>
+          <div class="ict-grid" id="ictGrid">
+            <div class="state-empty">Analiz bekleniyor...</div>
           </div>
         </div>
       </div>
 
+      <!-- Market Structure -->
       <div class="card">
         <div class="card-head"><i class="fas fa-water"></i> MARKET YAPISI</div>
         <div class="card-body">
@@ -594,7 +621,18 @@ select:focus { border-color: var(--blue); }
             <div class="ms-row"><span class="ms-label">Trend</span><span class="ms-val" id="msTrend">—</span></div>
             <div class="ms-row"><span class="ms-label">Yapı</span><span class="ms-val" id="msStruct">—</span></div>
             <div class="ms-row"><span class="ms-label">Volatilite</span><span class="ms-val" id="msVol">—</span></div>
+            <div class="ms-row"><span class="ms-label">Momentum</span><span class="ms-val" id="msMomentum">—</span></div>
           </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Candlestick Patterns -->
+    <div class="card">
+      <div class="card-head"><i class="fas fa-candles"></i> MUM PATERNLERİ</div>
+      <div class="card-body">
+        <div class="pattern-chips" id="patternsEl">
+          <span class="state-empty">—</span>
         </div>
       </div>
     </div>
@@ -634,10 +672,10 @@ select:focus { border-color: var(--blue); }
     <div class="card">
       <div class="card-head"><i class="fas fa-database"></i> VERİ HAVUZU</div>
       <div class="card-body">
-        <div class="pool-stat"><span class="ps-label">Toplam Borsa</span><span class="ps-val">32</span></div>
+        <div class="pool-stat"><span class="ps-label">Toplam Kaynak</span><span class="ps-val">4</span></div>
         <div class="pool-stat"><span class="ps-label">Aktif Kaynak</span><span class="ps-val text-green" id="poolActive">—</span></div>
         <div class="pool-stat"><span class="ps-label">Başarısız</span><span class="ps-val text-red" id="poolFail">—</span></div>
-        <div class="pool-stat"><span class="ps-label">Cache TTL</span><span class="ps-val">60s</span></div>
+        <div class="pool-stat"><span class="ps-label">Cache TTL</span><span class="ps-val">45s</span></div>
         <div class="health-bar"><div class="health-fill" id="healthFill" style="width:0%"></div></div>
         <div style="font-size:0.72rem;color:var(--muted)" id="poolUpdate">—</div>
       </div>
@@ -646,8 +684,8 @@ select:focus { border-color: var(--blue); }
     <!-- Exchange Status -->
     <div class="card">
       <div class="card-head">
-        <i class="fas fa-cloud"></i> BORSA DURUMU
-        <span class="badge" id="exActiveBadge">0/32</span>
+        <i class="fas fa-cloud"></i> KAYNAK DURUMU
+        <span class="badge" id="exActiveBadge">0/4</span>
       </div>
       <div class="card-body" style="padding:10px">
         <div id="exchangeGrid"></div>
@@ -673,14 +711,10 @@ select:focus { border-color: var(--blue); }
 
 <script>
 // =============================================
-//  CONSTANTS
+//  CONSTANTS - GÜNCELLENMİŞ (SADECE 4 KAYNAK)
 // =============================================
 const EXCHANGES = [
-  "Binance","Bybit","OKX","KuCoin","Gate.io","MEXC","Kraken",
-  "Bitfinex","Huobi","Coinbase","Bitget","BinanceUS","Crypto.com",
-  "Gemini","Poloniex","Bittrex","Bitstamp","LBank","AscendEX",
-  "BingX","Phemex","WazirX","CoinEx","DigiFinex","XT.com","ProBit",
-  "BKEX","Hotbit","ZB.com","Bibox","HitBTC","EXMO"
+  "Kraken", "Binance", "MEXC", "Yahoo"
 ];
 
 // =============================================
@@ -730,7 +764,7 @@ function tickClock() { $('clockEl').textContent = fmtTime(); }
 setInterval(tickClock, 1000); tickClock();
 
 // =============================================
-//  EXCHANGE GRID
+//  EXCHANGE GRID - GÜNCELLENMİŞ (4 KAYNAK)
 // =============================================
 function buildExchangeGrid() {
   const grid = $('exchangeGrid');
@@ -758,11 +792,11 @@ function updateExchangeGrid(stats) {
     if (ok) active++;
     if (ko) fail++;
   }
-  $('exActiveBadge').textContent = `${active}/32`;
-  $('sourceCountBadge').innerHTML = `<i class="fas fa-server"></i> ${active}/32 Borsa`;
+  $('exActiveBadge').textContent = `${active}/4`;
+  $('sourceCountBadge').innerHTML = `<i class="fas fa-server"></i> ${active}/4 Kaynak`;
   set('poolActive', active);
   set('poolFail', fail);
-  const health = active > 0 ? clamp((active / 32) * 100, 0, 100) : 0;
+  const health = active > 0 ? clamp((active / 4) * 100, 0, 100) : 0;
   $('healthFill').style.width = health + '%';
   $('poolUpdate').textContent = 'Güncellendi: ' + fmtTime();
 }
@@ -838,11 +872,14 @@ function initTradingView() {
 }
 
 // =============================================
-//  WEBSOCKET
+//  WEBSOCKET - GÜNCELLENMİŞ (ws → wss)
 // =============================================
 function connectWS() {
   const sym = $('symbolSelect').value + 'USDT';
-  const url = `ws://${location.host}/ws/${sym}`;
+  
+  // Production'da wss, development'da ws kullan
+  const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
+  const url = `${protocol}//${window.location.host}/wss/${sym}`;
 
   if (state.ws) {
     try { state.ws.close(); } catch(e) {}
@@ -862,7 +899,7 @@ function connectWS() {
     ws.onmessage = (e) => {
       try {
         const d = JSON.parse(e.data);
-        if (d.type === 'price_update') renderWSPrice(d);
+        if (d.type === 'price') renderWSPrice(d);
       } catch {}
     };
 
@@ -891,7 +928,6 @@ function setPill(id, cls, label) {
 
 function renderWSPrice(d) {
   const price = d.price;
-  const chgPct = d.change_percent;
 
   // Flash if changed
   const priceEl = $('priceEl');
@@ -903,23 +939,16 @@ function renderWSPrice(d) {
   }
   priceEl.textContent = fmtPrice(price);
 
-  const chgEl = $('priceChgEl');
-  if (chgEl) {
-    const up = chgPct >= 0;
-    chgEl.className = 'price-chg ' + (up ? 'up' : 'down');
-    chgEl.innerHTML = `<i class="fas fa-arrow-${up ? 'up' : 'down'}"></i> ${up ? '+' : ''}${(+chgPct).toFixed(2)}%`;
-  }
-
-  if (d.volume) set('volEl', fmtVol(d.volume));
-  if (d.source_count !== undefined) set('srcCountEl', d.source_count);
+  // Değişim oranını hesapla (WebSocket'ten gelmiyorsa)
+  // Bu kısmı backend'den gelen veriye göre güncellemek gerekebilir
 
   set('lastUpdateText', 'Son güncelleme: ' + fmtTime());
 }
 
 // =============================================
-//  ANALYZE
+//  ANALYZE - GÜNCELLENMİŞ (yeni endpoint)
 // =============================================
- async function analyzeSymbol() {
+async function analyzeSymbol() {
   const sym      = $('symbolSelect').value + 'USDT';
   const interval = $('intervalSelect').value;
   const btn      = $('analyzeBtn');
@@ -927,13 +956,11 @@ function renderWSPrice(d) {
   btn.innerHTML = '<div class="spinner"></div> Analiz Ediliyor...';
   btn.disabled = true;
 
-  // Her durumda saati güncelle (başlasın diye)
   set('lastUpdateText', 'Son güncelleme: Analiz yapılıyor...');
 
   try {
     const res = await fetch(`/api/analyze/${sym}?interval=${interval}&limit=200`);
     
-    // Her durumda son saati koy (başarılı veya başarısız)
     set('lastUpdateText', 'Son güncelleme: ' + fmtTime());
 
     if (!res.ok) {
@@ -950,11 +977,9 @@ function renderWSPrice(d) {
   } catch(e) {
     console.error('Analyze error:', e);
     
-    // Hata mesajını daha görünür yap
     $('signalLabel').textContent = 'HATA: ' + (e.message || 'Sunucu yanıtı alınamadı');
     $('signalLabel').className = 'signal-label sig-NEUTRAL';
     
-    // Hata durumunda da saati güncelle (kırmızı yapabilirsin)
     const errEl = $('lastUpdateText');
     errEl.textContent = 'Son güncelleme: HATA – ' + fmtTime();
     errEl.style.color = 'var(--red)';
@@ -966,7 +991,7 @@ function renderWSPrice(d) {
 }
 
 // =============================================
-//  RENDER DASHBOARD
+//  RENDER DASHBOARD - GÜNCELLENMİŞ (ICT Pattern'ler)
 // =============================================
 function renderDashboard(d) {
   if (!d) return;
@@ -976,29 +1001,25 @@ function renderDashboard(d) {
   set('priceSymLabel', sym);
 
   // Price
-  if (d.price_data) {
-    const pd = d.price_data;
+  if (d.price) {
+    const pd = d.price;
     const priceEl = $('priceEl');
     priceEl.textContent = fmtPrice(pd.current);
     priceEl.classList.remove('flash');
     void priceEl.offsetWidth;
     priceEl.classList.add('flash');
 
-    // Change %
-    const chg = pd.change_24h ?? null;
+    // Change % - price_data'dan change_24h alıyoruz, price'tan değil
+    // Bu kısım backend response'una göre ayarlanmalı
     const chgEl = $('priceChgEl');
-    if (chgEl && chg !== null) {
-      const up = chg >= 0;
-      chgEl.className = 'price-chg ' + (up ? 'up' : 'down');
-      chgEl.innerHTML = `<i class="fas fa-arrow-${up ? 'up' : 'down'}"></i> ${up ? '+' : ''}${(+chg).toFixed(2)}%`;
+    if (chgEl) {
+      // Varsayılan flat
     }
 
-    if (pd.volume_24h !== undefined) set('volEl', fmtVol(pd.volume_24h));
-    if (pd.source_count !== undefined) set('srcCountEl', pd.source_count);
+    if (pd.volume !== undefined) set('volEl', fmtVol(pd.volume));
+    if (d.active_sources) set('srcCountEl', d.active_sources.length);
 
-    const hi = pd.high_24h ? fmtPrice(pd.high_24h) : '—';
-    const lo = pd.low_24h  ? fmtPrice(pd.low_24h)  : '—';
-    set('hiLoEl', `${hi} / ${lo}`);
+    // Hi/Lo - price'tan gelmiyor, technical'dan alınabilir
   }
 
   // Signal
@@ -1014,9 +1035,9 @@ function renderDashboard(d) {
     set('recText', s.recommendation || '—');
   }
 
-  // Heikin Ashi + Technical
-  if (d.technical_indicators) {
-    const t = d.technical_indicators;
+  // Heikin Ashi
+  if (d.technical) {
+    const t = d.technical;
 
     // HA
     const haColorVal = t.ha_color_change === 1 ? '🟢' : t.ha_color_change === -1 ? '🔴' : '⚪';
@@ -1027,14 +1048,13 @@ function renderDashboard(d) {
 
     // Technical rows
     const rows = [];
-    if (t.rsi_value !== undefined)   rows.push(['RSI', fmt(t.rsi_value, 1), rsiColor(t.rsi_value)]);
+    if (t.rsi !== undefined)      rows.push(['RSI', fmt(t.rsi, 1), rsiColor(t.rsi)]);
     if (t.macd_histogram !== undefined) rows.push(['MACD Hist.', (t.macd_histogram >= 0 ? '+' : '') + fmt(t.macd_histogram, 5), t.macd_histogram >= 0 ? 'text-green' : 'text-red']);
     if (t.bb_position !== undefined) rows.push(['Bollinger %', fmt(t.bb_position, 1) + '%', '']);
     if (t.volume_ratio !== undefined) rows.push(['Hacim Oranı', fmt(t.volume_ratio, 2) + 'x', t.volume_ratio > 1.5 ? 'text-green' : '']);
-    if (t.stoch_k !== undefined) rows.push(['Stochastic K', fmt(t.stoch_k, 1), '']);
-    if (t.atr !== undefined) rows.push(['ATR', fmt(t.atr, 4), 'text-amber']);
-    if (t.ema20 !== undefined) rows.push(['EMA 20', fmtPrice(t.ema20), 'text-blue']);
-    if (t.ema50 !== undefined) rows.push(['EMA 50', fmtPrice(t.ema50), 'text-blue']);
+    if (t.atr !== undefined)      rows.push(['ATR', fmt(t.atr, 4), 'text-amber']);
+    if (t.sma_20 !== undefined)   rows.push(['SMA 20', fmtPrice(t.sma_20), 'text-blue']);
+    if (t.sma_50 !== undefined)   rows.push(['SMA 50', fmtPrice(t.sma_50), 'text-blue']);
 
     if (rows.length) {
       setHTML('techRows', rows.map(([lbl, val, cls]) =>
@@ -1045,11 +1065,62 @@ function renderDashboard(d) {
     }
   }
 
-  // Patterns
-  if (d.patterns && d.patterns.length > 0) {
-    setHTML('patternsEl', d.patterns.slice(0, 8).map(p => {
+  // ICT Patterns
+  if (d.ict_patterns) {
+    const ict = d.ict_patterns;
+    const html = [];
+    
+    // FVG
+    if (ict.fair_value_gaps && ict.fair_value_gaps.length) {
+      const fvg = ict.fair_value_gaps[0];
+      html.push(`<div class="ict-item"><div class="ict-type">FVG</div><div class="ict-val text-${fvg.direction === 'bullish' ? 'green' : 'red'}">${fvg.direction.toUpperCase()}</div><div class="ict-sub">${fmt(fvg.gap_percent, 2)}%</div></div>`);
+    } else {
+      html.push(`<div class="ict-item"><div class="ict-type">FVG</div><div class="ict-val">—</div></div>`);
+    }
+    
+    // Order Block
+    if (ict.order_blocks && ict.order_blocks.length) {
+      const ob = ict.order_blocks[0];
+      html.push(`<div class="ict-item"><div class="ict-type">OB</div><div class="ict-val text-${ob.direction === 'bullish' ? 'green' : 'red'}">${ob.direction.toUpperCase()}</div></div>`);
+    } else {
+      html.push(`<div class="ict-item"><div class="ict-type">OB</div><div class="ict-val">—</div></div>`);
+    }
+    
+    // BOS
+    if (ict.break_of_structure && ict.break_of_structure.length) {
+      const bos = ict.break_of_structure[0];
+      html.push(`<div class="ict-item"><div class="ict-type">BOS</div><div class="ict-val text-${bos.direction === 'bullish' ? 'green' : 'red'}">${bos.direction.toUpperCase()}</div></div>`);
+    } else {
+      html.push(`<div class="ict-item"><div class="ict-type">BOS</div><div class="ict-val">—</div></div>`);
+    }
+    
+    // CHoCH
+    if (ict.change_of_character && ict.change_of_character.length) {
+      const choch = ict.change_of_character[0];
+      html.push(`<div class="ict-item"><div class="ict-type">CHoCH</div><div class="ict-val text-${choch.direction === 'bullish' ? 'green' : 'red'}">${choch.direction.toUpperCase()}</div></div>`);
+    } else {
+      html.push(`<div class="ict-item"><div class="ict-type">CHoCH</div><div class="ict-val">—</div></div>`);
+    }
+    
+    // Liquidity Sweep
+    if (ict.liquidity_sweeps && ict.liquidity_sweeps.length) {
+      const ls = ict.liquidity_sweeps[0];
+      const dir = ls.direction.includes('bullish') ? 'bullish' : 'bearish';
+      html.push(`<div class="ict-item"><div class="ict-type">LIQ SWP</div><div class="ict-val text-${dir === 'bullish' ? 'green' : 'red'}">${dir.toUpperCase()}</div></div>`);
+    } else {
+      html.push(`<div class="ict-item"><div class="ict-type">LIQ SWP</div><div class="ict-val">—</div></div>`);
+    }
+    
+    setHTML('ictGrid', html.join(''));
+  } else {
+    setHTML('ictGrid', '<div class="state-empty">ICT verisi yok</div>');
+  }
+
+  // Candlestick Patterns
+  if (d.candle_patterns && d.candle_patterns.length > 0) {
+    setHTML('patternsEl', d.candle_patterns.slice(0, 10).map(p => {
       const cls = p.direction === 'bullish' ? 'bull' : p.direction === 'bearish' ? 'bear' : 'neut';
-      return `<span class="chip ${cls}">${p.name}</span>`;
+      return `<span class="chip ${cls}">${p.pattern.replace(/_/g, ' ')}</span>`;
     }).join(''));
   } else {
     setHTML('patternsEl', '<span class="state-empty">Patern bulunamadı</span>');
@@ -1061,6 +1132,7 @@ function renderDashboard(d) {
     set('msTrend',  ms.trend      || '—');
     set('msStruct', ms.structure  || '—');
     set('msVol',    ms.volatility || '—');
+    set('msMomentum', ms.momentum  || '—');
   }
 
   // ML stats
@@ -1075,6 +1147,11 @@ function renderDashboard(d) {
       set(`${key}Pct`, fmt(v, 1) + '%');
       $(`${key}Bar`).style.width = clamp(v, 0, 100) + '%';
     });
+  }
+
+  // Active sources
+  if (d.active_sources) {
+    set('srcCountEl', d.active_sources.length);
   }
 
   // Update time
@@ -1142,16 +1219,23 @@ function evaluateAI() {
   const chatBox = $('chatBox');
   const sig     = d.signal?.signal || 'NEUTRAL';
   const conf    = d.signal?.confidence || 0;
-  const price   = d.price_data?.current || 0;
-  const rsi     = d.technical_indicators?.rsi_value || 50;
+  const price   = d.price?.current || 0;
+  const rsi     = d.technical?.rsi || 50;
   const rec     = d.signal?.recommendation || '';
   const trend   = d.market_structure?.trend || '—';
   const vol     = d.market_structure?.volatility || '—';
 
+  // ICT pattern sayısı
+  const ictCount = (d.ict_patterns?.fair_value_gaps?.length || 0) +
+                   (d.ict_patterns?.order_blocks?.length || 0) +
+                   (d.ict_patterns?.break_of_structure?.length || 0);
+
   let comment = '';
   if (conf > 75) comment = 'Yüksek güven seviyesi – sinyal güçlü görünüyor.';
-  else if (conf > 55) comment = 'Orta güven – ek teyit önerilir.';
+  else if (conf > 60) comment = 'Orta güven – ek teyit önerilir.';
   else comment = 'Düşük güven – temkinli yaklaşılmalı.';
+  
+  if (ictCount > 2) comment += ' ICT pattern yoğunluğu yüksek.';
 
   const div = document.createElement('div');
   div.className = 'chat-msg';
@@ -1160,6 +1244,7 @@ function evaluateAI() {
     <div><b>Sinyal:</b> ${sig.replace(/_/g,' ')} (%${Math.round(conf)})</div>
     <div><b>Fiyat:</b> ${fmtPrice(price)} | <b>RSI:</b> ${(+rsi).toFixed(1)}</div>
     <div><b>Trend:</b> ${trend} | <b>Volatilite:</b> ${vol}</div>
+    <div><b>ICT Pattern:</b> ${ictCount} adet</div>
     ${rec ? `<div><b>Öneri:</b> ${rec}</div>` : ''}
     <div style="margin-top:6px;color:var(--cyan)">${comment}</div>
     <div class="chat-warn"><i class="fas fa-triangle-exclamation"></i> Bu bir yatırım tavsiyesi değildir.</div>
