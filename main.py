@@ -2155,16 +2155,20 @@ async def get_exchanges():
         "total_count": len(ExchangeDataFetcher.EXCHANGES)
     }
 
+
 @app.websocket("/wss/{symbol}")
 async def websocket_endpoint(websocket: WebSocket, symbol: str):
-    """WebSocket for real-time updates"""
-    symbol = symbol.upper()
-    if not symbol.endswith("USDT"):
-        symbol = f"{symbol}USDT"
-    
+    # WebSocket bağlantısını kabul et (CORS header'ları ile)
     await websocket.accept()
+    
+    # Headers'ları manuel ekle (opsiyonel)
+    await websocket.send_json({
+        "type": "connection_established",
+        "message": "WebSocket bağlantısı başarılı"
+    })
+    
     websocket_connections.add(websocket)
-    logger.info(f"🔌 WS connected: {symbol}")
+    logger.info(f"🔌 WSS connected: {symbol}")
     
     try:
         last_price = None
@@ -2182,16 +2186,14 @@ async def websocket_endpoint(websocket: WebSocket, symbol: str):
                 })
                 last_price = price
             
-            # 3 saniye bekle
             await asyncio.sleep(3)
             
     except WebSocketDisconnect:
-        logger.info(f"❌ WS disconnected: {symbol}")
+        logger.info(f"❌ WSS disconnected: {symbol}")
     except Exception as e:
-        logger.error(f"WS error: {str(e)}")
+        logger.error(f"WSS error: {str(e)}")
     finally:
         websocket_connections.discard(websocket)
-
 # ========================================================================================================
 # STARTUP
 # ========================================================================================================
