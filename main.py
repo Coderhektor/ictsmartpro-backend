@@ -1622,7 +1622,7 @@ async def health_check():
     }
 
  
-@router.get("/api/analyze/{symbol}")
+@app.get("/api/analyze/{symbol}")  # ← @app.get olmalı!
 async def analyze_symbol(
     symbol: str,
     interval: str = Query(
