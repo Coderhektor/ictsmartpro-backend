@@ -877,12 +877,11 @@ function initTradingView() {
 function connectWS() {
   const sym = $('symbolSelect').value + 'USDT';
   
-  // Protokolü otomatik belirle
-  const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
-  const host = window.location.host;
-  const url = `${protocol}//${host}/wss/${sym}`;
+  // DOĞRU: Sayfanın protokolüne göre ws veya wss seç
+  const wsProtocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
+  const url = `${wsProtocol}//${window.location.host}/wss/${sym}`;
   
-  console.log('🔌 WebSocket bağlanıyor:', url);
+  console.log('WebSocket bağlanıyor:', url); // Debug için
 
   if (state.ws) {
     try { state.ws.close(); } catch(e) {}
@@ -894,43 +893,35 @@ function connectWS() {
     state.ws = ws;
 
     ws.onopen = () => {
-      console.log('✅ WebSocket bağlantısı başarılı');
       state.wsRetries = 0;
-      setPill('wsPill', 'green', 'BAĞLANDI');
+      setPill('wsPill','green','BAĞLANDI');
       set('wsLabel', 'BAĞLANDI');
+      console.log('✅ WebSocket bağlantısı başarılı');
     };
 
     ws.onmessage = (e) => {
       try {
         const d = JSON.parse(e.data);
-        if (d.type === 'price') {
-          renderWSPrice(d);
-        }
-      } catch (err) {
-        console.error('WebSocket mesaj hatası:', err);
-      }
+        if (d.type === 'price') renderWSPrice(d);
+      } catch {}
     };
 
     ws.onerror = (e) => {
       console.error('❌ WebSocket hatası:', e);
-      setPill('wsPill', 'red', 'HATA');
+      setPill('wsPill','red','HATA');
     };
 
-    ws.onclose = (e) => {
-      console.log('🔌 WebSocket kapandı:', e.code, e.reason);
-      setPill('wsPill', 'muted', 'KAPALI');
-      set('wsLabel', 'KAPALI');
-      
-      // Yeniden bağlan
+    ws.onclose = () => {
+      console.log('WebSocket kapandı');
+      setPill('wsPill','muted','KAPALI');
+      set('wsLabel','KAPALI');
       if (state.wsRetries < 8) {
         state.wsRetries++;
-        const delay = 3000 + state.wsRetries * 1000;
-        console.log(`🔄 ${delay/1000}s sonra yeniden bağlanılacak...`);
-        setTimeout(connectWS, delay);
+        setTimeout(connectWS, 3000 + state.wsRetries * 1000);
       }
     };
   } catch(e) {
-    console.error('WebSocket oluşturma hatası:', e);
+    console.error('WS error:', e);
   }
 }
 
