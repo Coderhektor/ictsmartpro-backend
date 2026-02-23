@@ -8,12 +8,12 @@ import random
 import os
 import hmac
 import hashlib
-from datetime import datetime, timezone, timedelta  # ✅ timedelta EKLENDİ
+from datetime import datetime, timezone, timedelta
 from typing import Dict, List, Optional, Any, Tuple, Set
 from collections import defaultdict
 from contextlib import asynccontextmanager
 
-# ✅ Pydantic EKLENDİ
+# ✅ Pydantic
 from pydantic import BaseModel
 
 import numpy as np
@@ -29,7 +29,7 @@ import aiohttp
 from aiohttp import ClientTimeout, TCPConnector
 
 # ========================================================================================================
-# LOGGING SETUP - Renkli ve detaylı
+# LOGGING SETUP
 # ========================================================================================================
 class ColoredFormatter(logging.Formatter):
     """Renkli log formatı"""
@@ -58,23 +58,23 @@ class ColoredFormatter(logging.Formatter):
         return formatter.format(record)
 
 def setup_logging():
-    """Logging sistemi - renkli ve dosyaya"""
+    """Logging sistemi"""
     logger = logging.getLogger("ictsmartpro")
     logger.setLevel(logging.DEBUG if os.getenv("DEBUG") else logging.INFO)
     logger.handlers.clear()
     
-    # Console handler (renkli)
+    # Console handler
     console = logging.StreamHandler(sys.stdout)
     console.setLevel(logging.INFO)
     console.setFormatter(ColoredFormatter())
     logger.addHandler(console)
     
-    # File handler (detaylı)
+    # File handler
     try:
         file_handler = logging.FileHandler('ictsmartpro.log')
         file_handler.setLevel(logging.DEBUG)
         file_format = logging.Formatter(
-            '%(asctime)s | %(levelname)-8s | %(name)-12s | %(filename)s:%(lineno)d | %(message)s',
+            '%(asctime)s | %(levelname)-8s | %(message)s',
             datefmt='%Y-%m-%d %H:%M:%S'
         )
         file_handler.setFormatter(file_format)
@@ -87,44 +87,35 @@ def setup_logging():
 logger = setup_logging()
 
 # ========================================================================================================
-# CONFIGURATION - Environment based
+# CONFIGURATION
 # ========================================================================================================
 class Config:
-    """Sistem konfigürasyonu - çevre değişkenlerinden okur"""
+    """Sistem konfigürasyonu"""
     
-    # Environment
     ENV = os.getenv("ENV", "production")
     DEBUG = os.getenv("DEBUG", "false").lower() == "true"
     PORT = int(os.getenv("PORT", 8000))
     
-    # API Settings
     API_TIMEOUT = int(os.getenv("API_TIMEOUT", "8"))
     MAX_RETRIES = int(os.getenv("MAX_RETRIES", "2"))
     
-    # Data Requirements
     MIN_CANDLES = int(os.getenv("MIN_CANDLES", "30"))
     MIN_EXCHANGES = int(os.getenv("MIN_EXCHANGES", "2"))
     
-    # Cache
     CACHE_TTL = int(os.getenv("CACHE_TTL", "45"))
     
-    # Signal Confidence - GERÇEKÇİ SINIRLAR
     MAX_CONFIDENCE = float(os.getenv("MAX_CONFIDENCE", "78.5"))
     DEFAULT_CONFIDENCE = float(os.getenv("DEFAULT_CONFIDENCE", "51.5"))
-    MIN_CONFIDENCE_FOR_SIGNAL = float(os.getenv("MIN_CONFIDENCE", "54.0"))
     
-    # Rate Limiting
     RATE_LIMIT_CALLS = int(os.getenv("RATE_LIMIT_CALLS", "60"))
     RATE_LIMIT_PERIOD = int(os.getenv("RATE_LIMIT_PERIOD", "60"))
     
-    # Allowed origins
     ALLOWED_ORIGINS = os.getenv("ALLOWED_ORIGINS", "*").split(",")
 
 # ========================================================================================================
 # DATA MODELS
 # ========================================================================================================
 class Candle(BaseModel):
-    """Mum verisi modeli"""
     timestamp: int
     open: float
     high: float
@@ -136,15 +127,13 @@ class Candle(BaseModel):
     sources: Optional[List[str]] = None
 
 class Signal(BaseModel):
-    """Sinyal modeli"""
-    signal: str  # STRONG_BUY, BUY, NEUTRAL, SELL, STRONG_SELL
+    signal: str
     confidence: float
     recommendation: str
     buy_count: int = 0
     sell_count: int = 0
 
 class AnalysisResponse(BaseModel):
-    """Analiz cevap modeli"""
     success: bool
     symbol: str
     interval: str
@@ -159,20 +148,11 @@ class AnalysisResponse(BaseModel):
     data_points: int
 
 # ========================================================================================================
-# EXCHANGE DATA FETCHER - SADECE 4 GÜVENİLİR KAYNAK
+# EXCHANGE DATA FETCHER
 # ========================================================================================================
 class ExchangeDataFetcher:
-    """
-    📊 2026 ULTRA STABIL - 4 GÜVENİLİR KAYNAK
-    
-    ✓ KRAKEN    - En stabil, en eski
-    ✓ BINANCE   - En yüksek likidite
-    ✓ MEXC      - En hızlı API
-    ✓ YAHOO     - Sınırsız ücretsiz veri (fallback)
-    """
     
     EXCHANGES = [
-        # Kraken
         {
             "name": "Kraken",
             "weight": 1.00,
@@ -185,7 +165,6 @@ class ExchangeDataFetcher:
             "parser": "kraken",
             "timeout": 8
         },
-        # Binance
         {
             "name": "Binance",
             "weight": 0.99,
@@ -198,7 +177,6 @@ class ExchangeDataFetcher:
             "parser": "binance",
             "timeout": 5
         },
-        # MEXC
         {
             "name": "MEXC",
             "weight": 0.96,
@@ -211,7 +189,6 @@ class ExchangeDataFetcher:
             "parser": "binance",
             "timeout": 5
         },
-        # Yahoo Finance
         {
             "name": "Yahoo",
             "weight": 0.90,
@@ -226,7 +203,6 @@ class ExchangeDataFetcher:
         }
     ]
     
-    # WebSocket konfigürasyonu
     WEBSOCKETS = {
         "Binance": "wss://stream.binance.com:9443/ws/{symbol}@kline_{interval}",
         "Kraken": "wss://ws.kraken.com/v2",
@@ -243,7 +219,6 @@ class ExchangeDataFetcher:
         self._lock = asyncio.Lock()
     
     async def __aenter__(self):
-        """HTTP session başlat"""
         timeout = ClientTimeout(total=Config.API_TIMEOUT)
         connector = TCPConnector(
             limit=20,
@@ -264,7 +239,6 @@ class ExchangeDataFetcher:
             await self.session.close()
     
     def _check_rate_limit(self) -> bool:
-        """Rate limit kontrolü"""
         now = time.time()
         self.request_times = [t for t in self.request_times if now - t < Config.RATE_LIMIT_PERIOD]
         if len(self.request_times) >= Config.RATE_LIMIT_CALLS:
@@ -281,21 +255,18 @@ class ExchangeDataFetcher:
         return (time.time() - self.cache_time[key]) < Config.CACHE_TTL
     
     async def _fetch_exchange(self, exchange: Dict, symbol: str, interval: str, limit: int) -> Optional[List[Dict]]:
-        """Tek bir borsadan veri çek"""
         if not self._check_rate_limit():
             return None
         
         name = exchange["name"]
         
         try:
-            # Interval kontrolü
             if interval not in exchange["interval_map"]:
                 return None
             
             ex_interval = exchange["interval_map"][interval]
             formatted_symbol = exchange["symbol_fmt"](symbol)
             
-            # URL ve params hazırla
             if name == "Yahoo":
                 url = f"{exchange['base_url']}{formatted_symbol}"
                 params = {
@@ -311,7 +282,6 @@ class ExchangeDataFetcher:
                     "limit": limit
                 }
             
-            # HTTP isteği
             timeout = ClientTimeout(total=exchange.get("timeout", Config.API_TIMEOUT))
             async with self.session.get(url, params=params, timeout=timeout) as response:
                 if response.status != 200:
@@ -327,7 +297,6 @@ class ExchangeDataFetcher:
                     self.stats[name]["last_error"] = "Insufficient data"
                     return None
                 
-                # Başarılı
                 async with self._lock:
                     self.stats[name]["success"] += 1
                     self.stats[name]["last_success"] = time.time()
@@ -345,7 +314,6 @@ class ExchangeDataFetcher:
             return None
     
     async def _parse_response(self, exchange: str, data: Any) -> List[Dict]:
-        """API cevabını parse et"""
         candles = []
         
         try:
@@ -417,11 +385,9 @@ class ExchangeDataFetcher:
             return []
     
     def _aggregate_candles(self, all_candles: List[List[Dict]]) -> List[Dict]:
-        """Farklı borsalardan gelen verileri birleştir"""
         if not all_candles:
             return []
         
-        # Timestamp bazında grupla
         timestamp_map = defaultdict(list)
         for exchange_data in all_candles:
             for candle in exchange_data:
@@ -435,7 +401,6 @@ class ExchangeDataFetcher:
                 aggregated.append(candles[0])
                 continue
             
-            # Ağırlıklı ortalama hesapla
             total_weight = 0
             open_sum = high_sum = low_sum = close_sum = volume_sum = 0
             sources = []
@@ -468,10 +433,8 @@ class ExchangeDataFetcher:
         return aggregated
     
     async def get_candles(self, symbol: str, interval: str = "1h", limit: int = 100) -> List[Dict]:
-        """Ana veri çekme fonksiyonu"""
         cache_key = self._get_cache_key(symbol, interval)
         
-        # Cache kontrolü
         if self._is_cache_valid(cache_key):
             cached = self.cache.get(cache_key, [])
             if cached:
@@ -480,7 +443,6 @@ class ExchangeDataFetcher:
         
         logger.info(f"🔄 FETCH: {symbol} ({interval}) from {len(self.EXCHANGES)} sources...")
         
-        # Tüm borsalardan paralel çek
         tasks = [
             self._fetch_exchange(exchange, symbol, interval, limit * 2)
             for exchange in self.EXCHANGES
@@ -488,7 +450,6 @@ class ExchangeDataFetcher:
         
         results = await asyncio.gather(*tasks, return_exceptions=True)
         
-        # Başarılı sonuçları filtrele
         valid_results = []
         for r in results:
             if isinstance(r, list) and len(r) >= 10:
@@ -501,27 +462,22 @@ class ExchangeDataFetcher:
             if not valid_results:
                 return []
         
-        # Birleştir
         aggregated = self._aggregate_candles(valid_results)
         
         if len(aggregated) < Config.MIN_CANDLES:
             logger.warning(f"⚠️ Only {len(aggregated)} candles (need {Config.MIN_CANDLES})")
             return []
         
-        # Cache'e kaydet
         self.cache[cache_key] = aggregated
         self.cache_time[cache_key] = time.time()
         
         return aggregated[-limit:]
     
     async def get_current_price(self, symbol: str) -> Optional[float]:
-        """Anlık fiyat - hızlı"""
-        # Cache kontrolü
         if symbol in self.price_cache:
             if time.time() - self.price_cache[symbol].get("time", 0) < 10:
                 return self.price_cache[symbol].get("price")
         
-        # Binance'ten dene
         try:
             url = f"https://api.binance.com/api/v3/ticker/price?symbol={symbol.replace('/', '')}"
             async with self.session.get(url, timeout=5) as response:
@@ -533,7 +489,6 @@ class ExchangeDataFetcher:
         except:
             pass
         
-        # MEXC'ten dene
         try:
             url = f"https://api.mexc.com/api/v3/ticker/price?symbol={symbol.replace('/', '')}"
             async with self.session.get(url, timeout=5) as response:
@@ -548,41 +503,28 @@ class ExchangeDataFetcher:
         return None
     
     def get_stats(self) -> Dict:
-        """Borsa istatistiklerini döndür"""
         return dict(self.stats)
     
     def get_active_sources(self) -> List[str]:
-        """Aktif kaynakları döndür"""
         active = []
         now = time.time()
         for name, stats in self.stats.items():
-            # Son 5 dakikada başarılı olanlar
             if stats.get("last_success", 0) > now - 300:
                 active.append(name)
         return active
 
 # ========================================================================================================
-# ICT PATTERN DETECTOR (Smart Money Concepts)
+# ICT PATTERN DETECTOR
 # ========================================================================================================
 class ICTPatternDetector:
-    """
-    ICT (Inner Circle Trader) Pattern Detection
-    - Fair Value Gap (FVG)
-    - Order Block (OB)
-    - Break of Structure (BOS)
-    - Change of Character (CHoCH)
-    - Liquidity Sweep
-    """
     
     @staticmethod
     def detect_fair_value_gap(df: pd.DataFrame) -> List[Dict]:
-        """Fair Value Gap tespiti"""
         fvgs = []
         if len(df) < 3:
             return fvgs
         
         for i in range(1, len(df)-1):
-            # Bullish FVG
             if df['low'].iloc[i+1] > df['high'].iloc[i-1]:
                 gap_size = df['low'].iloc[i+1] - df['high'].iloc[i-1]
                 gap_percent = (gap_size / df['high'].iloc[i-1]) * 100
@@ -599,7 +541,6 @@ class ICTPatternDetector:
                         "strength": min(round(gap_percent * 5, 1), 80)
                     })
             
-            # Bearish FVG
             elif df['high'].iloc[i+1] < df['low'].iloc[i-1]:
                 gap_size = df['low'].iloc[i-1] - df['high'].iloc[i+1]
                 gap_percent = (gap_size / df['low'].iloc[i-1]) * 100
@@ -616,17 +557,15 @@ class ICTPatternDetector:
                         "strength": min(round(gap_percent * 5, 1), 80)
                     })
         
-        return fvgs[-5:]  # Son 5 FVG
+        return fvgs[-5:]
     
     @staticmethod
     def detect_order_blocks(df: pd.DataFrame) -> List[Dict]:
-        """Order Block tespiti"""
         obs = []
         if len(df) < 5:
             return obs
         
         for i in range(2, len(df)-2):
-            # Bullish Order Block
             if (df['close'].iloc[i] > df['open'].iloc[i] and
                 df['close'].iloc[i-1] < df['open'].iloc[i-1] and
                 df['high'].iloc[i] > df['high'].iloc[i-1]):
@@ -644,7 +583,6 @@ class ICTPatternDetector:
                     "strength": min(round(ob_percent * 10, 1), 75)
                 })
             
-            # Bearish Order Block
             elif (df['close'].iloc[i] < df['open'].iloc[i] and
                   df['close'].iloc[i-1] > df['open'].iloc[i-1] and
                   df['low'].iloc[i] < df['low'].iloc[i-1]):
@@ -666,7 +604,6 @@ class ICTPatternDetector:
     
     @staticmethod
     def detect_break_of_structure(df: pd.DataFrame) -> List[Dict]:
-        """Break of Structure tespiti"""
         bos_signals = []
         if len(df) < 10:
             return bos_signals
@@ -677,7 +614,6 @@ class ICTPatternDetector:
         current_high = df['high'].iloc[-1]
         current_low = df['low'].iloc[-1]
         
-        # Bullish BOS
         if current_high > recent_high * 1.005:
             bos_size = (current_high - recent_high) / recent_high * 100
             bos_signals.append({
@@ -690,7 +626,6 @@ class ICTPatternDetector:
                 "strength": min(round(bos_size * 20, 1), 80)
             })
         
-        # Bearish BOS
         elif current_low < recent_low * 0.995:
             bos_size = (recent_low - current_low) / recent_low * 100
             bos_signals.append({
@@ -707,7 +642,6 @@ class ICTPatternDetector:
     
     @staticmethod
     def detect_change_of_character(df: pd.DataFrame) -> List[Dict]:
-        """Change of Character tespiti"""
         if len(df) < 15:
             return []
         
@@ -741,7 +675,6 @@ class ICTPatternDetector:
     
     @staticmethod
     def detect_liquidity_sweep(df: pd.DataFrame) -> List[Dict]:
-        """Liquidity Sweep tespiti"""
         sweeps = []
         if len(df) < 20:
             return sweeps
@@ -752,7 +685,6 @@ class ICTPatternDetector:
         current_low = df['low'].iloc[-1]
         current_close = df['close'].iloc[-1]
         
-        # Yukarı yönlü sweep
         if current_high > swing_high * 1.01 and current_close < swing_high:
             sweep_size = (current_high - swing_high) / swing_high * 100
             sweeps.append({
@@ -766,7 +698,6 @@ class ICTPatternDetector:
                 "strength": min(round(sweep_size * 20, 1), 75)
             })
         
-        # Aşağı yönlü sweep
         elif current_low < swing_low * 0.99 and current_close > swing_low:
             sweep_size = (swing_low - current_low) / swing_low * 100
             sweeps.append({
@@ -784,14 +715,12 @@ class ICTPatternDetector:
     
     @staticmethod
     def analyze(df: pd.DataFrame) -> Dict[str, Any]:
-        """Tüm ICT pattern'lerini analiz et"""
         fvgs = ICTPatternDetector.detect_fair_value_gap(df)
         obs = ICTPatternDetector.detect_order_blocks(df)
         bos = ICTPatternDetector.detect_break_of_structure(df)
         choch = ICTPatternDetector.detect_change_of_character(df)
         sweeps = ICTPatternDetector.detect_liquidity_sweep(df)
         
-        # Bullish/Bearish pattern sayıları
         bullish_count = sum(1 for f in fvgs if f['direction'] == 'bullish')
         bullish_count += sum(1 for o in obs if o['direction'] == 'bullish')
         bullish_count += sum(1 for b in bos if b['direction'] == 'bullish')
@@ -818,7 +747,6 @@ class ICTPatternDetector:
 # CANDLESTICK PATTERN DETECTOR
 # ========================================================================================================
 class CandlestickPatternDetector:
-    """Klasik Japon mumu pattern'leri"""
     
     @staticmethod
     def detect_doji(candle: pd.Series) -> bool:
@@ -863,7 +791,6 @@ class CandlestickPatternDetector:
         prev_bearish = prev['close'] < prev['open']
         prev_bullish = prev['close'] > prev['open']
         
-        # Bullish Engulfing
         if (curr_bullish and prev_bearish and 
             curr['open'] < prev['close'] and 
             curr['close'] > prev['open']):
@@ -874,7 +801,6 @@ class CandlestickPatternDetector:
                 "timestamp": str(df.index[i])
             }
         
-        # Bearish Engulfing
         elif (curr_bearish and prev_bullish and 
               curr['open'] > prev['close'] and 
               curr['close'] < prev['open']):
@@ -902,7 +828,7 @@ class CandlestickPatternDetector:
             return None
         
         if curr_range < prev_range * 0.6:
-            if prev['close'] > prev['open']:  # Previous bullish
+            if prev['close'] > prev['open']:
                 if (curr['close'] < prev['close'] and curr['open'] > prev['open']):
                     return {
                         "pattern": "bullish_harami",
@@ -910,7 +836,7 @@ class CandlestickPatternDetector:
                         "strength": 60,
                         "timestamp": str(df.index[i])
                     }
-            else:  # Previous bearish
+            else:
                 if (curr['close'] > prev['close'] and curr['open'] < prev['open']):
                     return {
                         "pattern": "bearish_harami",
@@ -969,7 +895,6 @@ class CandlestickPatternDetector:
     
     @staticmethod
     def analyze(df: pd.DataFrame) -> List[Dict]:
-        """Tüm klasik pattern'leri analiz et"""
         patterns = []
         
         if len(df) < 10:
@@ -978,7 +903,6 @@ class CandlestickPatternDetector:
         for i in range(2, len(df)):
             curr = df.iloc[i]
             
-            # Tek mum pattern'leri
             if CandlestickPatternDetector.detect_doji(curr):
                 patterns.append({
                     "pattern": "doji",
@@ -1003,7 +927,6 @@ class CandlestickPatternDetector:
                     "timestamp": str(df.index[i])
                 })
             
-            # Çift mum pattern'leri
             engulfing = CandlestickPatternDetector.detect_engulfing(df, i)
             if engulfing:
                 patterns.append(engulfing)
@@ -1012,7 +935,6 @@ class CandlestickPatternDetector:
             if harami:
                 patterns.append(harami)
             
-            # Üçlü mum pattern'leri
             morning = CandlestickPatternDetector.detect_morning_star(df, i)
             if morning:
                 patterns.append(morning)
@@ -1024,31 +946,25 @@ class CandlestickPatternDetector:
         return patterns[-15:]
 
 # ========================================================================================================
-# TECHNICAL ANALYZER - Heikin Ashi + Indicators
+# TECHNICAL ANALYZER
 # ========================================================================================================
 class TechnicalAnalyzer:
-    """Teknik göstergeler + Heikin Ashi"""
     
     @staticmethod
     def calculate_heikin_ashi(df: pd.DataFrame) -> Dict[str, Any]:
-        """Heikin Ashi hesaplamaları"""
         try:
             if len(df) < 20:
                 return {}
             
-            # Heikin Ashi close
             ha_close = (df['open'] + df['high'] + df['low'] + df['close']) / 4
             
-            # Heikin Ashi open
             ha_open = ha_close.copy()
             for i in range(1, len(ha_open)):
                 ha_open.iloc[i] = (ha_open.iloc[i-1] + ha_close.iloc[i-1]) / 2
             
-            # Heikin Ashi high/low
             ha_high = pd.concat([df['high'], ha_open, ha_close], axis=1).max(axis=1)
             ha_low = pd.concat([df['low'], ha_open, ha_close], axis=1).min(axis=1)
             
-            # Trend analizi
             ha_bullish = sum(1 for i in range(-8, 0) if ha_close.iloc[i] > ha_open.iloc[i])
             ha_bearish = sum(1 for i in range(-8, 0) if ha_close.iloc[i] < ha_open.iloc[i])
             
@@ -1068,14 +984,12 @@ class TechnicalAnalyzer:
                 ha_trend = "NEUTRAL"
                 ha_strength = 50
             
-            # Heikin Ashi RSI
             delta = ha_close.diff()
             gain = (delta.where(delta > 0, 0)).rolling(window=14).mean()
             loss = (-delta.where(delta < 0, 0)).rolling(window=14).mean()
             rs = gain / loss.replace(0, np.nan)
             ha_rsi = 100 - (100 / (1 + rs))
             
-            # Renk değişimi
             ha_color_change = 0
             if ha_close.iloc[-1] > ha_open.iloc[-1] and ha_close.iloc[-2] <= ha_open.iloc[-2]:
                 ha_color_change = 1
@@ -1133,7 +1047,6 @@ class TechnicalAnalyzer:
     
     @staticmethod
     def analyze(df: pd.DataFrame) -> Dict[str, Any]:
-        """Tüm teknik göstergeleri hesapla"""
         if len(df) < 30:
             return {}
         
@@ -1142,32 +1055,25 @@ class TechnicalAnalyzer:
         low = df['low']
         volume = df['volume']
         
-        # Temel göstergeler
         rsi = TechnicalAnalyzer.calculate_rsi(close)
         macd, macd_signal, macd_hist = TechnicalAnalyzer.calculate_macd(close)
         bb_upper, bb_middle, bb_lower = TechnicalAnalyzer.calculate_bollinger_bands(close)
         
-        # Bollinger pozisyonu
         bb_range = bb_upper - bb_lower
         bb_range = bb_range.replace(0, 1)
         bb_position = ((close - bb_lower) / bb_range * 100).clip(0, 100)
         
-        # ATR
         atr = TechnicalAnalyzer.calculate_atr(high, low, close)
         atr_percent = (atr / close * 100).fillna(0)
         
-        # Volume
         volume_sma = volume.rolling(20).mean().fillna(volume)
         volume_ratio = (volume / volume_sma).fillna(1.0)
         
-        # SMA'lar
         sma_20 = close.rolling(20).mean()
         sma_50 = close.rolling(50).mean()
         
-        # Heikin Ashi
         heikin_ashi = TechnicalAnalyzer.calculate_heikin_ashi(df)
         
-        # Sonuçları birleştir
         result = {
             "rsi": round(float(rsi.iloc[-1]), 1),
             "macd": round(float(macd.iloc[-1]), 2),
@@ -1187,7 +1093,6 @@ class TechnicalAnalyzer:
             "price_vs_sma50": round(float((close.iloc[-1] / sma_50.iloc[-1] - 1) * 100), 1),
         }
         
-        # Heikin Ashi'yi ekle
         result.update(heikin_ashi)
         
         return result
@@ -1196,11 +1101,9 @@ class TechnicalAnalyzer:
 # MARKET STRUCTURE ANALYZER
 # ========================================================================================================
 class MarketStructureAnalyzer:
-    """Piyasa yapısı analizi"""
     
     @staticmethod
     def analyze(df: pd.DataFrame) -> Dict[str, Any]:
-        """Trend, yapı, volatilite analizi"""
         if len(df) < 30:
             return {
                 "trend": "NEUTRAL",
@@ -1215,7 +1118,6 @@ class MarketStructureAnalyzer:
         high = df['high']
         low = df['low']
         
-        # EMA'lar ile trend
         ema_9 = close.ewm(span=9).mean()
         ema_21 = close.ewm(span=21).mean()
         ema_50 = close.ewm(span=50).mean()
@@ -1236,7 +1138,6 @@ class MarketStructureAnalyzer:
             trend = "NEUTRAL"
             trend_strength = "WEAK"
         
-        # Yapı analizi
         recent_highs = high.tail(15)
         recent_lows = low.tail(15)
         
@@ -1252,7 +1153,6 @@ class MarketStructureAnalyzer:
         else:
             structure = "Neutral"
         
-        # Volatilite
         returns = close.pct_change().fillna(0)
         volatility = returns.rolling(20).std() * np.sqrt(252) * 100
         avg_vol = volatility.mean()
@@ -1268,7 +1168,6 @@ class MarketStructureAnalyzer:
             vol_regime = "NORMAL"
             vol_index = 100
         
-        # Momentum
         mom_5 = close.iloc[-1] / close.iloc[-5] - 1 if len(close) >= 5 else 0
         mom_10 = close.iloc[-1] / close.iloc[-10] - 1 if len(close) >= 10 else 0
         
@@ -1293,10 +1192,9 @@ class MarketStructureAnalyzer:
         }
 
 # ========================================================================================================
-# SIGNAL GENERATOR
+# SIGNAL GENERATOR - DÜZELTİLMİŞ VERSİYON
 # ========================================================================================================
 class SignalGenerator:
-    """Sinyal üretici - tüm kaynakları birleştirir"""
     
     @staticmethod
     def generate(
@@ -1305,7 +1203,6 @@ class SignalGenerator:
         ict_patterns: Dict[str, Any],
         candle_patterns: List[Dict]
     ) -> Dict[str, Any]:
-        """Tüm analizleri birleştirerek sinyal üret"""
         signals = []
         confidences = []
         weights = []
@@ -1342,37 +1239,86 @@ class SignalGenerator:
             confidences.append(0.66)
             weights.append(1.3)
         
-        # ICT Patterns
-        for fvg in ict_patterns.get('fair_value_gaps', [])[:2]:
-            signals.append('BUY' if fvg['direction'] == 'bullish' else 'SELL')
-            confidences.append(0.68)
-            weights.append(1.4)
+        # ============ ICT PATTERNS - GÜVENLİ ============
+        # Fair Value Gaps
+        fvgs = ict_patterns.get('fair_value_gaps', [])
+        if isinstance(fvgs, list):
+            for fvg in fvgs[:2]:
+                if fvg.get('direction') == 'bullish':
+                    signals.append('BUY')
+                    confidences.append(0.68)
+                    weights.append(1.4)
+                elif fvg.get('direction') == 'bearish':
+                    signals.append('SELL')
+                    confidences.append(0.68)
+                    weights.append(1.4)
         
-        for ob in ict_patterns.get('order_blocks', [])[:2]:
-            signals.append('BUY' if ob['direction'] == 'bullish' else 'SELL')
-            confidences.append(0.70)
-            weights.append(1.5)
+        # Order Blocks
+        obs = ict_patterns.get('order_blocks', [])
+        if isinstance(obs, list):
+            for ob in obs[:2]:
+                if ob.get('direction') == 'bullish':
+                    signals.append('BUY')
+                    confidences.append(0.70)
+                    weights.append(1.5)
+                elif ob.get('direction') == 'bearish':
+                    signals.append('SELL')
+                    confidences.append(0.70)
+                    weights.append(1.5)
         
-        for bos in ict_patterns.get('break_of_structure', []):
-            signals.append('BUY' if bos['direction'] == 'bullish' else 'SELL')
-            confidences.append(0.71)
-            weights.append(1.5)
+        # Break of Structure
+        bos_list = ict_patterns.get('break_of_structure', [])
+        if isinstance(bos_list, list):
+            for bos in bos_list:
+                if bos.get('direction') == 'bullish':
+                    signals.append('BUY')
+                    confidences.append(0.71)
+                    weights.append(1.5)
+                elif bos.get('direction') == 'bearish':
+                    signals.append('SELL')
+                    confidences.append(0.71)
+                    weights.append(1.5)
         
-        for choch in ict_patterns.get('change_of_character', []):
-            signals.append('BUY' if choch['direction'] == 'bullish' else 'SELL')
-            confidences.append(0.72)
-            weights.append(1.6)
+        # Change of Character
+        choch_list = ict_patterns.get('change_of_character', [])
+        if isinstance(choch_list, list):
+            for choch in choch_list:
+                if choch.get('direction') == 'bullish':
+                    signals.append('BUY')
+                    confidences.append(0.72)
+                    weights.append(1.6)
+                elif choch.get('direction') == 'bearish':
+                    signals.append('SELL')
+                    confidences.append(0.72)
+                    weights.append(1.6)
         
-        # Klasik pattern'ler
-        for pattern in candle_patterns[-5:]:
-            if pattern.get('direction') in ['bullish', 'bullish_reversal']:
-                signals.append('BUY')
-                confidences.append(pattern.get('strength', 60) / 100)
-                weights.append(1.2)
-            elif pattern.get('direction') in ['bearish', 'bearish_reversal']:
-                signals.append('SELL')
-                confidences.append(pattern.get('strength', 60) / 100)
-                weights.append(1.2)
+        # Liquidity Sweeps
+        sweeps = ict_patterns.get('liquidity_sweeps', [])
+        if isinstance(sweeps, list):
+            for sweep in sweeps:
+                direction = sweep.get('direction', '')
+                if 'bullish' in direction:
+                    signals.append('BUY')
+                    confidences.append(0.68)
+                    weights.append(1.3)
+                elif 'bearish' in direction:
+                    signals.append('SELL')
+                    confidences.append(0.68)
+                    weights.append(1.3)
+        
+        # ============ KLASİK PATERNLER - GÜVENLİ ============
+        if isinstance(candle_patterns, list) and len(candle_patterns) > 0:
+            for pattern in candle_patterns[-5:]:
+                direction = pattern.get('direction', '')
+                strength = pattern.get('strength', 60)
+                if direction in ['bullish', 'bullish_reversal']:
+                    signals.append('BUY')
+                    confidences.append(strength / 100)
+                    weights.append(1.2)
+                elif direction in ['bearish', 'bearish_reversal']:
+                    signals.append('SELL')
+                    confidences.append(strength / 100)
+                    weights.append(1.2)
         
         # RSI
         rsi = technical.get('rsi', 50)
@@ -1429,11 +1375,18 @@ class SignalGenerator:
             }
         
         # Ağırlıklı skor hesapla
-        buy_score = sum(c * w for s, c, w in zip(signals, confidences, weights) if s == 'BUY')
-        sell_score = sum(c * w for s, c, w in zip(signals, confidences, weights) if s == 'SELL')
+        buy_score = 0
+        sell_score = 0
+        buy_count = 0
+        sell_count = 0
         
-        buy_count = sum(1 for s in signals if s == 'BUY')
-        sell_count = sum(1 for s in signals if s == 'SELL')
+        for s, c, w in zip(signals, confidences, weights):
+            if s == 'BUY':
+                buy_score += c * w
+                buy_count += 1
+            elif s == 'SELL':
+                sell_score += c * w
+                sell_count += 1
         
         if buy_score > sell_score:
             final_signal = "BUY"
@@ -1447,17 +1400,14 @@ class SignalGenerator:
             final_signal = "NEUTRAL"
             avg_conf = Config.DEFAULT_CONFIDENCE
         
-        # Güven sınırlaması
         avg_conf = min(avg_conf, Config.MAX_CONFIDENCE)
         avg_conf = max(avg_conf, 45.0)
         
-        # Güçlü sinyal
         if avg_conf > 72 and buy_count > sell_count * 2:
             final_signal = "STRONG_BUY"
         elif avg_conf > 72 and sell_count > buy_count * 2:
             final_signal = "STRONG_SELL"
         
-        # Recommendation
         rec = SignalGenerator._generate_recommendation(
             final_signal, avg_conf, technical, market_structure, ict_patterns
         )
@@ -1472,7 +1422,6 @@ class SignalGenerator:
     
     @staticmethod
     def _generate_recommendation(signal, conf, technical, structure, ict):
-        """Öneri metni oluştur"""
         parts = []
         
         ha_trend = technical.get('ha_trend', '')
@@ -1521,7 +1470,7 @@ app = FastAPI(
     redoc_url=None
 )
 
-# CORS - Güvenli yapılandırma
+# CORS
 app.add_middleware(
     CORSMiddleware,
     allow_origins=Config.ALLOWED_ORIGINS,
@@ -1554,66 +1503,44 @@ startup_time = time.time()
 
 @app.get("/", response_class=HTMLResponse)
 async def root():
-    """Ana sayfa - index.html dosyasını açar"""
+    """Ana sayfa"""
     html_path = os.path.join(os.path.dirname(__file__), "templates", "index.html")
     
     if os.path.exists(html_path):
         return FileResponse(html_path)
     
-    # Dosya yoksa fallback
     return HTMLResponse(content="""
     <html>
-        <body>
-            <h1>❌ index.html bulunamadı!</h1>
-            <p>Lütfen templates/index.html dosyasını oluşturun.</p>
+        <body style="background:#0a0b0d; color:#e0e0e0; padding:40px;">
+            <h1 style="color:#00ff88;">ICTSMARTPRO v9.0</h1>
+            <p>✅ API çalışıyor - index.html bulunamadı</p>
+            <p><a href="/docs" style="color:#2563eb;">📚 API Documentation</a></p>
+        </body>
+    </html>
+    """)
+
+@app.get("/dashboard", response_class=HTMLResponse)
+async def dashboard():
+    """Dashboard sayfası"""
+    current_dir = os.path.dirname(os.path.abspath(__file__))
+    dashboard_path = os.path.join(current_dir, "templates", "dashboard.html")
+    
+    if os.path.exists(dashboard_path):
+        return FileResponse(dashboard_path)
+    
+    return HTMLResponse(content=f"""
+    <html>
+        <body style="background:#0a0b0d; color:#e0e0e0; padding:40px;">
+            <h1 style="color:#ff4444;">❌ dashboard.html bulunamadı</h1>
+            <p>Mevcut dizin: {current_dir}</p>
+            <p>Aranan: {dashboard_path}</p>
+            <a href="/" style="color:#00ff88;">← Ana Sayfa</a>
         </body>
     </html>
     """, status_code=404)
 
-import os
-from fastapi.responses import HTMLResponse, FileResponse
-
-@app.get("/dashboard", response_class=HTMLResponse)
-async def dashboard():
-    """Dashboard sayfası - dosya yolunu kontrol et"""
-    
-    # Mevcut dizini bul
-    current_dir = os.path.dirname(os.path.abspath(__file__))
-    
-    # Olası tüm yolları dene
-    possible_paths = [
-        os.path.join(current_dir, "templates", "dashboard.html"),
-        os.path.join(current_dir, "dashboard.html"),
-        os.path.join(current_dir, "static", "dashboard.html"),
-        os.path.join(current_dir, "public", "dashboard.html"),
-    ]
-    
-    # Her yolu dene
-    for path in possible_paths:
-        if os.path.exists(path):
-            print(f"✅ Dashboard bulundu: {path}")  # Log'a yaz
-            return FileResponse(path)
-    
-    # Hiçbiri yoksa hata mesajı göster
-    error_html = f"""
-    <html>
-        <body style="background:#0a0b0d; color:#e0e0e0; padding:40px; font-family:sans-serif;">
-            <h1 style="color:#ff4444;">❌ Dashboard Bulunamadı!</h1>
-            <p>Aranan yollar:</p>
-            <ul style="background:#1a1c20; padding:20px; border-radius:10px;">
-                {''.join([f'<li>{path}</li>' for path in possible_paths])}
-            </ul>
-            <p>Mevcut dizin: <strong>{current_dir}</strong></p>
-            <p>Lütfen dosyanın bu yollardan birinde olduğundan emin olun.</p>
-            <a href="/" style="color:#00ff88;">← Ana Sayfaya Dön</a>
-        </body>
-    </html>
-    """
-    return HTMLResponse(content=error_html, status_code=404)
-
 @app.get("/health")
 async def health_check():
-    """Health check endpoint"""
     uptime = time.time() - startup_time
     active_sources = data_fetcher.get_active_sources()
     return {
@@ -1621,20 +1548,19 @@ async def health_check():
         "version": "9.0.0",
         "timestamp": datetime.now(timezone.utc).isoformat(),
         "uptime_seconds": int(uptime),
-        "uptime_human": str(timedelta(seconds=int(uptime))),  # ✅ timedelta ÇALIŞIYOR
+        "uptime_human": str(timedelta(seconds=int(uptime))),
         "active_sources": active_sources,
         "max_confidence": Config.MAX_CONFIDENCE,
         "environment": Config.ENV,
         "debug": Config.DEBUG
     }
 
-@app.get("/api/analyze/{symbol}", response_model=AnalysisResponse)
+@app.get("/api/analyze/{symbol}")
 async def analyze_symbol(
     symbol: str,
     interval: str = Query(default="1h", regex="^(1m|5m|15m|30m|1h|4h|1d|1w)$"),
     limit: int = Query(default=100, ge=30, le=500)
 ):
-    """Complete market analysis with ICT, Heikin Ashi, and candlestick patterns"""
     symbol = symbol.upper()
     if not symbol.endswith("USDT"):
         symbol = f"{symbol}USDT"
@@ -1651,18 +1577,15 @@ async def analyze_symbol(
                 detail=f"Insufficient data. Got {len(candles) if candles else 0} candles"
             )
         
-        # DataFrame oluştur
         df = pd.DataFrame(candles)
         df['timestamp'] = pd.to_datetime(df['timestamp'], unit='ms')
         df = df.set_index('timestamp')
         
-        # Analizler
         technical = TechnicalAnalyzer.analyze(df)
         ict_patterns = ICTPatternDetector.analyze(df)
         candle_patterns = CandlestickPatternDetector.analyze(df)
         market_structure = MarketStructureAnalyzer.analyze(df)
         
-        # Sinyal üret
         signal = SignalGenerator.generate(
             technical,
             market_structure,
@@ -1670,7 +1593,6 @@ async def analyze_symbol(
             candle_patterns
         )
         
-        # Aktif kaynaklar
         active_sources = list(df['sources'].iloc[0]) if 'sources' in df.columns else []
         
         response = {
@@ -1706,7 +1628,6 @@ async def analyze_symbol(
 
 @app.get("/api/price/{symbol}")
 async def get_price(symbol: str):
-    """Get current price only (fast)"""
     symbol = symbol.upper()
     if not symbol.endswith("USDT"):
         symbol = f"{symbol}USDT"
@@ -1725,7 +1646,6 @@ async def get_price(symbol: str):
 
 @app.get("/api/exchanges")
 async def get_exchanges():
-    """Get exchange status with statistics"""
     stats = data_fetcher.get_stats()
     active = data_fetcher.get_active_sources()
     
@@ -1757,7 +1677,6 @@ async def get_exchanges():
 
 @app.get("/api/exchange-stats")
 async def get_exchange_stats():
-    """Get raw exchange statistics"""
     stats = data_fetcher.get_stats()
     return {
         "success": True,
@@ -1767,7 +1686,6 @@ async def get_exchange_stats():
 
 @app.websocket("/wss/{symbol}")
 async def websocket_endpoint(websocket: WebSocket, symbol: str):
-    """WebSocket for real-time price updates (WSS)"""
     symbol = symbol.upper()
     if not symbol.endswith("USDT"):
         symbol = f"{symbol}USDT"
@@ -1801,7 +1719,7 @@ async def websocket_endpoint(websocket: WebSocket, symbol: str):
         websocket_connections.discard(websocket)
 
 # ========================================================================================================
-# STARTUP & SHUTDOWN EVENTS
+# STARTUP & SHUTDOWN
 # ========================================================================================================
 @app.on_event("startup")
 async def startup_event():
@@ -1811,17 +1729,12 @@ async def startup_event():
     logger.info(f"Environment: {Config.ENV}")
     logger.info(f"Debug Mode: {Config.DEBUG}")
     logger.info(f"Sources: Kraken, Binance, MEXC, Yahoo")
-    logger.info(f"ICT Patterns: FVG, OB, BOS, CHoCH, Liquidity Sweep")
-    logger.info(f"Heikin Ashi: Enabled")
-    logger.info(f"Candlestick: 15+ patterns")
     logger.info(f"Max Confidence: {Config.MAX_CONFIDENCE}%")
-    logger.info(f"Cache TTL: {Config.CACHE_TTL}s")
     logger.info("=" * 60)
 
 @app.on_event("shutdown")
 async def shutdown_event():
-    logger.info("🛑 Shutting down ICTSMARTPRO v9.0...")
-    # WebSocket'leri kapat
+    logger.info("🛑 Shutting down...")
     for ws in websocket_connections:
         try:
             await ws.close()
@@ -1840,6 +1753,5 @@ if __name__ == "__main__":
         host="0.0.0.0",
         port=Config.PORT,
         reload=Config.DEBUG,
-        log_level="info",
-        access_log=True
+        log_level="info"
     )
