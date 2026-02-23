@@ -1194,48 +1194,7 @@ class MarketStructureAnalyzer:
 # ========================================================================================================
 # SIGNAL GENERATOR - DÜZELTİLMİŞ VERSİYON
 # ========================================================================================================
-@app.post("/api/train/{symbol}")
-async def train_model(symbol: str):
-    """
-    ML modelini eğit
-    """
-    symbol = symbol.upper()
-    if not symbol.endswith("USDT"):
-        symbol = f"{symbol}USDT"
-    
-    logger.info(f"🧠 Training model for {symbol}")
-    
-    try:
-        async with data_fetcher as fetcher:
-            # Daha fazla veri için limit büyük
-            candles = await fetcher.get_candles(symbol, "1h", 500)
-        
-        if not candles or len(candles) < 100:
-            raise HTTPException(
-                status_code=400,
-                detail=f"Insufficient data for training. Got {len(candles) if candles else 0} candles"
-            )
-        
-        df = pd.DataFrame(candles)
-        df['timestamp'] = pd.to_datetime(df['timestamp'], unit='ms')
-        df = df.set_index('timestamp')
-        
-        # Burada gerçek ML eğitimi yapılacak
-        # Şimdilik başarılı mesajı dön
-        
-        return {
-            "success": True,
-            "message": f"Model training completed for {symbol}",
-            "symbol": symbol,
-            "timestamp": datetime.now(timezone.utc).isoformat(),
-            "data_points": len(df)
-        }
-        
-    except HTTPException:
-        raise
-    except Exception as e:
-        logger.error(f"❌ Training failed: {str(e)}")
-        raise HTTPException(status_code=500, detail=str(e)[:200])
+
 # ========================================================================================================
 # SIGNAL GENERATOR - KESİN ÇÖZÜM
 # ========================================================================================================
@@ -1896,6 +1855,49 @@ async def websocket_endpoint(websocket: WebSocket, symbol: str):
         logger.error(f"WSS error: {str(e)}")
     finally:
         websocket_connections.discard(websocket)
+#========================================================================================================
+@app.post("/api/train/{symbol}")
+async def train_model(symbol: str):
+    """
+    ML modelini eğit
+    """
+    symbol = symbol.upper()
+    if not symbol.endswith("USDT"):
+        symbol = f"{symbol}USDT"
+    
+    logger.info(f"🧠 Training model for {symbol}")
+    
+    try:
+        async with data_fetcher as fetcher:
+            # Daha fazla veri için limit büyük
+            candles = await fetcher.get_candles(symbol, "1h", 500)
+        
+        if not candles or len(candles) < 100:
+            raise HTTPException(
+                status_code=400,
+                detail=f"Insufficient data for training. Got {len(candles) if candles else 0} candles"
+            )
+        
+        df = pd.DataFrame(candles)
+        df['timestamp'] = pd.to_datetime(df['timestamp'], unit='ms')
+        df = df.set_index('timestamp')
+        
+        # Burada gerçek ML eğitimi yapılacak
+        # Şimdilik başarılı mesajı dön
+        
+        return {
+            "success": True,
+            "message": f"Model training completed for {symbol}",
+            "symbol": symbol,
+            "timestamp": datetime.now(timezone.utc).isoformat(),
+            "data_points": len(df)
+        }
+        
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"❌ Training failed: {str(e)}")
+        raise HTTPException(status_code=500, detail=str(e)[:200])
 
 # ========================================================================================================
 # STARTUP & SHUTDOWN
