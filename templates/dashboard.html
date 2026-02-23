@@ -919,7 +919,7 @@ function renderWSPrice(d) {
 // =============================================
 //  ANALYZE
 // =============================================
-async function analyzeSymbol() {
+ async function analyzeSymbol() {
   const sym      = $('symbolSelect').value + 'USDT';
   const interval = $('intervalSelect').value;
   const btn      = $('analyzeBtn');
@@ -927,18 +927,38 @@ async function analyzeSymbol() {
   btn.innerHTML = '<div class="spinner"></div> Analiz Ediliyor...';
   btn.disabled = true;
 
+  // Her durumda saati güncelle (başlasın diye)
+  set('lastUpdateText', 'Son güncelleme: Analiz yapılıyor...');
+
   try {
     const res = await fetch(`/api/analyze/${sym}?interval=${interval}&limit=200`);
-    if (!res.ok) throw new Error(`HTTP ${res.status}`);
+    
+    // Her durumda son saati koy (başarılı veya başarısız)
+    set('lastUpdateText', 'Son güncelleme: ' + fmtTime());
+
+    if (!res.ok) {
+      const errorText = await res.text();
+      throw new Error(`HTTP ${res.status}: ${errorText}`);
+    }
+    
     const data = await res.json();
     if (!data.success) throw new Error(data.detail || 'Başarısız');
+    
     state.currentData = data;
     renderDashboard(data);
+    
   } catch(e) {
     console.error('Analyze error:', e);
-    // Show error in signal
-    $('signalLabel').textContent = 'HATA: ' + e.message;
+    
+    // Hata mesajını daha görünür yap
+    $('signalLabel').textContent = 'HATA: ' + (e.message || 'Sunucu yanıtı alınamadı');
     $('signalLabel').className = 'signal-label sig-NEUTRAL';
+    
+    // Hata durumunda da saati güncelle (kırmızı yapabilirsin)
+    const errEl = $('lastUpdateText');
+    errEl.textContent = 'Son güncelleme: HATA – ' + fmtTime();
+    errEl.style.color = 'var(--red)';
+    
   } finally {
     btn.innerHTML = '<i class="fas fa-search"></i> ANALİZ ET';
     btn.disabled = false;
