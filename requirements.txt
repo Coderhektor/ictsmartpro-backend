@@ -1,38 +1,39 @@
- 
-# Web / API temel paketler
-fastapi >= 0.115.0
-uvicorn[standard] >= 0.30.0
-orjson >= 3.10.0
-aiohttp >= 3.10.0
-websockets >= 13.0
+# ===== FASTAPI & WEB =====
+fastapi == 0.115.0
+uvicorn[standard] == 0.30.0
+orjson == 3.10.0
+aiohttp == 3.10.0
+websockets == 13.0
+python-multipart == 0.0.12
 
-# Veri bilimi & makine öğrenmesi çekirdek
-numpy >= 2.0.0
-pandas >= 2.2.3
-scikit-learn >= 1.5.2
-scipy >= 1.14.0
+# ===== DATA SCIENCE =====
+numpy == 2.0.0
+pandas == 2.2.3
+scikit-learn == 1.5.2
+scipy == 1.14.0
 
-# PyTorch CPU (senin belirttiğin gibi)
+# ===== PyTorch CPU =====
 --extra-index-url https://download.pytorch.org/whl/cpu
 torch == 2.3.1+cpu
 torchvision == 0.18.1+cpu
-transformers >= 4.45.0
+transformers == 4.45.0
 
-# Teknik analiz & finans
-yfinance >= 0.2.40
-# pandas-ta >= 0.3.14b0  # İsteğe bağlı, numba sorun çıkarırsa yorum satırı
+# ===== FINANCE =====
+yfinance == 0.2.40
 
-# Görüntü & görselleştirme (dashboard için)
-pillow >= 10.4.0
-jinja2 >= 3.1.4
+# ===== VISUALIZATION =====
+pillow == 10.4.0
+jinja2 == 3.1.4
 
-# Yardımcı / performans / log
-pydantic >= 2.9.0
-loguru >= 0.7.2
-psutil >= 6.0.0
-python-multipart == 0.0.12
-sentry-sdk>=2.0.0    # veya en güncel sürüm, mesela ==2.20.0 gibi
-flask
-psycopg2-binary
-gunicorn
+# ===== UTILITIES =====
+pydantic == 2.9.0
+loguru == 0.7.2
+psutil == 6.0.0
+sentry-sdk == 2.20.0
 
+# ===== DATABASE & PRODUCTION =====
+psycopg2-binary == 2.9.10
+gunicorn == 23.0.0
+
+# ===== ML OPTIONAL =====
+# pandas-ta == 0.3.14b0  # Numba sorun çıkarırsa comment
