@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>ICTSMARTPRO v9.0</title>
+<title>ICTSMARTPRO v9.0 - Ultimate Pattern Detector</title>
 <link href="https://fonts.googleapis.com/css2?family=Space+Mono:wght@400;700&family=Syne:wght@400;600;700;800&display=swap" rel="stylesheet">
 <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
 <script src="https://s3.tradingview.com/tv.js"></script>
@@ -334,6 +334,34 @@ select:focus { border-color: var(--blue); }
   font-size: 0.6rem; color: var(--muted);
 }
 
+/* ===== GAINZALGO & ULTIMATE PATTERNS ===== */
+.patterns-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-bottom: 12px;
+}
+.pattern-card {
+  flex: 1 1 calc(50% - 4px);
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--r-sm);
+  padding: 10px;
+}
+.pattern-card .pattern-title {
+  font-size: 0.7rem; font-weight: 700; color: var(--muted); text-transform: uppercase;
+  margin-bottom: 4px;
+}
+.pattern-card .pattern-price {
+  font-family: 'Space Mono', monospace;
+  font-size: 0.9rem; font-weight: 700;
+}
+.pattern-card .pattern-tpsl {
+  font-size: 0.65rem; color: var(--muted);
+  display: flex; justify-content: space-between;
+  margin-top: 6px;
+}
+
 /* ===== MARKET STRUCTURE ===== */
 .ms-rows .ms-row {
   display: flex; justify-content: space-between; align-items: center;
@@ -543,6 +571,10 @@ select:focus { border-color: var(--blue); }
             <div class="conf-bar-wrap"><div class="conf-bar" id="confBar" style="width:0%"></div></div>
           </div>
           <div class="rec-text" id="recText">—</div>
+          <div style="display:flex; justify-content:space-between; margin-top:12px; font-size:0.7rem;">
+            <span>TP: <span id="tpLevel">—</span></span>
+            <span>SL: <span id="slLevel">—</span></span>
+          </div>
         </div>
       </div>
 
@@ -601,7 +633,7 @@ select:focus { border-color: var(--blue); }
       </div>
     </div>
 
-    <!-- ICT Patterns + Market Structure -->
+    <!-- ICT Patterns + GainzAlgo/Ultimate -->
     <div id="bottomRow2">
       <!-- ICT Patterns -->
       <div class="card">
@@ -613,16 +645,41 @@ select:focus { border-color: var(--blue); }
         </div>
       </div>
 
-      <!-- Market Structure -->
+      <!-- GainzAlgo & Ultimate -->
       <div class="card">
-        <div class="card-head"><i class="fas fa-water"></i> MARKET YAPISI</div>
+        <div class="card-head"><i class="fas fa-bolt"></i> ÖZEL STRATEJİLER</div>
         <div class="card-body">
-          <div class="ms-rows" id="msRows">
-            <div class="ms-row"><span class="ms-label">Trend</span><span class="ms-val" id="msTrend">—</span></div>
-            <div class="ms-row"><span class="ms-label">Yapı</span><span class="ms-val" id="msStruct">—</span></div>
-            <div class="ms-row"><span class="ms-label">Volatilite</span><span class="ms-val" id="msVol">—</span></div>
-            <div class="ms-row"><span class="ms-label">Momentum</span><span class="ms-val" id="msMomentum">—</span></div>
+          <div class="patterns-row" id="gainzAlgoRow">
+            <div class="pattern-card">
+              <div class="pattern-title">GAINZALGO V2</div>
+              <div class="pattern-price" id="gainzAlgoPrice">—</div>
+              <div class="pattern-tpsl">
+                <span>TP: <span id="gainzAlgoTp">—</span></span>
+                <span>SL: <span id="gainzAlgoSl">—</span></span>
+              </div>
+            </div>
+            <div class="pattern-card">
+              <div class="pattern-title">ULTIMATE 2026</div>
+              <div class="pattern-price" id="ultimatePrice">—</div>
+              <div class="pattern-tpsl">
+                <span>TP: <span id="ultimateTp">—</span></span>
+                <span>SL: <span id="ultimateSl">—</span></span>
+              </div>
+            </div>
           </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Market Structure -->
+    <div class="card">
+      <div class="card-head"><i class="fas fa-water"></i> MARKET YAPISI</div>
+      <div class="card-body">
+        <div class="ms-rows" id="msRows">
+          <div class="ms-row"><span class="ms-label">Trend</span><span class="ms-val" id="msTrend">—</span></div>
+          <div class="ms-row"><span class="ms-label">Yapı</span><span class="ms-val" id="msStruct">—</span></div>
+          <div class="ms-row"><span class="ms-label">Volatilite</span><span class="ms-val" id="msVol">—</span></div>
+          <div class="ms-row"><span class="ms-label">Momentum</span><span class="ms-val" id="msMomentum">—</span></div>
         </div>
       </div>
     </div>
@@ -632,6 +689,16 @@ select:focus { border-color: var(--blue); }
       <div class="card-head"><i class="fas fa-candles"></i> MUM PATERNLERİ</div>
       <div class="card-body">
         <div class="pattern-chips" id="patternsEl">
+          <span class="state-empty">—</span>
+        </div>
+      </div>
+    </div>
+
+    <!-- Classical Patterns -->
+    <div class="card">
+      <div class="card-head"><i class="fas fa-landmark"></i> KLASİK FORMASYONLAR</div>
+      <div class="card-body">
+        <div class="pattern-chips" id="classicalPatternsEl">
           <span class="state-empty">—</span>
         </div>
       </div>
@@ -676,6 +743,7 @@ select:focus { border-color: var(--blue); }
         <div class="pool-stat"><span class="ps-label">Aktif Kaynak</span><span class="ps-val text-green" id="poolActive">—</span></div>
         <div class="pool-stat"><span class="ps-label">Başarısız</span><span class="ps-val text-red" id="poolFail">—</span></div>
         <div class="pool-stat"><span class="ps-label">Cache TTL</span><span class="ps-val">45s</span></div>
+        <div class="pool-stat"><span class="ps-label">Data Points</span><span class="ps-val" id="dataPoints">—</span></div>
         <div class="health-bar"><div class="health-fill" id="healthFill" style="width:0%"></div></div>
         <div style="font-size:0.72rem;color:var(--muted)" id="poolUpdate">—</div>
       </div>
@@ -711,7 +779,7 @@ select:focus { border-color: var(--blue); }
 
 <script>
 // =============================================
-//  CONSTANTS - GÜNCELLENMİŞ (SADECE 4 KAYNAK)
+//  CONSTANTS
 // =============================================
 const EXCHANGES = [
   "Kraken", "Binance", "MEXC", "Yahoo"
@@ -764,7 +832,7 @@ function tickClock() { $('clockEl').textContent = fmtTime(); }
 setInterval(tickClock, 1000); tickClock();
 
 // =============================================
-//  EXCHANGE GRID - GÜNCELLENMİŞ (4 KAYNAK)
+//  EXCHANGE GRID
 // =============================================
 function buildExchangeGrid() {
   const grid = $('exchangeGrid');
@@ -815,7 +883,6 @@ function initTradingView() {
   const container = $('tvContainer');
   if (!container) return;
 
-  // Destroy old
   if (state.tvWidget) {
     try { state.tvWidget.remove(); } catch(e) {}
     state.tvWidget = null;
@@ -824,7 +891,6 @@ function initTradingView() {
   $('chartSpinner').classList.remove('hidden');
   state.chartReady = false;
 
-  // Guard: wait for TradingView lib
   if (typeof TradingView === 'undefined') {
     setTimeout(initTradingView, 800);
     return;
@@ -867,22 +933,19 @@ function initTradingView() {
     $('chartSpinner').classList.add('hidden');
   }
 
-  // Fallback hide spinner
   setTimeout(() => $('chartSpinner').classList.add('hidden'), 6000);
 }
 
 // =============================================
-//  WEBSOCKET - GÜNCELLENMİŞ (ws → wss)
+//  WEBSOCKET
 // =============================================
 function connectWS() {
   const sym = $('symbolSelect').value + 'USDT';
   
-  // ===== EN ÖNEMLİ DÜZELTME =====
-  // Sayfanın protokolüne göre ws veya wss seç
   const wsProtocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
   const url = `${wsProtocol}//${window.location.host}/wss/${sym}`;
   
-  console.log('🔌 WebSocket bağlanıyor:', url); // Debug için
+  console.log('🔌 WebSocket bağlanıyor:', url);
 
   if (state.ws) {
     try { state.ws.close(); } catch(e) {}
@@ -937,7 +1000,6 @@ function setPill(id, cls, label) {
 function renderWSPrice(d) {
   const price = d.price;
 
-  // Flash if changed
   const priceEl = $('priceEl');
   if (state.lastPrice !== price) {
     priceEl.classList.remove('flash');
@@ -947,14 +1009,11 @@ function renderWSPrice(d) {
   }
   priceEl.textContent = fmtPrice(price);
 
-  // Değişim oranını hesapla (WebSocket'ten gelmiyorsa)
-  // Bu kısmı backend'den gelen veriye göre güncellemek gerekebilir
-
   set('lastUpdateText', 'Son güncelleme: ' + fmtTime());
 }
 
 // =============================================
-//  ANALYZE - GÜNCELLENMİŞ (yeni endpoint)
+//  ANALYZE
 // =============================================
 async function analyzeSymbol() {
   const sym      = $('symbolSelect').value + 'USDT';
@@ -999,7 +1058,7 @@ async function analyzeSymbol() {
 }
 
 // =============================================
-//  RENDER DASHBOARD - GÜNCELLENMİŞ (ICT Pattern'ler)
+//  RENDER DASHBOARD
 // =============================================
 function renderDashboard(d) {
   if (!d) return;
@@ -1017,17 +1076,24 @@ function renderDashboard(d) {
     void priceEl.offsetWidth;
     priceEl.classList.add('flash');
 
-    // Change % - price_data'dan change_24h alıyoruz, price'tan değil
-    // Bu kısım backend response'una göre ayarlanmalı
     const chgEl = $('priceChgEl');
-    if (chgEl) {
-      // Varsayılan flat
+    if (pd.change_percent !== undefined) {
+      const chg = pd.change_percent;
+      if (chg > 0) {
+        chgEl.className = 'price-chg up';
+        chgEl.innerHTML = `<i class="fas fa-arrow-up"></i> +${chg.toFixed(2)}%`;
+      } else if (chg < 0) {
+        chgEl.className = 'price-chg down';
+        chgEl.innerHTML = `<i class="fas fa-arrow-down"></i> ${chg.toFixed(2)}%`;
+      } else {
+        chgEl.className = 'price-chg flat';
+        chgEl.innerHTML = `<i class="fas fa-minus"></i> 0.00%`;
+      }
     }
 
-    if (pd.volume !== undefined) set('volEl', fmtVol(pd.volume));
+    if (pd.volume_24h_approx !== undefined) set('volEl', fmtVol(pd.volume_24h_approx));
     if (d.active_sources) set('srcCountEl', d.active_sources.length);
-
-    // Hi/Lo - price'tan gelmiyor, technical'dan alınabilir
+    if (pd.high && pd.low) set('hiLoEl', `${fmtPrice(pd.high)} / ${fmtPrice(pd.low)}`);
   }
 
   // Signal
@@ -1041,20 +1107,21 @@ function renderDashboard(d) {
     $('confBar').style.width = clamp(conf, 0, 100) + '%';
     set('confPct', '%' + Math.round(conf));
     set('recText', s.recommendation || '—');
+    
+    if (s.tp_level) set('tpLevel', fmtPrice(s.tp_level));
+    if (s.sl_level) set('slLevel', fmtPrice(s.sl_level));
   }
 
   // Heikin Ashi
   if (d.technical) {
     const t = d.technical;
 
-    // HA
     const haColorVal = t.ha_color_change === 1 ? '🟢' : t.ha_color_change === -1 ? '🔴' : '⚪';
     set('haTrend', t.ha_trend || '—');
     set('haRsi',   t.ha_rsi   ? fmt(t.ha_rsi, 1) : '—');
     set('haStr',   t.ha_trend_strength ? fmt(t.ha_trend_strength, 0) + '%' : '—');
     set('haColor', haColorVal);
 
-    // Technical rows
     const rows = [];
     if (t.rsi !== undefined)      rows.push(['RSI', fmt(t.rsi, 1), rsiColor(t.rsi)]);
     if (t.macd_histogram !== undefined) rows.push(['MACD Hist.', (t.macd_histogram >= 0 ? '+' : '') + fmt(t.macd_histogram, 5), t.macd_histogram >= 0 ? 'text-green' : 'text-red']);
@@ -1078,7 +1145,6 @@ function renderDashboard(d) {
     const ict = d.ict_patterns;
     const html = [];
     
-    // FVG
     if (ict.fair_value_gaps && ict.fair_value_gaps.length) {
       const fvg = ict.fair_value_gaps[0];
       html.push(`<div class="ict-item"><div class="ict-type">FVG</div><div class="ict-val text-${fvg.direction === 'bullish' ? 'green' : 'red'}">${fvg.direction.toUpperCase()}</div><div class="ict-sub">${fmt(fvg.gap_percent, 2)}%</div></div>`);
@@ -1086,7 +1152,6 @@ function renderDashboard(d) {
       html.push(`<div class="ict-item"><div class="ict-type">FVG</div><div class="ict-val">—</div></div>`);
     }
     
-    // Order Block
     if (ict.order_blocks && ict.order_blocks.length) {
       const ob = ict.order_blocks[0];
       html.push(`<div class="ict-item"><div class="ict-type">OB</div><div class="ict-val text-${ob.direction === 'bullish' ? 'green' : 'red'}">${ob.direction.toUpperCase()}</div></div>`);
@@ -1094,7 +1159,6 @@ function renderDashboard(d) {
       html.push(`<div class="ict-item"><div class="ict-type">OB</div><div class="ict-val">—</div></div>`);
     }
     
-    // BOS
     if (ict.break_of_structure && ict.break_of_structure.length) {
       const bos = ict.break_of_structure[0];
       html.push(`<div class="ict-item"><div class="ict-type">BOS</div><div class="ict-val text-${bos.direction === 'bullish' ? 'green' : 'red'}">${bos.direction.toUpperCase()}</div></div>`);
@@ -1102,7 +1166,6 @@ function renderDashboard(d) {
       html.push(`<div class="ict-item"><div class="ict-type">BOS</div><div class="ict-val">—</div></div>`);
     }
     
-    // CHoCH
     if (ict.change_of_character && ict.change_of_character.length) {
       const choch = ict.change_of_character[0];
       html.push(`<div class="ict-item"><div class="ict-type">CHoCH</div><div class="ict-val text-${choch.direction === 'bullish' ? 'green' : 'red'}">${choch.direction.toUpperCase()}</div></div>`);
@@ -1110,7 +1173,6 @@ function renderDashboard(d) {
       html.push(`<div class="ict-item"><div class="ict-type">CHoCH</div><div class="ict-val">—</div></div>`);
     }
     
-    // Liquidity Sweep
     if (ict.liquidity_sweeps && ict.liquidity_sweeps.length) {
       const ls = ict.liquidity_sweeps[0];
       const dir = ls.direction.includes('bullish') ? 'bullish' : 'bearish';
@@ -1124,6 +1186,29 @@ function renderDashboard(d) {
     setHTML('ictGrid', '<div class="state-empty">ICT verisi yok</div>');
   }
 
+  // GainzAlgo & Ultimate
+  if (d.gainzalgo_signals && d.gainzalgo_signals.length) {
+    const g = d.gainzalgo_signals[0];
+    $('gainzAlgoPrice').innerHTML = `${g.direction === 'bullish' ? '🟢' : '🔴'} ${fmtPrice(g.price)}`;
+    if (g.tp_level) set('gainzAlgoTp', fmtPrice(g.tp_level));
+    if (g.sl_level) set('gainzAlgoSl', fmtPrice(g.sl_level));
+  } else {
+    $('gainzAlgoPrice').innerHTML = '—';
+    set('gainzAlgoTp', '—');
+    set('gainzAlgoSl', '—');
+  }
+
+  if (d.ultimate_signals && d.ultimate_signals.length) {
+    const u = d.ultimate_signals[0];
+    $('ultimatePrice').innerHTML = `${u.direction === 'bullish' ? '🟢' : '🔴'} ${fmtPrice(u.price)}`;
+    if (u.tp_level) set('ultimateTp', fmtPrice(u.tp_level));
+    if (u.sl_level) set('ultimateSl', fmtPrice(u.sl_level));
+  } else {
+    $('ultimatePrice').innerHTML = '—';
+    set('ultimateTp', '—');
+    set('ultimateSl', '—');
+  }
+
   // Candlestick Patterns
   if (d.candle_patterns && d.candle_patterns.length > 0) {
     setHTML('patternsEl', d.candle_patterns.slice(0, 10).map(p => {
@@ -1132,6 +1217,16 @@ function renderDashboard(d) {
     }).join(''));
   } else {
     setHTML('patternsEl', '<span class="state-empty">Patern bulunamadı</span>');
+  }
+
+  // Classical Patterns
+  if (d.classical_patterns && d.classical_patterns.length > 0) {
+    setHTML('classicalPatternsEl', d.classical_patterns.slice(0, 10).map(p => {
+      const cls = p.direction === 'bullish' ? 'bull' : p.direction === 'bearish' ? 'bear' : 'neut';
+      return `<span class="chip ${cls}">${p.pattern.replace(/_/g, ' ')}</span>`;
+    }).join(''));
+  } else {
+    setHTML('classicalPatternsEl', '<span class="state-empty">Formasyon bulunamadı</span>');
   }
 
   // Market structure
@@ -1143,23 +1238,9 @@ function renderDashboard(d) {
     set('msMomentum', ms.momentum  || '—');
   }
 
-  // ML stats
-  if (d.ml_stats) {
-    const ms = d.ml_stats;
-    const pairs = [
-      ['lgbm', 'lightgbm'], ['xgb', 'xgboost'],
-      ['tf', 'transformer'], ['rf', 'random_forest']
-    ];
-    pairs.forEach(([key, field]) => {
-      const v = Number(ms[field] || 0);
-      set(`${key}Pct`, fmt(v, 1) + '%');
-      $(`${key}Bar`).style.width = clamp(v, 0, 100) + '%';
-    });
-  }
-
-  // Active sources
-  if (d.active_sources) {
-    set('srcCountEl', d.active_sources.length);
+  // Data points
+  if (d.data_points) {
+    set('dataPoints', d.data_points);
   }
 
   // Update time
@@ -1233,17 +1314,25 @@ function evaluateAI() {
   const trend   = d.market_structure?.trend || '—';
   const vol     = d.market_structure?.volatility || '—';
 
-  // ICT pattern sayısı
   const ictCount = (d.ict_patterns?.fair_value_gaps?.length || 0) +
                    (d.ict_patterns?.order_blocks?.length || 0) +
-                   (d.ict_patterns?.break_of_structure?.length || 0);
+                   (d.ict_patterns?.break_of_structure?.length || 0) +
+                   (d.ict_patterns?.liquidity_sweeps?.length || 0);
+
+  const classicalCount = d.classical_patterns?.length || 0;
+  const candleCount = d.candle_patterns?.length || 0;
+  const gainzCount = d.gainzalgo_signals?.length || 0;
+  const ultCount = d.ultimate_signals?.length || 0;
+  const totalPatterns = ictCount + classicalCount + candleCount + gainzCount + ultCount;
 
   let comment = '';
-  if (conf > 75) comment = 'Yüksek güven seviyesi – sinyal güçlü görünüyor.';
-  else if (conf > 60) comment = 'Orta güven – ek teyit önerilir.';
-  else comment = 'Düşük güven – temkinli yaklaşılmalı.';
+  if (conf > 75) comment = '🔥 Yüksek güven seviyesi – sinyal güçlü görünüyor.';
+  else if (conf > 60) comment = '✅ Orta güven – ek teyit önerilir.';
+  else comment = '⚠️ Düşük güven – temkinli yaklaşılmalı.';
   
-  if (ictCount > 2) comment += ' ICT pattern yoğunluğu yüksek.';
+  if (ictCount > 3) comment += ' Yoğun ICT pattern aktivitesi.';
+  if (gainzCount > 0) comment += ' GainzAlgo sinyali mevcut.';
+  if (ultCount > 0) comment += ' Ultimate 2026 sinyali mevcut.';
 
   const div = document.createElement('div');
   div.className = 'chat-msg';
@@ -1252,12 +1341,12 @@ function evaluateAI() {
     <div><b>Sinyal:</b> ${sig.replace(/_/g,' ')} (%${Math.round(conf)})</div>
     <div><b>Fiyat:</b> ${fmtPrice(price)} | <b>RSI:</b> ${(+rsi).toFixed(1)}</div>
     <div><b>Trend:</b> ${trend} | <b>Volatilite:</b> ${vol}</div>
-    <div><b>ICT Pattern:</b> ${ictCount} adet</div>
+    <div><b>Toplam Pattern:</b> ${totalPatterns} (ICT:${ictCount} Klasik:${classicalCount} Mum:${candleCount})</div>
     ${rec ? `<div><b>Öneri:</b> ${rec}</div>` : ''}
     <div style="margin-top:6px;color:var(--cyan)">${comment}</div>
     <div class="chat-warn"><i class="fas fa-triangle-exclamation"></i> Bu bir yatırım tavsiyesi değildir.</div>
   `;
-  // Clear empty state
+  
   const empty = chatBox.querySelector('.chat-empty');
   if (empty) empty.remove();
 
@@ -1283,10 +1372,8 @@ $('intervalSelect').addEventListener('change', () => {
 //  INIT
 // =============================================
 async function init() {
-  // Build exchange grid first
   buildExchangeGrid();
 
-  // Check backend health
   try {
     const r = await fetch('/health');
     if (r.ok) {
@@ -1298,16 +1385,9 @@ async function init() {
     setPill('backendPill', 'red', 'BAĞLANTI YOK');
   }
 
-  // Init chart (slight delay for DOM settle)
   setTimeout(initTradingView, 100);
-
-  // Connect WS
   connectWS();
-
-  // First analysis
   setTimeout(analyzeSymbol, 800);
-
-  // Periodic exchange stats
   setInterval(fetchExchangeStats, 30_000);
 }
 
