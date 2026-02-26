@@ -783,11 +783,12 @@ class GainzAlgoV2Detector:
 # ========================================================================================================
 # ICT PATTERN DETECTOR (GENİŞLETİLMİŞ)
 # ========================================================================================================
-class ICTPatternDetector:
-    
+
+class CandlestickPatternDetector:
+ 
     @staticmethod
     def calculate_indicators(df: pd.DataFrame) -> pd.DataFrame:
-        """Gerekli indikatörleri hesapla"""
+ 
         df = df.copy()
         class CandlestickPatternDetector:
    
