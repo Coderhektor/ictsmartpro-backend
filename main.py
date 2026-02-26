@@ -2527,8 +2527,8 @@ async def dashboard():
             <a href="/" style="color:#00ff88;">← Ana Sayfa</a>
         </body>
     </html>
-    """, status_code=404)  
- 
+    """, status_code=404)  ) 
+    
 @app.get("/health")
 async def health_check():
     uptime = time.time() - startup_time
