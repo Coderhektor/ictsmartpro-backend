@@ -423,7 +423,8 @@ class ExchangeDataFetcher:
             return []
     
 
-    def _aggregate_candles(self, all_candles: List[List[Dict]]) -> List[Dict]:
+def _aggregate_candles(self, all_candles: List[List[Dict]]) -> List[Dict]:
+        
     """Mum verilerini birleştir"""
     if not all_candles:
         return []
