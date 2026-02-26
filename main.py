@@ -422,11 +422,10 @@ class ExchangeDataFetcher:
             logger.debug(f"Parse error for {exchange}: {str(e)}")
             return []
     
-
     def _aggregate_candles(self, all_candles: List[List[Dict]]) -> List[Dict]:
-    """Mum verilerini birleştir"""
-    if not all_candles:
-        return []
+        """Mum verilerini birleştir"""
+        if not all_candles:
+            return []
     
     timestamp_map = defaultdict(list)
     for exchange_data in all_candles:
