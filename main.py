@@ -2551,89 +2551,136 @@ async def analyze_symbol(
     interval: str = Query(
         default="1h",
         regex="^(1m|5m|15m|30m|1h|4h|1d|1w)$",
-        description="Zaman aralığı"
+        description="Timeframe (1m,5m,15m,30m,1h,4h,1d,1w)"
     ),
     limit: int = Query(
         default=200,
         ge=50,
         le=1000,
-        description="Mum sayısı (50-1000 arası)"
+        description="Candle count (50-1000)"
     )
 ):
-    symbol = symbol.upper().strip()
+    # Symbol formatını düzelt - BTCUSDT, ETHUSDT, vb.
+    original_symbol = symbol.upper().strip()
+    symbol = original_symbol
+    
+    # USDT ekleme kontrolü - sadece USDT ile bitmiyorsa ekle
     if not symbol.endswith("USDT"):
-        symbol = f"{symbol}USDT"
+        # Zaten USDT var mı kontrol et (BTC-USDT, BTC/USDT gibi)
+        if "USDT" in symbol:
+            # USDT var ama farklı formatta, temizle
+            symbol = symbol.replace("-", "").replace("/", "").replace(" ", "")
+        else:
+            symbol = f"{symbol}USDT"
+    
+    # Geçerli sembol mü kontrol et
+    if not symbol.endswith("USDT") or len(symbol) < 6:
+        raise HTTPException(
+            status_code=400,
+            detail=f"Invalid symbol format: {original_symbol}. Use format like BTC, ETH, or BTCUSDT"
+        )
 
     logger.info(f"🔍 Analyzing {symbol} @ {interval} (limit={limit})")
 
+    # Zaman aşımı kontrolü
+    start_time = time.time()
+    timeout = 25  # 25 saniye timeout
+
     try:
+        # Data fetcher'ı async context manager ile kullan
         async with data_fetcher as fetcher:
-            candles = await fetcher.get_candles(symbol, interval, limit)
+            # Candles'ları al
+            candles = await asyncio.wait_for(
+                fetcher.get_candles(symbol, interval, limit),
+                timeout=15
+            )
             exchange_stats = fetcher.get_stats()
 
+        # Candle kontrolü
         if not candles:
-            raise HTTPException(422, "No candle data received from exchange")
+            raise HTTPException(
+                status_code=422,
+                detail=f"No candle data received from exchanges for {symbol}"
+            )
 
         if len(candles) < Config.MIN_CANDLES:
             raise HTTPException(
-                422,
-                f"Insufficient candles. Got {len(candles)}, minimum required: {Config.MIN_CANDLES}"
+                status_code=422,
+                detail=f"Insufficient candles for {symbol}. Got {len(candles)}, minimum required: {Config.MIN_CANDLES}"
             )
 
+        # DataFrame oluştur
         df = pd.DataFrame(candles)
+        
+        # Gerekli kolonları kontrol et
         required_cols = {"open", "high", "low", "close", "volume", "timestamp"}
-        if not required_cols.issubset(df.columns):
-            missing = required_cols - set(df.columns)
-            raise ValueError(f"Missing required columns: {missing}")
+        missing_cols = required_cols - set(df.columns)
+        if missing_cols:
+            raise ValueError(f"Missing required columns: {missing_cols}")
 
+        # Timestamp'i datetime'a çevir ve index yap
         df['timestamp'] = pd.to_datetime(df['timestamp'], unit='ms', errors='coerce')
-        df = df.dropna(subset=['timestamp']).set_index('timestamp').sort_index()
+        df = df.dropna(subset=['timestamp'])
+        
+        if df.empty:
+            raise HTTPException(422, "No valid timestamps in data")
+            
+        df = df.set_index('timestamp').sort_index()
 
+        # Son kontroller
         if len(df) < Config.MIN_CANDLES:
-            raise HTTPException(422, f"After cleaning only {len(df)} candles left")
+            raise HTTPException(
+                422, 
+                f"After cleaning only {len(df)} candles left (minimum: {Config.MIN_CANDLES})"
+            )
 
+        # Tüm analizleri paralel çalıştır (performans için)
+        analysis_tasks = [
+            TechnicalAnalyzer.analyze(df),
+            ICTPatternDetector.analyze(df),
+            CandlestickPatternDetector.analyze(df),
+            ClassicalPatternDetector.analyze(df),
+            GainzAlgoV2Detector.detect(df),
+            Ultimate2026Detector.detect(df),
+            MarketStructureAnalyzer.analyze(df)
+        ]
+        
+        # Hata yönetimi ile paralel çalıştır
         try:
+            (
+                technical,
+                ict_patterns,
+                candle_patterns,
+                classical_patterns,
+                gainzalgo_signals,
+                ultimate_signals,
+                market_structure
+            ) = await asyncio.gather(
+                *[asyncio.to_thread(task) if not asyncio.iscoroutinefunction(task) else task 
+                  for task in analysis_tasks],
+                return_exceptions=True
+            )
+        except Exception as e:
+            logger.error(f"Parallel analysis failed: {e}")
+            # Fallback to sequential
             technical = TechnicalAnalyzer.analyze(df)
-        except Exception as e:
-            logger.error(f"TechnicalAnalyzer failed: {e}", exc_info=True)
-            technical = {}
-
-        try:
             ict_patterns = ICTPatternDetector.analyze(df)
-        except Exception as e:
-            logger.error(f"ICTPatternDetector failed: {e}", exc_info=True)
-            ict_patterns = {}
-
-        try:
             candle_patterns = CandlestickPatternDetector.analyze(df)
-        except Exception as e:
-            logger.error(f"CandlestickPatternDetector failed: {e}", exc_info=True)
-            candle_patterns = []
-
-        try:
             classical_patterns = ClassicalPatternDetector.analyze(df)
-        except Exception as e:
-            logger.error(f"ClassicalPatternDetector failed: {e}", exc_info=True)
-            classical_patterns = []
-
-        try:
             gainzalgo_signals = GainzAlgoV2Detector.detect(df)
-        except Exception as e:
-            logger.error(f"GainzAlgoV2Detector failed: {e}", exc_info=True)
-            gainzalgo_signals = []
-
-        try:
             ultimate_signals = Ultimate2026Detector.detect(df)
-        except Exception as e:
-            logger.error(f"Ultimate2026Detector failed: {e}", exc_info=True)
-            ultimate_signals = []
-
-        try:
             market_structure = MarketStructureAnalyzer.analyze(df)
-        except Exception as e:
-            logger.error(f"MarketStructureAnalyzer failed: {e}", exc_info=True)
-            market_structure = {}
 
+        # Hataları temizle
+        technical = technical if not isinstance(technical, Exception) else {}
+        ict_patterns = ict_patterns if not isinstance(ict_patterns, Exception) else {}
+        candle_patterns = candle_patterns if not isinstance(candle_patterns, Exception) else []
+        classical_patterns = classical_patterns if not isinstance(classical_patterns, Exception) else []
+        gainzalgo_signals = gainzalgo_signals if not isinstance(gainzalgo_signals, Exception) else []
+        ultimate_signals = ultimate_signals if not isinstance(ultimate_signals, Exception) else []
+        market_structure = market_structure if not isinstance(market_structure, Exception) else {}
+
+        # Signal oluştur
         try:
             signal = SignalGenerator.generate(
                 technical,
@@ -2645,31 +2692,123 @@ async def analyze_symbol(
                 ultimate_signals
             )
         except Exception as e:
-            logger.error(f"SignalGenerator failed: {e}", exc_info=True)
+            logger.error(f"SignalGenerator failed: {e}")
             signal = {
-                "signal": "ERROR",
-                "confidence": 0,
-                "recommendation": f"Signal error: {str(e)[:100]}",
+                "signal": "NEUTRAL",
+                "confidence": 50.0,
+                "recommendation": f"Signal analysis error, using neutral",
                 "buy_count": 0,
                 "sell_count": 0,
                 "tp_level": None,
                 "sl_level": None
             }
 
+        # Tüm pattern'leri topla ve formatla
         all_patterns = []
+        
+        # ICT pattern'lerini ekle
         for pattern_list in ict_patterns.values():
-            all_patterns.extend(pattern_list)
-        all_patterns.extend(candle_patterns)
-        all_patterns.extend(classical_patterns)
-        all_patterns.extend(gainzalgo_signals)
-        all_patterns.extend(ultimate_signals)
+            for p in pattern_list:
+                formatted_p = {
+                    "name": p.get("pattern", "ict_pattern"),
+                    "type": PatternType.ICT,
+                    "direction": p.get("direction", "neutral"),
+                    "confidence": float(p.get("strength", 50)),
+                    "timestamp": p.get("timestamp", datetime.now().isoformat()),
+                    "price": float(p.get("price", 0)),
+                    "description": p.get("description", ""),
+                    "sl_level": p.get("sl_level"),
+                    "tp_level": p.get("tp_level")
+                }
+                # Orijinal tüm alanları koru
+                formatted_p.update({k: v for k, v in p.items() 
+                                  if k not in formatted_p})
+                all_patterns.append(formatted_p)
+        
+        # Candlestick pattern'lerini ekle
+        for p in candle_patterns:
+            formatted_p = {
+                "name": p.get("pattern", "candle_pattern"),
+                "type": PatternType.PRICE_ACTION,
+                "direction": p.get("direction", "neutral"),
+                "confidence": float(p.get("strength", 50)),
+                "timestamp": p.get("timestamp", datetime.now().isoformat()),
+                "price": float(p.get("price", 0)),
+                "description": p.get("description", ""),
+                "sl_level": p.get("sl_level"),
+                "tp_level": p.get("tp_level")
+            }
+            formatted_p.update({k: v for k, v in p.items() 
+                              if k not in formatted_p})
+            all_patterns.append(formatted_p)
+        
+        # Classical pattern'lerini ekle
+        for p in classical_patterns:
+            formatted_p = {
+                "name": p.get("pattern", "classical_pattern"),
+                "type": PatternType.CLASSICAL,
+                "direction": p.get("direction", "neutral"),
+                "confidence": float(p.get("strength", 50)),
+                "timestamp": p.get("timestamp", datetime.now().isoformat()),
+                "price": float(p.get("price", 0)),
+                "description": p.get("description", ""),
+                "sl_level": p.get("sl_level"),
+                "tp_level": p.get("tp_level")
+            }
+            formatted_p.update({k: v for k, v in p.items() 
+                              if k not in formatted_p})
+            all_patterns.append(formatted_p)
+        
+        # GainzAlgo pattern'lerini ekle
+        for p in gainzalgo_signals:
+            formatted_p = {
+                "name": p.get("pattern", "gainzalgo"),
+                "type": PatternType.GAINZALGO,
+                "direction": p.get("direction", "neutral"),
+                "confidence": float(p.get("strength", 50)),
+                "timestamp": p.get("timestamp", datetime.now().isoformat()),
+                "price": float(p.get("price", 0)),
+                "description": p.get("description", ""),
+                "sl_level": p.get("sl_level"),
+                "tp_level": p.get("tp_level")
+            }
+            formatted_p.update({k: v for k, v in p.items() 
+                              if k not in formatted_p})
+            all_patterns.append(formatted_p)
+        
+        # Ultimate pattern'lerini ekle
+        for p in ultimate_signals:
+            formatted_p = {
+                "name": p.get("pattern", "ultimate"),
+                "type": PatternType.ULTIMATE,
+                "direction": p.get("direction", "neutral"),
+                "confidence": float(p.get("strength", 50)),
+                "timestamp": p.get("timestamp", datetime.now().isoformat()),
+                "price": float(p.get("price", 0)),
+                "description": p.get("description", ""),
+                "sl_level": p.get("sl_level"),
+                "tp_level": p.get("tp_level")
+            }
+            formatted_p.update({k: v for k, v in p.items() 
+                              if k not in formatted_p})
+            all_patterns.append(formatted_p)
 
+        # Aktif kaynakları al
         active_sources = fetcher.get_active_sources()
 
+        # Son mum verileri
         last_row = df.iloc[-1]
         first_row = df.iloc[0]
         volume_sum = float(df["volume"].sum())
+        
+        # 24h hacim tahmini (interval'e göre)
+        interval_multipliers = {
+            "1m": 1440, "5m": 288, "15m": 96, "30m": 48,
+            "1h": 24, "4h": 6, "1d": 1, "1w": 0.142857
+        }
+        volume_24h = volume_sum * interval_multipliers.get(interval, 24)
 
+        # Response oluştur
         response = {
             "success": True,
             "symbol": symbol,
@@ -2680,9 +2819,15 @@ async def analyze_symbol(
                 "open": float(last_row["open"]),
                 "high": float(last_row["high"]),
                 "low": float(last_row["low"]),
-                "volume_24h_approx": volume_sum,
+                "volume_24h_approx": round(volume_24h, 2),
+                "volume_candle": float(last_row.get("volume", 0)),
                 "change_percent": round(
                     (float(last_row["close"]) / float(first_row["close"]) - 1) * 100,
+                    2
+                ),
+                "change_24h": round(
+                    (float(last_row["close"]) / float(df.iloc[-min(24, len(df))]["close"]) - 1) * 100 
+                    if len(df) >= 24 else 0,
                     2
                 )
             },
@@ -2696,24 +2841,39 @@ async def analyze_symbol(
             "market_structure": market_structure,
             "active_sources": active_sources,
             "data_points": len(df),
-            "all_patterns": all_patterns[-30:],
-            "exchange_stats": exchange_stats
+            "all_patterns": all_patterns[-50:],  # Son 50 pattern
+            "exchange_stats": exchange_stats,
+            "performance_ms": round((time.time() - start_time) * 1000, 2)
         }
 
+        # Log
         logger.info(
-            f"✅ {symbol} | {signal.get('signal', 'UNKNOWN')} "
+            f"✅ {symbol} @ {interval} | {signal.get('signal', 'UNKNOWN')} "
             f"({signal.get('confidence', 0):.1f}%) | {len(df)} candles | "
-            f"ICT:{sum(len(v) for v in ict_patterns.values())} Classical:{len(classical_patterns)}"
+            f"ICT:{sum(len(v) for v in ict_patterns.values())} "
+            f"Classical:{len(classical_patterns)} | "
+            f"⏱️ {response['performance_ms']}ms"
         )
 
         return response
 
+    except asyncio.TimeoutError:
+        logger.error(f"⏰ Timeout analyzing {symbol}")
+        raise HTTPException(
+            status_code=504,
+            detail=f"Analysis timeout for {symbol} after {timeout}s"
+        )
     except HTTPException:
         raise
+    except ValueError as e:
+        logger.error(f"❌ Value error for {symbol}: {str(e)}")
+        raise HTTPException(status_code=422, detail=str(e)[:300])
     except Exception as e:
-        logger.exception(f"❌ Analysis failed for {symbol}: {str(e)}")
-        detail = f"Analysis error: {str(e)}"
-        raise HTTPException(status_code=500, detail=detail[:300])
+        logger.exception(f"❌ Critical error for {symbol}: {str(e)}")
+        raise HTTPException(
+            status_code=500,
+            detail=f"Analysis failed: {str(e)[:200]}"
+        )
 
 @app.get("/api/price/{symbol}")
 async def get_price(symbol: str):
