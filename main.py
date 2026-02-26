@@ -422,10 +422,11 @@ class ExchangeDataFetcher:
             logger.debug(f"Parse error for {exchange}: {str(e)}")
             return []
     
+
     def _aggregate_candles(self, all_candles: List[List[Dict]]) -> List[Dict]:
-        """Mum verilerini birleştir"""
-        if not all_candles:
-            return []
+    """Mum verilerini birleştir"""
+    if not all_candles:
+        return []
     
     timestamp_map = defaultdict(list)
     for exchange_data in all_candles:
@@ -437,7 +438,10 @@ class ExchangeDataFetcher:
         candles = timestamp_map[timestamp]
         
         if len(candles) == 1:
-            aggregated.append(candles[0])
+            agg = candles[0].copy()
+            agg['source_count'] = 1
+            agg['sources'] = [candles[0]['exchange']]
+            aggregated.append(agg)
             continue
         
         total_weight = 0
@@ -469,7 +473,7 @@ class ExchangeDataFetcher:
                 "exchange": "aggregated"
             })
     
-    return aggregated
+    return aggregated  # Bu satır fonksiyonun içinde, doğru girintide
 
     async def get_candles(self, symbol: str, interval: str = "1h", limit: int = 100) -> List[Dict]:
         cache_key = self._get_cache_key(symbol, interval)
