@@ -2770,6 +2770,24 @@ async def get_exchanges():
         "active_count": len(active),
         "total_count": len(ExchangeDataFetcher.EXCHANGES)
     }
+#===========================================================================   
+# ✅ YENİ - Frontend'in beklediği endpoint
+@app.get("/api/exchange-stats")
+async def get_exchange_stats():
+    """Exchange istatistikleri - frontend için"""
+    try:
+        stats = data_fetcher.get_stats()
+        return {
+            "success": True,
+            "timestamp": datetime.now(timezone.utc).isoformat(),
+            "stats": stats
+        }
+    except Exception as e:
+        logger.error(f"Exchange stats error: {str(e)}")
+        return {
+            "success": False,
+            "error": str(e)
+        }
 
 @app.websocket("/wss/{symbol}")
 async def websocket_endpoint(websocket: WebSocket, symbol: str):
@@ -2870,7 +2888,6 @@ async def get_stats():
             "rate_limit": f"{Config.RATE_LIMIT_CALLS}/{Config.RATE_LIMIT_PERIOD}s"
         }
     }
-
 
 # ========================================================================================================
 # STARTUP & SHUTDOWN
