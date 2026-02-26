@@ -183,6 +183,7 @@ class AnalysisResponse(BaseModel):
     active_sources: List[str]
     data_points: int
     all_patterns: List[Pattern]
+    exchange_stats: Optional[Dict] = None  # YENİ: exchange istatistikleri
 
 # ========================================================================================================
 # EXCHANGE DATA FETCHER
@@ -421,54 +422,57 @@ class ExchangeDataFetcher:
             logger.debug(f"Parse error for {exchange}: {str(e)}")
             return []
     
-    def _aggregate_candles(self, all_candles: List[List[Dict]]) -> List[Dict]:
-        if not all_candles:
-            return []
-        
-        timestamp_map = defaultdict(list)
-        for exchange_data in all_candles:
-            for candle in exchange_data:
-                timestamp_map[candle["timestamp"]].append(candle)
-        
-        aggregated = []
-        for timestamp in sorted(timestamp_map.keys()):
-            candles = timestamp_map[timestamp]
-            
-            if len(candles) == 1:
-                aggregated.append(candles[0])
-                continue
-            
-            total_weight = 0
-            open_sum = high_sum = low_sum = close_sum = volume_sum = 0
-            sources = []
-            
-            for candle in candles:
-                exchange_config = next((e for e in self.EXCHANGES if e["name"] == candle["exchange"]), None)
-                weight = exchange_config["weight"] if exchange_config else 0.5
-                
-                total_weight += weight
-                open_sum += candle["open"] * weight
-                high_sum += candle["high"] * weight
-                low_sum += candle["low"] * weight
-                close_sum += candle["close"] * weight
-                volume_sum += candle["volume"] * weight
-                sources.append(candle["exchange"])
-            
-            if total_weight > 0:
-                aggregated.append({
-                    "timestamp": timestamp,
-                    "open": open_sum / total_weight,
-                    "high": high_sum / total_weight,
-                    "low": low_sum / total_weight,
-                    "close": close_sum / total_weight,
-                    "volume": volume_sum / total_weight,
-                    "source_count": len(candles),
-                    "sources": sources,
-                    "exchange": "aggregated"
-                })
-        
-        return aggregated
+   def _aggregate_candles(self, all_candles: List[List[Dict]]) -> List[Dict]:
+    if not all_candles:
+        return []
     
+    timestamp_map = defaultdict(list)
+    for exchange_data in all_candles:
+        for candle in exchange_data:
+            timestamp_map[candle["timestamp"]].append(candle)
+    
+    aggregated = []
+    for timestamp in sorted(timestamp_map.keys()):
+        candles = timestamp_map[timestamp]
+        
+        if len(candles) == 1:
+            agg = candles[0].copy()
+            agg['source_count'] = 1
+            agg['sources'] = [candles[0]['exchange']]
+            aggregated.append(agg)
+            continue
+        
+        total_weight = 0
+        open_sum = high_sum = low_sum = close_sum = volume_sum = 0
+        sources = []
+        
+        for candle in candles:
+            exchange_config = next((e for e in self.EXCHANGES if e["name"] == candle["exchange"]), None)
+            weight = exchange_config["weight"] if exchange_config else 0.5
+            
+            total_weight += weight
+            open_sum += candle["open"] * weight
+            high_sum += candle["high"] * weight
+            low_sum += candle["low"] * weight
+            close_sum += candle["close"] * weight
+            volume_sum += candle["volume"] * weight
+            sources.append(candle["exchange"])
+        
+        if total_weight > 0:
+            aggregated.append({
+                "timestamp": timestamp,
+                "open": open_sum / total_weight,
+                "high": high_sum / total_weight,
+                "low": low_sum / total_weight,
+                "close": close_sum / total_weight,
+                "volume": volume_sum / total_weight,
+                "source_count": len(candles),
+                "sources": sources,
+                "exchange": "aggregated"
+            })
+    
+    return aggregated
+
     async def get_candles(self, symbol: str, interval: str = "1h", limit: int = 100) -> List[Dict]:
         cache_key = self._get_cache_key(symbol, interval)
         
@@ -2546,6 +2550,7 @@ async def health_check():
     }
 
 @app.get("/api/analyze/{symbol}", response_model=AnalysisResponse)
+# 793. satırdaki analyze metodunu güncelleyin:
 async def analyze_symbol(
     symbol: str,
     interval: str = Query(
@@ -2569,6 +2574,8 @@ async def analyze_symbol(
     try:
         async with data_fetcher as fetcher:
             candles = await fetcher.get_candles(symbol, interval, limit)
+            # Exchange istatistiklerini al
+            exchange_stats = fetcher.get_stats()
 
         if not candles:
             raise HTTPException(422, "No candle data received from exchange")
@@ -2653,7 +2660,9 @@ async def analyze_symbol(
                 "confidence": 0,
                 "recommendation": f"Signal error: {str(e)[:100]}",
                 "buy_count": 0,
-                "sell_count": 0
+                "sell_count": 0,
+                "tp_level": None,
+                "sl_level": None
             }
 
         # Tüm pattern'leri topla
@@ -2666,17 +2675,12 @@ async def analyze_symbol(
         all_patterns.extend(ultimate_signals)
 
         # Aktif kaynaklar
-        active_sources = []
-        if 'sources' in df.columns:
-            first_sources = df['sources'].iloc[0]
-            if isinstance(first_sources, (list, tuple)):
-                active_sources = list(first_sources)
-            elif isinstance(first_sources, str):
-                active_sources = [first_sources]
+        active_sources = fetcher.get_active_sources()
 
         # Response
         last_row = df.iloc[-1]
         first_row = df.iloc[0]
+        volume_sum = float(df["volume"].sum())
 
         response = {
             "success": True,
@@ -2688,7 +2692,7 @@ async def analyze_symbol(
                 "open": float(last_row["open"]),
                 "high": float(last_row["high"]),
                 "low": float(last_row["low"]),
-                "volume_24h_approx": float(df["volume"].sum()),
+                "volume_24h_approx": volume_sum,
                 "change_percent": round(
                     (float(last_row["close"]) / float(first_row["close"]) - 1) * 100,
                     2
@@ -2704,7 +2708,8 @@ async def analyze_symbol(
             "market_structure": market_structure,
             "active_sources": active_sources,
             "data_points": len(df),
-            "all_patterns": all_patterns[-30:]
+            "all_patterns": all_patterns[-30:],
+            "exchange_stats": exchange_stats  # YENİ
         }
 
         logger.info(
