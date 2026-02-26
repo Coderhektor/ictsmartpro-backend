@@ -423,7 +423,7 @@ class ExchangeDataFetcher:
             return []
     
    def _aggregate_candles(self, all_candles: List[List[Dict]]) -> List[Dict]:
-    if not all_candles:
+       if not all_candles:
         return []
     
     timestamp_map = defaultdict(list)
