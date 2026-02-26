@@ -183,7 +183,7 @@ class AnalysisResponse(BaseModel):
     active_sources: List[str]
     data_points: int
     all_patterns: List[Pattern]
-    exchange_stats: Optional[Dict] = None  # YENİ: exchange istatistikleri
+    exchange_stats: Optional[Dict] = None
 
 # ========================================================================================================
 # EXCHANGE DATA FETCHER
@@ -422,60 +422,58 @@ class ExchangeDataFetcher:
             logger.debug(f"Parse error for {exchange}: {str(e)}")
             return []
     
-
-def _aggregate_candles(self, all_candles: List[List[Dict]]) -> List[Dict]:
+    def _aggregate_candles(self, all_candles: List[List[Dict]]) -> List[Dict]:
+        """Mum verilerini birleştir"""
+        if not all_candles:
+            return []
         
-    """Mum verilerini birleştir"""
-    if not all_candles:
-        return []
-    
-    timestamp_map = defaultdict(list)
-    for exchange_data in all_candles:
-        for candle in exchange_data:
-            timestamp_map[candle["timestamp"]].append(candle)
-    
-    aggregated = []
-    for timestamp in sorted(timestamp_map.keys()):
-        candles = timestamp_map[timestamp]
+        timestamp_map = defaultdict(list)
+        for exchange_data in all_candles:
+            for candle in exchange_data:
+                timestamp_map[candle["timestamp"]].append(candle)
         
-        if len(candles) == 1:
-            agg = candles[0].copy()
-            agg['source_count'] = 1
-            agg['sources'] = [candles[0]['exchange']]
-            aggregated.append(agg)
-            continue
-        
-        total_weight = 0
-        open_sum = high_sum = low_sum = close_sum = volume_sum = 0
-        sources = []
-        
-        for candle in candles:
-            exchange_config = next((e for e in self.EXCHANGES if e["name"] == candle["exchange"]), None)
-            weight = exchange_config["weight"] if exchange_config else 0.5
+        aggregated = []
+        for timestamp in sorted(timestamp_map.keys()):
+            candles = timestamp_map[timestamp]
             
-            total_weight += weight
-            open_sum += candle["open"] * weight
-            high_sum += candle["high"] * weight
-            low_sum += candle["low"] * weight
-            close_sum += candle["close"] * weight
-            volume_sum += candle["volume"] * weight
-            sources.append(candle["exchange"])
+            if len(candles) == 1:
+                agg = candles[0].copy()
+                agg['source_count'] = 1
+                agg['sources'] = [candles[0]['exchange']]
+                aggregated.append(agg)
+                continue
+            
+            total_weight = 0
+            open_sum = high_sum = low_sum = close_sum = volume_sum = 0
+            sources = []
+            
+            for candle in candles:
+                exchange_config = next((e for e in self.EXCHANGES if e["name"] == candle["exchange"]), None)
+                weight = exchange_config["weight"] if exchange_config else 0.5
+                
+                total_weight += weight
+                open_sum += candle["open"] * weight
+                high_sum += candle["high"] * weight
+                low_sum += candle["low"] * weight
+                close_sum += candle["close"] * weight
+                volume_sum += candle["volume"] * weight
+                sources.append(candle["exchange"])
+            
+            if total_weight > 0:
+                aggregated.append({
+                    "timestamp": timestamp,
+                    "open": open_sum / total_weight,
+                    "high": high_sum / total_weight,
+                    "low": low_sum / total_weight,
+                    "close": close_sum / total_weight,
+                    "volume": volume_sum / total_weight,
+                    "source_count": len(candles),
+                    "sources": sources,
+                    "exchange": "aggregated"
+                })
         
-        if total_weight > 0:
-            aggregated.append({
-                "timestamp": timestamp,
-                "open": open_sum / total_weight,
-                "high": high_sum / total_weight,
-                "low": low_sum / total_weight,
-                "close": close_sum / total_weight,
-                "volume": volume_sum / total_weight,
-                "source_count": len(candles),
-                "sources": sources,
-                "exchange": "aggregated"
-            })
+        return aggregated
     
-    return aggregated  # Bu satır fonksiyonun içinde, doğru girintide
-
     async def get_candles(self, symbol: str, interval: str = "1h", limit: int = 100) -> List[Dict]:
         cache_key = self._get_cache_key(symbol, interval)
         
@@ -706,9 +704,6 @@ class GainzAlgoV2Detector:
         loss = (-delta.where(delta < 0, 0)).rolling(window=14).mean()
         rs = gain / loss.replace(0, np.nan)
         rsi = 100 - (100 / (1 + rs))
-        rsi_6 = df['close'].diff().rolling(window=6).apply(
-            lambda x: 100 - 100 / (1 + (x[x>0].sum() / (-x[x<0].sum() + 0.001)))
-        )
         
         # Momentum
         momentum = df['close'].diff(12)
@@ -736,8 +731,7 @@ class GainzAlgoV2Detector:
                 rsi.iloc[i] > 40 and
                 momentum.iloc[i] > 0 and
                 bull_engulf.iloc[i] and
-                df['close'].iloc[i] > df['close'].iloc[i-1] and
-                df['is_bullish'].iloc[i] if 'is_bullish' in df.columns else True
+                df['close'].iloc[i] > df['close'].iloc[i-1]
             )
             
             if buy_cond and not pd.isna(atr.iloc[i]):
@@ -764,8 +758,7 @@ class GainzAlgoV2Detector:
                 rsi.iloc[i] < 60 and
                 momentum.iloc[i] < 0 and
                 bear_engulf.iloc[i] and
-                df['close'].iloc[i] < df['close'].iloc[i-1] and
-                df['is_bearish'].iloc[i] if 'is_bearish' in df.columns else True
+                df['close'].iloc[i] < df['close'].iloc[i-1]
             )
             
             if sell_cond and not pd.isna(atr.iloc[i]):
@@ -2534,8 +2527,8 @@ async def dashboard():
             <a href="/" style="color:#00ff88;">← Ana Sayfa</a>
         </body>
     </html>
-    """, status_code=404)   
-    
+    """, status_code=404)
+
 @app.get("/health")
 async def health_check():
     uptime = time.time() - startup_time
@@ -2553,7 +2546,6 @@ async def health_check():
     }
 
 @app.get("/api/analyze/{symbol}", response_model=AnalysisResponse)
-# 793. satırdaki analyze metodunu güncelleyin:
 async def analyze_symbol(
     symbol: str,
     interval: str = Query(
@@ -2577,7 +2569,6 @@ async def analyze_symbol(
     try:
         async with data_fetcher as fetcher:
             candles = await fetcher.get_candles(symbol, interval, limit)
-            # Exchange istatistiklerini al
             exchange_stats = fetcher.get_stats()
 
         if not candles:
@@ -2589,7 +2580,6 @@ async def analyze_symbol(
                 f"Insufficient candles. Got {len(candles)}, minimum required: {Config.MIN_CANDLES}"
             )
 
-        # DataFrame oluştur
         df = pd.DataFrame(candles)
         required_cols = {"open", "high", "low", "close", "volume", "timestamp"}
         if not required_cols.issubset(df.columns):
@@ -2602,7 +2592,6 @@ async def analyze_symbol(
         if len(df) < Config.MIN_CANDLES:
             raise HTTPException(422, f"After cleaning only {len(df)} candles left")
 
-        # Tüm analizleri çalıştır
         try:
             technical = TechnicalAnalyzer.analyze(df)
         except Exception as e:
@@ -2645,7 +2634,6 @@ async def analyze_symbol(
             logger.error(f"MarketStructureAnalyzer failed: {e}", exc_info=True)
             market_structure = {}
 
-        # Signal üret
         try:
             signal = SignalGenerator.generate(
                 technical,
@@ -2668,7 +2656,6 @@ async def analyze_symbol(
                 "sl_level": None
             }
 
-        # Tüm pattern'leri topla
         all_patterns = []
         for pattern_list in ict_patterns.values():
             all_patterns.extend(pattern_list)
@@ -2677,10 +2664,8 @@ async def analyze_symbol(
         all_patterns.extend(gainzalgo_signals)
         all_patterns.extend(ultimate_signals)
 
-        # Aktif kaynaklar
         active_sources = fetcher.get_active_sources()
 
-        # Response
         last_row = df.iloc[-1]
         first_row = df.iloc[0]
         volume_sum = float(df["volume"].sum())
@@ -2712,7 +2697,7 @@ async def analyze_symbol(
             "active_sources": active_sources,
             "data_points": len(df),
             "all_patterns": all_patterns[-30:],
-            "exchange_stats": exchange_stats  # YENİ
+            "exchange_stats": exchange_stats
         }
 
         logger.info(
@@ -2778,8 +2763,7 @@ async def get_exchanges():
         "active_count": len(active),
         "total_count": len(ExchangeDataFetcher.EXCHANGES)
     }
-#===========================================================================   
-# ✅ YENİ - Frontend'in beklediği endpoint
+
 @app.get("/api/exchange-stats")
 async def get_exchange_stats():
     """Exchange istatistikleri - frontend için"""
@@ -2833,9 +2817,7 @@ async def websocket_endpoint(websocket: WebSocket, symbol: str):
 
 @app.post("/api/train/{symbol}")
 async def train_model(symbol: str):
-    """
-    ML modelini eğit (ileriye dönük)
-    """
+    """ML modelini eğit (ileriye dönük)"""
     symbol = symbol.upper()
     if not symbol.endswith("USDT"):
         symbol = f"{symbol}USDT"
@@ -2855,9 +2837,6 @@ async def train_model(symbol: str):
         df = pd.DataFrame(candles)
         df['timestamp'] = pd.to_datetime(df['timestamp'], unit='ms')
         df = df.set_index('timestamp')
-        
-        # Burada gerçek ML eğitimi yapılacak
-        # Şimdilik başarılı mesajı dön
         
         return {
             "success": True,
