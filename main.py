@@ -801,7 +801,7 @@ class GainzAlgoV2Detector:
     # ========================================================================================================
 
 
-class CandlestickPatternDetector:
+class  ICTPatternDetector:
 
     @staticmethod
     def calculate_indicators(df: pd.DataFrame) -> pd.DataFrame:
