@@ -1660,65 +1660,81 @@ class ClassicalPatternDetector:
 # ========================================================================================================
 # CANDLESTICK PATTERN DETECTOR (GENİŞLETİLMİŞ)
 # ========================================================================================================
+ # ========================================================================================================
+# CANDLESTICK PATTERN DETECTOR (GENİŞLETİLMİŞ)
+# ========================================================================================================
 class CandlestickPatternDetector:
 
+    @staticmethod
+    def calculate_indicators(df: pd.DataFrame) -> pd.DataFrame:
+        """Gerekli indikatörleri hesapla"""
+        df = df.copy()
 
- @staticmethod
- def detect_doji(candle: pd.Series) -> Optional[Dict]:
-    body = candle['body']
-    range_candle = candle['range']
-    if range_candle == 0:
+        # Temel mum özellikleri
+        df['is_bullish'] = df['close'] > df['open']
+        df['is_bearish'] = df['close'] < df['open']
+        df['body'] = abs(df['close'] - df['open'])
+        df['range'] = df['high'] - df['low']
+        df['upper_shadow'] = df['high'] - df[['close', 'open']].max(axis=1)
+        df['lower_shadow'] = df[['close', 'open']].min(axis=1) - df['low']
+        df['body_percent'] = df['body'] / df['range'].replace(0, 1)
+
+        return df
+
+    @staticmethod
+    def detect_doji(candle: pd.Series) -> Optional[Dict]:
+        body = candle['body']
+        range_candle = candle['range']
+        if range_candle == 0:
+            return None
+
+        if (body / range_candle) < 0.1:
+            return {
+                "pattern": "doji",
+                "type": "candlestick",
+                "direction": "neutral",
+                "strength": 50,
+                "description": "Doji - Market indecision"
+            }
         return None
 
-    if (body / range_candle) < 0.1:
-        return {
-            "pattern": "doji",
-            "type": "candlestick",
-            "direction": "neutral",
-            "strength": 50,
-            "description": "Doji - Market indecision"
-        }
-    return None
+    @staticmethod
+    def detect_hammer(candle: pd.Series) -> Optional[Dict]:
+        body = candle['body']
+        lower_shadow = candle['lower_shadow']
+        upper_shadow = candle['upper_shadow']
 
+        if body == 0 or candle['range'] == 0:
+            return None
 
-@staticmethod
-def detect_hammer(candle: pd.Series) -> Optional[Dict]:
-    body = candle['body']
-    lower_shadow = candle['lower_shadow']
-    upper_shadow = candle['upper_shadow']
-
-    if body == 0 or candle['range'] == 0:
+        if lower_shadow > 2 * body and upper_shadow < body and candle['is_bullish']:
+            return {
+                "pattern": "hammer",
+                "type": "candlestick",
+                "direction": "bullish",
+                "strength": 70,
+                "description": "Hammer - Bullish reversal"
+            }
         return None
 
-    if lower_shadow > 2 * body and upper_shadow < body and candle['is_bullish']:
-        return {
-            "pattern": "hammer",
-            "type": "candlestick",
-            "direction": "bullish",
-            "strength": 70,
-            "description": "Hammer - Bullish reversal"
-        }
-    return None
+    @staticmethod
+    def detect_shooting_star(candle: pd.Series) -> Optional[Dict]:
+        body = candle['body']
+        lower_shadow = candle['lower_shadow']
+        upper_shadow = candle['upper_shadow']
 
+        if body == 0 or candle['range'] == 0:
+            return None
 
-@staticmethod
-def detect_shooting_star(candle: pd.Series) -> Optional[Dict]:
-    body = candle['body']
-    lower_shadow = candle['lower_shadow']
-    upper_shadow = candle['upper_shadow']
-
-    if body == 0 or candle['range'] == 0:
+        if upper_shadow > 2 * body and lower_shadow < body and candle['is_bearish']:
+            return {
+                "pattern": "shooting_star",
+                "type": "candlestick",
+                "direction": "bearish",
+                "strength": 70,
+                "description": "Shooting Star - Bearish reversal"
+            }
         return None
-
-    if upper_shadow > 2 * body and lower_shadow < body and candle['is_bearish']:
-        return {
-            "pattern": "shooting_star",
-            "type": "candlestick",
-            "direction": "bearish",
-            "strength": 70,
-            "description": "Shooting Star - Bearish reversal"
-        }
-    return None
 
     @staticmethod
     def detect_marubozu(candle: pd.Series) -> Optional[Dict]:
@@ -1873,117 +1889,112 @@ def detect_shooting_star(candle: pd.Series) -> Optional[Dict]:
 
         return None
 
+    @staticmethod
+    def detect_three_white_soldiers(df: pd.DataFrame, i: int) -> Optional[Dict]:
+        if i < 2 or i >= len(df):
+            return None
 
-@staticmethod
-def detect_three_white_soldiers(df: pd.DataFrame, i: int) -> Optional[Dict]:
-    if i < 2 or i >= len(df):
+        if (df['is_bullish'].iloc[i - 2] and
+            df['is_bullish'].iloc[i - 1] and
+            df['is_bullish'].iloc[i] and
+            df['close'].iloc[i - 1] > df['close'].iloc[i - 2] and
+            df['close'].iloc[i] > df['close'].iloc[i - 1]):
+            return {
+                "pattern": "three_white_soldiers",
+                "type": "candlestick",
+                "direction": "bullish",
+                "strength": 78,
+                "timestamp": str(df.index[i]),
+                "price": float(df['close'].iloc[i]),
+                "description": "Three White Soldiers - Strong bullish continuation"
+            }
         return None
 
-    # 'is_bullish' kolonu artık var
-    if (df['is_bullish'].iloc[i - 2] and
-        df['is_bullish'].iloc[i - 1] and
-        df['is_bullish'].iloc[i] and
-        df['close'].iloc[i - 1] > df['close'].iloc[i - 2] and
-        df['close'].iloc[i] > df['close'].iloc[i - 1]):
-        return {
-            "pattern": "three_white_soldiers",
-            "type": "candlestick",
-            "direction": "bullish",
-            "strength": 78,
-            "timestamp": str(df.index[i]),
-            "price": float(df['close'].iloc[i]),
-            "description": "Three White Soldiers - Strong bullish continuation"
-        }
-    return None
+    @staticmethod
+    def detect_three_black_crows(df: pd.DataFrame, i: int) -> Optional[Dict]:
+        if i < 2 or i >= len(df):
+            return None
 
-
-@staticmethod
-def detect_three_black_crows(df: pd.DataFrame, i: int) -> Optional[Dict]:
-    if i < 2 or i >= len(df):
+        if (df['is_bearish'].iloc[i - 2] and
+            df['is_bearish'].iloc[i - 1] and
+            df['is_bearish'].iloc[i] and
+            df['close'].iloc[i - 1] < df['close'].iloc[i - 2] and
+            df['close'].iloc[i] < df['close'].iloc[i - 1]):
+            return {
+                "pattern": "three_black_crows",
+                "type": "candlestick",
+                "direction": "bearish",
+                "strength": 78,
+                "timestamp": str(df.index[i]),
+                "price": float(df['close'].iloc[i]),
+                "description": "Three Black Crows - Strong bearish continuation"
+            }
         return None
 
-    if (df['is_bearish'].iloc[i - 2] and
-        df['is_bearish'].iloc[i - 1] and
-        df['is_bearish'].iloc[i] and
-        df['close'].iloc[i - 1] < df['close'].iloc[i - 2] and
-        df['close'].iloc[i] < df['close'].iloc[i - 1]):
-        return {
-            "pattern": "three_black_crows",
-            "type": "candlestick",
-            "direction": "bearish",
-            "strength": 78,
-            "timestamp": str(df.index[i]),
-            "price": float(df['close'].iloc[i]),
-            "description": "Three Black Crows - Strong bearish continuation"
-        }
-    return None
+    @staticmethod
+    def analyze(df: pd.DataFrame) -> List[Dict]:
+        patterns = []
 
+        if len(df) < 10:
+            return patterns
 
-@staticmethod
-def analyze(df: pd.DataFrame) -> List[Dict]:
-    patterns = []
+        # İndikatörleri hesapla
+        df = CandlestickPatternDetector.calculate_indicators(df)
 
-    if len(df) < 10:
-        return patterns
+        for i in range(2, len(df)):
+            curr = df.iloc[i]
 
-    # İndikatörleri hesapla
-    df = CandlestickPatternDetector.calculate_indicators(df)
+            # Tek mum pattern'leri
+            doji = CandlestickPatternDetector.detect_doji(curr)
+            if doji:
+                doji['timestamp'] = str(df.index[i])
+                doji['price'] = float(curr['close'])
+                patterns.append(doji)
 
-    for i in range(2, len(df)):
-        curr = df.iloc[i]
+            hammer = CandlestickPatternDetector.detect_hammer(curr)
+            if hammer:
+                hammer['timestamp'] = str(df.index[i])
+                hammer['price'] = float(curr['close'])
+                patterns.append(hammer)
 
-        # Tek mum pattern'leri
-        doji = CandlestickPatternDetector.detect_doji(curr)
-        if doji:
-            doji['timestamp'] = str(df.index[i])
-            doji['price'] = float(curr['close'])
-            patterns.append(doji)
+            shooting = CandlestickPatternDetector.detect_shooting_star(curr)
+            if shooting:
+                shooting['timestamp'] = str(df.index[i])
+                shooting['price'] = float(curr['close'])
+                patterns.append(shooting)
 
-        hammer = CandlestickPatternDetector.detect_hammer(curr)
-        if hammer:
-            hammer['timestamp'] = str(df.index[i])
-            hammer['price'] = float(curr['close'])
-            patterns.append(hammer)
+            marubozu = CandlestickPatternDetector.detect_marubozu(curr)
+            if marubozu:
+                marubozu['timestamp'] = str(df.index[i])
+                marubozu['price'] = float(curr['close'])
+                patterns.append(marubozu)
 
-        shooting = CandlestickPatternDetector.detect_shooting_star(curr)
-        if shooting:
-            shooting['timestamp'] = str(df.index[i])
-            shooting['price'] = float(curr['close'])
-            patterns.append(shooting)
+            # Çoklu mum pattern'leri
+            engulfing = CandlestickPatternDetector.detect_engulfing(df, i)
+            if engulfing:
+                patterns.append(engulfing)
 
-        marubozu = CandlestickPatternDetector.detect_marubozu(curr)
-        if marubozu:
-            marubozu['timestamp'] = str(df.index[i])
-            marubozu['price'] = float(curr['close'])
-            patterns.append(marubozu)
+            harami = CandlestickPatternDetector.detect_harami(df, i)
+            if harami:
+                patterns.append(harami)
 
-        # Çoklu mum pattern'leri (df'in tamamını gönder)
-        engulfing = CandlestickPatternDetector.detect_engulfing(df, i)
-        if engulfing:
-            patterns.append(engulfing)
+            morning = CandlestickPatternDetector.detect_morning_star(df, i)
+            if morning:
+                patterns.append(morning)
 
-        harami = CandlestickPatternDetector.detect_harami(df, i)
-        if harami:
-            patterns.append(harami)
+            evening = CandlestickPatternDetector.detect_evening_star(df, i)
+            if evening:
+                patterns.append(evening)
 
-        morning = CandlestickPatternDetector.detect_morning_star(df, i)
-        if morning:
-            patterns.append(morning)
+            soldiers = CandlestickPatternDetector.detect_three_white_soldiers(df, i)
+            if soldiers:
+                patterns.append(soldiers)
 
-        evening = CandlestickPatternDetector.detect_evening_star(df, i)
-        if evening:
-            patterns.append(evening)
+            crows = CandlestickPatternDetector.detect_three_black_crows(df, i)
+            if crows:
+                patterns.append(crows)
 
-        soldiers = CandlestickPatternDetector.detect_three_white_soldiers(df, i)
-        if soldiers:
-            patterns.append(soldiers)
-
-        crows = CandlestickPatternDetector.detect_three_black_crows(df, i)
-        if crows:
-            patterns.append(crows)
-
-    return patterns[-30:]
-
+        return patterns[-30:]
 
 # ========================================================================================================
 # TECHNICAL ANALYZER
