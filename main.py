@@ -104,7 +104,7 @@ class Config:
     API_TIMEOUT = int(os.getenv("API_TIMEOUT", "8"))
     MAX_RETRIES = int(os.getenv("MAX_RETRIES", "2"))
 
-    MIN_CANDLES = int(os.getenv("MIN_CANDLES", "30"))
+    MIN_CANDLES = int(os.getenv("MIN_CANDLES", "50"))  # 30 -> 50'ye çıkar
     MIN_EXCHANGES = int(os.getenv("MIN_EXCHANGES", "2"))
 
     CACHE_TTL = int(os.getenv("CACHE_TTL", "45"))
@@ -125,18 +125,17 @@ class Direction(str, Enum):
     BULLISH = "bullish"
     BEARISH = "bearish"
     NEUTRAL = "neutral"
+    BULLISH_REVERSAL = "bullish_reversal"
+    BEARISH_REVERSAL = "bearish_reversal"
 
 
 class PatternType(str, Enum):
     ICT = "ict"
+    ICTSMARTPRO = "ictsmartpro"  # Yeni!
     CLASSICAL = "classical"
-    INDICATOR = "indicator"
     PRICE_ACTION = "price_action"
-    FIBONACCI = "fibonacci"
     SUPPORT_RESISTANCE = "support_resistance"
     TREND = "trend"
-    GAINZALGO = "gainzalgo"
-    ULTIMATE = "ultimate"
 
 
 # ========================================================================================================
@@ -187,8 +186,7 @@ class AnalysisResponse(BaseModel):
     ict_patterns: Dict[str, List[Dict[str, Any]]]
     candle_patterns: List[Dict[str, Any]]
     classical_patterns: List[Dict[str, Any]]
-    gainzalgo_signals: List[Dict[str, Any]]
-    ultimate_signals: List[Dict[str, Any]]
+    ictsmartpro_signals: List[Dict[str, Any]]  # GainzAlgo kalktı, ICTSMARTPRO geldi
     market_structure: Dict[str, Any]
     active_sources: List[str]
     data_points: int
@@ -197,7 +195,7 @@ class AnalysisResponse(BaseModel):
 
 
 # ========================================================================================================
-# EXCHANGE DATA FETCHER
+# EXCHANGE DATA FETCHER (DÜZELTİLMİŞ)
 # ========================================================================================================
 class ExchangeDataFetcher:
     EXCHANGES = [
@@ -251,12 +249,6 @@ class ExchangeDataFetcher:
         }
     ]
 
-    WEBSOCKETS = {
-        "Binance": "wss://stream.binance.com:9443/ws/{symbol}@kline_{interval}",
-        "Kraken": "wss://ws.kraken.com/v2",
-        "MEXC": "wss://wbs.mexc.com/ws"
-    }
-
     def __init__(self):
         self.session: Optional[aiohttp.ClientSession] = None
         self.cache: Dict[str, Any] = {}
@@ -285,6 +277,18 @@ class ExchangeDataFetcher:
     async def __aexit__(self, exc_type, exc_val, exc_tb):
         if self.session:
             await self.session.close()
+
+    def _get_interval_ms(self, interval: str) -> int:
+        """Interval'i milisaniyeye çevir"""
+        multipliers = {
+            "1m": 60, "5m": 300, "15m": 900, "30m": 1800,
+            "1h": 3600, "4h": 14400, "1d": 86400, "1w": 604800
+        }
+        return multipliers.get(interval, 3600) * 1000
+
+    def _round_timestamp(self, ts_ms: int, interval_ms: int) -> int:
+        """Timestamp'i interval'a yuvarla (floor)"""
+        return (ts_ms // interval_ms) * interval_ms
 
     def _check_rate_limit(self) -> bool:
         now = time.time()
@@ -350,6 +354,7 @@ class ExchangeDataFetcher:
                     self.stats[name]["last_success"] = time.time()
                     self.stats[name]["last_error"] = ""
 
+                logger.debug(f"✅ {name}: {len(candles)} candles")
                 return candles
 
         except asyncio.TimeoutError:
@@ -415,13 +420,19 @@ class ExchangeDataFetcher:
 
                     for i in range(min(len(timestamps), len(closes))):
                         if closes[i] is not None:
+                            # Yahoo'da None değerler olabiliyor, fallback ekle
+                            open_val = opens[i] if i < len(opens) and opens[i] is not None else closes[i]
+                            high_val = highs[i] if i < len(highs) and highs[i] is not None else closes[i]
+                            low_val = lows[i] if i < len(lows) and lows[i] is not None else closes[i]
+                            volume_val = volumes[i] if i < len(volumes) and volumes[i] is not None else 0
+                            
                             candles.append({
                                 "timestamp": int(timestamps[i]) * 1000,
-                                "open": float(opens[i] if opens[i] else closes[i]),
-                                "high": float(highs[i] if highs[i] else closes[i]),
-                                "low": float(lows[i] if lows[i] else closes[i]),
+                                "open": float(open_val),
+                                "high": float(high_val),
+                                "low": float(low_val),
                                 "close": float(closes[i]),
-                                "volume": float(volumes[i] if volumes[i] else 0),
+                                "volume": float(volume_val),
                                 "exchange": exchange
                             })
 
@@ -432,35 +443,41 @@ class ExchangeDataFetcher:
             logger.debug(f"Parse error for {exchange}: {str(e)}")
             return []
 
-    def _aggregate_candles(self, all_candles: List[List[Dict]]) -> List[Dict]:
-        """Mum verilerini birleştir"""
+    def _aggregate_candles(self, all_candles: List[List[Dict]], interval: str) -> List[Dict]:
+        """Mum verilerini birleştir - timestamp hizalamalı"""
         if not all_candles:
             return []
-
+        
+        interval_ms = self._get_interval_ms(interval)
         timestamp_map = defaultdict(list)
+        
         for exchange_data in all_candles:
             for candle in exchange_data:
-                timestamp_map[candle["timestamp"]].append(candle)
-
+                # Timestamp'i interval'a yuvarla
+                rounded_ts = self._round_timestamp(candle["timestamp"], interval_ms)
+                candle["rounded_timestamp"] = rounded_ts
+                timestamp_map[rounded_ts].append(candle)
+        
+        logger.info(f"⏰ Timestamp yuvarlama: {len(timestamp_map)} farklı zaman dilimi")
+        
         aggregated = []
         for timestamp in sorted(timestamp_map.keys()):
             candles = timestamp_map[timestamp]
-
-            if len(candles) == 1:
-                agg = candles[0].copy()
-                agg['source_count'] = 1
-                agg['sources'] = [candles[0]['exchange']]
-                aggregated.append(agg)
-                continue
-
+            
+            # Ağırlıklı ortalama hesapla
             total_weight = 0
             open_sum = high_sum = low_sum = close_sum = volume_sum = 0
             sources = []
-
+            
+            valid_candles = 0
             for candle in candles:
+                # NaN kontrolü
+                if any(pd.isna(v) for v in [candle["open"], candle["high"], candle["low"], candle["close"], candle["volume"]]):
+                    continue
+                    
                 exchange_config = next((e for e in self.EXCHANGES if e["name"] == candle["exchange"]), None)
                 weight = exchange_config["weight"] if exchange_config else 0.5
-
+                
                 total_weight += weight
                 open_sum += candle["open"] * weight
                 high_sum += candle["high"] * weight
@@ -468,8 +485,9 @@ class ExchangeDataFetcher:
                 close_sum += candle["close"] * weight
                 volume_sum += candle["volume"] * weight
                 sources.append(candle["exchange"])
-
-            if total_weight > 0:
+                valid_candles += 1
+            
+            if total_weight > 0 and valid_candles >= 1:
                 aggregated.append({
                     "timestamp": timestamp,
                     "open": open_sum / total_weight,
@@ -477,21 +495,35 @@ class ExchangeDataFetcher:
                     "low": low_sum / total_weight,
                     "close": close_sum / total_weight,
                     "volume": volume_sum / total_weight,
-                    "source_count": len(candles),
+                    "source_count": valid_candles,
                     "sources": sources,
                     "exchange": "aggregated"
                 })
+        
+        # DataFrame'e çevir ve NaN'ları temizle
+        if not aggregated:
+            return []
+        
+        df = pd.DataFrame(aggregated).sort_values("timestamp")
+        cols = ['open', 'high', 'low', 'close', 'volume']
+        df[cols] = df[cols].ffill().bfill()  # İleri ve geri doldur
+        df = df.dropna(subset=['open', 'high', 'low', 'close'])
+        
+        logger.info(f"📊 Aggregation sonrası: {len(df)} mum (kaynak: {len(all_candles)} borsa)")
+        
+        return df.to_dict('records')
 
-        return aggregated
-
-    async def get_candles(self, symbol: str, interval: str = "1h", limit: int = 100) -> List[Dict]:
+    async def get_candles(self, symbol: str, interval: str = "1h", limit: int = 200) -> List[Dict]:
         cache_key = self._get_cache_key(symbol, interval)
 
+        # Cache kontrolü
         if self._is_cache_valid(cache_key):
             cached = self.cache.get(cache_key, [])
-            if cached:
+            if cached and len(cached) >= Config.MIN_CANDLES:
                 logger.info(f"📦 CACHE: {symbol} ({interval}) - {len(cached)} candles")
                 return cached[-limit:]
+            else:
+                logger.warning(f"⚠️ Cache geçersiz: {len(cached) if cached else 0} mum (min:{Config.MIN_CANDLES})")
 
         logger.info(f"🔄 FETCH: {symbol} ({interval}) from {len(self.EXCHANGES)} sources...")
 
@@ -503,18 +535,27 @@ class ExchangeDataFetcher:
         results = await asyncio.gather(*tasks, return_exceptions=True)
 
         valid_results = []
-        for r in results:
+        source_stats = {}
+        
+        for i, r in enumerate(results):
+            exchange_name = self.EXCHANGES[i]["name"]
             if isinstance(r, list) and len(r) >= 10:
                 valid_results.append(r)
+                source_stats[exchange_name] = len(r)
+            elif isinstance(r, Exception):
+                logger.debug(f"❌ {exchange_name} hata: {str(r)[:50]}")
+            else:
+                logger.debug(f"⚠️ {exchange_name} yetersiz veri: {len(r) if r else 0}")
 
         logger.info(f"✅ RECEIVED: {len(valid_results)}/{len(self.EXCHANGES)} sources")
+        logger.debug(f"📊 Source stats: {source_stats}")
 
         if len(valid_results) < Config.MIN_EXCHANGES:
             logger.warning(f"⚠️ Only {len(valid_results)} sources, using available...")
             if not valid_results:
                 return []
 
-        aggregated = self._aggregate_candles(valid_results)
+        aggregated = self._aggregate_candles(valid_results, interval)
 
         if len(aggregated) < Config.MIN_CANDLES:
             logger.warning(f"⚠️ Only {len(aggregated)} candles (need {Config.MIN_CANDLES})")
@@ -567,300 +608,328 @@ class ExchangeDataFetcher:
 
 
 # ========================================================================================================
-# ULTIMATE 2026 PATTERN DETECTOR
+# ORTAK DATAFRAME HAZIRLAMA FONKSİYONU (DRY)
 # ========================================================================================================
-class Ultimate2026Detector:
-    """Ultimate 2026 stratejisi - Multi-timeframe + Multi-phase filtreleme"""
+def prepare_dataframe(df: pd.DataFrame) -> pd.DataFrame:
+    """Tüm indikatörleri tek yerde hesapla - DRY prensibi"""
+    df = df.copy()
+    
+    # Temel mum özellikleri
+    df['is_bullish'] = df['close'] > df['open']
+    df['is_bearish'] = df['close'] < df['open']
+    df['body'] = abs(df['close'] - df['open'])
+    df['range'] = df['high'] - df['low']
+    df['upper_shadow'] = df['high'] - df[['close', 'open']].max(axis=1)
+    df['lower_shadow'] = df[['close', 'open']].min(axis=1) - df['low']
+    df['body_percent'] = df['body'] / df['range'].replace(0, 1)
+    
+    # RSI (14)
+    delta = df['close'].diff()
+    gain = (delta.where(delta > 0, 0)).rolling(window=14).mean()
+    loss = (-delta.where(delta < 0, 0)).rolling(window=14).mean()
+    rs = gain / loss.replace(0, np.nan)
+    df['rsi'] = 100 - (100 / (1 + rs))
+    df['rsi'] = df['rsi'].fillna(50)
+    
+    # EMA'lar
+    df['ema_9'] = df['close'].ewm(span=9, adjust=False).mean()
+    df['ema_20'] = df['close'].ewm(span=20, adjust=False).mean()
+    df['ema_50'] = df['close'].ewm(span=50, adjust=False).mean()
+    df['ema_200'] = df['close'].ewm(span=200, adjust=False).mean()
+    
+    # ATR
+    tr1 = df['high'] - df['low']
+    tr2 = (df['high'] - df['close'].shift(1)).abs()
+    tr3 = (df['low'] - df['close'].shift(1)).abs()
+    tr = pd.concat([tr1, tr2, tr3], axis=1).max(axis=1)
+    df['atr'] = tr.rolling(window=14).mean()
+    df['atr'] = df['atr'].fillna(df['range'].rolling(14).mean())
+    
+    # Volume
+    df['volume_sma'] = df['volume'].rolling(window=20).mean()
+    df['volume_ratio'] = df['volume'] / df['volume_sma'].replace(0, 1)
+    df['volume_ratio'] = df['volume_ratio'].fillna(1.0)
+    
+    # Bollinger Bands
+    df['bb_middle'] = df['close'].rolling(window=20).mean()
+    df['bb_std'] = df['close'].rolling(window=20).std()
+    df['bb_upper'] = df['bb_middle'] + (df['bb_std'] * 2)
+    df['bb_lower'] = df['bb_middle'] - (df['bb_std'] * 2)
+    bb_range = (df['bb_upper'] - df['bb_lower']).replace(0, 1)
+    df['bb_position'] = ((df['close'] - df['bb_lower']) / bb_range * 100).clip(0, 100)
+    
+    # Momentum
+    df['mom_5'] = df['close'].pct_change(5) * 100
+    df['mom_10'] = df['close'].pct_change(10) * 100
+    
+    # NaN'ları agresif temizle
+    df = df.ffill().bfill()
+    df = df.fillna({
+        'rsi': 50,
+        'volume_ratio': 1.0,
+        'mom_5': 0,
+        'mom_10': 0,
+        'bb_position': 50
+    })
+    
+    return df
 
+
+# ========================================================================================================
+# GELİŞMİŞ MARKET STRUCTURE ANALYZER (HH/HL/LH/LL + S/R ZONES)
+# ========================================================================================================
+class MarketStructureAnalyzer:
+    """Gelişmiş piyasa yapısı analizörü - HH/HL/LH/LL doğru hesaplama + destek/direnç bölgeleri"""
+    
     @staticmethod
-    def detect(df: pd.DataFrame) -> List[Dict]:
-        signals = []
-
+    def find_swing_points(high: pd.Series, low: pd.Series, window: int = 5) -> Dict:
+        """Swing high/low'ları bul (HH/HL/LH/LL için)"""
+        swings = {
+            'swing_highs': [],
+            'swing_lows': [],
+            'hh': [],  # Higher Highs
+            'hl': [],  # Higher Lows
+            'lh': [],  # Lower Highs
+            'll': []   # Lower Lows
+        }
+        
+        n = len(high)
+        
+        # Swing High'ları bul (merkezî pencere ile)
+        for i in range(window, n - window):
+            if high.iloc[i] == high.iloc[i-window:i+window+1].max():
+                if not pd.isna(high.iloc[i]):
+                    swings['swing_highs'].append((i, high.iloc[i]))
+        
+        # Swing Low'ları bul
+        for i in range(window, n - window):
+            if low.iloc[i] == low.iloc[i-window:i+window+1].min():
+                if not pd.isna(low.iloc[i]):
+                    swings['swing_lows'].append((i, low.iloc[i]))
+        
+        # HH/HL/LH/LL sınıflandırması (bir öncekine göre karşılaştır)
+        for idx, (i, val) in enumerate(swings['swing_highs']):
+            if idx > 0:
+                prev_idx, prev_val = swings['swing_highs'][idx-1]
+                if val > prev_val * 1.001:  # %0.1'den fazla artış
+                    swings['hh'].append((i, val, "HH"))
+                elif val < prev_val * 0.999:  # %0.1'den fazla düşüş
+                    swings['lh'].append((i, val, "LH"))
+        
+        for idx, (i, val) in enumerate(swings['swing_lows']):
+            if idx > 0:
+                prev_idx, prev_val = swings['swing_lows'][idx-1]
+                if val > prev_val * 1.001:
+                    swings['hl'].append((i, val, "HL"))
+                elif val < prev_val * 0.999:
+                    swings['ll'].append((i, val, "LL"))
+        
+        logger.debug(f"📈 Swing points: HH:{len(swings['hh'])}, HL:{len(swings['hl'])}, LH:{len(swings['lh'])}, LL:{len(swings['ll'])}")
+        
+        return swings
+    
+    @staticmethod
+    def find_support_resistance_zones(high: pd.Series, low: pd.Series, close: pd.Series, window: int = 20, tolerance: float = 0.01) -> List[Dict]:
+        """Destek/direnç aralıklarını bul (net çizgi değil, bölge olarak)"""
+        zones = []
+        n = len(high)
+        
+        if n < window * 2:
+            return zones
+        
+        # Son 50 periyottaki önemli seviyeler
+        lookback = min(50, n)
+        
+        for i in range(window, n - window):
+            zone_high = high.iloc[i-window:i+window].max()
+            zone_low = low.iloc[i-window:i+window].min()
+            zone_center = (zone_high + zone_low) / 2
+            
+            # ATR'ye göre bölge kalınlığı
+            atr_value = (high - low).rolling(14).mean().iloc[min(i, n-1)]
+            if pd.isna(atr_value):
+                atr_value = (high.iloc[i] - low.iloc[i]) * 0.5
+            
+            zone_thickness = atr_value * 0.3  # Biraz daha dar
+            
+            # Fiyat bu bölgeye kaç kez temas etmiş?
+            touches = 0
+            start_idx = max(0, i - lookback)
+            end_idx = min(n, i + lookback)
+            
+            for j in range(start_idx, end_idx):
+                if abs(high.iloc[j] - zone_center) < zone_thickness:
+                    touches += 1
+            
+            # Güç hesapla (temas sayısına göre)
+            strength = min(touches * 5, 70)  # Max 70
+            
+            if touches >= 3 and strength >= 15:  # En az 3 temas
+                zone_type = "resistance" if zone_center > close.iloc[i] else "support"
+                
+                zones.append({
+                    "level": round(zone_center, 2),
+                    "zone_low": round(zone_center - zone_thickness, 2),
+                    "zone_high": round(zone_center + zone_thickness, 2),
+                    "type": zone_type,
+                    "strength": strength,
+                    "touches": touches,
+                    "timestamp": str(close.index[i]) if hasattr(close.index[i], 'strftime') else str(i)
+                })
+        
+        # Birleştir yakın bölgeleri
+        merged_zones = []
+        zones.sort(key=lambda x: x['level'])
+        
+        for zone in zones:
+            if not merged_zones:
+                merged_zones.append(zone)
+            else:
+                last = merged_zones[-1]
+                # Bölgeler örtüşüyorsa birleştir
+                if abs(zone['level'] - last['level']) < (last['zone_high'] - last['zone_low']):
+                    last['zone_low'] = min(last['zone_low'], zone['zone_low'])
+                    last['zone_high'] = max(last['zone_high'], zone['zone_high'])
+                    last['level'] = (last['zone_low'] + last['zone_high']) / 2
+                    last['strength'] = max(last['strength'], zone['strength'])
+                    last['touches'] += zone['touches']
+                else:
+                    merged_zones.append(zone)
+        
+        logger.debug(f"🎯 Support/Resistance zones: {len(merged_zones)}")
+        
+        return merged_zones[-10:]  # Son 10 bölge
+    
+    @staticmethod
+    def analyze(df: pd.DataFrame) -> Dict[str, Any]:
         if len(df) < 50:
-            return signals
-
-        # EMA'lar
-        ema_fast = df['close'].ewm(span=9).mean()
-        ema_slow = df['close'].ewm(span=21).mean()
-
-        # RSI
-        delta = df['close'].diff()
-        gain = (delta.where(delta > 0, 0)).rolling(window=14).mean()
-        loss = (-delta.where(delta < 0, 0)).rolling(window=14).mean()
-        rs = gain / loss.replace(0, np.nan)
-        rsi = 100 - (100 / (1 + rs))
-
+            return {
+                "trend": "NEUTRAL",
+                "trend_strength": "WEAK",
+                "structure": "Neutral",
+                "swings": {"hh": [], "hl": [], "lh": [], "ll": []},
+                "support_resistance": [],
+                "volatility": "NORMAL",
+                "volatility_index": 100,
+                "momentum": "Neutral"
+            }
+        
+        close = df['close']
+        high = df['high']
+        low = df['low']
+        
+        # Swing noktalarını bul
+        swings = MarketStructureAnalyzer.find_swing_points(high, low)
+        
+        # Destek/direnç bölgelerini bul
+        sr_zones = MarketStructureAnalyzer.find_support_resistance_zones(high, low, close)
+        
+        # Trend belirleme (HH/HL bazlı)
+        last_20_idx = len(df) - 20
+        
+        recent_hh = [h for h in swings['hh'] if h[0] > last_20_idx]
+        recent_hl = [h for h in swings['hl'] if h[0] > last_20_idx]
+        recent_lh = [h for h in swings['lh'] if h[0] > last_20_idx]
+        recent_ll = [h for h in swings['ll'] if h[0] > last_20_idx]
+        
+        if len(recent_hh) >= 2 and len(recent_hl) >= 2:
+            trend = "STRONG_UPTREND"
+            trend_strength = "STRONG"
+            structure = "Bullish"
+        elif len(recent_hh) >= 1 and len(recent_hl) >= 1:
+            trend = "UPTREND"
+            trend_strength = "MODERATE"
+            structure = "Bullish"
+        elif len(recent_ll) >= 2 and len(recent_lh) >= 2:
+            trend = "STRONG_DOWNTREND"
+            trend_strength = "STRONG"
+            structure = "Bearish"
+        elif len(recent_ll) >= 1 and len(recent_lh) >= 1:
+            trend = "DOWNTREND"
+            trend_strength = "MODERATE"
+            structure = "Bearish"
+        else:
+            trend = "NEUTRAL"
+            trend_strength = "WEAK"
+            structure = "Neutral"
+        
+        # Volatilite hesapla (ATR bazlı)
+        atr = df['atr'] if 'atr' in df.columns else (high - low).rolling(14).mean()
+        current_atr = atr.iloc[-1] if not pd.isna(atr.iloc[-1]) else (high.iloc[-1] - low.iloc[-1])
+        avg_atr = atr.rolling(50).mean().iloc[-1] if len(atr) >= 50 else current_atr
+        
+        if pd.isna(avg_atr) or avg_atr == 0:
+            avg_atr = current_atr
+        
+        if current_atr > avg_atr * 1.5:
+            vol_regime = "HIGH"
+            vol_index = 150
+        elif current_atr < avg_atr * 0.7:
+            vol_regime = "LOW"
+            vol_index = 70
+        else:
+            vol_regime = "NORMAL"
+            vol_index = 100
+        
         # Momentum
-        momentum = df['close'].diff(12)
-
-        # Pivot noktaları
-        high_pivot = df['high'].rolling(window=5, center=True).max()
-        low_pivot = df['low'].rolling(window=5, center=True).min()
-
-        # Engulfing
-        bull_engulf = (df['close'] > df['open']) & (df['close'] > df['close'].shift(1)) & (
-                df['open'] <= df['close'].shift(1))
-        bear_engulf = (df['close'] < df['open']) & (df['close'] < df['close'].shift(1)) & (
-                df['open'] >= df['close'].shift(1))
-
-        # ATR
-        tr1 = df['high'] - df['low']
-        tr2 = (df['high'] - df['close'].shift(1)).abs()
-        tr3 = (df['low'] - df['close'].shift(1)).abs()
-        tr = pd.concat([tr1, tr2, tr3], axis=1).max(axis=1)
-        atr = tr.rolling(window=14).mean()
-
-        # Divergence
-        price_lows = df['low'].rolling(window=10).min()
-        rsi_lows = rsi.rolling(window=10).min()
-        bull_div = (df['low'] < price_lows.shift(1)) & (rsi > rsi_lows.shift(1)) & (rsi < 40)
-
-        price_highs = df['high'].rolling(window=10).max()
-        rsi_highs = rsi.rolling(window=10).max()
-        bear_div = (df['high'] > price_highs.shift(1)) & (rsi < rsi_highs.shift(1)) & (rsi > 60)
-
-        # Structure Break
-        bull_structure = (df['close'] > high_pivot.shift(1)) & (high_pivot.shift(1).notna())
-        bear_structure = (df['close'] < low_pivot.shift(1)) & (low_pivot.shift(1).notna())
-
-        # Son 10 mumu tara
-        for i in range(len(df) - 10, len(df)):
-            if i < 10:
-                continue
-
-            # === BUY SİNYALİ ===
-            # Phase 1: Trend + Momentum + RSI
-            phase1_buy = (
-                ema_fast.iloc[i] > ema_slow.iloc[i] and
-                ema_fast.iloc[i - 1] <= ema_slow.iloc[i - 1] and  # crossover
-                momentum.iloc[i] > 0 and
-                rsi.iloc[i] > 35
-            )
-
-            # Phase 2: Yapısal onay
-            phase2_buy = (
-                bull_engulf.iloc[i] or
-                bull_div.iloc[i] or
-                bull_structure.iloc[i]
-            )
-
-            if phase1_buy and phase2_buy:
-                entry_price = df['close'].iloc[i]
-                sl_level = entry_price - atr.iloc[i] * 1.3
-                tp_level = entry_price + (entry_price - sl_level) * 2.2
-
-                signals.append({
-                    "pattern": "ultimate_2026_buy",
-                    "type": "ultimate",
-                    "direction": "bullish",
-                    "strength": 85,
-                    "timestamp": str(df.index[i]),
-                    "price": float(entry_price),
-                    "sl_level": float(sl_level),
-                    "tp_level": float(tp_level),
-                    "description": "Ultimate 2026 BUY - Multi-phase confirmation"
-                })
-
-            # === SELL SİNYALİ ===
-            phase1_sell = (
-                ema_fast.iloc[i] < ema_slow.iloc[i] and
-                ema_fast.iloc[i - 1] >= ema_slow.iloc[i - 1] and  # crossunder
-                momentum.iloc[i] < 0 and
-                rsi.iloc[i] < 65
-            )
-
-            phase2_sell = (
-                bear_engulf.iloc[i] or
-                bear_div.iloc[i] or
-                bear_structure.iloc[i]
-            )
-
-            if phase1_sell and phase2_sell:
-                entry_price = df['close'].iloc[i]
-                sl_level = entry_price + atr.iloc[i] * 1.3
-                tp_level = entry_price - (sl_level - entry_price) * 2.2
-
-                signals.append({
-                    "pattern": "ultimate_2026_sell",
-                    "type": "ultimate",
-                    "direction": "bearish",
-                    "strength": 85,
-                    "timestamp": str(df.index[i]),
-                    "price": float(entry_price),
-                    "sl_level": float(sl_level),
-                    "tp_level": float(tp_level),
-                    "description": "Ultimate 2026 SELL - Multi-phase confirmation"
-                })
-
-        return signals[-10:]
+        mom_5 = (close.iloc[-1] / close.iloc[-5] - 1) if len(close) >= 5 else 0
+        mom_10 = (close.iloc[-1] / close.iloc[-10] - 1) if len(close) >= 10 else 0
+        
+        if mom_5 > 0.02 and mom_10 > 0.03:
+            momentum = "Strong_Bullish"
+        elif mom_5 > 0.01:
+            momentum = "Bullish"
+        elif mom_5 < -0.02 and mom_10 < -0.03:
+            momentum = "Strong_Bearish"
+        elif mom_5 < -0.01:
+            momentum = "Bearish"
+        else:
+            momentum = "Neutral"
+        
+        # Son HH/HL/LH/LL'leri formatla
+        last_swings = {
+            "hh": [{"index": s[0], "price": s[1], "type": s[2]} for s in swings['hh'][-5:]],
+            "hl": [{"index": s[0], "price": s[1], "type": s[2]} for s in swings['hl'][-5:]],
+            "lh": [{"index": s[0], "price": s[1], "type": s[2]} for s in swings['lh'][-5:]],
+            "ll": [{"index": s[0], "price": s[1], "type": s[2]} for s in swings['ll'][-5:]]
+        }
+        
+        result = {
+            "trend": trend,
+            "trend_strength": trend_strength,
+            "structure": structure,
+            "swings": last_swings,
+            "support_resistance": sr_zones[-5:],
+            "volatility": vol_regime,
+            "volatility_index": vol_index,
+            "momentum": momentum,
+            "current_price": float(close.iloc[-1])
+        }
+        
+        logger.info(f"📊 Market Structure: {trend} ({trend_strength}) | Vol:{vol_regime} | Mom:{momentum}")
+        
+        return result
 
 
 # ========================================================================================================
-# GAINZALGO V2 DETECTOR
+# ICT PATTERN DETECTOR (GENİŞLETİLMİŞ)
 # ========================================================================================================
-class GainzAlgoV2Detector:
-    """GainzAlgo V2 Alpha stratejisi"""
-
-    @staticmethod
-    def detect(df: pd.DataFrame) -> List[Dict]:
-        signals = []
-
-        if len(df) < 30:
-            return signals
-
-        # EMA'lar
-        ema_fast = df['close'].ewm(span=9).mean()
-        ema_slow = df['close'].ewm(span=21).mean()
-
-        # RSI
-        delta = df['close'].diff()
-        gain = (delta.where(delta > 0, 0)).rolling(window=14).mean()
-        loss = (-delta.where(delta < 0, 0)).rolling(window=14).mean()
-        rs = gain / loss.replace(0, np.nan)
-        rsi = 100 - (100 / (1 + rs))
-
-        # Momentum
-        momentum = df['close'].diff(12)
-
-        # Engulfing
-        bull_engulf = (df['close'] > df['open']) & (df['close'] > df['close'].shift(1)) & (
-                df['open'] < df['close'].shift(1))
-        bear_engulf = (df['close'] < df['open']) & (df['close'] < df['close'].shift(1)) & (
-                df['open'] > df['close'].shift(1))
-
-        # ATR
-        tr1 = df['high'] - df['low']
-        tr2 = (df['high'] - df['close'].shift(1)).abs()
-        tr3 = (df['low'] - df['close'].shift(1)).abs()
-        tr = pd.concat([tr1, tr2, tr3], axis=1).max(axis=1)
-        atr = tr.rolling(window=14).mean()
-
-        # Son 15 mumu tara
-        for i in range(len(df) - 15, len(df)):
-            if i < 10:
-                continue
-
-            # === BUY SİNYALİ ===
-            buy_cond = (
-                ema_fast.iloc[i] > ema_slow.iloc[i] and
-                ema_fast.iloc[i - 1] <= ema_slow.iloc[i - 1] and  # crossover
-                rsi.iloc[i] > 40 and
-                momentum.iloc[i] > 0 and
-                bull_engulf.iloc[i] and
-                df['close'].iloc[i] > df['close'].iloc[i - 1]
-            )
-
-            if buy_cond and not pd.isna(atr.iloc[i]):
-                entry_price = df['close'].iloc[i]
-                sl_level = entry_price - atr.iloc[i] * 1.2
-                tp_level = entry_price + (entry_price - sl_level) * 2.0
-
-                signals.append({
-                    "pattern": "gainzalgo_v2_buy",
-                    "type": "gainzalgo",
-                    "direction": "bullish",
-                    "strength": 85,
-                    "timestamp": str(df.index[i]),
-                    "price": float(entry_price),
-                    "sl_level": float(sl_level),
-                    "tp_level": float(tp_level),
-                    "description": "GainzAlgo V2 BUY - EMA crossover + RSI + Momentum + Engulfing"
-                })
-
-            # === SELL SİNYALİ ===
-            sell_cond = (
-                ema_fast.iloc[i] < ema_slow.iloc[i] and
-                ema_fast.iloc[i - 1] >= ema_slow.iloc[i - 1] and  # crossunder
-                rsi.iloc[i] < 60 and
-                momentum.iloc[i] < 0 and
-                bear_engulf.iloc[i] and
-                df['close'].iloc[i] < df['close'].iloc[i - 1]
-            )
-
-            if sell_cond and not pd.isna(atr.iloc[i]):
-                entry_price = df['close'].iloc[i]
-                sl_level = entry_price + atr.iloc[i] * 1.2
-                tp_level = entry_price - (sl_level - entry_price) * 2.0
-
-                signals.append({
-                    "pattern": "gainzalgo_v2_sell",
-                    "type": "gainzalgo",
-                    "direction": "bearish",
-                    "strength": 85,
-                    "timestamp": str(df.index[i]),
-                    "price": float(entry_price),
-                    "sl_level": float(sl_level),
-                    "tp_level": float(tp_level),
-                    "description": "GainzAlgo V2 SELL - EMA crossunder + RSI + Momentum + Engulfing"
-                })
-
-        return signals[-10:]
-
-    # ========================================================================================================
-    # ICT PATTERN DETECTOR (GENİŞLETİLMİŞ)
-    # ========================================================================================================
-
-
-class  ICTPatternDetector:
-
-    @staticmethod
-    def calculate_indicators(df: pd.DataFrame) -> pd.DataFrame:
-        """Gerekli indikatörleri hesapla"""
-        df = df.copy()
-
-        # Temel mum özellikleri
-        df['is_bullish'] = df['close'] > df['open']
-        df['is_bearish'] = df['close'] < df['open']
-        df['body'] = abs(df['close'] - df['open'])
-        df['range'] = df['high'] - df['low']
-        df['upper_shadow'] = df['high'] - df[['close', 'open']].max(axis=1)
-        df['lower_shadow'] = df[['close', 'open']].min(axis=1) - df['low']
-        df['body_percent'] = df['body'] / df['range'].replace(0, 1)
-
-        # RSI
-        delta = df['close'].diff()
-        gain = (delta.where(delta > 0, 0)).rolling(window=14).mean()
-        loss = (-delta.where(delta < 0, 0)).rolling(window=14).mean()
-        rs = gain / loss.replace(0, np.nan)
-        df['rsi'] = 100 - (100 / (1 + rs))
-
-        # EMA'lar
-        df['ema_9'] = df['close'].ewm(span=9, adjust=False).mean()
-        df['ema_20'] = df['close'].ewm(span=20, adjust=False).mean()
-        df['ema_50'] = df['close'].ewm(span=50, adjust=False).mean()
-
-        # ATR
-        tr1 = df['high'] - df['low']
-        tr2 = (df['high'] - df['close'].shift(1)).abs()
-        tr3 = (df['low'] - df['close'].shift(1)).abs()
-        tr = pd.concat([tr1, tr2, tr3], axis=1).max(axis=1)
-        df['atr'] = tr.rolling(window=14).mean()
-
-        # Volume
-        df['volume_sma'] = df['volume'].rolling(window=20).mean()
-        df['volume_ratio'] = df['volume'] / df['volume_sma']
-
-        # Candlestick
-        df['is_bullish'] = df['close'] > df['open']
-        df['is_bearish'] = df['close'] < df['open']
-        df['body'] = abs(df['close'] - df['open'])
-        df['upper_shadow'] = df['high'] - df[['close', 'open']].max(axis=1)
-        df['lower_shadow'] = df[['close', 'open']].min(axis=1) - df['low']
-
-        return df
-
+class ICTPatternDetector:
+    """ICT Pattern dedektörü - FVG, Order Blocks, Breaker, MSS, CHoCH, OTE, etc."""
+    
     @staticmethod
     def detect_fair_value_gap(df: pd.DataFrame) -> List[Dict]:
         fvgs = []
         if len(df) < 3:
             return fvgs
-
-        for i in range(1, len(df) - 1):
+        
+        n = len(df)
+        for i in range(1, n - 1):
             # Bullish FVG
             if df['low'].iloc[i + 1] > df['high'].iloc[i - 1]:
                 gap_size = df['low'].iloc[i + 1] - df['high'].iloc[i - 1]
-                gap_percent = (gap_size / df['high'].iloc[i - 1]) * 100
-
+                gap_percent = (gap_size / df['high'].iloc[i - 1]) * 100 if df['high'].iloc[i - 1] > 0 else 0
+                
                 if gap_percent > 0.1:
                     fvgs.append({
                         "pattern": "bullish_fvg",
@@ -874,12 +943,12 @@ class  ICTPatternDetector:
                         "gap_percent": round(gap_percent, 2),
                         "description": f"Bullish Fair Value Gap at {gap_percent:.2f}%"
                     })
-
+            
             # Bearish FVG
             elif df['high'].iloc[i + 1] < df['low'].iloc[i - 1]:
                 gap_size = df['low'].iloc[i - 1] - df['high'].iloc[i + 1]
-                gap_percent = (gap_size / df['low'].iloc[i - 1]) * 100
-
+                gap_percent = (gap_size / df['low'].iloc[i - 1]) * 100 if df['low'].iloc[i - 1] > 0 else 0
+                
                 if gap_percent > 0.1:
                     fvgs.append({
                         "pattern": "bearish_fvg",
@@ -893,25 +962,26 @@ class  ICTPatternDetector:
                         "gap_percent": round(gap_percent, 2),
                         "description": f"Bearish Fair Value Gap at {gap_percent:.2f}%"
                     })
-
+        
         return fvgs[-10:]
-
+    
     @staticmethod
     def detect_order_blocks(df: pd.DataFrame) -> List[Dict]:
         obs = []
         if len(df) < 5:
             return obs
-
-        for i in range(2, len(df) - 2):
+        
+        n = len(df)
+        for i in range(2, n - 2):
             # Bullish Order Block
             if (df['is_bullish'].iloc[i] and
                 df['is_bearish'].iloc[i - 1] and
                 df['low'].iloc[i] < df['low'].iloc[i - 1] and
                 df['close'].iloc[i] > df['high'].iloc[i - 1]):
-
+                
                 ob_range = abs(df['high'].iloc[i - 1] - df['low'].iloc[i - 1])
-                ob_percent = (ob_range / df['close'].iloc[i - 1]) * 100
-
+                ob_percent = (ob_range / df['close'].iloc[i - 1]) * 100 if df['close'].iloc[i - 1] > 0 else 0
+                
                 obs.append({
                     "pattern": "bullish_order_block",
                     "type": "ict",
@@ -923,16 +993,16 @@ class  ICTPatternDetector:
                     "block_high": float(df['high'].iloc[i - 1]),
                     "description": "Bullish Order Block - Smart money buying zone"
                 })
-
+            
             # Bearish Order Block
             elif (df['is_bearish'].iloc[i] and
                   df['is_bullish'].iloc[i - 1] and
                   df['high'].iloc[i] > df['high'].iloc[i - 1] and
                   df['close'].iloc[i] < df['low'].iloc[i - 1]):
-
+                
                 ob_range = abs(df['high'].iloc[i - 1] - df['low'].iloc[i - 1])
-                ob_percent = (ob_range / df['close'].iloc[i - 1]) * 100
-
+                ob_percent = (ob_range / df['close'].iloc[i - 1]) * 100 if df['close'].iloc[i - 1] > 0 else 0
+                
                 obs.append({
                     "pattern": "bearish_order_block",
                     "type": "ict",
@@ -944,19 +1014,20 @@ class  ICTPatternDetector:
                     "block_high": float(df['high'].iloc[i - 1]),
                     "description": "Bearish Order Block - Smart money selling zone"
                 })
-
+        
         return obs[-10:]
-
+    
     @staticmethod
     def detect_breaker_blocks(df: pd.DataFrame) -> List[Dict]:
         breakers = []
         if len(df) < 15:
             return breakers
-
-        for i in range(10, len(df) - 1):
+        
+        n = len(df)
+        for i in range(10, n - 1):
             recent_high = df['high'].iloc[i - 10:i].max()
             recent_low = df['low'].iloc[i - 10:i].min()
-
+            
             # Bullish Breaker (eski direnç -> destek)
             if (df['close'].iloc[i] > recent_high and
                 df['close'].iloc[i - 1] < recent_high):
@@ -970,7 +1041,7 @@ class  ICTPatternDetector:
                     "break_level": float(recent_high),
                     "description": "Bullish Breaker - Resistance turned support"
                 })
-
+            
             # Bearish Breaker (eski destek -> direnç)
             elif (df['close'].iloc[i] < recent_low and
                   df['close'].iloc[i - 1] > recent_low):
@@ -984,26 +1055,27 @@ class  ICTPatternDetector:
                     "break_level": float(recent_low),
                     "description": "Bearish Breaker - Support turned resistance"
                 })
-
+        
         return breakers[-10:]
-
+    
     @staticmethod
     def detect_liquidity_sweeps(df: pd.DataFrame) -> List[Dict]:
         sweeps = []
         if len(df) < 25:
             return sweeps
-
-        for i in range(20, len(df)):
+        
+        n = len(df)
+        for i in range(20, n):
             swing_highs = df['high'].iloc[i - 20:i - 5].nlargest(3)
             swing_lows = df['low'].iloc[i - 20:i - 5].nsmallest(3)
-
+            
             # Yukarı likidite avı (bearish reversal)
             if len(swing_highs) > 0 and df['high'].iloc[i] > swing_highs.iloc[0] * 1.001:
                 if df['close'].iloc[i] < swing_highs.iloc[0]:
                     volume_conf = 0
                     if not pd.isna(df['volume_ratio'].iloc[i]):
                         volume_conf = min(0.15, df['volume_ratio'].iloc[i] * 0.1)
-
+                    
                     sweeps.append({
                         "pattern": "liquidity_sweep_up",
                         "type": "ict",
@@ -1015,14 +1087,14 @@ class  ICTPatternDetector:
                         "sweep_high": float(df['high'].iloc[i]),
                         "description": "Liquidity Sweep Above - Bearish reversal"
                     })
-
+            
             # Aşağı likidite avı (bullish reversal)
             if len(swing_lows) > 0 and df['low'].iloc[i] < swing_lows.iloc[0] * 0.999:
                 if df['close'].iloc[i] > swing_lows.iloc[0]:
                     volume_conf = 0
                     if not pd.isna(df['volume_ratio'].iloc[i]):
                         volume_conf = min(0.15, df['volume_ratio'].iloc[i] * 0.1)
-
+                    
                     sweeps.append({
                         "pattern": "liquidity_sweep_down",
                         "type": "ict",
@@ -1034,22 +1106,23 @@ class  ICTPatternDetector:
                         "sweep_low": float(df['low'].iloc[i]),
                         "description": "Liquidity Sweep Below - Bullish reversal"
                     })
-
+        
         return sweeps[-10:]
-
+    
     @staticmethod
     def detect_break_of_structure(df: pd.DataFrame) -> List[Dict]:
         bos_signals = []
         if len(df) < 15:
             return bos_signals
-
-        for i in range(10, len(df)):
+        
+        n = len(df)
+        for i in range(10, n):
             recent_high = df['high'].iloc[i - 10:i].max()
             recent_low = df['low'].iloc[i - 10:i].min()
-
+            
             # Bullish BOS
             if df['high'].iloc[i] > recent_high * 1.005:
-                bos_size = (df['high'].iloc[i] - recent_high) / recent_high * 100
+                bos_size = (df['high'].iloc[i] - recent_high) / recent_high * 100 if recent_high > 0 else 0
                 bos_signals.append({
                     "pattern": "bullish_bos",
                     "type": "ict",
@@ -1061,10 +1134,10 @@ class  ICTPatternDetector:
                     "break_size": round(bos_size, 2),
                     "description": f"Bullish Break of Structure at {bos_size:.2f}%"
                 })
-
+            
             # Bearish BOS
             elif df['low'].iloc[i] < recent_low * 0.995:
-                bos_size = (recent_low - df['low'].iloc[i]) / recent_low * 100
+                bos_size = (recent_low - df['low'].iloc[i]) / recent_low * 100 if recent_low > 0 else 0
                 bos_signals.append({
                     "pattern": "bearish_bos",
                     "type": "ict",
@@ -1076,22 +1149,19 @@ class  ICTPatternDetector:
                     "break_size": round(bos_size, 2),
                     "description": f"Bearish Break of Structure at {bos_size:.2f}%"
                 })
-
+        
         return bos_signals[-10:]
-
+    
     @staticmethod
     def detect_change_of_character(df: pd.DataFrame) -> List[Dict]:
         choch_signals = []
         if len(df) < 20:
             return choch_signals
-
-        # Trend değişimi sinyali
-        ema_fast = df['ema_9']
-        ema_slow = df['ema_20']
-
-        for i in range(15, len(df)):
+        
+        n = len(df)
+        for i in range(15, n):
             recent_trend = df['close'].iloc[i - 10:i].pct_change().mean()
-
+            
             # Bullish CHoCH (downtrend -> uptrend)
             if recent_trend < -0.001 and df['close'].iloc[i] > df['high'].iloc[i - 1]:
                 choch_signals.append({
@@ -1103,7 +1173,7 @@ class  ICTPatternDetector:
                     "price": float(df['close'].iloc[i]),
                     "description": "Bullish Change of Character - Downtrend broken"
                 })
-
+            
             # Bearish CHoCH (uptrend -> downtrend)
             elif recent_trend > 0.001 and df['close'].iloc[i] < df['low'].iloc[i - 1]:
                 choch_signals.append({
@@ -1115,16 +1185,17 @@ class  ICTPatternDetector:
                     "price": float(df['close'].iloc[i]),
                     "description": "Bearish Change of Character - Uptrend broken"
                 })
-
+        
         return choch_signals[-10:]
-
+    
     @staticmethod
     def detect_market_structure_shift(df: pd.DataFrame) -> List[Dict]:
         mss_signals = []
         if len(df) < 15:
             return mss_signals
-
-        for i in range(10, len(df) - 2):
+        
+        n = len(df)
+        for i in range(10, n - 2):
             # Bullish MSS (higher high + higher low)
             if (df['high'].iloc[i] > df['high'].iloc[i - 1] and
                 df['low'].iloc[i] > df['low'].iloc[i - 1] and
@@ -1138,7 +1209,7 @@ class  ICTPatternDetector:
                     "price": float(df['close'].iloc[i]),
                     "description": "Bullish Market Structure Shift - HH + HL"
                 })
-
+            
             # Bearish MSS (lower low + lower high)
             if (df['low'].iloc[i] < df['low'].iloc[i - 1] and
                 df['high'].iloc[i] < df['high'].iloc[i - 1] and
@@ -1152,70 +1223,78 @@ class  ICTPatternDetector:
                     "price": float(df['close'].iloc[i]),
                     "description": "Bearish Market Structure Shift - LL + LH"
                 })
-
+        
         return mss_signals[-10:]
-
+    
     @staticmethod
     def detect_optimal_trade_entry(df: pd.DataFrame) -> List[Dict]:
         ote_signals = []
         if len(df) < 30:
             return ote_signals
-
-        for i in range(25, len(df)):
+        
+        n = len(df)
+        for i in range(25, n):
             # Son swing high/low'ları bul
-            high_idx = df['high'].iloc[i - 20:i].idxmax()
-            low_idx = df['low'].iloc[i - 20:i].idxmin()
-
-            if isinstance(high_idx, int) and isinstance(low_idx, int) and high_idx < low_idx:
-                # Düşüş trendi
-                swing_high = df.loc[high_idx, 'high'] if high_idx in df.index else None
-                swing_low = df.loc[low_idx, 'low'] if low_idx in df.index else None
-
-                if swing_high and swing_low and swing_high > swing_low:
-                    retrace = (df['close'].iloc[i] - swing_low) / (swing_high - swing_low)
-                    if 0.618 <= retrace <= 0.79:
-                        ote_signals.append({
-                            "pattern": "bearish_ote",
-                            "type": "ict",
-                            "direction": "bearish",
-                            "strength": 78,
-                            "timestamp": str(df.index[i]),
-                            "price": float(df['close'].iloc[i]),
-                            "retracement": round(float(retrace), 3),
-                            "description": f"Bearish OTE at {retrace:.2f} retracement"
-                        })
-
-            elif isinstance(high_idx, int) and isinstance(low_idx, int) and low_idx < high_idx:
-                # Yükseliş trendi
-                swing_low = df.loc[low_idx, 'low'] if low_idx in df.index else None
-                swing_high = df.loc[high_idx, 'high'] if high_idx in df.index else None
-
-                if swing_low and swing_high and swing_high > swing_low:
-                    retrace = (swing_high - df['close'].iloc[i]) / (swing_high - swing_low)
-                    if 0.618 <= retrace <= 0.79:
-                        ote_signals.append({
-                            "pattern": "bullish_ote",
-                            "type": "ict",
-                            "direction": "bullish",
-                            "strength": 78,
-                            "timestamp": str(df.index[i]),
-                            "price": float(df['close'].iloc[i]),
-                            "retracement": round(float(retrace), 3),
-                            "description": f"Bullish OTE at {retrace:.2f} retracement"
-                        })
-
+            window_data = df.iloc[i - 20:i]
+            if len(window_data) == 0:
+                continue
+                
+            high_idx = window_data['high'].idxmax()
+            low_idx = window_data['low'].idxmin()
+            
+            if isinstance(high_idx, pd.Timestamp) and isinstance(low_idx, pd.Timestamp):
+                high_pos = window_data.index.get_loc(high_idx)
+                low_pos = window_data.index.get_loc(low_idx)
+                
+                if high_pos < low_pos:  # Önce high, sonra low -> düşüş trendi
+                    swing_high = window_data.loc[high_idx, 'high']
+                    swing_low = window_data.loc[low_idx, 'low']
+                    
+                    if swing_high > swing_low:
+                        retrace = (df['close'].iloc[i] - swing_low) / (swing_high - swing_low)
+                        if 0.618 <= retrace <= 0.79:
+                            ote_signals.append({
+                                "pattern": "bearish_ote",
+                                "type": "ict",
+                                "direction": "bearish",
+                                "strength": 78,
+                                "timestamp": str(df.index[i]),
+                                "price": float(df['close'].iloc[i]),
+                                "retracement": round(float(retrace), 3),
+                                "description": f"Bearish OTE at {retrace:.2f} retracement"
+                            })
+                
+                elif low_pos < high_pos:  # Önce low, sonra high -> yükseliş trendi
+                    swing_low = window_data.loc[low_idx, 'low']
+                    swing_high = window_data.loc[high_idx, 'high']
+                    
+                    if swing_high > swing_low:
+                        retrace = (swing_high - df['close'].iloc[i]) / (swing_high - swing_low)
+                        if 0.618 <= retrace <= 0.79:
+                            ote_signals.append({
+                                "pattern": "bullish_ote",
+                                "type": "ict",
+                                "direction": "bullish",
+                                "strength": 78,
+                                "timestamp": str(df.index[i]),
+                                "price": float(df['close'].iloc[i]),
+                                "retracement": round(float(retrace), 3),
+                                "description": f"Bullish OTE at {retrace:.2f} retracement"
+                            })
+        
         return ote_signals[-10:]
-
+    
     @staticmethod
     def detect_turtle_soup(df: pd.DataFrame) -> List[Dict]:
         soups = []
         if len(df) < 30:
             return soups
-
-        for i in range(25, len(df)):
+        
+        n = len(df)
+        for i in range(25, n):
             period_high = df['high'].iloc[i - 20:i].max()
             period_low = df['low'].iloc[i - 20:i].min()
-
+            
             # Yukarı kırılım tuzağı (bearish)
             if df['high'].iloc[i] > period_high * 1.001 and df['close'].iloc[i] < period_high:
                 soups.append({
@@ -1227,7 +1306,7 @@ class  ICTPatternDetector:
                     "price": float(df['close'].iloc[i]),
                     "description": "Turtle Soup - False breakout above"
                 })
-
+            
             # Aşağı kırılım tuzağı (bullish)
             elif df['low'].iloc[i] < period_low * 0.999 and df['close'].iloc[i] > period_low:
                 soups.append({
@@ -1239,25 +1318,26 @@ class  ICTPatternDetector:
                     "price": float(df['close'].iloc[i]),
                     "description": "Turtle Soup - False breakout below"
                 })
-
+        
         return soups[-10:]
-
+    
     @staticmethod
     def detect_displacement(df: pd.DataFrame) -> List[Dict]:
         displacements = []
         if len(df) < 25:
             return displacements
-
-        for i in range(20, len(df)):
+        
+        n = len(df)
+        for i in range(20, n):
             avg_volume = df['volume'].iloc[i - 20:i].mean()
             if avg_volume > 0:
                 volume_ratio = df['volume'].iloc[i] / avg_volume
-
+                
                 if (volume_ratio > 1.5 and
                     abs(df['close'].iloc[i] - df['open'].iloc[i]) > df['atr'].iloc[i] * 0.5):
                     direction = "bullish" if df['is_bullish'].iloc[i] else "bearish"
                     strength = 70 + min(20, (volume_ratio - 1) * 20)
-
+                    
                     displacements.append({
                         "pattern": f"{direction}_displacement",
                         "type": "ict",
@@ -1268,142 +1348,146 @@ class  ICTPatternDetector:
                         "volume_ratio": round(float(volume_ratio), 2),
                         "description": f"{direction.capitalize()} Displacement - High volume move"
                     })
-
+        
         return displacements[-10:]
-
-    @staticmethod
-    def detect_judgmental_volume(df: pd.DataFrame) -> List[Dict]:
-        jv_signals = []
-        if len(df) < 25:
-            return jv_signals
-
-        for i in range(20, len(df)):
-            if not pd.isna(df['volume_ratio'].iloc[i]) and df['volume_ratio'].iloc[i] > 2.0:
-                direction = "bullish" if df['is_bullish'].iloc[i] else "bearish"
-
-                jv_signals.append({
-                    "pattern": f"judgmental_volume_{direction}",
-                    "type": "ict",
-                    "direction": direction,
-                    "strength": 70,
-                    "timestamp": str(df.index[i]),
-                    "price": float(df['close'].iloc[i]),
-                    "volume_ratio": round(float(df['volume_ratio'].iloc[i]), 2),
-                    "description": f"Judgmental Volume - {direction.capitalize()} with {df['volume_ratio'].iloc[i]:.2f}x volume"
-                })
-
-        return jv_signals[-10:]
-
-    @staticmethod
-    def detect_power_of_three(df: pd.DataFrame) -> List[Dict]:
-        pot_signals = []
-        if len(df) < 10:
-            return pot_signals
-
-        for i in range(5, len(df) - 2):
-            # Accumulation, Manipulation, Distribution
-            if (df['is_bullish'].iloc[i - 2] and
-                df['is_bearish'].iloc[i - 1] and
-                df['is_bullish'].iloc[i] and
-                abs(df['close'].iloc[i] - df['close'].iloc[i - 2]) / df['close'].iloc[i - 2] < 0.01):
-                pot_signals.append({
-                    "pattern": "power_of_three_bullish",
-                    "type": "ict",
-                    "direction": "bullish",
-                    "strength": 65,
-                    "timestamp": str(df.index[i]),
-                    "price": float(df['close'].iloc[i]),
-                    "description": "Power of Three - Accumulation pattern"
-                })
-
-        return pot_signals[-10:]
-
-    @staticmethod
-    def detect_buyside_sellside_liquidity(df: pd.DataFrame) -> List[Dict]:
-        liquidity_signals = []
-        if len(df) < 20:
-            return liquidity_signals
-
-        for i in range(15, len(df)):
-            recent_range = df['high'].iloc[i - 10:i].max() - df['low'].iloc[i - 10:i].min()
-            if recent_range > 0:
-                # Buyside liquidity (near highs)
-                if df['high'].iloc[i] > df['high'].iloc[i - 10:i].max() * 0.995:
-                    liquidity_signals.append({
-                        "pattern": "buyside_liquidity",
-                        "type": "ict",
-                        "direction": "bearish",
-                        "strength": 60,
-                        "timestamp": str(df.index[i]),
-                        "price": float(df['close'].iloc[i]),
-                        "description": "Buyside Liquidity - Price near recent highs"
-                    })
-
-                # Sellside liquidity (near lows)
-                if df['low'].iloc[i] < df['low'].iloc[i - 10:i].min() * 1.005:
-                    liquidity_signals.append({
-                        "pattern": "sellside_liquidity",
-                        "type": "ict",
-                        "direction": "bullish",
-                        "strength": 60,
-                        "timestamp": str(df.index[i]),
-                        "price": float(df['close'].iloc[i]),
-                        "description": "Sellside Liquidity - Price near recent lows"
-                    })
-
-        return liquidity_signals[-10:]
-
-    @staticmethod
-    def detect_institutional_order_flow(df: pd.DataFrame) -> List[Dict]:
-        iof_signals = []
-        if len(df) < 25:
-            return iof_signals
-
-        for i in range(20, len(df)):
-            avg_volume = df['volume'].iloc[i - 20:i].mean()
-            if avg_volume > 0:
-                volume_ratio = df['volume'].iloc[i] / avg_volume
-
-                if (volume_ratio > 1.8 and
-                    abs(df['close'].iloc[i] - df['open'].iloc[i]) > df['atr'].iloc[i] * 0.7):
-                    direction = "bullish" if df['is_bullish'].iloc[i] else "bearish"
-
-                    iof_signals.append({
-                        "pattern": f"institutional_flow_{direction}",
-                        "type": "ict",
-                        "direction": direction,
-                        "strength": 80,
-                        "timestamp": str(df.index[i]),
-                        "price": float(df['close'].iloc[i]),
-                        "volume_ratio": round(float(volume_ratio), 2),
-                        "description": f"Institutional Order Flow - {direction.capitalize()} with {volume_ratio:.2f}x volume"
-                    })
-
-        return iof_signals[-10:]
-
+    
     @staticmethod
     def analyze(df: pd.DataFrame) -> Dict[str, List[Dict]]:
         """Tüm ICT pattern'lerini analiz et"""
-
-        # İndikatörleri hesapla
-        df_with_indicators = ICTPatternDetector.calculate_indicators(df)
-
+        
         return {
-            "fair_value_gaps": ICTPatternDetector.detect_fair_value_gap(df_with_indicators),
-            "order_blocks": ICTPatternDetector.detect_order_blocks(df_with_indicators),
-            "breaker_blocks": ICTPatternDetector.detect_breaker_blocks(df_with_indicators),
-            "liquidity_sweeps": ICTPatternDetector.detect_liquidity_sweeps(df_with_indicators),
-            "break_of_structure": ICTPatternDetector.detect_break_of_structure(df_with_indicators),
-            "change_of_character": ICTPatternDetector.detect_change_of_character(df_with_indicators),
-            "market_structure_shift": ICTPatternDetector.detect_market_structure_shift(df_with_indicators),
-            "optimal_trade_entry": ICTPatternDetector.detect_optimal_trade_entry(df_with_indicators),
-            "turtle_soup": ICTPatternDetector.detect_turtle_soup(df_with_indicators),
-            "displacement": ICTPatternDetector.detect_displacement(df_with_indicators),
-            "judgmental_volume": ICTPatternDetector.detect_judgmental_volume(df_with_indicators),
-            "power_of_three": ICTPatternDetector.detect_power_of_three(df_with_indicators),
-            "buyside_sellside_liquidity": ICTPatternDetector.detect_buyside_sellside_liquidity(df_with_indicators),
-            "institutional_order_flow": ICTPatternDetector.detect_institutional_order_flow(df_with_indicators)
+            "fair_value_gaps": ICTPatternDetector.detect_fair_value_gap(df),
+            "order_blocks": ICTPatternDetector.detect_order_blocks(df),
+            "breaker_blocks": ICTPatternDetector.detect_breaker_blocks(df),
+            "liquidity_sweeps": ICTPatternDetector.detect_liquidity_sweeps(df),
+            "break_of_structure": ICTPatternDetector.detect_break_of_structure(df),
+            "change_of_character": ICTPatternDetector.detect_change_of_character(df),
+            "market_structure_shift": ICTPatternDetector.detect_market_structure_shift(df),
+            "optimal_trade_entry": ICTPatternDetector.detect_optimal_trade_entry(df),
+            "turtle_soup": ICTPatternDetector.detect_turtle_soup(df),
+            "displacement": ICTPatternDetector.detect_displacement(df)
         }
+
+
+# ========================================================================================================
+# ICTSMARTPRO STRATEJİSİ (GainzAlgo ve Ultimate KALDIRILDI)
+# ========================================================================================================
+class ICTSmartProDetector:
+    """ICTSMARTPRO Ana Strateji - HH/HL/LH/LL + S/R Bölgeleri + FVG + Order Blocks"""
+    
+    @staticmethod
+    def detect(df: pd.DataFrame, market_structure: Dict) -> List[Dict]:
+        signals = []
+        
+        if len(df) < 50:
+            return signals
+        
+        # Swing noktalarını al
+        swings = market_structure.get('swings', {})
+        sr_zones = market_structure.get('support_resistance', [])
+        
+        recent_hh = swings.get('hh', [])
+        recent_hl = swings.get('hl', [])
+        recent_lh = swings.get('lh', [])
+        recent_ll = swings.get('ll', [])
+        
+        current_price = df['close'].iloc[-1]
+        current_idx = len(df) - 1
+        
+        # === YÜKSELİŞ SİNYALİ: HH + HL ===
+        if len(recent_hh) >= 1 and len(recent_hl) >= 1:
+            last_hh = recent_hh[-1]
+            last_hl = recent_hl[-1]
+            
+            # Son 10 mum içinde mi?
+            if last_hh['index'] > len(df) - 15 or last_hl['index'] > len(df) - 15:
+                
+                # TP: Son HH'in biraz üstü
+                tp_level = last_hh['price'] * 1.02
+                
+                # SL: Son HL'in biraz altı
+                sl_level = last_hl['price'] * 0.98
+                
+                # Güç hesapla
+                strength = 70
+                if len(recent_hh) >= 2 and len(recent_hl) >= 2:
+                    strength = 85
+                
+                signals.append({
+                    "pattern": "ictsmartpro_hh_hl_buy",
+                    "type": "ictsmartpro",
+                    "direction": "bullish",
+                    "strength": strength,
+                    "timestamp": str(df.index[-1]),
+                    "price": float(current_price),
+                    "sl_level": float(sl_level),
+                    "tp_level": float(tp_level),
+                    "description": f"ICTSMARTPRO BUY - HH/HL Structure (HH:{last_hh['price']:.2f}, HL:{last_hl['price']:.2f})"
+                })
+        
+        # === DÜŞÜŞ SİNYALİ: LL + LH ===
+        if len(recent_ll) >= 1 and len(recent_lh) >= 1:
+            last_ll = recent_ll[-1]
+            last_lh = recent_lh[-1]
+            
+            if last_ll['index'] > len(df) - 15 or last_lh['index'] > len(df) - 15:
+                
+                # TP: Son LL'in biraz altı
+                tp_level = last_ll['price'] * 0.98
+                
+                # SL: Son LH'in biraz üstü
+                sl_level = last_lh['price'] * 1.02
+                
+                strength = 70
+                if len(recent_ll) >= 2 and len(recent_lh) >= 2:
+                    strength = 85
+                
+                signals.append({
+                    "pattern": "ictsmartpro_ll_lh_sell",
+                    "type": "ictsmartpro",
+                    "direction": "bearish",
+                    "strength": strength,
+                    "timestamp": str(df.index[-1]),
+                    "price": float(current_price),
+                    "sl_level": float(sl_level),
+                    "tp_level": float(tp_level),
+                    "description": f"ICTSMARTPRO SELL - LL/LH Structure (LL:{last_ll['price']:.2f}, LH:{last_lh['price']:.2f})"
+                })
+        
+        # === DESTEK BÖLGESİNDEN DÖNÜŞ ===
+        for zone in sr_zones:
+            if zone['type'] == 'support' and zone['zone_low'] <= current_price <= zone['zone_high']:
+                if df['is_bullish'].iloc[-1]:  # Bullish mum
+                    signals.append({
+                        "pattern": "ictsmartpro_support_bounce",
+                        "type": "ictsmartpro",
+                        "direction": "bullish",
+                        "strength": zone['strength'],
+                        "timestamp": str(df.index[-1]),
+                        "price": float(current_price),
+                        "sl_level": float(zone['zone_low'] * 0.99),
+                        "tp_level": float(zone['zone_high'] * 1.05),
+                        "description": f"ICTSMARTPRO BUY - Support Bounce (Strength:{zone['strength']}%)"
+                    })
+            
+            # === DİRENÇ BÖLGESİNDEN DÖNÜŞ ===
+            elif zone['type'] == 'resistance' and zone['zone_low'] <= current_price <= zone['zone_high']:
+                if df['is_bearish'].iloc[-1]:  # Bearish mum
+                    signals.append({
+                        "pattern": "ictsmartpro_resistance_reject",
+                        "type": "ictsmartpro",
+                        "direction": "bearish",
+                        "strength": zone['strength'],
+                        "timestamp": str(df.index[-1]),
+                        "price": float(current_price),
+                        "sl_level": float(zone['zone_high'] * 1.01),
+                        "tp_level": float(zone['zone_low'] * 0.95),
+                        "description": f"ICTSMARTPRO SELL - Resistance Rejection (Strength:{zone['strength']}%)"
+                    })
+        
+        logger.info(f"🎯 ICTSMARTPRO: {len(signals)} sinyal üretildi")
+        
+        return signals[-5:]  # Son 5 sinyal
 
 
 # ========================================================================================================
@@ -1416,12 +1500,13 @@ class ClassicalPatternDetector:
         patterns = []
         if len(df) < 30:
             return patterns
-
-        for i in range(20, len(df)):
+        
+        n = len(df)
+        for i in range(20, n):
             # Double Top
             high1 = df['high'].iloc[i - 15:i - 5].max()
             high2 = df['high'].iloc[i - 5:i].max()
-
+            
             if high1 > 0 and abs(high1 - high2) / high1 < 0.02 and df['close'].iloc[i] < high2 * 0.98:
                 patterns.append({
                     "pattern": "double_top",
@@ -1434,11 +1519,11 @@ class ClassicalPatternDetector:
                     "level2": float(high2),
                     "description": "Double Top - Bearish reversal"
                 })
-
+            
             # Double Bottom
             low1 = df['low'].iloc[i - 15:i - 5].min()
             low2 = df['low'].iloc[i - 5:i].min()
-
+            
             if low1 > 0 and abs(low1 - low2) / low1 < 0.02 and df['close'].iloc[i] > low2 * 1.02:
                 patterns.append({
                     "pattern": "double_bottom",
@@ -1451,21 +1536,22 @@ class ClassicalPatternDetector:
                     "level2": float(low2),
                     "description": "Double Bottom - Bullish reversal"
                 })
-
+        
         return patterns[-10:]
-
+    
     @staticmethod
     def detect_head_shoulders(df: pd.DataFrame) -> List[Dict]:
         patterns = []
         if len(df) < 40:
             return patterns
-
-        for i in range(30, len(df)):
+        
+        n = len(df)
+        for i in range(30, n):
             # Head and Shoulders (Top)
             left_shoulder = df['high'].iloc[i - 25:i - 15].max()
             head = df['high'].iloc[i - 15:i - 5].max()
             right_shoulder = df['high'].iloc[i - 5:i].max()
-
+            
             if (head > left_shoulder * 1.02 and head > right_shoulder * 1.02 and
                 abs(left_shoulder - right_shoulder) / left_shoulder < 0.05 and
                 df['close'].iloc[i] < head * 0.98):
@@ -1480,12 +1566,12 @@ class ClassicalPatternDetector:
                     "shoulders": [float(left_shoulder), float(right_shoulder)],
                     "description": "Head and Shoulders - Bearish reversal"
                 })
-
+            
             # Inverse Head and Shoulders
             left_shoulder = df['low'].iloc[i - 25:i - 15].min()
             head = df['low'].iloc[i - 15:i - 5].min()
             right_shoulder = df['low'].iloc[i - 5:i].min()
-
+            
             if (head < left_shoulder * 0.98 and head < right_shoulder * 0.98 and
                 abs(left_shoulder - right_shoulder) / left_shoulder < 0.05 and
                 df['close'].iloc[i] > head * 1.02):
@@ -1500,20 +1586,21 @@ class ClassicalPatternDetector:
                     "shoulders": [float(left_shoulder), float(right_shoulder)],
                     "description": "Inverse Head and Shoulders - Bullish reversal"
                 })
-
+        
         return patterns[-10:]
-
+    
     @staticmethod
     def detect_w_pattern(df: pd.DataFrame) -> List[Dict]:
         patterns = []
         if len(df) < 35:
             return patterns
-
-        for i in range(30, len(df)):
+        
+        n = len(df)
+        for i in range(30, n):
             first_bottom = df['low'].iloc[i - 25:i - 15].min()
             peak = df['high'].iloc[i - 15:i - 8].max()
             second_bottom = df['low'].iloc[i - 8:i - 2].min()
-
+            
             if (first_bottom > 0 and second_bottom > 0 and peak > 0 and
                 abs(first_bottom - second_bottom) / first_bottom < 0.03 and
                 peak > first_bottom * 1.05 and
@@ -1530,20 +1617,21 @@ class ClassicalPatternDetector:
                     "peak": float(peak),
                     "description": "W Pattern - Bullish reversal"
                 })
-
+        
         return patterns[-10:]
-
+    
     @staticmethod
     def detect_m_pattern(df: pd.DataFrame) -> List[Dict]:
         patterns = []
         if len(df) < 35:
             return patterns
-
-        for i in range(30, len(df)):
+        
+        n = len(df)
+        for i in range(30, n):
             first_top = df['high'].iloc[i - 25:i - 15].max()
             bottom = df['low'].iloc[i - 15:i - 8].min()
             second_top = df['high'].iloc[i - 8:i - 2].max()
-
+            
             if (first_top > 0 and second_top > 0 and bottom > 0 and
                 abs(first_top - second_top) / first_top < 0.03 and
                 bottom < first_top * 0.95 and
@@ -1560,24 +1648,25 @@ class ClassicalPatternDetector:
                     "bottom": float(bottom),
                     "description": "M Pattern - Bearish reversal"
                 })
-
+        
         return patterns[-10:]
-
+    
     @staticmethod
     def detect_triangle_patterns(df: pd.DataFrame) -> List[Dict]:
         patterns = []
         if len(df) < 30:
             return patterns
-
-        for i in range(25, len(df)):
+        
+        n = len(df)
+        for i in range(25, n):
             highs = df['high'].iloc[i - 20:i].values
             lows = df['low'].iloc[i - 20:i].values
-
+            
             if len(highs) >= 5:
                 x = np.arange(len(highs))
                 high_slope = np.polyfit(x, highs, 1)[0]
                 low_slope = np.polyfit(x, lows, 1)[0]
-
+                
                 # Rising Wedge (Bearish)
                 if high_slope > 0 and low_slope > 0 and high_slope < low_slope * 1.1:
                     if df['close'].iloc[i] < lows[-1]:
@@ -1590,7 +1679,7 @@ class ClassicalPatternDetector:
                             "price": float(df['close'].iloc[i]),
                             "description": "Rising Wedge - Bearish breakdown"
                         })
-
+                
                 # Falling Wedge (Bullish)
                 if high_slope < 0 and low_slope < 0 and low_slope < high_slope:
                     if df['close'].iloc[i] > highs[-1]:
@@ -1603,24 +1692,25 @@ class ClassicalPatternDetector:
                             "price": float(df['close'].iloc[i]),
                             "description": "Falling Wedge - Bullish breakout"
                         })
-
+        
         return patterns[-10:]
-
+    
     @staticmethod
     def detect_diamond_pattern(df: pd.DataFrame) -> List[Dict]:
         patterns = []
         if len(df) < 50:
             return patterns
-
-        for i in range(45, len(df)):
+        
+        n = len(df)
+        for i in range(45, n):
             expand_high = df['high'].iloc[i - 40:i - 20].max()
             expand_low = df['low'].iloc[i - 40:i - 20].min()
             expand_range = expand_high - expand_low
-
+            
             contract_high = df['high'].iloc[i - 20:i].max()
             contract_low = df['low'].iloc[i - 20:i].min()
             contract_range = contract_high - contract_low
-
+            
             if expand_range > 0 and contract_range < expand_range * 0.6:
                 if df['close'].iloc[i] > df['high'].iloc[i - 5:i].mean():
                     patterns.append({
@@ -1642,9 +1732,9 @@ class ClassicalPatternDetector:
                         "price": float(df['close'].iloc[i]),
                         "description": "Diamond Pattern - Bearish breakdown"
                     })
-
+        
         return patterns[-10:]
-
+    
     @staticmethod
     def analyze(df: pd.DataFrame) -> List[Dict]:
         patterns = []
@@ -1654,32 +1744,16 @@ class ClassicalPatternDetector:
         patterns.extend(ClassicalPatternDetector.detect_m_pattern(df))
         patterns.extend(ClassicalPatternDetector.detect_triangle_patterns(df))
         patterns.extend(ClassicalPatternDetector.detect_diamond_pattern(df))
+        
+        logger.info(f"📚 Classical patterns: {len(patterns)}")
+        
         return patterns[-20:]
 
 
 # ========================================================================================================
-# CANDLESTICK PATTERN DETECTOR (GENİŞLETİLMİŞ)
-# ========================================================================================================
- # ========================================================================================================
-# CANDLESTICK PATTERN DETECTOR (GENİŞLETİLMİŞ)
+# CANDLESTICK PATTERN DETECTOR
 # ========================================================================================================
 class CandlestickPatternDetector:
-
-    @staticmethod
-    def calculate_indicators(df: pd.DataFrame) -> pd.DataFrame:
-        """Gerekli indikatörleri hesapla"""
-        df = df.copy()
-
-        # Temel mum özellikleri
-        df['is_bullish'] = df['close'] > df['open']
-        df['is_bearish'] = df['close'] < df['open']
-        df['body'] = abs(df['close'] - df['open'])
-        df['range'] = df['high'] - df['low']
-        df['upper_shadow'] = df['high'] - df[['close', 'open']].max(axis=1)
-        df['lower_shadow'] = df[['close', 'open']].min(axis=1) - df['low']
-        df['body_percent'] = df['body'] / df['range'].replace(0, 1)
-
-        return df
 
     @staticmethod
     def detect_doji(candle: pd.Series) -> Optional[Dict]:
@@ -1687,136 +1761,136 @@ class CandlestickPatternDetector:
         range_candle = candle['range']
         if range_candle == 0:
             return None
-
+        
         if (body / range_candle) < 0.1:
             return {
                 "pattern": "doji",
-                "type": "candlestick",
+                "type": "price_action",
                 "direction": "neutral",
                 "strength": 50,
                 "description": "Doji - Market indecision"
             }
         return None
-
+    
     @staticmethod
     def detect_hammer(candle: pd.Series) -> Optional[Dict]:
         body = candle['body']
         lower_shadow = candle['lower_shadow']
         upper_shadow = candle['upper_shadow']
-
+        
         if body == 0 or candle['range'] == 0:
             return None
-
+        
         if lower_shadow > 2 * body and upper_shadow < body and candle['is_bullish']:
             return {
                 "pattern": "hammer",
-                "type": "candlestick",
+                "type": "price_action",
                 "direction": "bullish",
                 "strength": 70,
                 "description": "Hammer - Bullish reversal"
             }
         return None
-
+    
     @staticmethod
     def detect_shooting_star(candle: pd.Series) -> Optional[Dict]:
         body = candle['body']
         lower_shadow = candle['lower_shadow']
         upper_shadow = candle['upper_shadow']
-
+        
         if body == 0 or candle['range'] == 0:
             return None
-
+        
         if upper_shadow > 2 * body and lower_shadow < body and candle['is_bearish']:
             return {
                 "pattern": "shooting_star",
-                "type": "candlestick",
+                "type": "price_action",
                 "direction": "bearish",
                 "strength": 70,
                 "description": "Shooting Star - Bearish reversal"
             }
         return None
-
+    
     @staticmethod
     def detect_marubozu(candle: pd.Series) -> Optional[Dict]:
         body = abs(candle['close'] - candle['open'])
         lower_shadow = min(candle['open'], candle['close']) - candle['low']
         upper_shadow = candle['high'] - max(candle['open'], candle['close'])
-
+        
         if body == 0:
             return None
-
+        
         if lower_shadow < body * 0.1 and upper_shadow < body * 0.1:
             direction = "bullish" if candle['close'] > candle['open'] else "bearish"
             return {
                 "pattern": "marubozu",
-                "type": "candlestick",
+                "type": "price_action",
                 "direction": direction,
                 "strength": 65,
                 "description": f"Marubozu - Strong {direction} momentum"
             }
         return None
-
+    
     @staticmethod
     def detect_engulfing(df: pd.DataFrame, i: int) -> Optional[Dict]:
         if i < 1 or i >= len(df):
             return None
-
+        
         curr = df.iloc[i]
         prev = df.iloc[i - 1]
-
+        
         curr_bullish = curr['close'] > curr['open']
         curr_bearish = curr['close'] < curr['open']
         prev_bearish = prev['close'] < prev['open']
         prev_bullish = prev['close'] > prev['open']
-
+        
         if (curr_bullish and prev_bearish and
             curr['open'] < prev['close'] and
             curr['close'] > prev['open']):
             return {
                 "pattern": "bullish_engulfing",
-                "type": "candlestick",
+                "type": "price_action",
                 "direction": "bullish",
                 "strength": 75,
                 "timestamp": str(df.index[i]),
                 "price": float(curr['close']),
                 "description": "Bullish Engulfing - Strong reversal"
             }
-
+        
         elif (curr_bearish and prev_bullish and
               curr['open'] > prev['close'] and
               curr['close'] < prev['open']):
             return {
                 "pattern": "bearish_engulfing",
-                "type": "candlestick",
+                "type": "price_action",
                 "direction": "bearish",
                 "strength": 75,
                 "timestamp": str(df.index[i]),
                 "price": float(curr['close']),
                 "description": "Bearish Engulfing - Strong reversal"
             }
-
+        
         return None
-
+    
     @staticmethod
     def detect_harami(df: pd.DataFrame, i: int) -> Optional[Dict]:
         if i < 1 or i >= len(df):
             return None
-
+        
         curr = df.iloc[i]
         prev = df.iloc[i - 1]
-
+        
         curr_range = abs(curr['close'] - curr['open'])
         prev_range = abs(prev['close'] - prev['open'])
-
+        
         if prev_range == 0:
             return None
-
+        
         if curr_range < prev_range * 0.6:
             if prev['close'] > prev['open']:
                 if (curr['close'] < prev['close'] and curr['open'] > prev['open']):
                     return {
                         "pattern": "bearish_harami",
-                        "type": "candlestick",
+                        "type": "price_action",
                         "direction": "bearish",
                         "strength": 65,
                         "timestamp": str(df.index[i]),
@@ -1827,25 +1901,25 @@ class CandlestickPatternDetector:
                 if (curr['close'] > prev['close'] and curr['open'] < prev['open']):
                     return {
                         "pattern": "bullish_harami",
-                        "type": "candlestick",
+                        "type": "price_action",
                         "direction": "bullish",
                         "strength": 65,
                         "timestamp": str(df.index[i]),
                         "price": float(curr['close']),
                         "description": "Bullish Harami - Potential reversal"
                     }
-
+        
         return None
-
+    
     @staticmethod
     def detect_morning_star(df: pd.DataFrame, i: int) -> Optional[Dict]:
         if i < 2 or i >= len(df):
             return None
-
+        
         c1 = df.iloc[i - 2]
         c2 = df.iloc[i - 1]
         c3 = df.iloc[i]
-
+        
         if c1['close'] < c1['open'] and c3['close'] > c3['open']:
             body2 = abs(c2['close'] - c2['open'])
             range2 = c2['high'] - c2['low']
@@ -1853,25 +1927,25 @@ class CandlestickPatternDetector:
                 if c2['low'] < c1['low'] and c3['open'] > c2['close']:
                     return {
                         "pattern": "morning_star",
-                        "type": "candlestick",
+                        "type": "price_action",
                         "direction": "bullish",
                         "strength": 80,
                         "timestamp": str(df.index[i]),
                         "price": float(c3['close']),
                         "description": "Morning Star - Bullish reversal"
                     }
-
+        
         return None
-
+    
     @staticmethod
     def detect_evening_star(df: pd.DataFrame, i: int) -> Optional[Dict]:
         if i < 2 or i >= len(df):
             return None
-
+        
         c1 = df.iloc[i - 2]
         c2 = df.iloc[i - 1]
         c3 = df.iloc[i]
-
+        
         if c1['close'] > c1['open'] and c3['close'] < c3['open']:
             body2 = abs(c2['close'] - c2['open'])
             range2 = c2['high'] - c2['low']
@@ -1879,21 +1953,21 @@ class CandlestickPatternDetector:
                 if c2['high'] > c1['high'] and c3['open'] < c2['close']:
                     return {
                         "pattern": "evening_star",
-                        "type": "candlestick",
+                        "type": "price_action",
                         "direction": "bearish",
                         "strength": 80,
                         "timestamp": str(df.index[i]),
                         "price": float(c3['close']),
                         "description": "Evening Star - Bearish reversal"
                     }
-
+        
         return None
-
+    
     @staticmethod
     def detect_three_white_soldiers(df: pd.DataFrame, i: int) -> Optional[Dict]:
         if i < 2 or i >= len(df):
             return None
-
+        
         if (df['is_bullish'].iloc[i - 2] and
             df['is_bullish'].iloc[i - 1] and
             df['is_bullish'].iloc[i] and
@@ -1901,7 +1975,7 @@ class CandlestickPatternDetector:
             df['close'].iloc[i] > df['close'].iloc[i - 1]):
             return {
                 "pattern": "three_white_soldiers",
-                "type": "candlestick",
+                "type": "price_action",
                 "direction": "bullish",
                 "strength": 78,
                 "timestamp": str(df.index[i]),
@@ -1909,12 +1983,12 @@ class CandlestickPatternDetector:
                 "description": "Three White Soldiers - Strong bullish continuation"
             }
         return None
-
+    
     @staticmethod
     def detect_three_black_crows(df: pd.DataFrame, i: int) -> Optional[Dict]:
         if i < 2 or i >= len(df):
             return None
-
+        
         if (df['is_bearish'].iloc[i - 2] and
             df['is_bearish'].iloc[i - 1] and
             df['is_bearish'].iloc[i] and
@@ -1922,7 +1996,7 @@ class CandlestickPatternDetector:
             df['close'].iloc[i] < df['close'].iloc[i - 1]):
             return {
                 "pattern": "three_black_crows",
-                "type": "candlestick",
+                "type": "price_action",
                 "direction": "bearish",
                 "strength": 78,
                 "timestamp": str(df.index[i]),
@@ -1930,71 +2004,71 @@ class CandlestickPatternDetector:
                 "description": "Three Black Crows - Strong bearish continuation"
             }
         return None
-
+    
     @staticmethod
     def analyze(df: pd.DataFrame) -> List[Dict]:
         patterns = []
-
+        
         if len(df) < 10:
             return patterns
-
-        # İndikatörleri hesapla
-        df = CandlestickPatternDetector.calculate_indicators(df)
-
+        
         for i in range(2, len(df)):
             curr = df.iloc[i]
-
+            
             # Tek mum pattern'leri
             doji = CandlestickPatternDetector.detect_doji(curr)
             if doji:
                 doji['timestamp'] = str(df.index[i])
                 doji['price'] = float(curr['close'])
                 patterns.append(doji)
-
+            
             hammer = CandlestickPatternDetector.detect_hammer(curr)
             if hammer:
                 hammer['timestamp'] = str(df.index[i])
                 hammer['price'] = float(curr['close'])
                 patterns.append(hammer)
-
+            
             shooting = CandlestickPatternDetector.detect_shooting_star(curr)
             if shooting:
                 shooting['timestamp'] = str(df.index[i])
                 shooting['price'] = float(curr['close'])
                 patterns.append(shooting)
-
+            
             marubozu = CandlestickPatternDetector.detect_marubozu(curr)
             if marubozu:
                 marubozu['timestamp'] = str(df.index[i])
                 marubozu['price'] = float(curr['close'])
                 patterns.append(marubozu)
-
+            
             # Çoklu mum pattern'leri
             engulfing = CandlestickPatternDetector.detect_engulfing(df, i)
             if engulfing:
                 patterns.append(engulfing)
-
+            
             harami = CandlestickPatternDetector.detect_harami(df, i)
             if harami:
                 patterns.append(harami)
-
+            
             morning = CandlestickPatternDetector.detect_morning_star(df, i)
             if morning:
                 patterns.append(morning)
-
+            
             evening = CandlestickPatternDetector.detect_evening_star(df, i)
             if evening:
                 patterns.append(evening)
-
+            
             soldiers = CandlestickPatternDetector.detect_three_white_soldiers(df, i)
             if soldiers:
                 patterns.append(soldiers)
-
+            
             crows = CandlestickPatternDetector.detect_three_black_crows(df, i)
             if crows:
                 patterns.append(crows)
-
+        
+        logger.info(f"🕯️ Candlestick patterns: {len(patterns)}")
+        
         return patterns[-30:]
+
 
 # ========================================================================================================
 # TECHNICAL ANALYZER
@@ -2006,19 +2080,19 @@ class TechnicalAnalyzer:
         try:
             if len(df) < 20:
                 return {}
-
+            
             ha_close = (df['open'] + df['high'] + df['low'] + df['close']) / 4
-
+            
             ha_open = ha_close.copy()
             for i in range(1, len(ha_open)):
                 ha_open.iloc[i] = (ha_open.iloc[i - 1] + ha_close.iloc[i - 1]) / 2
-
+            
             ha_high = pd.concat([df['high'], ha_open, ha_close], axis=1).max(axis=1)
             ha_low = pd.concat([df['low'], ha_open, ha_close], axis=1).min(axis=1)
-
+            
             ha_bullish = sum(1 for i in range(-8, 0) if ha_close.iloc[i] > ha_open.iloc[i])
             ha_bearish = sum(1 for i in range(-8, 0) if ha_close.iloc[i] < ha_open.iloc[i])
-
+            
             if ha_bullish >= 6:
                 ha_trend = "STRONG_BULLISH"
                 ha_strength = ha_bullish * 12.5
@@ -2034,19 +2108,19 @@ class TechnicalAnalyzer:
             else:
                 ha_trend = "NEUTRAL"
                 ha_strength = 50
-
+            
             delta = ha_close.diff()
             gain = (delta.where(delta > 0, 0)).rolling(window=14).mean()
             loss = (-delta.where(delta < 0, 0)).rolling(window=14).mean()
             rs = gain / loss.replace(0, np.nan)
             ha_rsi = 100 - (100 / (1 + rs))
-
+            
             ha_color_change = 0
             if ha_close.iloc[-1] > ha_open.iloc[-1] and ha_close.iloc[-2] <= ha_open.iloc[-2]:
                 ha_color_change = 1
             elif ha_close.iloc[-1] < ha_open.iloc[-1] and ha_close.iloc[-2] >= ha_open.iloc[-2]:
                 ha_color_change = -1
-
+            
             return {
                 "ha_trend": ha_trend,
                 "ha_trend_strength": round(min(ha_strength, 100), 1),
@@ -2056,83 +2130,58 @@ class TechnicalAnalyzer:
                 "ha_color_change": ha_color_change,
                 "ha_momentum": round(float((ha_close.iloc[-1] - ha_close.iloc[-5]) / ha_close.iloc[-5] * 100), 2)
             }
-
+        
         except Exception as e:
             logger.error(f"Heikin Ashi error: {str(e)}")
             return {}
-
-    @staticmethod
-    def calculate_rsi(close: pd.Series, period: int = 14) -> pd.Series:
-        delta = close.diff()
-        gain = (delta.where(delta > 0, 0)).rolling(window=period).mean()
-        loss = (-delta.where(delta < 0, 0)).rolling(window=period).mean()
-        rs = gain / loss.replace(0, np.nan)
-        rsi = 100 - (100 / (1 + rs))
-        return rsi.fillna(50)
-
-    @staticmethod
-    def calculate_macd(close: pd.Series) -> tuple:
-        exp1 = close.ewm(span=12, adjust=False).mean()
-        exp2 = close.ewm(span=26, adjust=False).mean()
-        macd = exp1 - exp2
-        signal = macd.ewm(span=9, adjust=False).mean()
-        hist = macd - signal
-        return macd, signal, hist
-
-    @staticmethod
-    def calculate_bollinger_bands(close: pd.Series, period: int = 20) -> tuple:
-        middle = close.rolling(window=period).mean()
-        std = close.rolling(window=period).std()
-        upper = middle + (std * 2)
-        lower = middle - (std * 2)
-        return upper, middle, lower
-
-    @staticmethod
-    def calculate_atr(high: pd.Series, low: pd.Series, close: pd.Series, period: int = 14) -> pd.Series:
-        tr1 = high - low
-        tr2 = (high - close.shift(1)).abs()
-        tr3 = (low - close.shift(1)).abs()
-        tr = pd.concat([tr1, tr2, tr3], axis=1).max(axis=1)
-        atr = tr.rolling(window=period).mean()
-        return atr.fillna(0)
-
+    
     @staticmethod
     def analyze(df: pd.DataFrame) -> Dict[str, Any]:
         if len(df) < 30:
             return {}
-
+        
         close = df['close']
         high = df['high']
         low = df['low']
         volume = df['volume']
-
-        rsi = TechnicalAnalyzer.calculate_rsi(close)
-        macd, macd_signal, macd_hist = TechnicalAnalyzer.calculate_macd(close)
-        bb_upper, bb_middle, bb_lower = TechnicalAnalyzer.calculate_bollinger_bands(close)
-
-        bb_range = bb_upper - bb_lower
-        bb_range = bb_range.replace(0, 1)
-        bb_position = ((close - bb_lower) / bb_range * 100).clip(0, 100)
-
-        atr = TechnicalAnalyzer.calculate_atr(high, low, close)
+        
+        # RSI
+        rsi = df['rsi'] if 'rsi' in df.columns else 50
+        
+        # MACD
+        exp1 = close.ewm(span=12, adjust=False).mean()
+        exp2 = close.ewm(span=26, adjust=False).mean()
+        macd = exp1 - exp2
+        signal = macd.ewm(span=9, adjust=False).mean()
+        macd_hist = macd - signal
+        
+        # Bollinger
+        bb_upper = df['bb_upper'] if 'bb_upper' in df.columns else close.rolling(20).mean() + close.rolling(20).std() * 2
+        bb_middle = df['bb_middle'] if 'bb_middle' in df.columns else close.rolling(20).mean()
+        bb_lower = df['bb_lower'] if 'bb_lower' in df.columns else close.rolling(20).mean() - close.rolling(20).std() * 2
+        bb_position = df['bb_position'] if 'bb_position' in df.columns else 50
+        
+        # ATR
+        atr = df['atr'] if 'atr' in df.columns else (high - low).rolling(14).mean()
         atr_percent = (atr / close * 100).fillna(0)
-
-        volume_sma = volume.rolling(20).mean().fillna(volume)
-        volume_ratio = (volume / volume_sma).fillna(1.0)
-
+        
+        # Volume ratio
+        volume_ratio = df['volume_ratio'] if 'volume_ratio' in df.columns else 1.0
+        
+        # SMA
         sma_20 = close.rolling(20).mean()
         sma_50 = close.rolling(50).mean()
-
+        
         # Momentum
-        mom_5 = close.pct_change(5) * 100
-        mom_10 = close.pct_change(10) * 100
-
+        mom_5 = df['mom_5'] if 'mom_5' in df.columns else close.pct_change(5) * 100
+        mom_10 = df['mom_10'] if 'mom_10' in df.columns else close.pct_change(10) * 100
+        
         heikin_ashi = TechnicalAnalyzer.calculate_heikin_ashi(df)
-
+        
         result = {
             "rsi": round(float(rsi.iloc[-1]), 1),
             "macd": round(float(macd.iloc[-1]), 2),
-            "macd_signal": round(float(macd_signal.iloc[-1]), 2),
+            "macd_signal": round(float(signal.iloc[-1]), 2),
             "macd_histogram": round(float(macd_hist.iloc[-1]), 2),
             "bb_upper": round(float(bb_upper.iloc[-1]), 2),
             "bb_middle": round(float(bb_middle.iloc[-1]), 2),
@@ -2149,105 +2198,10 @@ class TechnicalAnalyzer:
             "momentum_5": round(float(mom_5.iloc[-1]), 2),
             "momentum_10": round(float(mom_10.iloc[-1]), 2)
         }
-
+        
         result.update(heikin_ashi)
-
+        
         return result
-
-
-# ========================================================================================================
-# MARKET STRUCTURE ANALYZER
-# ========================================================================================================
-class MarketStructureAnalyzer:
-
-    @staticmethod
-    def analyze(df: pd.DataFrame) -> Dict[str, Any]:
-        if len(df) < 30:
-            return {
-                "trend": "NEUTRAL",
-                "trend_strength": "WEAK",
-                "structure": "Neutral",
-                "volatility": "Normal",
-                "volatility_index": 100,
-                "momentum": "Neutral"
-            }
-
-        close = df['close']
-        high = df['high']
-        low = df['low']
-
-        ema_9 = close.ewm(span=9).mean()
-        ema_21 = close.ewm(span=21).mean()
-        ema_50 = close.ewm(span=50).mean()
-
-        if ema_9.iloc[-1] > ema_21.iloc[-1] > ema_50.iloc[-1]:
-            trend = "STRONG_UPTREND"
-            trend_strength = "STRONG"
-        elif ema_9.iloc[-1] > ema_21.iloc[-1]:
-            trend = "UPTREND"
-            trend_strength = "MODERATE"
-        elif ema_9.iloc[-1] < ema_21.iloc[-1] < ema_50.iloc[-1]:
-            trend = "STRONG_DOWNTREND"
-            trend_strength = "STRONG"
-        elif ema_9.iloc[-1] < ema_21.iloc[-1]:
-            trend = "DOWNTREND"
-            trend_strength = "MODERATE"
-        else:
-            trend = "NEUTRAL"
-            trend_strength = "WEAK"
-
-        recent_highs = high.tail(15)
-        recent_lows = low.tail(15)
-
-        hh = sum(1 for i in range(1, len(recent_highs)) if recent_highs.iloc[i] > recent_highs.iloc[i - 1])
-        ll = sum(1 for i in range(1, len(recent_lows)) if recent_lows.iloc[i] < recent_lows.iloc[i - 1])
-        hl = sum(1 for i in range(1, len(recent_lows)) if recent_lows.iloc[i] > recent_lows.iloc[i - 1])
-        lh = sum(1 for i in range(1, len(recent_highs)) if recent_highs.iloc[i] < recent_highs.iloc[i - 1])
-
-        if hh >= 10 and hl >= 8:
-            structure = "Bullish"
-        elif ll >= 10 and lh >= 8:
-            structure = "Bearish"
-        else:
-            structure = "Neutral"
-
-        returns = close.pct_change().fillna(0)
-        volatility = returns.rolling(20).std() * np.sqrt(252) * 100
-        avg_vol = volatility.mean()
-        current_vol = volatility.iloc[-1]
-
-        if current_vol > avg_vol * 1.5:
-            vol_regime = "HIGH"
-            vol_index = 150
-        elif current_vol < avg_vol * 0.7:
-            vol_regime = "LOW"
-            vol_index = 70
-        else:
-            vol_regime = "NORMAL"
-            vol_index = 100
-
-        mom_5 = close.iloc[-1] / close.iloc[-5] - 1 if len(close) >= 5 else 0
-        mom_10 = close.iloc[-1] / close.iloc[-10] - 1 if len(close) >= 10 else 0
-
-        if mom_5 > 0.02 and mom_10 > 0.03:
-            momentum = "Strong_Bullish"
-        elif mom_5 > 0.01:
-            momentum = "Bullish"
-        elif mom_5 < -0.02 and mom_10 < -0.03:
-            momentum = "Strong_Bearish"
-        elif mom_5 < -0.01:
-            momentum = "Bearish"
-        else:
-            momentum = "Neutral"
-
-        return {
-            "trend": trend,
-            "trend_strength": trend_strength,
-            "structure": structure,
-            "volatility": vol_regime,
-            "volatility_index": vol_index,
-            "momentum": momentum
-        }
 
 
 # ========================================================================================================
@@ -2262,44 +2216,30 @@ class SignalGenerator:
         ict_patterns: Dict[str, List[Dict]],
         candle_patterns: List[Dict],
         classical_patterns: List[Dict],
-        gainzalgo_signals: List[Dict],
-        ultimate_signals: List[Dict]
+        ictsmartpro_signals: List[Dict]  # GainzAlgo ve Ultimate kalktı, ICTSMARTPRO geldi
     ) -> Dict[str, Any]:
 
         signals = []
         confidences = []
         weights = []
         all_patterns = []
-
-        # === ULTIMATE 2026 SİNYALLERİ (En yüksek öncelik) ===
-        for sig in ultimate_signals:
+        
+        # === ICTSMARTPRO SİNYALLERİ (En yüksek öncelik) ===
+        for sig in ictsmartpro_signals:
             if sig.get('direction') in ['bullish', 'bullish_reversal']:
                 signals.append('BUY')
-                confidences.append(0.85)
+                confidences.append(sig.get('strength', 70) / 100)
                 weights.append(2.5)
                 all_patterns.append(sig)
             elif sig.get('direction') in ['bearish', 'bearish_reversal']:
                 signals.append('SELL')
-                confidences.append(0.85)
+                confidences.append(sig.get('strength', 70) / 100)
                 weights.append(2.5)
                 all_patterns.append(sig)
-
-        # === GAINZALGO V2 SİNYALLERİ ===
-        for sig in gainzalgo_signals:
-            if sig.get('direction') in ['bullish', 'bullish_reversal']:
-                signals.append('BUY')
-                confidences.append(0.82)
-                weights.append(2.2)
-                all_patterns.append(sig)
-            elif sig.get('direction') in ['bearish', 'bearish_reversal']:
-                signals.append('SELL')
-                confidences.append(0.82)
-                weights.append(2.2)
-                all_patterns.append(sig)
-
+        
         # === ICT PATTERNS ===
         for pattern_list in ict_patterns.values():
-            for pattern in pattern_list[:3]:  # Her kategoriden ilk 3
+            for pattern in pattern_list[:3]:
                 if pattern.get('direction') in ['bullish', 'bullish_reversal']:
                     signals.append('BUY')
                     confidences.append(pattern.get('strength', 70) / 100)
@@ -2310,7 +2250,7 @@ class SignalGenerator:
                     confidences.append(pattern.get('strength', 70) / 100)
                     weights.append(1.8)
                     all_patterns.append(pattern)
-
+        
         # === CLASSICAL PATTERNS ===
         for pattern in classical_patterns[:5]:
             if pattern.get('direction') in ['bullish', 'bullish_reversal']:
@@ -2323,7 +2263,7 @@ class SignalGenerator:
                 confidences.append(pattern.get('strength', 70) / 100)
                 weights.append(1.5)
                 all_patterns.append(pattern)
-
+        
         # === CANDLESTICK PATTERNS ===
         for pattern in candle_patterns[-5:]:
             if pattern.get('direction') in ['bullish', 'bullish_reversal']:
@@ -2336,7 +2276,7 @@ class SignalGenerator:
                 confidences.append(pattern.get('strength', 60) / 100)
                 weights.append(1.2)
                 all_patterns.append(pattern)
-
+        
         # === HEIKIN ASHI ===
         ha_trend = technical.get('ha_trend', 'NEUTRAL')
         if ha_trend in ['STRONG_BULLISH', 'BULLISH']:
@@ -2347,7 +2287,7 @@ class SignalGenerator:
             signals.append('SELL')
             confidences.append(0.72)
             weights.append(1.5)
-
+        
         # === RSI ===
         rsi = technical.get('rsi', 50)
         if rsi < 30:
@@ -2358,7 +2298,7 @@ class SignalGenerator:
             signals.append('SELL')
             confidences.append(0.64)
             weights.append(1.1)
-
+        
         # === MACD ===
         macd_hist = technical.get('macd_histogram', 0)
         if macd_hist > 0:
@@ -2369,7 +2309,7 @@ class SignalGenerator:
             signals.append('SELL')
             confidences.append(0.62)
             weights.append(1.0)
-
+        
         # === MARKET STRUCTURE ===
         trend = market_structure.get('trend', 'NEUTRAL')
         if 'UPTREND' in trend:
@@ -2380,7 +2320,7 @@ class SignalGenerator:
             signals.append('SELL')
             confidences.append(0.70)
             weights.append(1.3)
-
+        
         # Sinyal yoksa nötr
         if not signals:
             return {
@@ -2392,67 +2332,67 @@ class SignalGenerator:
                 "tp_level": None,
                 "sl_level": None
             }
-
+        
         # Ağırlıklı skor hesapla
         buy_score = 0.0
         sell_score = 0.0
         buy_count = 0
         sell_count = 0
-        last_buy_tp = None
-        last_buy_sl = None
-        last_sell_tp = None
-        last_sell_sl = None
-
+        
+        # En güçlü pattern'in TP/SL'sini bul
+        best_pattern = None
+        max_strength = 0
+        
         for i in range(len(signals)):
             s = signals[i]
             c = confidences[i]
             w = weights[i]
-
+            
             if s == 'BUY':
                 buy_score += c * w
                 buy_count += 1
-                # Son TP/SL'yi al
-                if i < len(all_patterns) and 'tp_level' in all_patterns[i]:
-                    last_buy_tp = all_patterns[i]['tp_level']
-                    last_buy_sl = all_patterns[i]['sl_level']
             elif s == 'SELL':
                 sell_score += c * w
                 sell_count += 1
-                if i < len(all_patterns) and 'tp_level' in all_patterns[i]:
-                    last_sell_tp = all_patterns[i]['tp_level']
-                    last_sell_sl = all_patterns[i]['sl_level']
-
+            
+            # En güçlü pattern'i bul (TP/SL için)
+            if i < len(all_patterns):
+                strength = all_patterns[i].get('strength', 0)
+                if strength > max_strength:
+                    max_strength = strength
+                    best_pattern = all_patterns[i]
+        
         if buy_score > sell_score:
             final_signal = "BUY"
             total_score = buy_score + sell_score
             avg_conf = (buy_score / total_score * 100) if total_score > 0 else Config.DEFAULT_CONFIDENCE
-            tp_level = last_buy_tp
-            sl_level = last_buy_sl
+            tp_level = best_pattern.get('tp_level') if best_pattern and best_pattern.get('direction') in ['bullish', 'bullish_reversal'] else None
+            sl_level = best_pattern.get('sl_level') if best_pattern and best_pattern.get('direction') in ['bullish', 'bullish_reversal'] else None
         elif sell_score > buy_score:
             final_signal = "SELL"
             total_score = buy_score + sell_score
             avg_conf = (sell_score / total_score * 100) if total_score > 0 else Config.DEFAULT_CONFIDENCE
-            tp_level = last_sell_tp
-            sl_level = last_sell_sl
+            tp_level = best_pattern.get('tp_level') if best_pattern and best_pattern.get('direction') in ['bearish', 'bearish_reversal'] else None
+            sl_level = best_pattern.get('sl_level') if best_pattern and best_pattern.get('direction') in ['bearish', 'bearish_reversal'] else None
         else:
             final_signal = "NEUTRAL"
             avg_conf = Config.DEFAULT_CONFIDENCE
             tp_level = None
             sl_level = None
-
+        
         avg_conf = min(float(avg_conf), Config.MAX_CONFIDENCE)
         avg_conf = max(float(avg_conf), 45.0)
-
+        
         if avg_conf > 75 and buy_count > sell_count * 2:
             final_signal = "STRONG_BUY"
         elif avg_conf > 75 and sell_count > buy_count * 2:
             final_signal = "STRONG_SELL"
-
+        
         rec = SignalGenerator._generate_recommendation(
             final_signal, avg_conf, technical, market_structure, ict_patterns,
             buy_count, sell_count
         )
-
+        
         return {
             "signal": final_signal,
             "confidence": round(avg_conf, 1),
@@ -2462,24 +2402,24 @@ class SignalGenerator:
             "tp_level": round(tp_level, 2) if tp_level else None,
             "sl_level": round(sl_level, 2) if sl_level else None
         }
-
+    
     @staticmethod
     def _generate_recommendation(signal, conf, technical, structure, ict_patterns, buy_count, sell_count):
         parts = []
-
+        
         ha_trend = technical.get('ha_trend', '')
         if ha_trend:
             parts.append(f"Heikin Ashi: {ha_trend}")
-
+        
         # ICT pattern sayıları
         total_ict = sum(len(v) for v in ict_patterns.values())
         if total_ict > 0:
             parts.append(f"ICT: {total_ict} patterns")
-
+        
         trend = structure.get('trend', '')
         if trend != 'NEUTRAL':
             parts.append(f"Trend: {trend}")
-
+        
         if signal == "STRONG_BUY":
             base = "🟢 STRONG BUY - Multiple strong bullish signals"
         elif signal == "BUY":
@@ -2490,18 +2430,18 @@ class SignalGenerator:
             base = "🔴 SELL - Bearish bias"
         else:
             base = "⚪ NEUTRAL - No clear bias"
-
+        
         parts.insert(0, base)
-
+        
         if conf > 75:
             parts.append(f"🔥 High confidence ({conf:.0f}%)")
         elif conf > 65:
             parts.append(f"✅ Moderate confidence ({conf:.0f}%)")
         else:
             parts.append(f"⚠️ Low confidence ({conf:.0f}%)")
-
+        
         parts.append(f"Signals: B{buy_count} S{sell_count}")
-
+        
         return ". ".join(parts) + "."
 
 
@@ -2510,7 +2450,7 @@ class SignalGenerator:
 # ========================================================================================================
 app = FastAPI(
     title="ICTSMARTPRO v9.0 - Ultimate Pattern Detector",
-    description="AI-Powered Crypto Analysis with 70+ ICT & Classical Patterns",
+    description="AI-Powered Crypto Analysis with ICT & Classical Patterns",
     version="9.0.0",
     docs_url="/docs" if Config.DEBUG else None,
     redoc_url=None
@@ -2553,10 +2493,10 @@ startup_time = time.time()
 async def root():
     """Ana sayfa"""
     html_path = os.path.join(os.path.dirname(__file__), "templates", "index.html")
-
+    
     if os.path.exists(html_path):
         return FileResponse(html_path)
-
+    
     return HTMLResponse(content="""
     <html>
         <body style="background:#0a0b0d; color:#e0e0e0; padding:40px;">
@@ -2573,10 +2513,10 @@ async def dashboard():
     """Dashboard sayfası"""
     current_dir = os.path.dirname(os.path.abspath(__file__))
     dashboard_path = os.path.join(current_dir, "templates", "dashboard.html")
-
+    
     if os.path.exists(dashboard_path):
         return FileResponse(dashboard_path)
-
+    
     return HTMLResponse(content=f"""
     <html>
         <body style="background:#0a0b0d; color:#e0e0e0; padding:40px;">
@@ -2621,153 +2561,84 @@ async def analyze_symbol(
         description="Candle count (50-1000)"
     )
 ):
-    # Symbol formatını düzelt - BTCUSDT, ETHUSDT, vb.
+    # Symbol formatını düzelt
     original_symbol = symbol.upper().strip()
     symbol = original_symbol
-
-    # USDT ekleme kontrolü - sadece USDT ile bitmiyorsa ekle
+    
     if not symbol.endswith("USDT"):
-        # Zaten USDT var mı kontrol et (BTC-USDT, BTC/USDT gibi)
         if "USDT" in symbol:
-            # USDT var ama farklı formatta, temizle
             symbol = symbol.replace("-", "").replace("/", "").replace(" ", "")
         else:
             symbol = f"{symbol}USDT"
-
-    # Geçerli sembol mü kontrol et
+    
     if not symbol.endswith("USDT") or len(symbol) < 6:
         raise HTTPException(
             status_code=400,
             detail=f"Invalid symbol format: {original_symbol}. Use format like BTC, ETH, or BTCUSDT"
         )
-
+    
     logger.info(f"🔍 Analyzing {symbol} @ {interval} (limit={limit})")
-
-    # Zaman aşımı kontrolü
+    
     start_time = time.time()
-    timeout = 25  # 25 saniye timeout
-
+    timeout = 25
+    
     try:
-        # Data fetcher'ı async context manager ile kullan
         async with data_fetcher as fetcher:
-            # Candles'ları al
             candles = await asyncio.wait_for(
                 fetcher.get_candles(symbol, interval, limit),
                 timeout=15
             )
             exchange_stats = fetcher.get_stats()
-
-        # Candle kontrolü
+        
         if not candles:
             raise HTTPException(
                 status_code=422,
                 detail=f"No candle data received from exchanges for {symbol}"
             )
-
+        
         if len(candles) < Config.MIN_CANDLES:
+            logger.warning(f"⚠️ Yetersiz mum: {len(candles)} (min:{Config.MIN_CANDLES})")
             raise HTTPException(
                 status_code=422,
                 detail=f"Insufficient candles for {symbol}. Got {len(candles)}, minimum required: {Config.MIN_CANDLES}"
             )
-
+        
         # DataFrame oluştur
         df = pd.DataFrame(candles)
-
-        # Gerekli kolonları kontrol et
-        required_cols = {"open", "high", "low", "close", "volume", "timestamp"}
-        missing_cols = required_cols - set(df.columns)
-        if missing_cols:
-            raise ValueError(f"Missing required columns: {missing_cols}")
-
-        # Timestamp'i datetime'a çevir ve index yap
-        df['timestamp'] = pd.to_datetime(df['timestamp'], unit='ms', errors='coerce')
-        df = df.dropna(subset=['timestamp'])
-
-        if df.empty:
-            raise HTTPException(422, "No valid timestamps in data")
-
+        df['timestamp'] = pd.to_datetime(df['timestamp'], unit='ms')
         df = df.set_index('timestamp').sort_index()
-
-        # Son kontroller
-        if len(df) < Config.MIN_CANDLES:
-            raise HTTPException(
-                422,
-                f"After cleaning only {len(df)} candles left (minimum: {Config.MIN_CANDLES})"
-            )
-
-        # Tüm analizleri paralel çalıştır (performans için)
-        analysis_tasks = [
-            TechnicalAnalyzer.analyze(df),
-            ICTPatternDetector.analyze(df),
-            CandlestickPatternDetector.analyze(df),
-            ClassicalPatternDetector.analyze(df),
-            GainzAlgoV2Detector.detect(df),
-            Ultimate2026Detector.detect(df),
-            MarketStructureAnalyzer.analyze(df)
-        ]
-
-        # Hata yönetimi ile paralel çalıştır
-        try:
-            (
-                technical,
-                ict_patterns,
-                candle_patterns,
-                classical_patterns,
-                gainzalgo_signals,
-                ultimate_signals,
-                market_structure
-            ) = await asyncio.gather(
-                *[asyncio.to_thread(task) if not asyncio.iscoroutinefunction(task) else task
-                  for task in analysis_tasks],
-                return_exceptions=True
-            )
-        except Exception as e:
-            logger.error(f"Parallel analysis failed: {e}")
-            # Fallback to sequential
-            technical = TechnicalAnalyzer.analyze(df)
-            ict_patterns = ICTPatternDetector.analyze(df)
-            candle_patterns = CandlestickPatternDetector.analyze(df)
-            classical_patterns = ClassicalPatternDetector.analyze(df)
-            gainzalgo_signals = GainzAlgoV2Detector.detect(df)
-            ultimate_signals = Ultimate2026Detector.detect(df)
-            market_structure = MarketStructureAnalyzer.analyze(df)
-
-        # Hataları temizle
-        technical = technical if not isinstance(technical, Exception) else {}
-        ict_patterns = ict_patterns if not isinstance(ict_patterns, Exception) else {}
-        candle_patterns = candle_patterns if not isinstance(candle_patterns, Exception) else []
-        classical_patterns = classical_patterns if not isinstance(classical_patterns, Exception) else []
-        gainzalgo_signals = gainzalgo_signals if not isinstance(gainzalgo_signals, Exception) else []
-        ultimate_signals = ultimate_signals if not isinstance(ultimate_signals, Exception) else []
-        market_structure = market_structure if not isinstance(market_structure, Exception) else {}
-
+        
+        # ORTAK DataFrame hazırlama
+        df_prepared = prepare_dataframe(df)
+        
+        logger.info(f"📊 DataFrame hazır: {len(df_prepared)} mum, {len(df_prepared.columns)} kolon")
+        
+        # Piyasa yapısı analizi (önce bunu yap, ICTSMARTPRO için lazım)
+        market_structure = MarketStructureAnalyzer.analyze(df_prepared)
+        
+        # Analizleri yap
+        technical = TechnicalAnalyzer.analyze(df_prepared)
+        ict_patterns = ICTPatternDetector.analyze(df_prepared)
+        candle_patterns = CandlestickPatternDetector.analyze(df_prepared)
+        classical_patterns = ClassicalPatternDetector.analyze(df_prepared)
+        
+        # ICTSMARTPRO stratejisi (GainzAlgo ve Ultimate KALDIRILDI)
+        ictsmartpro_signals = ICTSmartProDetector.detect(df_prepared, market_structure)
+        
         # Signal oluştur
-        try:
-            signal = SignalGenerator.generate(
-                technical,
-                market_structure,
-                ict_patterns,
-                candle_patterns,
-                classical_patterns,
-                gainzalgo_signals,
-                ultimate_signals
-            )
-        except Exception as e:
-            logger.error(f"SignalGenerator failed: {e}")
-            signal = {
-                "signal": "NEUTRAL",
-                "confidence": 50.0,
-                "recommendation": f"Signal analysis error, using neutral",
-                "buy_count": 0,
-                "sell_count": 0,
-                "tp_level": None,
-                "sl_level": None
-            }
-
-        # Tüm pattern'leri topla ve formatla
+        signal = SignalGenerator.generate(
+            technical,
+            market_structure,
+            ict_patterns,
+            candle_patterns,
+            classical_patterns,
+            ictsmartpro_signals
+        )
+        
+        # Tüm pattern'leri topla
         all_patterns = []
-
-        # ICT pattern'lerini ekle
+        
+        # ICT pattern'leri
         for pattern_list in ict_patterns.values():
             for p in pattern_list:
                 formatted_p = {
@@ -2781,12 +2652,9 @@ async def analyze_symbol(
                     "sl_level": p.get("sl_level"),
                     "tp_level": p.get("tp_level")
                 }
-                # Orijinal tüm alanları koru
-                formatted_p.update({k: v for k, v in p.items()
-                                    if k not in formatted_p})
                 all_patterns.append(formatted_p)
-
-        # Candlestick pattern'lerini ekle
+        
+        # Candlestick pattern'leri
         for p in candle_patterns:
             formatted_p = {
                 "name": p.get("pattern", "candle_pattern"),
@@ -2799,11 +2667,9 @@ async def analyze_symbol(
                 "sl_level": p.get("sl_level"),
                 "tp_level": p.get("tp_level")
             }
-            formatted_p.update({k: v for k, v in p.items()
-                                if k not in formatted_p})
             all_patterns.append(formatted_p)
-
-        # Classical pattern'lerini ekle
+        
+        # Classical pattern'leri
         for p in classical_patterns:
             formatted_p = {
                 "name": p.get("pattern", "classical_pattern"),
@@ -2816,15 +2682,13 @@ async def analyze_symbol(
                 "sl_level": p.get("sl_level"),
                 "tp_level": p.get("tp_level")
             }
-            formatted_p.update({k: v for k, v in p.items()
-                                if k not in formatted_p})
             all_patterns.append(formatted_p)
-
-        # GainzAlgo pattern'lerini ekle
-        for p in gainzalgo_signals:
+        
+        # ICTSMARTPRO pattern'leri
+        for p in ictsmartpro_signals:
             formatted_p = {
-                "name": p.get("pattern", "gainzalgo"),
-                "type": PatternType.GAINZALGO,
+                "name": p.get("pattern", "ictsmartpro"),
+                "type": PatternType.ICTSMARTPRO,
                 "direction": p.get("direction", "neutral"),
                 "confidence": float(p.get("strength", 50)),
                 "timestamp": p.get("timestamp", datetime.now().isoformat()),
@@ -2833,43 +2697,23 @@ async def analyze_symbol(
                 "sl_level": p.get("sl_level"),
                 "tp_level": p.get("tp_level")
             }
-            formatted_p.update({k: v for k, v in p.items()
-                                if k not in formatted_p})
             all_patterns.append(formatted_p)
-
-        # Ultimate pattern'lerini ekle
-        for p in ultimate_signals:
-            formatted_p = {
-                "name": p.get("pattern", "ultimate"),
-                "type": PatternType.ULTIMATE,
-                "direction": p.get("direction", "neutral"),
-                "confidence": float(p.get("strength", 50)),
-                "timestamp": p.get("timestamp", datetime.now().isoformat()),
-                "price": float(p.get("price", 0)),
-                "description": p.get("description", ""),
-                "sl_level": p.get("sl_level"),
-                "tp_level": p.get("tp_level")
-            }
-            formatted_p.update({k: v for k, v in p.items()
-                                if k not in formatted_p})
-            all_patterns.append(formatted_p)
-
-        # Aktif kaynakları al
+        
+        # Aktif kaynaklar
         active_sources = fetcher.get_active_sources()
-
+        
         # Son mum verileri
-        last_row = df.iloc[-1]
-        first_row = df.iloc[0]
-        volume_sum = float(df["volume"].sum())
-
-        # 24h hacim tahmini (interval'e göre)
+        last_row = df_prepared.iloc[-1]
+        first_row = df_prepared.iloc[0]
+        volume_sum = float(df_prepared["volume"].sum())
+        
+        # 24h hacim tahmini
         interval_multipliers = {
             "1m": 1440, "5m": 288, "15m": 96, "30m": 48,
             "1h": 24, "4h": 6, "1d": 1, "1w": 0.142857
         }
         volume_24h = volume_sum * interval_multipliers.get(interval, 24)
-
-        # Response oluştur
+        
         response = {
             "success": True,
             "symbol": symbol,
@@ -2887,8 +2731,8 @@ async def analyze_symbol(
                     2
                 ),
                 "change_24h": round(
-                    (float(last_row["close"]) / float(df.iloc[-min(24, len(df))]["close"]) - 1) * 100
-                    if len(df) >= 24 else 0,
+                    (float(last_row["close"]) / float(df_prepared.iloc[-min(24, len(df_prepared))]["close"]) - 1) * 100
+                    if len(df_prepared) >= 24 else 0,
                     2
                 )
             },
@@ -2897,27 +2741,27 @@ async def analyze_symbol(
             "ict_patterns": ict_patterns,
             "candle_patterns": candle_patterns[-20:],
             "classical_patterns": classical_patterns[-10:],
-            "gainzalgo_signals": gainzalgo_signals[-5:],
-            "ultimate_signals": ultimate_signals[-5:],
+            "ictsmartpro_signals": ictsmartpro_signals[-5:],  # GainzAlgo yerine ICTSMARTPRO
             "market_structure": market_structure,
             "active_sources": active_sources,
-            "data_points": len(df),
-            "all_patterns": all_patterns[-50:],  # Son 50 pattern
+            "data_points": len(df_prepared),
+            "all_patterns": all_patterns[-50:],
             "exchange_stats": exchange_stats,
             "performance_ms": round((time.time() - start_time) * 1000, 2)
         }
-
+        
         # Log
         logger.info(
             f"✅ {symbol} @ {interval} | {signal.get('signal', 'UNKNOWN')} "
-            f"({signal.get('confidence', 0):.1f}%) | {len(df)} candles | "
+            f"({signal.get('confidence', 0):.1f}%) | {len(df_prepared)} candles | "
             f"ICT:{sum(len(v) for v in ict_patterns.values())} "
             f"Classical:{len(classical_patterns)} | "
+            f"ICTSMARTPRO:{len(ictsmartpro_signals)} | "
             f"⏱️ {response['performance_ms']}ms"
         )
-
+        
         return response
-
+    
     except asyncio.TimeoutError:
         logger.error(f"⏰ Timeout analyzing {symbol}")
         raise HTTPException(
@@ -2942,13 +2786,13 @@ async def get_price(symbol: str):
     symbol = symbol.upper()
     if not symbol.endswith("USDT"):
         symbol = f"{symbol}USDT"
-
+    
     async with data_fetcher as fetcher:
         price = await fetcher.get_current_price(symbol)
-
+    
     if price is None:
         raise HTTPException(status_code=404, detail="Price not available")
-
+    
     return {
         "symbol": symbol,
         "price": round(price, 2),
@@ -2960,14 +2804,14 @@ async def get_price(symbol: str):
 async def get_exchanges():
     stats = data_fetcher.get_stats()
     active = data_fetcher.get_active_sources()
-
+    
     exchanges = []
     for exchange in ExchangeDataFetcher.EXCHANGES:
         name = exchange["name"]
         stat = stats.get(name, {"success": 0, "fail": 0, "last_error": "", "last_success": 0})
         total = stat["success"] + stat["fail"]
         reliability = (stat["success"] / total * 100) if total > 0 else 0
-
+        
         exchanges.append({
             "name": name,
             "status": "active" if name in active else "degraded",
@@ -2978,7 +2822,7 @@ async def get_exchanges():
             "last_error": stat["last_error"][:50] if stat["last_error"] else "",
             "last_success": datetime.fromtimestamp(stat["last_success"]).isoformat() if stat["last_success"] else None
         })
-
+    
     return {
         "success": True,
         "timestamp": datetime.now(timezone.utc).isoformat(),
@@ -3011,17 +2855,17 @@ async def websocket_endpoint(websocket: WebSocket, symbol: str):
     symbol = symbol.upper()
     if not symbol.endswith("USDT"):
         symbol = f"{symbol}USDT"
-
+    
     await websocket.accept()
     websocket_connections.add(websocket)
     logger.info(f"🔌 WSS connected: {symbol}")
-
+    
     try:
         last_price = None
         while True:
             async with data_fetcher as fetcher:
                 price = await fetcher.get_current_price(symbol)
-
+            
             if price and price != last_price:
                 await websocket.send_json({
                     "type": "price",
@@ -3030,9 +2874,9 @@ async def websocket_endpoint(websocket: WebSocket, symbol: str):
                     "timestamp": datetime.now(timezone.utc).isoformat()
                 })
                 last_price = price
-
+            
             await asyncio.sleep(3)
-
+    
     except WebSocketDisconnect:
         logger.info(f"❌ WSS disconnected: {symbol}")
     except Exception as e:
@@ -3041,51 +2885,13 @@ async def websocket_endpoint(websocket: WebSocket, symbol: str):
         websocket_connections.discard(websocket)
 
 
-@app.post("/api/train/{symbol}")
-async def train_model(symbol: str):
-    """ML modelini eğit (ileriye dönük)"""
-    symbol = symbol.upper()
-    if not symbol.endswith("USDT"):
-        symbol = f"{symbol}USDT"
-
-    logger.info(f"🧠 Training model for {symbol}")
-
-    try:
-        async with data_fetcher as fetcher:
-            candles = await fetcher.get_candles(symbol, "1h", 500)
-
-        if not candles or len(candles) < 100:
-            raise HTTPException(
-                status_code=400,
-                detail=f"Insufficient data for training. Got {len(candles) if candles else 0} candles"
-            )
-
-        df = pd.DataFrame(candles)
-        df['timestamp'] = pd.to_datetime(df['timestamp'], unit='ms')
-        df = df.set_index('timestamp')
-
-        return {
-            "success": True,
-            "message": f"Model training completed for {symbol}",
-            "symbol": symbol,
-            "timestamp": datetime.now(timezone.utc).isoformat(),
-            "data_points": len(df)
-        }
-
-    except HTTPException:
-        raise
-    except Exception as e:
-        logger.error(f"❌ Training failed: {str(e)}")
-        raise HTTPException(status_code=500, detail=str(e)[:200])
-
-
 @app.get("/api/stats")
 async def get_stats():
     """Sistem istatistikleri"""
     stats = data_fetcher.get_stats()
     total_requests = sum(s["success"] + s["fail"] for s in stats.values())
     total_success = sum(s["success"] for s in stats.values())
-
+    
     return {
         "success": True,
         "timestamp": datetime.now(timezone.utc).isoformat(),
@@ -3115,7 +2921,7 @@ async def startup_event():
     logger.info(f"Environment: {Config.ENV}")
     logger.info(f"Debug Mode: {Config.DEBUG}")
     logger.info(f"Sources: Kraken, Binance, MEXC, Yahoo")
-    logger.info(f"Pattern Types: ICT (20+), Classical (15+), Candlestick (15+), GainzAlgo, Ultimate")
+    logger.info(f"Pattern Types: ICT (15+), Classical (10+), Candlestick (15+), ICTSMARTPRO")
     logger.info(f"Max Confidence: {Config.MAX_CONFIDENCE}%")
     logger.info(f"Min Candles: {Config.MIN_CANDLES}")
     logger.info(f"Cache TTL: {Config.CACHE_TTL}s")
@@ -3139,7 +2945,7 @@ async def shutdown_event():
 # ========================================================================================================
 if __name__ == "__main__":
     import uvicorn
-
+    
     uvicorn.run(
         "main:app",
         host="0.0.0.0",
