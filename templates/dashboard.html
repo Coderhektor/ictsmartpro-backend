@@ -460,6 +460,81 @@ select:focus{border-color:var(--blue);}
 .ms-lbl{font-size:.65rem; /* .6 -> .65 */ color:var(--dim);letter-spacing:.08em;text-transform:uppercase;margin-bottom:5px;} /* 4px -> 5px */
 .ms-val{font-size:.9rem; /* .82 -> .9 */ font-weight:600;}
 
+  /* ─── ICT BULL/BEAR DENGESİ ─────────────────────────────────────── */
+#ictBalanceCard {
+  margin-top: 16px;
+}
+.ict-balance-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 12px;
+  margin-bottom: 12px;
+}
+.ict-balance-box {
+  background: var(--bg2);
+  border: 1px solid var(--line);
+  border-radius: var(--r);
+  padding: 14px;
+  text-align: center;
+}
+.ict-balance-box.bull { border-color: var(--green); background: var(--green-a); }
+.ict-balance-box.bear { border-color: var(--red); background: var(--red-a); }
+.ict-balance-label {
+  font-size: 0.7rem;
+  color: var(--dim);
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  margin-bottom: 6px;
+}
+.ict-balance-number {
+  font-family: var(--head);
+  font-size: 2.2rem;
+  font-weight: 900;
+  line-height: 1;
+}
+.ict-balance-number.bull { color: var(--green); }
+.ict-balance-number.bear { color: var(--red); }
+
+.ict-balance-result {
+  background: var(--bg3);
+  border: 1px solid var(--line);
+  border-radius: var(--r);
+  padding: 16px;
+  text-align: center;
+  margin-top: 8px;
+}
+.ict-balance-direction {
+  font-family: var(--head);
+  font-size: 1.4rem;
+  font-weight: 900;
+  letter-spacing: 0.04em;
+  margin-bottom: 6px;
+}
+.ict-balance-direction.bull { color: var(--green); }
+.ict-balance-direction.bear { color: var(--red); }
+.ict-balance-direction.neutral { color: var(--dim); }
+.ict-balance-desc {
+  font-size: 0.85rem;
+  color: var(--dim);
+  line-height: 1.5;
+}
+.ict-balance-bar {
+  background: var(--line);
+  border-radius: 99px;
+  height: 8px;
+  width: 100%;
+  margin: 12px 0 8px;
+  overflow: hidden;
+}
+.ict-balance-fill {
+  height: 100%;
+  border-radius: 99px;
+  transition: width 0.5s ease;
+}
+.ict-balance-fill.bull { background: var(--green); }
+.ict-balance-fill.bear { background: var(--red); }
+.ict-balance-fill.neutral { background: var(--dim); }
+
 /* ─── SIDE: ML MODELS ─────────────────────────────────────────── */
 .ml-row{display:flex;justify-content:space-between;margin-bottom:4px; /* 3px -> 4px */ font-size:.8rem;} /* .75 -> .8 */
 .ml-name{color:var(--text);}
@@ -849,6 +924,31 @@ select:focus{border-color:var(--blue);}
       </div><!-- /#stratRow -->
     </div>
   </div>
+ <!-- ICT BULL/BEAR DENGESİ (YENİ KART) -->
+<div class="card" id="ictBalanceCard">
+  <div class="ch"><i class="fas fa-scale-balanced"></i><span class="chl">ICT BULL/BEAR DENGESİ</span><span class="cbadge mleft" id="ictBalanceBadge">0 pattern</span></div>
+  <div class="cb">
+    <div class="ict-balance-grid">
+      <div class="ict-balance-box bull">
+        <div class="ict-balance-label">BOĞA PATERNLERİ</div>
+        <div class="ict-balance-number bull" id="ictBullCount">0</div>
+      </div>
+      <div class="ict-balance-box bear">
+        <div class="ict-balance-label">AYI PATERNLERİ</div>
+        <div class="ict-balance-number bear" id="ictBearCount">0</div>
+      </div>
+    </div>
+    
+    <div class="ict-balance-bar">
+      <div class="ict-balance-fill neutral" id="ictBalanceFill" style="width: 50%"></div>
+    </div>
+    
+    <div class="ict-balance-result" id="ictBalanceResult">
+      <div class="ict-balance-direction neutral" id="ictDirection">TARAF BELİRSİZ</div>
+      <div class="ict-balance-desc" id="ictBalanceDesc">Analiz bekleniyor...</div>
+    </div>
+  </div>
+</div>
 
   <!-- ICT Patterns -->
   <div class="card">
@@ -1221,23 +1321,154 @@ async function doAnalyze(){
     set('updText','Son güncelleme: '+fmtT());
   }
 }
+  // ─────────────────────────────────────────────────────────
+//  ICT BULL/BEAR DENGESİ HESAPLAMA
+// ─────────────────────────────────────────────────────────
+function calculateICTBalance(ict) {
+  if (!ict || Object.keys(ict).length === 0) {
+    return {
+      bullCount: 0,
+      bearCount: 0,
+      total: 0,
+      ratio: 50,
+      direction: 'neutral',
+      description: 'ICT pattern verisi yok'
+    };
+  }
+
+  let bullCount = 0;
+  let bearCount = 0;
+
+  // Tüm ICT pattern kategorilerini tara
+  for (const [category, patterns] of Object.entries(ict)) {
+    if (!Array.isArray(patterns)) continue;
+    
+    for (const pattern of patterns) {
+      const dir = pattern.direction || 'neutral';
+      
+      if (dir.includes('bull')) {
+        bullCount++;
+      } else if (dir.includes('bear')) {
+        bearCount++;
+      }
+      // neutral olanları saymıyoruz
+    }
+  }
+
+  const total = bullCount + bearCount;
+  
+  // Boğa yüzdesi (0-100 arası)
+  let bullPercentage = total > 0 ? (bullCount / total) * 100 : 50;
+  
+  // Yön belirle
+  let direction = 'neutral';
+  let directionText = 'TARAF BELİRSİZ';
+  let description = '';
+  let fillClass = 'neutral';
+  
+  if (bullCount > bearCount) {
+    const fark = bullCount - bearCount;
+    const oran = total > 0 ? (bullCount / total * 100).toFixed(1) : 0;
+    
+    direction = 'bull';
+    directionText = 'BOĞA BASKINI';
+    fillClass = 'bull';
+    
+    if (fark >= 5) {
+      description = `🔥 Güçlü boğa baskını! ${bullCount} boğa, ${bearCount} ayı (${oran}%)`;
+    } else if (fark >= 2) {
+      description = `📈 Boğalar avantajlı: ${bullCount} - ${bearCount} (${oran}%)`;
+    } else {
+      description = `↗️ Hafif boğa eğilimi: ${bullCount} - ${bearCount}`;
+    }
+    
+  } else if (bearCount > bullCount) {
+    const fark = bearCount - bullCount;
+    const oran = total > 0 ? (bearCount / total * 100).toFixed(1) : 0;
+    
+    direction = 'bear';
+    directionText = 'AYI BASKINI';
+    fillClass = 'bear';
+    
+    if (fark >= 5) {
+      description = `🔥 Güçlü ayı baskını! ${bearCount} ayı, ${bullCount} boğa (${oran}%)`;
+    } else if (fark >= 2) {
+      description = `📉 Ayılar avantajlı: ${bearCount} - ${bullCount} (${oran}%)`;
+    } else {
+      description = `↘️ Hafif ayı eğilimi: ${bearCount} - ${bullCount}`;
+    }
+    
+  } else {
+    direction = 'neutral';
+    directionText = 'TARAF BELİRSİZ';
+    fillClass = 'neutral';
+    
+    if (total === 0) {
+      description = 'ICT pattern tespit edilemedi';
+    } else {
+      description = `⚖️ Eşit güç: ${bullCount} boğa - ${bearCount} ayı`;
+    }
+  }
+
+  return {
+    bullCount,
+    bearCount,
+    total,
+    ratio: bullPercentage,
+    direction,
+    directionText,
+    description,
+    fillClass
+  };
+}
+
+// ─────────────────────────────────────────────────────────
+//  ICT DENGESİ RENDER (renderAll içinde çağrılacak)
+// ─────────────────────────────────────────────────────────
+function renderICTBalance(ict) {
+  const balance = calculateICTBalance(ict);
+  
+  // Sayıları güncelle
+  set('ictBullCount', balance.bullCount);
+  set('ictBearCount', balance.bearCount);
+  set('ictBalanceBadge', `${balance.total} pattern`);
+  
+  // Denge çubuğunu güncelle
+  const fillEl = $('ictBalanceFill');
+  fillEl.style.width = balance.ratio + '%';
+  fillEl.className = 'ict-balance-fill ' + balance.fillClass;
+  
+  // Yön ve açıklamayı güncelle
+  const dirEl = $('ictDirection');
+  dirEl.textContent = balance.directionText;
+  dirEl.className = 'ict-balance-direction ' + balance.direction;
+  
+  set('ictBalanceDesc', balance.description);
+  
+  // Log'a da ekle
+  addLog(`📊 ICT Dengesi: ${balance.bullCount} boğa, ${balance.bearCount} ayı → ${balance.directionText}`, 
+         balance.direction === 'bull' ? 'c-green' : balance.direction === 'bear' ? 'c-red' : 'c-dim');
+}
 
 // ─────────────────────────────────────────────────────────
 //  RENDER ALL (Güncellendi: gainzalgo_signals -> ictsmartpro_signals)
 // ─────────────────────────────────────────────────────────
-function renderAll(d){
+ function renderAll(d){
   renderPrice(d);
   renderSignal(d.signal);
   renderHeikinAshi(d.technical);
   renderTechnical(d.technical);
-  renderICTSMARTPROSignals(d.ictsmartpro_signals); // GainzAlgo/Ultimate yerine
+  renderICTSMARTPROSignals(d.ictsmartpro_signals);
   renderICT(d.ict_patterns);
+  
+  // YENİ: ICT Bull/Bear dengesini hesapla ve göster
+  renderICTBalance(d.ict_patterns);
+  
   renderCandlePatterns(d.candle_patterns);
   renderClassicalPatterns(d.classical_patterns);
   renderMarketStructure(d.market_structure);
   renderSidePanel(d);
 }
-
 // ─── PRICE ───────────────────────────────────────────────
 function renderPrice(d){
   if(!d) return;
@@ -1629,6 +1860,7 @@ function doEvaluate(){
   const ispCount=(d.ictsmartpro_signals||[]).length; // GainzAlgo/Ultimate yerine
   const candleCount=(d.candle_patterns||[]).length;
   const classicCount=(d.classical_patterns||[]).length;
+  const ictBalance = calculateICTBalance(d.ict_patterns);
 
   let verdict='';
   if(conf>75) verdict='🔥 Yüksek güven seviyesi. Sinyal güçlü.';
@@ -1636,6 +1868,17 @@ function doEvaluate(){
   else verdict='⚠️ Düşük güven. Temkinli yaklaşılmalı.';
   if(ictTotal>10) verdict+=' Yoğun ICT aktivitesi.';
   if(ispCount>0) verdict+=` ${ispCount} ICTSMARTPRO sinyali mevcut.`;
+  // ICT dengesi bilgisini ekle
+if (ictBalance.total > 0) {
+  if (ictBalance.direction === 'bull') {
+    verdict += ` 📊 ICT'lerde ${ictBalance.bullCount}-${ictBalance.bearCount} boğa baskın.`;
+  } else if (ictBalance.direction === 'bear') {
+    verdict += ` 📊 ICT'lerde ${ictBalance.bearCount}-${ictBalance.bullCount} ayı baskın.`;
+  }
+}
+
+if (ictBalance.total > 10) verdict += ' Yoğun ICT aktivitesi.';
+if (ispCount > 0) verdict += ` ${ispCount} ICTSMARTPRO sinyali mevcut.`;
 
   const box=$('chatLog');
   const empty=box.querySelector('.chat-empty');
