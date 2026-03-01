@@ -200,13 +200,12 @@ class AnalysisResponse(BaseModel):
 
 
 # ========================================================================================================
-# WEBSOCKET VERİ TOPLAYICI (Binance, Bybit, MEXC, Finnhub, Yahoo)
+# WEBSOCKET VERİ TOPLAYICI (Binance, Bybit, MEXC, Yahoo)
 # ========================================================================================================
 class WebSocketCollector:
     """
     Çoklu borsa WebSocket toplayıcı
     - Binance, Bybit, MEXC (kripto)
-    - Finnhub (hisse, forex, emtia)
     - Yahoo (yedek, HTTP polling)
     """
     
@@ -242,13 +241,6 @@ class WebSocketCollector:
                 "parser": self._parse_mexc,
                 "symbol_format": lambda s: f"spot@public.deals.v3.api@{s.upper()}",
                 "weight": 0.96
-            },
-            "finnhub": {
-                "url": f"wss://ws.finnhub.io?token={Config.FINNHUB_API_KEY}",
-                "ping_interval": 20,
-                "parser": self._parse_finnhub,
-                "symbol_format": lambda s: s.upper(),
-                "weight": 0.95
             }
         }
         
@@ -263,10 +255,6 @@ class WebSocketCollector:
         # Her borsa için ayrı task
         tasks = []
         for exchange in self.WS_CONFIGS.keys():
-            if exchange == "finnhub" and not Config.FINNHUB_API_KEY:
-                logger.warning("⚠️ FINNHUB_API_KEY bulunamadı, Finnhub WebSocket başlatılmadı")
-                continue
-                
             tasks.append(asyncio.create_task(self._run_websocket(exchange)))
         
         # Yahoo HTTP polling
@@ -276,18 +264,21 @@ class WebSocketCollector:
         logger.info(f"✅ WebSocket toplayıcı başlatıldı: {len(tasks)} kaynak")
         await asyncio.gather(*tasks)
     
-
-    # async def stop(self):  # GEÇİCİ OLARAK DEVRE DIŞI
-#     """Tüm bağlantıları durdur"""
-#     self.running = False
-#     connections_copy = list(self.connections.items())
-#     for exchange, ws in connections_copy:
-#         try:
-#             await ws.close()
-#         except:
-#             pass
-#     self.connections.clear()
-#     logger.info("🛑 WebSocket toplayıcı durduruldu")
+    async def stop(self):
+        """Tüm bağlantıları durdur - DÜZELTİLDİ"""
+        self.running = False
+        
+        # Dictionary'nin bir kopyasını al
+        connections_copy = list(self.connections.items())
+        
+        for exchange, ws in connections_copy:
+            try:
+                await ws.close()
+            except:
+                pass
+        
+        self.connections.clear()
+        logger.info("🛑 WebSocket toplayıcı durduruldu")
     
     async def subscribe(self, exchange: str, symbols: List[str]):
         """Yeni sembollere abone ol"""
@@ -334,14 +325,6 @@ class WebSocketCollector:
                         }
                         await ws.send(json.dumps(subscribe_msg))
                 
-                elif exchange == "finnhub":
-                    for symbol in symbols:
-                        subscribe_msg = {
-                            "type": "subscribe",
-                            "symbol": symbol
-                        }
-                        await ws.send(json.dumps(subscribe_msg))
-                
                 logger.debug(f"📡 {exchange} abone: {symbols}")
     
     async def unsubscribe(self, exchange: str, symbols: List[str]):
@@ -364,14 +347,6 @@ class WebSocketCollector:
                         "id": int(time.time() * 1000)
                     }
                     await ws.send(json.dumps(unsubscribe_msg))
-                
-                elif exchange == "finnhub":
-                    for symbol in symbols:
-                        unsubscribe_msg = {
-                            "type": "unsubscribe",
-                            "symbol": symbol
-                        }
-                        await ws.send(json.dumps(unsubscribe_msg))
     
     async def _run_websocket(self, exchange: str):
         """Tek bir WebSocket bağlantısını yönet (reconnect + backoff)"""
@@ -426,71 +401,75 @@ class WebSocketCollector:
             self.connections.pop(exchange, None)
             self.stats[exchange]["connected"] = False
     
-   async def _run_yahoo_polling(self):
-    """Yahoo Finance HTTP polling - DÜZELTİLMİŞ SEMBOL FORMATLARI"""
-    logger.info("📡 Yahoo Finance polling başlatıldı")
-    
-    while self.running:
-        try:
-            symbols = self.subscriptions.get("yahoo", set())
-            
-            for symbol in symbols:
-                try:
-                    # YAHOO SEMBOL FORMATLARI - DÜZELTİLDİ
-                    if symbol == "BTC-USD" or symbol == "BTCUSDT":
-                        yahoo_symbol = "BTC-USD"
-                    elif symbol == "ETH-USD" or symbol == "ETHUSDT":
-                        yahoo_symbol = "ETH-USD"
-                    elif symbol == "SOL-USD" or symbol == "SOLUSDT":
-                        yahoo_symbol = "SOL-USD"
-                    elif symbol == "XAUUSD" or symbol == "XAU":
-                        yahoo_symbol = "GC=F"  # Altın futures
-                    elif symbol == "XAGUSD" or symbol == "XAG":
-                        yahoo_symbol = "SI=F"  # Gümüş futures
-                    elif symbol == "EURUSD":
-                        yahoo_symbol = "EURUSD=X"
-                    elif symbol == "GBPUSD":
-                        yahoo_symbol = "GBPUSD=X"
-                    elif symbol == "USDTRY":
-                        yahoo_symbol = "USDTRY=X"
-                    elif symbol == "AAPL":
-                        yahoo_symbol = "AAPL"
-                    elif symbol == "TSLA":
-                        yahoo_symbol = "TSLA"
-                    elif symbol == "MSFT":
-                        yahoo_symbol = "MSFT"
-                    else:
-                        yahoo_symbol = symbol
+    async def _run_yahoo_polling(self):
+        """Yahoo Finance HTTP polling - DÜZELTİLMİŞ SEMBOL FORMATLARI"""
+        logger.info("📡 Yahoo Finance polling başlatıldı")
+        
+        while self.running:
+            try:
+                symbols = self.subscriptions.get("yahoo", set())
+                
+                for symbol in symbols:
+                    try:
+                        # YAHOO SEMBOL FORMATLARI - DÜZELTİLDİ
+                        if symbol == "BTC-USD" or symbol == "BTCUSDT":
+                            yahoo_symbol = "BTC-USD"
+                        elif symbol == "ETH-USD" or symbol == "ETHUSDT":
+                            yahoo_symbol = "ETH-USD"
+                        elif symbol == "SOL-USD" or symbol == "SOLUSDT":
+                            yahoo_symbol = "SOL-USD"
+                        elif symbol == "XAUUSD" or symbol == "XAU":
+                            yahoo_symbol = "GC=F"  # Altın futures
+                        elif symbol == "XAGUSD" or symbol == "XAG":
+                            yahoo_symbol = "SI=F"  # Gümüş futures
+                        elif symbol == "EURUSD":
+                            yahoo_symbol = "EURUSD=X"
+                        elif symbol == "GBPUSD":
+                            yahoo_symbol = "GBPUSD=X"
+                        elif symbol == "USDTRY":
+                            yahoo_symbol = "USDTRY=X"
+                        elif symbol == "AAPL":
+                            yahoo_symbol = "AAPL"
+                        elif symbol == "TSLA":
+                            yahoo_symbol = "TSLA"
+                        elif symbol == "MSFT":
+                            yahoo_symbol = "MSFT"
+                        elif symbol == "GOOGL":
+                            yahoo_symbol = "GOOGL"
+                        elif symbol == "AMZN":
+                            yahoo_symbol = "AMZN"
+                        else:
+                            yahoo_symbol = symbol
+                        
+                        # Yahoo Finance API URL
+                        url = f"https://query1.finance.yahoo.com/v8/finance/chart/{yahoo_symbol}"
+                        
+                        # User-Agent ekle
+                        headers = {
+                            "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36"
+                        }
+                        
+                        async with aiohttp.ClientSession() as session:
+                            async with session.get(url, headers=headers, timeout=5) as response:
+                                if response.status == 200:
+                                    data = await response.json()
+                                    result = data.get('chart', {}).get('result', [])
+                                    if result and len(result) > 0:
+                                        meta = result[0].get('meta', {})
+                                        price = meta.get('regularMarketPrice')
+                                        if price:
+                                            logger.debug(f"✅ Yahoo {symbol}: {price}")
                     
-                    # Yahoo Finance API URL
-                    url = f"https://query1.finance.yahoo.com/v8/finance/chart/{yahoo_symbol}"
-                    
-                    # User-Agent ekle
-                    headers = {
-                        "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36"
-                    }
-                    
-                    async with aiohttp.ClientSession() as session:
-                        async with session.get(url, headers=headers, timeout=5) as response:
-                            if response.status == 200:
-                                data = await response.json()
-                                result = data.get('chart', {}).get('result', [])
-                                if result and len(result) > 0:
-                                    meta = result[0].get('meta', {})
-                                    price = meta.get('regularMarketPrice')
-                                    if price:
-                                        logger.debug(f"✅ Yahoo {symbol}: {price}")
+                    except Exception as e:
+                        logger.debug(f"Yahoo {symbol} hatası: {str(e)}")
                     
                     await asyncio.sleep(2)
-                    
-                except Exception as e:
-                    logger.debug(f"Yahoo {symbol} hatası: {str(e)}")
                 
-            await asyncio.sleep(self.yahoo_interval)
-            
-        except Exception as e:
-            logger.error(f"Yahoo polling hatası: {str(e)}")
-            await asyncio.sleep(30)
+                await asyncio.sleep(self.yahoo_interval)
+                
+            except Exception as e:
+                logger.error(f"Yahoo polling hatası: {str(e)}")
+                await asyncio.sleep(30)
     
     # ========== PARSER FONKSİYONLARI ==========
     
@@ -560,21 +539,6 @@ class WebSocketCollector:
                 "timestamp": trade_data.get("t", int(time.time() * 1000))
             }
             await self._process_price(exchange, price_data)
-    
-    async def _parse_finnhub(self, message: str, exchange: str):
-        """Finnhub mesajlarını parse et"""
-        data = json.loads(message)
-        
-        if data.get("type") == "trade":
-            for trade in data.get("data", []):
-                price_data = {
-                    "symbol": trade["s"],
-                    "price": float(trade["p"]),
-                    "volume": float(trade.get("v", 0)),
-                    "source": exchange,
-                    "timestamp": trade.get("t", int(time.time() * 1000))
-                }
-                await self._process_price(exchange, price_data)
     
     async def _process_price(self, exchange: str, price_data: Dict):
         """Gelen fiyat verisini işle - Redis'e yaz veya callback çağır"""
@@ -657,6 +621,18 @@ class ExchangeDataFetcher:
                 "1h": "1h", "4h": "4h", "1d": "1d", "1w": "1w"
             },
             "parser": "binance",
+            "timeout": 5
+        },
+        {
+            "name": "Bybit",
+            "weight": 0.95,
+            "base_url": "https://api.bybit.com/v5/market/klines",
+            "symbol_fmt": lambda s: s.replace("/", ""),
+            "interval_map": {
+                "1m": "1", "5m": "5", "15m": "15", "30m": "30",
+                "1h": "60", "4h": "240", "1d": "D", "1w": "W"
+            },
+            "parser": "bybit",
             "timeout": 5
         },
         {
@@ -748,6 +724,14 @@ class ExchangeDataFetcher:
                     "range": "1mo" if interval in ["1d", "1w"] else "5d",
                     "includePrePost": "false"
                 }
+            elif name == "Bybit":
+                url = exchange["base_url"]
+                params = {
+                    "category": "spot",
+                    "symbol": formatted_symbol,
+                    "interval": ex_interval,
+                    "limit": limit
+                }
             else:
                 url = exchange["base_url"]
                 params = {
@@ -795,6 +779,20 @@ class ExchangeDataFetcher:
             if exchange in ["Binance", "MEXC"]:
                 if isinstance(data, list):
                     for item in data:
+                        if len(item) >= 6:
+                            candles.append({
+                                "timestamp": int(item[0]),
+                                "open": float(item[1]),
+                                "high": float(item[2]),
+                                "low": float(item[3]),
+                                "close": float(item[4]),
+                                "volume": float(item[5]),
+                                "exchange": exchange
+                            })
+
+            elif exchange == "Bybit":
+                if isinstance(data, dict) and data.get("result", {}).get("list"):
+                    for item in data["result"]["list"]:
                         if len(item) >= 6:
                             candles.append({
                                 "timestamp": int(item[0]),
@@ -3265,7 +3263,7 @@ async def startup_event():
     logger.info("=" * 70)
     logger.info(f"Environment: {Config.ENV}")
     logger.info(f"Debug Mode: {Config.DEBUG}")
-    logger.info(f"Sources: Kraken, Binance, MEXC, Yahoo, Bybit, Finnhub")
+    logger.info(f"Sources: Kraken, Binance, MEXC, Yahoo, Bybit")
     logger.info(f"Pattern Types: ICT (15+), Classical (10+), Candlestick (15+), ICTSMARTPRO")
     logger.info(f"Max Confidence: {Config.MAX_CONFIDENCE}%")
     logger.info(f"Min Candles: {Config.MIN_CANDLES}")
@@ -3276,19 +3274,19 @@ async def startup_event():
         ws_collector = WebSocketCollector(redis_client=None)
         
         symbols = {
-            "binance": ["BTCUSDT", "ETHUSDT", "SOLUSDT", "BNBUSDT", "ADAUSDT"],
-            "bybit": ["BTCUSDT", "ETHUSDT", "SOLUSDT"],
-            "mexc": ["BTCUSDT", "ETHUSDT", "SOLUSDT"],
-            "finnhub": ["AAPL", "TSLA", "MSFT", "GOOGL", "AMZN", "OANDA:XAU_USD", "OANDA:XAG_USD", "OANDA:EUR_USD", "OANDA:GBP_USD"],
-            "yahoo": ["BTC-USD", "ETH-USD", "SOL-USD", "XAUUSD=X", "XAGUSD=X", "EURUSD=X", "GBPUSD=X", "AAPL", "TSLA"]
+            "binance": ["BTCUSDT", "ETHUSDT", "SOLUSDT", "BNBUSDT", "ADAUSDT", "AVAXUSDT", "LINKUSDT", "DOTUSDT"],
+            "bybit": ["BTCUSDT", "ETHUSDT", "SOLUSDT", "AVAXUSDT"],
+            "mexc": ["BTCUSDT", "ETHUSDT", "SOLUSDT", "AVAXUSDT"],
+            "yahoo": ["BTC-USD", "ETH-USD", "SOL-USD", "XAUUSD", "XAGUSD", "EURUSD", "GBPUSD", "USDTRY", "AAPL", "TSLA", "MSFT", "GOOGL", "AMZN"]
         }
         
         for exchange, sym_list in symbols.items():
-            await ws_collector.subscribe(exchange, sym_list)
+            if sym_list:
+                await ws_collector.subscribe(exchange, sym_list)
         
         asyncio.create_task(ws_collector.start())
         
-        total_symbols = sum(len(v) for v in symbols.values())
+        total_symbols = sum(len(v) for v in symbols.values() if v)
         logger.info(f"✅ WebSocketCollector başlatıldı: {total_symbols} sembol")
         
     except Exception as e:
