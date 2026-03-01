@@ -193,6 +193,446 @@ class AnalysisResponse(BaseModel):
     all_patterns: List[Pattern]
     exchange_stats: Optional[Dict] = None
 
+    # ========================================================================================================
+# WEBSOCKET VERİ TOPLAYICI (Binance, Bybit, MEXC, Finnhub, Yahoo)
+# ========================================================================================================
+class WebSocketCollector:
+    """
+    Çoklu borsa WebSocket toplayıcı
+    - Binance, Bybit, MEXC (kripto)
+    - Finnhub (hisse, forex, emtia)
+    - Yahoo (yedek, HTTP polling)
+    """
+    
+    def __init__(self, redis_client=None):
+        self.redis_client = redis_client
+        self.connections = {}
+        self.subscriptions = defaultdict(set)
+        self.running = False
+        self.reconnect_delay = 1
+        self.max_reconnect_delay = 60
+        self.stats = defaultdict(lambda: {"connected": False, "messages": 0, "errors": 0, "last_message": 0})
+        
+        # WebSocket konfigürasyonları
+        self.WS_CONFIGS = {
+            "binance": {
+                "url": "wss://stream.binance.com:9443/ws",
+                "multi_stream": "wss://stream.binance.com:9443/stream?streams={streams}",
+                "ping_interval": 20,
+                "parser": self._parse_binance,
+                "symbol_format": lambda s: s.lower().replace("usdt", "usdt@trade"),
+                "weight": 1.0
+            },
+            "bybit": {
+                "url": "wss://stream.bybit.com/v5/public/spot",
+                "ping_interval": 20,
+                "parser": self._parse_bybit,
+                "symbol_format": lambda s: s.upper(),
+                "weight": 0.98
+            },
+            "mexc": {
+                "url": "wss://wbs.mexc.com/ws",
+                "ping_interval": 30,
+                "parser": self._parse_mexc,
+                "symbol_format": lambda s: f"spot@public.deals.v3.api@{s.upper()}",
+                "weight": 0.96
+            },
+            "finnhub": {
+                "url": f"wss://ws.finnhub.io?token={os.getenv('FINNHUB_API_KEY', '')}",
+                "ping_interval": 20,
+                "parser": self._parse_finnhub,
+                "symbol_format": lambda s: s.upper(),
+                "weight": 0.95
+            }
+        }
+        
+        # Yahoo HTTP polling için ayrı
+        self.yahoo_enabled = True
+        self.yahoo_interval = int(os.getenv("YAHOO_POLLING_INTERVAL", "10"))  # saniye
+        
+    async def start(self):
+        """Tüm WebSocket bağlantılarını başlat"""
+        self.running = True
+        
+        # Her borsa için ayrı task
+        tasks = []
+        for exchange in self.WS_CONFIGS.keys():
+            if exchange == "finnhub" and not os.getenv("FINNHUB_API_KEY"):
+                logger.warning("⚠️ FINNHUB_API_KEY bulunamadı, Finnhub WebSocket başlatılmadı")
+                continue
+                
+            tasks.append(asyncio.create_task(self._run_websocket(exchange)))
+        
+        # Yahoo HTTP polling
+        if self.yahoo_enabled:
+            tasks.append(asyncio.create_task(self._run_yahoo_polling()))
+        
+        logger.info(f"✅ WebSocket toplayıcı başlatıldı: {len(tasks)} kaynak")
+        await asyncio.gather(*tasks)
+    
+    async def stop(self):
+        """Tüm bağlantıları durdur"""
+        self.running = False
+        for exchange, ws in self.connections.items():
+            try:
+                await ws.close()
+            except:
+                pass
+        self.connections.clear()
+        logger.info("🛑 WebSocket toplayıcı durduruldu")
+    
+    async def subscribe(self, exchange: str, symbols: List[str]):
+        """Yeni sembollere abone ol"""
+        exchange = exchange.lower()
+        if exchange not in self.WS_CONFIGS:
+            logger.error(f"❌ Bilinmeyen borsa: {exchange}")
+            return
+        
+        config = self.WS_CONFIGS[exchange]
+        self.subscriptions[exchange].update(symbols)
+        
+        # Bağlantı varsa hemen abone ol
+        if exchange in self.connections:
+            ws = self.connections[exchange]
+            if ws.open:
+                if exchange == "binance":
+                    # Binance multi-stream format
+                    streams = [config["symbol_format"](s) for s in symbols]
+                    subscribe_msg = {
+                        "method": "SUBSCRIBE",
+                        "params": streams,
+                        "id": int(time.time() * 1000)
+                    }
+                    await ws.send(json.dumps(subscribe_msg))
+                
+                elif exchange == "bybit":
+                    for symbol in symbols:
+                        subscribe_msg = {
+                            "op": "subscribe",
+                            "args": [f"publicTrade.{symbol}"]
+                        }
+                        await ws.send(json.dumps(subscribe_msg))
+                
+                elif exchange == "mexc":
+                    for symbol in symbols:
+                        channel = config["symbol_format"](symbol)
+                        subscribe_msg = {
+                            "method": "SUBSCRIPTION",
+                            "params": [channel]
+                        }
+                        await ws.send(json.dumps(subscribe_msg))
+                
+                elif exchange == "finnhub":
+                    for symbol in symbols:
+                        subscribe_msg = {
+                            "type": "subscribe",
+                            "symbol": symbol
+                        }
+                        await ws.send(json.dumps(subscribe_msg))
+                
+                logger.debug(f"📡 {exchange} abone: {symbols}")
+    
+    async def unsubscribe(self, exchange: str, symbols: List[str]):
+        """Abonelikten çık"""
+        exchange = exchange.lower()
+        if exchange not in self.subscriptions:
+            return
+        
+        for sym in symbols:
+            self.subscriptions[exchange].discard(sym)
+        
+        if exchange in self.connections:
+            ws = self.connections[exchange]
+            if ws.open:
+                if exchange == "binance":
+                    streams = [self.WS_CONFIGS["binance"]["symbol_format"](s) for s in symbols]
+                    unsubscribe_msg = {
+                        "method": "UNSUBSCRIBE",
+                        "params": streams,
+                        "id": int(time.time() * 1000)
+                    }
+                    await ws.send(json.dumps(unsubscribe_msg))
+                
+                elif exchange == "finnhub":
+                    for symbol in symbols:
+                        unsubscribe_msg = {
+                            "type": "unsubscribe",
+                            "symbol": symbol
+                        }
+                        await ws.send(json.dumps(unsubscribe_msg))
+    
+    async def _run_websocket(self, exchange: str):
+        """Tek bir WebSocket bağlantısını yönet (reconnect + backoff)"""
+        config = self.WS_CONFIGS[exchange]
+        url = config["url"]
+        reconnect_delay = self.reconnect_delay
+        
+        while self.running:
+            try:
+                logger.info(f"🔌 {exchange} WebSocket bağlanıyor...")
+                
+                async with websockets.connect(
+                    url,
+                    ping_interval=config.get("ping_interval", 20),
+                    ping_timeout=10,
+                    close_timeout=5
+                ) as ws:
+                    self.connections[exchange] = ws
+                    self.stats[exchange]["connected"] = True
+                    self.stats[exchange]["errors"] = 0
+                    reconnect_delay = self.reconnect_delay  # başarılı → delay sıfırla
+                    
+                    logger.info(f"✅ {exchange} WebSocket bağlandı")
+                    
+                    # Mevcut abonelikleri gönder
+                    if self.subscriptions[exchange]:
+                        await self.subscribe(exchange, list(self.subscriptions[exchange]))
+                    
+                    # Mesajları dinle
+                    async for message in ws:
+                        self.stats[exchange]["messages"] += 1
+                        self.stats[exchange]["last_message"] = time.time()
+                        
+                        try:
+                            await config["parser"](message, exchange)
+                        except Exception as e:
+                            logger.error(f"❌ {exchange} parse error: {str(e)}")
+                            self.stats[exchange]["errors"] += 1
+                    
+                    logger.warning(f"⚠️ {exchange} bağlantı kapandı")
+            
+            except Exception as e:
+                self.stats[exchange]["errors"] += 1
+                logger.error(f"❌ {exchange} WebSocket hatası: {str(e)}")
+            
+            # Exponential backoff ile yeniden bağlan
+            if self.running:
+                logger.info(f"🔄 {exchange} yeniden bağlanıyor ({reconnect_delay:.1f}s)...")
+                await asyncio.sleep(reconnect_delay)
+                reconnect_delay = min(reconnect_delay * 2, self.max_reconnect_delay)
+            
+            self.connections.pop(exchange, None)
+            self.stats[exchange]["connected"] = False
+    
+    async def _run_yahoo_polling(self):
+        """Yahoo Finance HTTP polling (WebSocket olmadığı için)"""
+        logger.info("📡 Yahoo Finance polling başlatıldı")
+        
+        while self.running:
+            try:
+                # Abone olunan semboller için Yahoo'dan veri çek
+                symbols = self.subscriptions.get("yahoo", set())
+                
+                for symbol in symbols:
+                    try:
+                        # Yahoo formatına dönüştür
+                        yahoo_symbol = symbol.replace("USDT", "-USD")
+                        
+                        # yfinance ile çek
+                        ticker = yf.Ticker(yahoo_symbol)
+                        data = ticker.history(period="1d", interval="1m")
+                        
+                        if not data.empty:
+                            last = data.iloc[-1]
+                            
+                            # Redis'e yaz veya direkt işle
+                            price_data = {
+                                "symbol": symbol,
+                                "price": float(last["Close"]),
+                                "high": float(last["High"]),
+                                "low": float(last["Low"]),
+                                "volume": float(last["Volume"]),
+                                "source": "yahoo",
+                                "timestamp": int(time.time() * 1000)
+                            }
+                            
+                            await self._process_price("yahoo", price_data)
+                            
+                        await asyncio.sleep(2)  # rate limit koruması
+                        
+                    except Exception as e:
+                        logger.debug(f"Yahoo {symbol} hatası: {str(e)}")
+                
+                # Periyodik bekleme
+                for _ in range(self.yahoo_interval):
+                    if not self.running:
+                        break
+                    await asyncio.sleep(1)
+                    
+            except Exception as e:
+                logger.error(f"Yahoo polling hatası: {str(e)}")
+                await asyncio.sleep(10)
+    
+    # ========== PARSER FONKSİYONLARI ==========
+    
+    async def _parse_binance(self, message: str, exchange: str):
+        """Binance mesajlarını parse et"""
+        data = json.loads(message)
+        
+        # Stream format (multi-stream)
+        if "stream" in data:
+            stream = data["stream"]
+            symbol = stream.split("@")[0].upper()
+            if "USDT" not in symbol:
+                symbol = f"{symbol}USDT"
+            
+            trade_data = data["data"]
+            if "p" in trade_data:  # price
+                price_data = {
+                    "symbol": symbol,
+                    "price": float(trade_data["p"]),
+                    "volume": float(trade_data.get("q", 0)),
+                    "source": exchange,
+                    "timestamp": trade_data.get("T", int(time.time() * 1000))
+                }
+                await self._process_price(exchange, price_data)
+        
+        # Single stream
+        elif "s" in data:  # symbol
+            symbol = data["s"]
+            price_data = {
+                "symbol": symbol,
+                "price": float(data["p"]),
+                "volume": float(data.get("q", 0)),
+                "source": exchange,
+                "timestamp": data.get("T", int(time.time() * 1000))
+            }
+            await self._process_price(exchange, price_data)
+    
+    async def _parse_bybit(self, message: str, exchange: str):
+        """Bybit mesajlarını parse et"""
+        data = json.loads(message)
+        
+        if "topic" in data and "publicTrade" in data["topic"]:
+            symbol = data["topic"].split(".")[-1]
+            
+            if "data" in data:
+                for trade in data["data"]:
+                    price_data = {
+                        "symbol": symbol,
+                        "price": float(trade["p"]),
+                        "volume": float(trade.get("v", 0)),
+                        "source": exchange,
+                        "timestamp": trade.get("T", int(time.time() * 1000))
+                    }
+                    await self._process_price(exchange, price_data)
+    
+    async def _parse_mexc(self, message: str, exchange: str):
+        """MEXC mesajlarını parse et"""
+        data = json.loads(message)
+        
+        # MEXC trade format
+        if "data" in data and "symbol" in data.get("d", {}):
+            trade_data = data["d"]
+            symbol = trade_data["symbol"].split("@")[-1]
+            
+            price_data = {
+                "symbol": symbol,
+                "price": float(trade_data["p"]),
+                "volume": float(trade_data.get("v", 0)),
+                "source": exchange,
+                "timestamp": trade_data.get("t", int(time.time() * 1000))
+            }
+            await self._process_price(exchange, price_data)
+    
+    async def _parse_finnhub(self, message: str, exchange: str):
+        """Finnhub mesajlarını parse et"""
+        data = json.loads(message)
+        
+        if data.get("type") == "trade":
+            for trade in data.get("data", []):
+                price_data = {
+                    "symbol": trade["s"],
+                    "price": float(trade["p"]),
+                    "volume": float(trade.get("v", 0)),
+                    "source": exchange,
+                    "timestamp": trade.get("t", int(time.time() * 1000))
+                }
+                await self._process_price(exchange, price_data)
+    
+    async def _process_price(self, exchange: str, price_data: Dict):
+        """Gelen fiyat verisini işle - Redis'e yaz veya callback çağır"""
+        try:
+            symbol = price_data["symbol"]
+            price = price_data["price"]
+            timestamp = price_data["timestamp"]
+            
+            # Redis varsa yaz
+            if self.redis_client:
+                key = f"price:{symbol}"
+                await self.redis_client.hset(key, mapping={
+                    "price": price,
+                    "source": exchange,
+                    "timestamp": timestamp,
+                    "volume": price_data.get("volume", 0)
+                })
+                await self.redis_client.expire(key, 60)  # 60 saniye TTL
+            
+            # Log (debug)
+            logger.debug(f"💰 {symbol} @ {exchange}: {price}")
+            
+        except Exception as e:
+            logger.error(f"❌ _process_price hatası: {str(e)}")
+    
+    def get_stats(self) -> Dict:
+        """İstatistikleri döndür"""
+        result = {}
+        for exchange, stats in self.stats.items():
+            result[exchange] = {
+                "connected": stats["connected"],
+                "messages": stats["messages"],
+                "errors": stats["errors"],
+                "last_message": datetime.fromtimestamp(stats["last_message"]).isoformat() if stats["last_message"] else None,
+                "subscriptions": list(self.subscriptions.get(exchange, []))[:10]
+            }
+        
+        # Yahoo ayrı
+        result["yahoo"] = {
+            "connected": self.yahoo_enabled,
+            "subscriptions": list(self.subscriptions.get("yahoo", []))[:10]
+        }
+        
+        return result
+
+
+# ========================================================================================================
+# KULLANIM ÖRNEĞİ (mevcut kodunuza nasıl entegre edeceğiniz)
+# ========================================================================================================
+"""
+# 1. Redis client varsa ekleyin
+redis_client = redis.Redis(host='localhost', port=6379, decode_responses=True)
+
+# 2. WebSocketCollector'ı başlatın
+ws_collector = WebSocketCollector(redis_client=redis_client)
+
+# 3. Abone olmak istediğiniz sembolleri belirleyin
+SYMBOLS = {
+    "binance": ["BTCUSDT", "ETHUSDT", "SOLUSDT"],
+    "bybit": ["BTCUSDT", "ETHUSDT"],
+    "mexc": ["BTCUSDT", "ETHUSDT"],
+    "finnhub": ["AAPL", "TSLA", "OANDA:XAU_USD"],  # hisse + altın
+    "yahoo": ["BTC-USD", "XAUUSD=X"]  # yedek
+}
+
+# 4. Başlatma fonksiyonu
+async def start_websocket_collector():
+    # Önce abonelikleri ekle
+    for exchange, symbols in SYMBOLS.items():
+        await ws_collector.subscribe(exchange, symbols)
+    
+    # Sonra collector'ı başlat
+    await ws_collector.start()
+
+# 5. Ana uygulama başlangıcında çağırın
+@app.on_event("startup")
+async def startup():
+    asyncio.create_task(start_websocket_collector())
+
+# 6. Kapanışta durdurun
+@app.on_event("shutdown")
+async def shutdown():
+    await ws_collector.stop()
+"""
 
 # ========================================================================================================
 # EXCHANGE DATA FETCHER (DÜZELTİLMİŞ)
@@ -2952,4 +3392,5 @@ if __name__ == "__main__":
         port=Config.PORT,
         reload=Config.DEBUG,
         log_level="info"
-    )  
+    )
+proda hazır mı ekleme doğr mu?
