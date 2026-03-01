@@ -1410,50 +1410,48 @@ function updateWSPrice(d){
 // ─────────────────────────────────────────────────────────
 //  MAIN ANALYZE
 // ─────────────────────────────────────────────────────────
+// ─────────────────────────────────────────────────────────
+//  MAIN ANALYZE (DÜZELTİLMİŞ)
+// ─────────────────────────────────────────────────────────
 async function doAnalyze(){
-  let sym=$('selSym').value;
-  const tf=$('selTf').value;
-  const limit=$('selLimit').value;
-  const btn=$('analyzeBtn');
+  let sym = $('selSym').value;  // const -> let olarak değiştir
+  const tf = $('selTf').value;
+  const limit = $('selLimit').value;
+  const btn = $('analyzeBtn');
 
   // Symbol formatını düzelt
   if(['BTC','ETH','SOL','BNB','XRP','ADA','DOGE','AVAX','LINK','DOT'].includes(sym)){
-    sym = sym+'USDT';
-  } else if(sym==='AAPL'||sym==='TSLA'||sym==='MSFT'||sym==='GOOGL'||sym==='AMZN'){
-    // Finnhub için olduğu gibi kalır
-  } else if(sym==='XAU'||sym==='XAG'||sym==='EURUSD'||sym==='GBPUSD'||sym==='USDTRY'){
-    // Yahoo/Finnhub için olduğu gibi kalır
+    sym = sym + 'USDT';  // Şimdi çalışır
   }
 
-  btn.innerHTML='<div class="spin"></div> Analiz Ediliyor...';
-  btn.disabled=true;
-  set('updText','Analiz ediliyor...');
+  btn.innerHTML = '<div class="spin"></div> Analiz Ediliyor...';
+  btn.disabled = true;
+  set('updText', 'Analiz ediliyor...');
   addLog(`Analiz başladı: ${sym} @ ${tf}`);
 
   try{
-    const res=await fetch(`/api/analyze/${sym}?interval=${tf}&limit=${limit}`);
+    const res = await fetch(`/api/analyze/${sym}?interval=${tf}&limit=${limit}`);
     if(!res.ok){
-      const err=await res.text();
+      const err = await res.text();
       throw new Error(`HTTP ${res.status}: ${err.slice(0,120)}`);
     }
-    const data=await res.json();
+    const data = await res.json();
     if(!data.success) throw new Error(data.detail||'Sunucu hatası');
 
-    S.data=data;
+    S.data = data;
     renderAll(data);
     addLog(`Analiz tamamlandı: ${data.signal?.signal} (%${Math.round(data.signal?.confidence||0)})`,'c-green');
 
   } catch(e){
     console.error(e);
-    set('sigLbl','HATA');
-    $('sigLbl').className='sig-lbl sig-NEUTRAL';
-    set('recBox','Hata: '+e.message.slice(0,120));
-    addLog('HATA: '+e.message.slice(0,80),'c-red');
-    $('backendPill').className='badge-pill amber';
+    set('sigLbl', 'HATA');
+    $('sigLbl').className = 'sig-lbl sig-NEUTRAL';
+    set('recBox', 'Hata: ' + e.message.slice(0,120));
+    addLog('HATA: ' + e.message.slice(0,80), 'c-red');
   } finally{
-    btn.innerHTML='<i class="fas fa-magnifying-glass"></i> ANALİZ ET';
-    btn.disabled=false;
-    set('updText','Son güncelleme: '+fmtT());
+    btn.innerHTML = '<i class="fas fa-magnifying-glass"></i> ANALİZ ET';
+    btn.disabled = false;
+    set('updText', 'Son güncelleme: ' + fmtT());
   }
 }
 
