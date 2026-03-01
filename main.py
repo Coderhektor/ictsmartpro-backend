@@ -276,16 +276,21 @@ class WebSocketCollector:
         logger.info(f"✅ WebSocket toplayıcı başlatıldı: {len(tasks)} kaynak")
         await asyncio.gather(*tasks)
     
-    async def stop(self):
-        """Tüm bağlantıları durdur"""
-        self.running = False
-        for exchange, ws in self.connections.items():
-            try:
-                await ws.close()
-            except:
-                pass
-        self.connections.clear()
-        logger.info("🛑 WebSocket toplayıcı durduruldu")
+   async def stop(self):
+    """Tüm bağlantıları durdur - DÜZELTİLDİ"""
+    self.running = False
+    
+    # Dictionary'nin bir kopyasını al
+    connections_copy = list(self.connections.items())
+    
+    for exchange, ws in connections_copy:
+        try:
+            await ws.close()
+        except:
+            pass
+    
+    self.connections.clear()
+    logger.info("🛑 WebSocket toplayıcı durduruldu")
     
     async def subscribe(self, exchange: str, symbols: List[str]):
         """Yeni sembollere abone ol"""
