@@ -119,7 +119,7 @@ class Config:
 
     ALLOWED_ORIGINS = os.getenv("ALLOWED_ORIGINS", "*").split(",")
     
-    FINNHUB_API_KEY = os.getenv("FINNHUB_API_KEY", "")
+    FINNHUB_API_KEY = os.getenv("FINNHUB_API_KEY", "d6iabo1r01ql9cifj4lgd6iabo1r01ql9cifj4m0")
     YAHOO_POLLING_INTERVAL = int(os.getenv("YAHOO_POLLING_INTERVAL", "10"))
 
 
