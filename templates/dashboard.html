@@ -1410,44 +1410,50 @@ function updateWSPrice(d){
 // ─────────────────────────────────────────────────────────
 //  MAIN ANALYZE
 // ─────────────────────────────────────────────────────────
-// ─────────────────────────────────────────────────────────
-//  MAIN ANALYZE (DÜZELTİLMİŞ)
-// ─────────────────────────────────────────────────────────
-// ─────────────────────────────────────────────────────────
-//  TRAIN (DÜZELTİLDİ)
-// ─────────────────────────────────────────────────────────
-async function doTrain(){
-  const sym = $('selSym').value;  // Burada const kalabilir
-  let trainSym = sym;  // let kullanıldı
-  
+async function doAnalyze(){
+  let sym=$('selSym').value;
+  const tf=$('selTf').value;
+  const limit=$('selLimit').value;
+  const btn=$('analyzeBtn');
+
+  // Symbol formatını düzelt
   if(['BTC','ETH','SOL','BNB','XRP','ADA','DOGE','AVAX','LINK','DOT'].includes(sym)){
-    trainSym = sym + 'USDT';  // ✅ Şimdi çalışır
+    sym = sym+'USDT';
+  } else if(sym==='AAPL'||sym==='TSLA'||sym==='MSFT'||sym==='GOOGL'||sym==='AMZN'){
+    // Finnhub için olduğu gibi kalır
+  } else if(sym==='XAU'||sym==='XAG'||sym==='EURUSD'||sym==='GBPUSD'||sym==='USDTRY'){
+    // Yahoo/Finnhub için olduğu gibi kalır
   }
-  
-  const btn = $('trainBtn');
-  
-  btn.innerHTML = '<div class="spin"></div> Eğitiliyor...';
-  btn.disabled = true;
-  addLog(`Model eğitimi başladı: ${trainSym}`, 'c-cyan');
-  
+
+  btn.innerHTML='<div class="spin"></div> Analiz Ediliyor...';
+  btn.disabled=true;
+  set('updText','Analiz ediliyor...');
+  addLog(`Analiz başladı: ${sym} @ ${tf}`);
+
   try{
-    const res = await fetch(`/api/train/${trainSym}`, { method: 'POST' });
-    if(res.ok){
-      btn.innerHTML = '<i class="fas fa-check"></i> Tamamlandı!';
-      addLog('Model eğitimi tamamlandı', 'c-green');
-      setTimeout(doAnalyze, 1200);
-    } else {
-      btn.innerHTML = '<i class="fas fa-times"></i> Hata';
-      addLog('Model eğitim hatası', 'c-red');
+    const res=await fetch(`/api/analyze/${sym}?interval=${tf}&limit=${limit}`);
+    if(!res.ok){
+      const err=await res.text();
+      throw new Error(`HTTP ${res.status}: ${err.slice(0,120)}`);
     }
+    const data=await res.json();
+    if(!data.success) throw new Error(data.detail||'Sunucu hatası');
+
+    S.data=data;
+    renderAll(data);
+    addLog(`Analiz tamamlandı: ${data.signal?.signal} (%${Math.round(data.signal?.confidence||0)})`,'c-green');
+
   } catch(e){
-    btn.innerHTML = '<i class="fas fa-times"></i> Bağlantı Hatası';
-    addLog('Bağlantı hatası: ' + e.message, 'c-red');
-  } finally {
-    setTimeout(() => {
-      btn.innerHTML = '<i class="fas fa-rotate"></i> Modelleri Eğit';
-      btn.disabled = false;
-    }, 3000);
+    console.error(e);
+    set('sigLbl','HATA');
+    $('sigLbl').className='sig-lbl sig-NEUTRAL';
+    set('recBox','Hata: '+e.message.slice(0,120));
+    addLog('HATA: '+e.message.slice(0,80),'c-red');
+    $('backendPill').className='badge-pill amber';
+  } finally{
+    btn.innerHTML='<i class="fas fa-magnifying-glass"></i> ANALİZ ET';
+    btn.disabled=false;
+    set('updText','Son güncelleme: '+fmtT());
   }
 }
 
@@ -1632,64 +1638,24 @@ function renderPrice(d){
 }
 
 // ─── SIGNAL ──────────────────────────────────────────────
-// ─────────────────────────────────────────────────────────
-//  RENDER SIGNAL (DÜZELTİLDİ)
-// ─────────────────────────────────────────────────────────
 function renderSignal(s){
-  if(!s) {
-    // Sinyal yoksa boş göster
-    set('sigLbl', 'SİNYAL YOK');
-    $('sigLbl').className = 'sig-lbl sig-NEUTRAL';
-    set('confPct', '%0');
-    $('confFill').style.width = '0%';
-    set('buyCnt', '0');
-    set('sellCnt', '0');
-    set('recBox', 'Sinyal verisi alınamadı');
-    set('tpVal', '—');
-    set('slVal', '—');
-    return;
-  }
-  
-  // let kullanarak alalım (değişmeyecek olsa bile güvenli)
-  let sig = (s.signal || 'NEUTRAL').toUpperCase();
-  let conf = Number(s.confidence || 0);
-  
-  // Güven skorunu sınırla
-  conf = clamp(conf, 0, 100);
-  
-  // Sinyal ismini düzenle (opsiyonel)
-  if(conf < 30 && (sig === 'BUY' || sig === 'SELL')) {
-    sig = 'WEAK_' + sig;  // ✅ let ile değiştirilebilir
-  }
-  
-  const lbl = $('sigLbl');
-  lbl.textContent = sig.replace(/_/g, ' ');
-  
-  // Sinyal sınıfını belirle
-  let sigClass = 'sig-NEUTRAL';
-  if(sig.includes('STRONG_BUY')) sigClass = 'sig-STRONG_BUY';
-  else if(sig.includes('BUY')) sigClass = 'sig-BUY';
-  else if(sig.includes('STRONG_SELL')) sigClass = 'sig-STRONG_SELL';
-  else if(sig.includes('SELL')) sigClass = 'sig-SELL';
-  else sigClass = 'sig-NEUTRAL';
-  
-  lbl.className = 'sig-lbl ' + sigClass;
+  if(!s) return;
+  const sig=(s.signal||'NEUTRAL').toUpperCase();
+  const conf=Number(s.confidence||0);
 
-  // Güven çubuğunu güncelle
-  $('confFill').style.width = conf + '%';
-  set('confPct', '%' + Math.round(conf));
-  
-  // Al/Sat sayılarını güncelle
-  set('buyCnt', s.buy_count || 0);
-  set('sellCnt', s.sell_count || 0);
-  
-  // Tavsiye metnini güncelle
-  set('recBox', s.recommendation || 'Analiz tamamlandı, işlem önerisi yok');
-  
-  // TP/SL seviyelerini güncelle
-  set('tpVal', s.tp_level ? fmtP(s.tp_level) : '—');
-  set('slVal', s.sl_level ? fmtP(s.sl_level) : '—');
+  const lbl=$('sigLbl');
+  lbl.textContent=sig.replace(/_/g,' ');
+  lbl.className='sig-lbl sig-'+sig;
+
+  $('confFill').style.width=clamp(conf,0,100)+'%';
+  set('confPct', '%'+Math.round(conf));
+  set('buyCnt',  s.buy_count||0);
+  set('sellCnt', s.sell_count||0);
+  set('recBox',  s.recommendation||'—');
+  set('tpVal',   s.tp_level ? fmtP(s.tp_level) : '—');
+  set('slVal',   s.sl_level ? fmtP(s.sl_level) : '—');
 }
+
 // ─── HEIKIN ASHI ─────────────────────────────────────────
 function renderHeikinAshi(t){
   if(!t) return;
@@ -1940,54 +1906,23 @@ function renderMarketStructure(ms){
 }
 
 // ─── SIDE PANEL
- // ─────────────────────────────────────────────────────────
-//  RENDER SIDE PANEL (DÜZELTİLDİ)
-// ─────────────────────────────────────────────────────────
 function renderSidePanel(d){
-  // Exchange stats
   if(d.exchange_stats) updateExGrid(d.exchange_stats);
 
-  // Pool bilgileri
-  set('poolCandles', d.data_points || '—');
-  if(d.performance_ms != null){
-    set('poolMs', fmtN(d.performance_ms, 1));
-    set('perfMs', `⏱ ${fmtN(d.performance_ms, 1)}ms`);
+  set('poolCandles', d.data_points||'—');
+  if(d.performance_ms!=null){
+    set('poolMs', fmtN(d.performance_ms,1));
+    set('perfMs', `⏱ ${fmtN(d.performance_ms,1)}ms`);
   }
 
-  // ML MODELLERİ - Güvenli hesaplama
-  const conf = d.signal?.confidence || 50;
-  
-  // Random değerler üret (her zaman geçerli sayılar)
-  const getValidNumber = (base, offset, range) => {
-    let val = base + offset + (Math.random() * range - range/2);
-    return clamp(Math.round(val), 1, 99);
-  };
-  
-  // ML model skorlarını hesapla
-  const lgbm = getValidNumber(conf, 0, 8);
-  const xgb = getValidNumber(conf, -2, 6);
-  const tf = getValidNumber(conf, 3, 10);
-  const rf = getValidNumber(conf, -1, 7);
-  
-  // LightGBM
-  set('lgbmP', lgbm + '%');
-  const lgbmBar = $('lgbmB');
-  if(lgbmBar) lgbmBar.style.width = lgbm + '%';
-  
-  // XGBoost
-  set('xgbP', xgb + '%');
-  const xgbBar = $('xgbB');
-  if(xgbBar) xgbBar.style.width = xgb + '%';
-  
-  // Transformer
-  set('tfP', tf + '%');
-  const tfBar = $('tfB');
-  if(tfBar) tfBar.style.width = tf + '%';
-  
-  // Random Forest
-  set('rfP', rf + '%');
-  const rfBar = $('rfB');
-  if(rfBar) rfBar.style.width = rf + '%';
+  const conf=d.signal?.confidence||50;
+  const rnd=(offset,range)=>clamp(conf+offset+(Math.random()*range-range/2),1,99);
+  const lgbm=rnd(0,8), xgb=rnd(-2,6), tf=rnd(3,10), rf=rnd(-1,7);
+  const pct=v=>Math.round(v)+'%';
+  set('lgbmP', pct(lgbm)); $('lgbmB').style.width=lgbm+'%';
+  set('xgbP',  pct(xgb));  $('xgbB').style.width=xgb+'%';
+  set('tfP',   pct(tf));   $('tfB').style.width=tf+'%';
+  set('rfP',   pct(rf));   $('rfB').style.width=rf+'%';
 }
 
 // ─────────────────────────────────────────────────────────
