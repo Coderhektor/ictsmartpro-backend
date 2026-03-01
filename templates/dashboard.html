@@ -703,33 +703,42 @@ select:focus{border-color:var(--blue);}
     <div class="ch"><i class="fas fa-sliders"></i><span class="chl">ANALİZ KONTROLÜ</span></div>
     <div id="ctrl-row">
       <select id="selSym">
-        <option value="BTC">₿ BTC / USDT</option>
-        <option value="ETH">Ξ ETH / USDT</option>
-        <option value="SOL">◎ SOL / USDT</option>
-        <option value="BNB">BNB / USDT</option>
-        <option value="XRP">XRP / USDT</option>
-        <option value="ADA">ADA / USDT</option>
-        <option value="DOGE">DOGE / USDT</option>
-        <option value="AVAX">AVAX / USDT</option>
-        <option value="LINK">LINK / USDT</option>
-        <option value="DOT">DOT / USDT</option>
-        <option value="AAPL">AAPL (Finnhub)</option>
-        <option value="TSLA">TSLA (Finnhub)</option>
-        <option value="MSFT">MSFT (Finnhub)</option>
-        <option value="XAU">XAU (Altın)</option>
-        <option value="XAG">XAG (Gümüş)</option>
-        <option value="EURUSD">EUR/USD</option>
-        <option value="GBPUSD">GBP/USD</option>
+        <optgroup label="Kripto Paralar">
+          <option value="BTC">₿ BTC / USDT</option>
+          <option value="ETH">Ξ ETH / USDT</option>
+          <option value="SOL">◎ SOL / USDT</option>
+          <option value="BNB">BNB / USDT</option>
+          <option value="XRP">XRP / USDT</option>
+          <option value="ADA">ADA / USDT</option>
+          <option value="DOGE">DOGE / USDT</option>
+          <option value="AVAX">AVAX / USDT</option>
+          <option value="LINK">LINK / USDT</option>
+          <option value="DOT">DOT / USDT</option>
+        </optgroup>
+        <optgroup label="Hisse Senetleri">
+          <option value="AAPL">AAPL (Apple)</option>
+          <option value="TSLA">TSLA (Tesla)</option>
+          <option value="MSFT">MSFT (Microsoft)</option>
+          <option value="GOOGL">GOOGL (Google)</option>
+          <option value="AMZN">AMZN (Amazon)</option>
+        </optgroup>
+        <optgroup label="Emtia & Forex">
+          <option value="XAU">XAU (Altın)</option>
+          <option value="XAG">XAG (Gümüş)</option>
+          <option value="EURUSD">EUR/USD</option>
+          <option value="GBPUSD">GBP/USD</option>
+          <option value="USDTRY">USD/TRY</option>
+        </optgroup>
       </select>
       <select id="selTf">
-        <option value="1m">1m</option>
-        <option value="5m">5m</option>
-        <option value="15m">15m</option>
-        <option value="30m">30m</option>
-        <option value="1h" selected>1s</option>
-        <option value="4h">4s</option>
-        <option value="1d">1G</option>
-        <option value="1w">1H</option>
+        <option value="1m">1 Dakika</option>
+        <option value="5m">5 Dakika</option>
+        <option value="15m">15 Dakika</option>
+        <option value="30m">30 Dakika</option>
+        <option value="1h" selected>1 Saat</option>
+        <option value="4h">4 Saat</option>
+        <option value="1d">1 Gün</option>
+        <option value="1w">1 Hafta</option>
       </select>
       <select id="selLimit">
         <option value="100">100 Mum</option>
@@ -1078,7 +1087,7 @@ select:focus{border-color:var(--blue);}
   <div class="card">
     <div class="ch"><i class="fas fa-database"></i><span class="chl">VERİ HAVUZU</span></div>
     <div class="cb">
-      <div class="pool-row"><span class="pool-lbl">Toplam Kaynak</span><span class="pool-val">4</span></div>
+      <div class="pool-row"><span class="pool-lbl">Toplam Kaynak</span><span class="pool-val">6</span></div>
       <div class="pool-row"><span class="pool-lbl">Aktif Kaynak</span><span class="pool-val c-green" id="poolActive">—</span></div>
       <div class="pool-row"><span class="pool-lbl">Başarısız</span><span class="pool-val c-red" id="poolFail">—</span></div>
       <div class="pool-row"><span class="pool-lbl">Cache TTL</span><span class="pool-val">45s</span></div>
@@ -1093,7 +1102,7 @@ select:focus{border-color:var(--blue);}
 
   <!-- Exchange Status -->
   <div class="card">
-    <div class="ch"><i class="fas fa-server"></i><span class="chl">KAYNAK DURUMU</span><span class="cbadge mleft" id="exBadge">0/4</span></div>
+    <div class="ch"><i class="fas fa-server"></i><span class="chl">KAYNAK DURUMU</span><span class="cbadge mleft" id="exBadge">0/6</span></div>
     <div class="cb" style="padding:12px">
       <div id="exGrid"></div>
     </div>
@@ -1181,7 +1190,7 @@ function addLog(msg, cls=''){
 // ─────────────────────────────────────────────────────────
 //  EXCHANGE GRID
 // ─────────────────────────────────────────────────────────
-const EXCHANGES = ['Kraken','Binance','MEXC','Yahoo'];
+const EXCHANGES = ['Kraken','Binance','MEXC','Bybit','Finnhub','Yahoo'];
 
 function buildExGrid(){
   const g=$('exGrid');
@@ -1298,11 +1307,12 @@ const TV_TF = {'1m':'1','5m':'5','15m':'15','30m':'30','1h':'60','4h':'240','1d'
 function getTVSymbol(sym){
   const crypto=['BTC','ETH','SOL','BNB','XRP','ADA','DOGE','AVAX','LINK','DOT'];
   if(crypto.includes(sym)) return `BINANCE:${sym}USDT`;
-  if(sym==='AAPL'||sym==='TSLA'||sym==='MSFT') return `NASDAQ:${sym}`;
+  if(sym==='AAPL'||sym==='TSLA'||sym==='MSFT'||sym==='GOOGL'||sym==='AMZN') return `NASDAQ:${sym}`;
   if(sym==='XAU') return 'OANDA:XAUUSD';
   if(sym==='XAG') return 'OANDA:XAGUSD';
   if(sym==='EURUSD') return 'FX:EURUSD';
   if(sym==='GBPUSD') return 'FX:GBPUSD';
+  if(sym==='USDTRY') return 'FX:USDTRY';
   return `BINANCE:${sym}USDT`;
 }
 
@@ -1347,9 +1357,17 @@ function initTV(){
 //  WEBSOCKET
 // ─────────────────────────────────────────────────────────
 function connectWS(){
-  const sym=$('selSym').value+'USDT';
+  const sym=$('selSym').value;
+  let wsSymbol = sym;
+  
+  if(['BTC','ETH','SOL','BNB','XRP','ADA','DOGE','AVAX','LINK','DOT'].includes(sym)){
+    wsSymbol = sym+'USDT';
+  } else if(sym==='XAU'||sym==='XAG'||sym==='EURUSD'||sym==='GBPUSD'||sym==='USDTRY'){
+    wsSymbol = sym;
+  }
+  
   const proto=location.protocol==='https:'?'wss:':'ws:';
-  const url=`${proto}//${location.host}/wss/${sym}`;
+  const url=`${proto}//${location.host}/wss/${wsSymbol}`;
 
   if(S.ws){ try{S.ws.close();}catch(e){} S.ws=null; }
 
@@ -1359,7 +1377,7 @@ function connectWS(){
 
     ws.onopen=()=>{
       S.wsRetries=0;
-      addLog(`WSS bağlandı: ${sym}`,'c-green');
+      addLog(`WSS bağlandı: ${wsSymbol}`,'c-green');
     };
     ws.onmessage=e=>{
       try{ const d=JSON.parse(e.data); if(d.type==='price') updateWSPrice(d); }catch(e){}
@@ -1401,9 +1419,9 @@ async function doAnalyze(){
   // Symbol formatını düzelt
   if(['BTC','ETH','SOL','BNB','XRP','ADA','DOGE','AVAX','LINK','DOT'].includes(sym)){
     sym = sym+'USDT';
-  } else if(sym==='AAPL'||sym==='TSLA'||sym==='MSFT'){
+  } else if(sym==='AAPL'||sym==='TSLA'||sym==='MSFT'||sym==='GOOGL'||sym==='AMZN'){
     // Finnhub için olduğu gibi kalır
-  } else if(sym==='XAU'||sym==='XAG'||sym==='EURUSD'||sym==='GBPUSD'){
+  } else if(sym==='XAU'||sym==='XAG'||sym==='EURUSD'||sym==='GBPUSD'||sym==='USDTRY'){
     // Yahoo/Finnhub için olduğu gibi kalır
   }
 
@@ -1911,15 +1929,21 @@ function renderSidePanel(d){
 //  TRAIN
 // ─────────────────────────────────────────────────────────
 async function doTrain(){
-  const sym=$('selSym').value+'USDT';
+  const sym=$('selSym').value;
+  let trainSym = sym;
+  
+  if(['BTC','ETH','SOL','BNB','XRP','ADA','DOGE','AVAX','LINK','DOT'].includes(sym)){
+    trainSym = sym+'USDT';
+  }
+  
   const btn=$('trainBtn');
   
   btn.innerHTML='<div class="spin"></div> Eğitiliyor...';
   btn.disabled=true;
-  addLog(`Model eğitimi başladı: ${sym}`, 'c-cyan');
+  addLog(`Model eğitimi başladı: ${trainSym}`, 'c-cyan');
   
   try{
-    const res=await fetch(`/api/train/${sym}`, {method:'POST'});
+    const res=await fetch(`/api/train/${trainSym}`, {method:'POST'});
     if(res.ok){
       btn.innerHTML='<i class="fas fa-check"></i> Tamamlandı!';
       addLog('Model eğitimi tamamlandı', 'c-green');
