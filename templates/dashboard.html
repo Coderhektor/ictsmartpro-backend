@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>ICTSMARTPRO v9.0</title>
+<title>ICTSMARTPRO v9.0 - DATA POOL</title>
 <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@300;400;500;600;700&family=Unbounded:wght@300;400;600;700;900&display=swap" rel="stylesheet">
 <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
 <script src="https://s3.tradingview.com/tv.js"></script>
@@ -53,8 +53,8 @@ body{
   background:var(--bg0);
   color:var(--text);
   font-family:var(--mono);
-  font-size:14px; /* 13 -> 14 */
-  line-height:1.6; /* 1.55 -> 1.6 */
+  font-size:14px;
+  line-height:1.6;
   min-height:100vh;
   overflow-x:hidden;
 }
@@ -74,7 +74,7 @@ body::before{
 /* ─── TOPBAR ─────────────────────────────────────────────────────── */
 #topbar{
   position:sticky;top:0;z-index:200;
-  height:56px; /* 52 -> 56 */
+  height:56px;
   display:flex;align-items:center;gap:16px;
   padding:0 24px;
   background:rgba(4,6,10,.92);
@@ -84,14 +84,14 @@ body::before{
 
 .brand{
   font-family:var(--head);
-  font-size:1rem; /* .95 -> 1.0 */
+  font-size:1rem;
   font-weight:900;
   letter-spacing:-.03em;color:var(--white);
   display:flex;align-items:center;gap:6px;
 }
 .brand-accent{color:var(--blue);}
 .brand-ver{
-  font-size:.65rem; /* .58 -> .65 */
+  font-size:.65rem;
   font-weight:400;
   color:var(--dim);padding:2px 6px;
   border:1px solid var(--line);border-radius:4px;
@@ -103,9 +103,9 @@ body::before{
 
 .badge-pill{
   display:inline-flex;align-items:center;gap:5px;
-  padding:4px 12px; /* 3px 10px -> 4px 12px */
+  padding:4px 12px;
   border-radius:20px;
-  font-family:var(--mono);font-size:.75rem; /* .68 -> .75 */
+  font-family:var(--mono);font-size:.75rem;
   font-weight:600;
   border:1px solid;transition:all .25s;user-select:none;
 }
@@ -122,14 +122,14 @@ body::before{
 }
 @keyframes pulse{0%,100%{opacity:1;transform:scale(1)}50%{opacity:.4;transform:scale(.7)}}
 
-#clockEl{font-size:.8rem; /* .72 -> .8 */ color:var(--dim);letter-spacing:.04em;}
+#clockEl{font-size:.8rem; color:var(--dim);letter-spacing:.04em;}
 
 /* ─── LAYOUT ─────────────────────────────────────────────────────── */
 #shell{
   display:grid;
-  grid-template-columns:1fr 340px; /* 320 -> 340 */
-  gap:16px; /* 14 -> 16 */
-  padding:16px 20px 20px; /* 14px -> 16px */
+  grid-template-columns:1fr 340px;
+  gap:16px;
+  padding:16px 20px 20px;
   max-width:1700px;
   margin:0 auto;
 }
@@ -152,38 +152,38 @@ body::before{
 
 .ch{
   display:flex;align-items:center;gap:8px;
-  padding:12px 16px; /* 10px 14px -> 12px 16px */
+  padding:12px 16px;
   border-bottom:1px solid var(--line);
   font-family:var(--head);
-  font-size:.7rem; /* .62 -> .7 */
+  font-size:.7rem;
   font-weight:700;
   letter-spacing:.12em;text-transform:uppercase;
   color:var(--dim);
 }
-.ch i{color:var(--blue);font-size:.9rem;} /* .8 -> .9 */
+.ch i{color:var(--blue);font-size:.9rem;}
 .ch .chl{color:var(--text);font-weight:600;}
 .ch .mleft{margin-left:auto;}
 .ch .cbadge{
-  padding:2px 8px; /* 1px 7px -> 2px 8px */
+  padding:2px 8px;
   border-radius:20px;
   background:var(--bg2);border:1px solid var(--line);
-  font-family:var(--mono);font-size:.7rem; /* .65 -> .7 */
+  font-family:var(--mono);font-size:.7rem;
   color:var(--dim);
 }
 
-.cb{padding:16px;} /* 14px -> 16px */
+.cb{padding:16px;}
 
 /* ─── CONTROLS ─────────────────────────────────────────────────── */
 #ctrl-row{
-  display:flex;flex-wrap:wrap;align-items:center;gap:12px; /* 10px -> 12px */
-  padding:14px 16px; /* 12px 14px -> 14px 16px */
+  display:flex;flex-wrap:wrap;align-items:center;gap:12px;
+  padding:14px 16px;
 }
 
 select{
   background:var(--bg2);color:var(--text);
   border:1px solid var(--line);border-radius:var(--r);
-  padding:8px 32px 8px 12px; /* 7px 28px 7px 10px -> 8px 32px 8px 12px */
-  font-family:var(--mono);font-size:.85rem; /* .78 -> .85 */
+  padding:8px 32px 8px 12px;
+  font-family:var(--mono);font-size:.85rem;
   appearance:none;
   background-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='10' height='6'%3E%3Cpath d='M0 0l5 6 5-6z' fill='%234a6080'/%3E%3C/svg%3E");
   background-repeat:no-repeat;background-position:right 12px center;
@@ -193,9 +193,9 @@ select:focus{border-color:var(--blue);}
 
 .btn{
   display:inline-flex;align-items:center;gap:6px;
-  padding:8px 20px; /* 7px 18px -> 8px 20px */
+  padding:8px 20px;
   border-radius:var(--r);
-  font-family:var(--mono);font-size:.85rem; /* .78 -> .85 */
+  font-family:var(--mono);font-size:.85rem;
   font-weight:600;
   border:none;cursor:pointer;transition:all .18s;outline:none;
 }
@@ -217,19 +217,19 @@ select:focus{border-color:var(--blue);}
 #priceSigRow{
   display:grid;
   grid-template-columns:1fr 1fr;
-  gap:16px; /* 14 -> 16 */
+  gap:16px;
 }
 @media(max-width:650px){#priceSigRow{grid-template-columns:1fr;}}
 
 /* price card */
 .price-sym{
-  font-family:var(--head);font-size:.7rem; /* .6 -> .7 */
+  font-family:var(--head);font-size:.7rem;
   font-weight:600;
   color:var(--dim);letter-spacing:.15em;margin-bottom:8px;
 }
 .price-big{
   font-family:var(--head);
-  font-size:clamp(1.8rem,4vw,2.8rem); /* 1.6/2.6 -> 1.8/2.8 */
+  font-size:clamp(1.8rem,4vw,2.8rem);
   font-weight:900;
   line-height:1;letter-spacing:-.04em;
   color:var(--white);word-break:break-all;
@@ -242,9 +242,9 @@ select:focus{border-color:var(--blue);}
 .chg-badge{
   display:inline-flex;align-items:center;gap:4px;
   margin-top:10px;margin-bottom:14px;
-  padding:5px 12px; /* 4px 10px -> 5px 12px */
+  padding:5px 12px;
   border-radius:20px;
-  font-size:.8rem; /* .75 -> .8 */
+  font-size:.8rem;
   font-weight:600;
 }
 .chg-up  {color:var(--green);background:var(--green-a);border:1px solid var(--green);}
@@ -253,22 +253,22 @@ select:focus{border-color:var(--blue);}
 
 .kv-row{
   display:flex;justify-content:space-between;align-items:center;
-  padding:8px 0; /* 7px -> 8px */
+  padding:8px 0;
   border-bottom:1px solid var(--line);
 }
 .kv-row:last-child{border-bottom:none;}
-.kv-lbl{font-size:.8rem; /* .72 -> .8 */ color:var(--dim);}
-.kv-val{font-size:.85rem; /* .78 -> .85 */ font-weight:600;color:var(--white);}
+.kv-lbl{font-size:.8rem; color:var(--dim);}
+.kv-val{font-size:.85rem; font-weight:600;color:var(--white);}
 
 /* signal card */
 .sig-lbl{
   display:flex;align-items:center;justify-content:center;
-  padding:18px; /* 16px -> 18px */
+  padding:18px;
   border-radius:var(--r);
-  font-family:var(--head);font-size:1.2rem; /* 1.1 -> 1.2 */
+  font-family:var(--head);font-size:1.2rem;
   font-weight:900;
   letter-spacing:.04em;text-transform:uppercase;
-  margin-bottom:16px; /* 14px -> 16px */
+  margin-bottom:16px;
   transition:all .4s;
 }
 .sig-STRONG_BUY {background:linear-gradient(135deg,#10b981,#059669);color:#fff;box-shadow:0 0 24px rgba(16,185,129,.3);}
@@ -277,48 +277,48 @@ select:focus{border-color:var(--blue);}
 .sig-SELL       {background:linear-gradient(135deg,#f43f5e,#be123c);color:#fff;box-shadow:0 0 24px rgba(244,63,94,.25);}
 .sig-STRONG_SELL{background:linear-gradient(135deg,#dc2626,#991b1b);color:#fff;box-shadow:0 0 24px rgba(220,38,38,.3);}
 
-.conf-row{display:flex;justify-content:space-between;align-items:center;margin-bottom:6px;} /* 5px -> 6px */
-.conf-track{background:var(--bg2);border-radius:99px;height:6px;overflow:hidden;margin-bottom:12px;} /* 10px -> 12px */
+.conf-row{display:flex;justify-content:space-between;align-items:center;margin-bottom:6px;}
+.conf-track{background:var(--bg2);border-radius:99px;height:6px;overflow:hidden;margin-bottom:12px;}
 .conf-fill{height:100%;border-radius:99px;background:var(--blue);transition:width .7s ease;}
-.conf-pct{font-family:var(--mono);font-size:.8rem; /* .72 -> .8 */ color:var(--dim);}
+.conf-pct{font-family:var(--mono);font-size:.8rem; color:var(--dim);}
 
 .rec-box{
   background:var(--bg2);border:1px solid var(--line);border-radius:var(--r);
-  padding:12px; /* 10px -> 12px */
-  margin-top:12px; /* 10px -> 12px */
-  font-size:.8rem; /* .72 -> .8 */
-  color:var(--dim);line-height:1.6; /* 1.5 -> 1.6 */
-  min-height:40px; /* 36px -> 40px */
+  padding:12px;
+  margin-top:12px;
+  font-size:.8rem;
+  color:var(--dim);line-height:1.6;
+  min-height:40px;
 }
 
 .tpsl-row{
   display:flex;justify-content:space-around;
-  margin-top:12px; /* 10px -> 12px */
-  padding-top:12px; /* 10px -> 12px */
+  margin-top:12px;
+  padding-top:12px;
   border-top:1px solid var(--line);
 }
 .tpsl-box{text-align:center;}
-.tpsl-box .tpsl-lbl{font-size:.7rem; /* .62 -> .7 */ color:var(--dim);margin-bottom:2px;}
-.tpsl-box .tpsl-val{font-size:.9rem; /* .82 -> .9 */ font-weight:600;}
+.tpsl-box .tpsl-lbl{font-size:.7rem; color:var(--dim);margin-bottom:2px;}
+.tpsl-box .tpsl-val{font-size:.9rem; font-weight:600;}
 .tp-val{color:var(--green);}
 .sl-val{color:var(--red);}
 
 /* ─── BUY/SELL COUNTER ─────────────────────────────────────────── */
 .bs-counter{
-  display:flex;gap:10px; /* 8px -> 10px */
-  margin-top:12px; /* 10px -> 12px */
+  display:flex;gap:10px;
+  margin-top:12px;
 }
 .bs-box{
-  flex:1;padding:10px; /* 8px -> 10px */
+  flex:1;padding:10px;
   border-radius:var(--r);
   text-align:center;
 }
 .bs-buy {background:var(--green-a);border:1px solid var(--green);}
 .bs-sell{background:var(--red-a);  border:1px solid var(--red);}
-.bs-num{font-family:var(--head);font-size:1.6rem; /* 1.4 -> 1.6 */ font-weight:900;}
+.bs-num{font-family:var(--head);font-size:1.6rem; font-weight:900;}
 .bs-buy  .bs-num{color:var(--green);}
 .bs-sell .bs-num{color:var(--red);}
-.bs-txt{font-size:.7rem; /* .65 -> .7 */ color:var(--dim);margin-top:2px;}
+.bs-txt{font-size:.7rem; color:var(--dim);margin-top:2px;}
 
 /* ─── CHART ─────────────────────────────────────────────────────── */
 #chartWrap{position:relative;width:100%;height:500px;background:var(--bg2);border-radius:0 0 var(--r2) var(--r2);}
@@ -338,49 +338,49 @@ select:focus{border-color:var(--blue);}
   border-radius:50%;
   animation:rot 1s linear infinite;
 }
-#chartLoader p{font-size:.8rem; /* .75 -> .8 */ color:var(--dim);}
+#chartLoader p{font-size:.8rem; color:var(--dim);}
 
 /* ─── HEIKIN ASHI GRID ─────────────────────────────────────────── */
 .ha-grid{
-  display:grid;grid-template-columns:1fr 1fr 1fr 1fr;gap:10px; /* 8px -> 10px */
+  display:grid;grid-template-columns:1fr 1fr 1fr 1fr;gap:10px;
 }
 @media(max-width:500px){.ha-grid{grid-template-columns:1fr 1fr;}}
 .ha-box{
   background:var(--bg2);border:1px solid var(--line);border-radius:var(--r);
-  padding:12px; /* 10px -> 12px */
+  padding:12px;
   text-align:center;
 }
-.ha-lbl{font-size:.65rem; /* .6 -> .65 */ color:var(--dim);letter-spacing:.08em;text-transform:uppercase;margin-bottom:4px;}
-.ha-val{font-size:1rem; /* .95 -> 1.0 */ font-weight:700;font-family:var(--head);}
+.ha-lbl{font-size:.65rem; color:var(--dim);letter-spacing:.08em;text-transform:uppercase;margin-bottom:4px;}
+.ha-val{font-size:1rem; font-weight:700;font-family:var(--head);}
 
 /* ─── TECH INDICATORS ─────────────────────────────────────────── */
 #techGrid{
-  display:grid;grid-template-columns:1fr 1fr;gap:10px; /* 8px -> 10px */
+  display:grid;grid-template-columns:1fr 1fr;gap:10px;
 }
 @media(max-width:480px){#techGrid{grid-template-columns:1fr;}}
 .tech-box{
   background:var(--bg2);border:1px solid var(--line);border-radius:var(--r);
-  padding:12px 14px; /* 10px 12px -> 12px 14px */
+  padding:12px 14px;
 }
-.tech-lbl{font-size:.65rem; /* .6 -> .65 */ color:var(--dim);letter-spacing:.08em;text-transform:uppercase;margin-bottom:4px;} /* 3px -> 4px */
-.tech-val{font-size:.95rem; /* .88 -> .95 */ font-weight:600;}
-.tech-sub{font-size:.7rem; /* .65 -> .7 */ color:var(--dim);margin-top:2px;}
+.tech-lbl{font-size:.65rem; color:var(--dim);letter-spacing:.08em;text-transform:uppercase;margin-bottom:4px;}
+.tech-val{font-size:.95rem; font-weight:600;}
+.tech-sub{font-size:.7rem; color:var(--dim);margin-top:2px;}
 .bar-track{background:var(--line);border-radius:99px;height:4px;margin-top:6px;overflow:hidden;}
 .bar-fill{height:100%;border-radius:99px;transition:width .5s ease;}
 
 /* ─── ICT PATTERNS ─────────────────────────────────────────────── */
 .ict-table{width:100%;border-collapse:collapse;}
 .ict-table th{
-  padding:8px 12px; /* 6px 10px -> 8px 12px */
+  padding:8px 12px;
   text-align:left;
-  font-family:var(--head);font-size:.65rem; /* .58 -> .65 */
+  font-family:var(--head);font-size:.65rem;
   font-weight:700;
   letter-spacing:.1em;text-transform:uppercase;
   color:var(--dim);border-bottom:1px solid var(--line);
 }
 .ict-table td{
-  padding:9px 12px; /* 7px 10px -> 9px 12px */
-  font-size:.8rem; /* .75 -> .8 */
+  padding:9px 12px;
+  font-size:.8rem;
   border-bottom:1px solid var(--line);
 }
 .ict-table tr:last-child td{border-bottom:none;}
@@ -394,11 +394,11 @@ select:focus{border-color:var(--blue);}
 .ict-str-fill{height:100%;border-radius:99px;background:var(--blue);}
 
 /* ─── PATTERN CHIPS ─────────────────────────────────────────────── */
-.chip-row{display:flex;flex-wrap:wrap;gap:8px; /* 6px -> 8px */ min-height:32px;} /* 28px -> 32px */
+.chip-row{display:flex;flex-wrap:wrap;gap:8px; min-height:32px;}
 .chip{
-  padding:4px 12px; /* 3px 9px -> 4px 12px */
+  padding:4px 12px;
   border-radius:20px;
-  font-family:var(--mono);font-size:.75rem; /* .68 -> .75 */
+  font-family:var(--mono);font-size:.75rem;
   font-weight:600;
 }
 .chip-bull{background:var(--green-a);color:var(--green);border:1px solid var(--green);}
@@ -406,33 +406,33 @@ select:focus{border-color:var(--blue);}
 .chip-neut{background:var(--bg2);   color:var(--dim);  border:1px solid var(--line);  }
 
 /* ─── STRATEGY CARDS (ICTSMARTPRO ONLY) ─────────────────────────── */
-#stratRow{display:grid;grid-template-columns:1fr 1fr;gap:16px;} /* 14px -> 16px */
+#stratRow{display:grid;grid-template-columns:1fr 1fr;gap:16px;}
 @media(max-width:650px){#stratRow{grid-template-columns:1fr;}}
 
 .strat-card{
   background:var(--bg2);border:1px solid var(--line);border-radius:var(--r);
-  padding:14px; /* 12px -> 14px */
+  padding:14px;
 }
 .strat-head{
-  display:flex;align-items:center;gap:8px; /* 6px -> 8px */
-  margin-bottom:12px; /* 10px -> 12px */
+  display:flex;align-items:center;gap:8px;
+  margin-bottom:12px;
 }
 .strat-icon{
-  width:32px;height:32px; /* 28px -> 32px */
+  width:32px;height:32px;
   border-radius:6px;
   display:flex;align-items:center;justify-content:center;
-  font-size:.9rem; /* .8 -> .9 */
+  font-size:.9rem;
 }
-.strat-icon.isp{background:var(--blue-a);color:var(--blue);} /* GainzAlgo kalktı, ICTSMARTPRO ikonu */
-.strat-name{font-family:var(--head);font-size:.75rem; /* .65 -> .75 */ font-weight:700;letter-spacing:.08em;color:var(--white);}
-.strat-sub{font-size:.65rem; /* .6 -> .65 */ color:var(--dim);}
+.strat-icon.isp{background:var(--blue-a);color:var(--blue);}
+.strat-name{font-family:var(--head);font-size:.75rem; font-weight:700;letter-spacing:.08em;color:var(--white);}
+.strat-sub{font-size:.65rem; color:var(--dim);}
 
 .strat-sig{
-  display:flex;align-items:center;gap:8px; /* 6px -> 8px */
-  padding:10px; /* 8px -> 10px */
+  display:flex;align-items:center;gap:8px;
+  padding:10px;
   border-radius:var(--r);
-  margin-bottom:10px; /* 8px -> 10px */
-  font-family:var(--head);font-size:.85rem; /* .75 -> .85 */
+  margin-bottom:10px;
+  font-family:var(--head);font-size:.85rem;
   font-weight:700;
 }
 .strat-sig.bull{background:var(--green-a);border:1px solid var(--green);color:var(--green);}
@@ -440,27 +440,27 @@ select:focus{border-color:var(--blue);}
 .strat-sig.none{background:var(--bg3);    border:1px solid var(--line); color:var(--dim);}
 
 .strat-tpsl{
-  display:grid;grid-template-columns:1fr 1fr;gap:8px; /* 6px -> 8px */
+  display:grid;grid-template-columns:1fr 1fr;gap:8px;
 }
 .strat-tpsl-box{
   background:var(--bg1);border:1px solid var(--line);border-radius:6px;
-  padding:8px 10px; /* 6px 8px -> 8px 10px */
+  padding:8px 10px;
   text-align:center;
 }
-.strat-tpsl-lbl{font-size:.65rem; /* .58 -> .65 */ color:var(--dim);}
-.strat-tpsl-val{font-size:.9rem; /* .8 -> .9 */ font-weight:600;margin-top:2px;} /* 1px -> 2px */
+.strat-tpsl-lbl{font-size:.65rem; color:var(--dim);}
+.strat-tpsl-val{font-size:.9rem; font-weight:600;margin-top:2px;}
 
 /* ─── MARKET STRUCTURE ─────────────────────────────────────────── */
-.ms-grid{display:grid;grid-template-columns:1fr 1fr;gap:10px;} /* 8px -> 10px */
+.ms-grid{display:grid;grid-template-columns:1fr 1fr;gap:10px;}
 @media(max-width:480px){.ms-grid{grid-template-columns:1fr;}}
 .ms-box{
   background:var(--bg2);border:1px solid var(--line);border-radius:var(--r);
-  padding:12px; /* 10px -> 12px */
+  padding:12px;
 }
-.ms-lbl{font-size:.65rem; /* .6 -> .65 */ color:var(--dim);letter-spacing:.08em;text-transform:uppercase;margin-bottom:5px;} /* 4px -> 5px */
-.ms-val{font-size:.9rem; /* .82 -> .9 */ font-weight:600;}
+.ms-lbl{font-size:.65rem; color:var(--dim);letter-spacing:.08em;text-transform:uppercase;margin-bottom:5px;}
+.ms-val{font-size:.9rem; font-weight:600;}
 
-  /* ─── ICT BULL/BEAR DENGESİ ─────────────────────────────────────── */
+/* ─── ICT BULL/BEAR DENGESİ ─────────────────────────────────────── */
 #ictBalanceCard {
   margin-top: 16px;
 }
@@ -536,10 +536,10 @@ select:focus{border-color:var(--blue);}
 .ict-balance-fill.neutral { background: var(--dim); }
 
 /* ─── SIDE: ML MODELS ─────────────────────────────────────────── */
-.ml-row{display:flex;justify-content:space-between;margin-bottom:4px; /* 3px -> 4px */ font-size:.8rem;} /* .75 -> .8 */
+.ml-row{display:flex;justify-content:space-between;margin-bottom:4px; font-size:.8rem;}
 .ml-name{color:var(--text);}
 .ml-pct{font-weight:600;}
-.ml-track{background:var(--bg2);border-radius:99px;height:5px;overflow:hidden;margin-bottom:12px;} /* 10px -> 12px */
+.ml-track{background:var(--bg2);border-radius:99px;height:5px;overflow:hidden;margin-bottom:12px;}
 .ml-fill{height:100%;border-radius:99px;transition:width .7s ease;}
 .ml-blue   {background:var(--cyan);}
 .ml-green  {background:var(--green);}
@@ -549,50 +549,67 @@ select:focus{border-color:var(--blue);}
 /* ─── SIDE: DATA POOL ─────────────────────────────────────────── */
 .pool-row{
   display:flex;justify-content:space-between;align-items:center;
-  padding:8px 0; /* 7px -> 8px */
+  padding:8px 0;
   border-bottom:1px solid var(--line);
 }
 .pool-row:last-child{border-bottom:none;}
-.pool-lbl{font-size:.8rem; /* .72 -> .8 */ color:var(--dim);}
-.pool-val{font-size:.85rem; /* .78 -> .85 */ font-weight:600;}
-.health-track{background:var(--bg2);border-radius:99px;height:7px;margin:14px 0 10px; /* 12px 0 8px -> 14px 0 10px */ overflow:hidden;}
+.pool-lbl{font-size:.8rem; color:var(--dim);}
+.pool-val{font-size:.85rem; font-weight:600;}
+.health-track{background:var(--bg2);border-radius:99px;height:7px;margin:14px 0 10px; overflow:hidden;}
 .health-fill{height:100%;border-radius:99px;background:linear-gradient(90deg,var(--blue),var(--green));transition:width .6s ease;}
 
 /* ─── SIDE: EXCHANGE STATUS ─────────────────────────────────────── */
 #exGrid{
-  display:grid;grid-template-columns:repeat(2,1fr);gap:8px; /* 6px -> 8px */
+  display:grid;grid-template-columns:repeat(2,1fr);gap:8px;
 }
 .ex-card{
   background:var(--bg2);border:1px solid var(--line);border-radius:var(--r);
-  padding:12px; /* 10px -> 12px */
+  padding:12px;
   text-align:center;transition:all .2s;
 }
 .ex-card.ok {border-color:var(--green);background:var(--green-a);}
 .ex-card.err{border-color:var(--red);  opacity:.55;}
-.ex-name{font-family:var(--head);font-size:.7rem; /* .62 -> .7 */ font-weight:700;display:block;margin-bottom:5px;}
-.ex-rel{font-size:.7rem; /* .65 -> .7 */ color:var(--dim);}
-.ex-emoji{font-size:1.1rem;} /* 1rem -> 1.1rem */
-.ex-err{font-size:.65rem; /* .58 -> .65 */ color:var(--red);margin-top:2px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;}
+.ex-name{font-family:var(--head);font-size:.7rem; font-weight:700;display:block;margin-bottom:5px;}
+.ex-rel{font-size:.7rem; color:var(--dim);}
+.ex-emoji{font-size:1.1rem;}
+.ex-err{font-size:.65rem; color:var(--red);margin-top:2px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;}
+
+/* ─── SIDE: WEBSOCKET COLLECTOR STATUS ─────────────────────────── */
+#wsCollectorGrid{
+  display:grid;grid-template-columns:repeat(2,1fr);gap:8px;
+  margin-top:12px;
+}
+.ws-card{
+  background:var(--bg2);border:1px solid var(--line);border-radius:var(--r);
+  padding:10px;
+  text-align:center;transition:all .2s;
+}
+.ws-card.ok {border-color:var(--cyan);background:var(--cyan-a);}
+.ws-card.err{border-color:var(--red);  opacity:.55;}
+.ws-name{font-family:var(--head);font-size:.7rem; font-weight:700;display:block;margin-bottom:4px;}
+.ws-emoji{font-size:1rem;}
+.ws-msgs{font-size:.65rem; color:var(--dim);margin-top:4px;}
+.ws-subs{font-size:.6rem; color:var(--dim);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;}
 
 /* ─── SIDE: AI CHAT ─────────────────────────────────────────────── */
 #chatLog{
   background:var(--bg2);border:1px solid var(--line);border-radius:var(--r);
   min-height:100px;max-height:220px;overflow-y:auto;
-  padding:12px; /* 10px -> 12px */
-  margin-bottom:12px; /* 10px -> 12px */
+  padding:12px;
+  margin-bottom:12px;
   scrollbar-width:thin;scrollbar-color:var(--line) transparent;
 }
 .chat-msg{
   background:rgba(59,130,246,.07);border:1px solid var(--line);
-  border-radius:var(--r);padding:12px; /* 10px -> 12px */
-  margin-bottom:10px; /* 8px -> 10px */
+  border-radius:var(--r);padding:12px;
+  margin-bottom:10px;
 }
 .chat-msg:last-child{margin-bottom:0;}
-.chat-from{font-family:var(--head);font-size:.7rem; /* .6 -> .7 */ font-weight:700;color:var(--blue);margin-bottom:5px;letter-spacing:.08em;}
-.chat-body{font-size:.8rem; /* .73 -> .8 */ color:var(--text);line-height:1.6;}
+.chat-from{font-family:var(--head);font-size:.7rem; font-weight:700;color:var(--blue);margin-bottom:5px;letter-spacing:.08em;}
+.chat-body{font-size:.8rem; color:var(--text);line-height:1.6;}
 .chat-body b{color:var(--white);}
-.chat-note{color:var(--amber);font-size:.7rem; /* .65 -> .7 */ margin-top:6px;}
-.chat-empty{font-size:.8rem; /* .75 -> .8 */ color:var(--dim);font-style:italic;}
+.chat-note{color:var(--amber);font-size:.7rem; margin-top:6px;}
+.chat-empty{font-size:.8rem; color:var(--dim);font-style:italic;}
 
 /* ─── ACTIVITY LOG ─────────────────────────────────────────────── */
 #logBox{
@@ -600,10 +617,10 @@ select:focus{border-color:var(--blue);}
   scrollbar-width:thin;scrollbar-color:var(--line) transparent;
 }
 .log-line{
-  display:flex;align-items:baseline;gap:8px; /* 6px -> 8px */
-  padding:6px 0; /* 4px -> 6px */
+  display:flex;align-items:baseline;gap:8px;
+  padding:6px 0;
   border-bottom:1px dashed var(--line);
-  font-size:.75rem; /* .68 -> .75 */
+  font-size:.75rem;
 }
 .log-line:last-child{border-bottom:none;}
 .log-time{color:var(--dim);flex-shrink:0;}
@@ -620,7 +637,7 @@ select:focus{border-color:var(--blue);}
 .c-white {color:var(--white)!important;}
 
 /* ─── EMPTY ─────────────────────────────────────────────────────── */
-.empty{color:var(--dim);font-size:.8rem; /* .75 -> .8 */ font-style:italic;}
+.empty{color:var(--dim);font-size:.8rem; font-style:italic;}
 
 /* ─── SCROLLBAR ─────────────────────────────────────────────────── */
 ::-webkit-scrollbar{width:4px;height:4px;}
@@ -628,22 +645,22 @@ select:focus{border-color:var(--blue);}
 
 /* ─── STATUS BAR ─────────────────────────────────────────────────── */
 #statusBar{
-  display:flex;align-items:center;gap:12px; /* 10px -> 12px */ flex-wrap:wrap;
-  padding:10px 20px; /* 8px 20px -> 10px 20px */
+  display:flex;align-items:center;gap:12px; flex-wrap:wrap;
+  padding:10px 20px;
   border-bottom:1px solid var(--line);
   background:rgba(4,6,10,.7);
   backdrop-filter:blur(8px);
-  position:sticky;top:56px; /* 52px -> 56px (topbar height) */ z-index:150;
+  position:sticky;top:56px; z-index:150;
 }
-#statusBar .upd{margin-left:auto;font-size:.75rem; /* .68 -> .75 */ color:var(--dim);}
+#statusBar .upd{margin-left:auto;font-size:.75rem; color:var(--dim);}
 
 /* ─── PERF BADGE ─────────────────────────────────────────────────── */
 #perfMs{
-  font-family:var(--mono);font-size:.7rem; /* .65 -> .7 */ color:var(--dim);
+  font-family:var(--mono);font-size:.7rem; color:var(--dim);
 }
 
 /* ─── GRID: bottom rows ─────────────────────────────────────────── */
-#techRow{display:grid;grid-template-columns:1fr 1fr;gap:16px;} /* 14px -> 16px */
+#techRow{display:grid;grid-template-columns:1fr 1fr;gap:16px;}
 #bottomRow{display:grid;grid-template-columns:1fr 1fr;gap:16px;}
 @media(max-width:650px){
   #techRow{grid-template-columns:1fr;}
@@ -696,6 +713,13 @@ select:focus{border-color:var(--blue);}
         <option value="AVAX">AVAX / USDT</option>
         <option value="LINK">LINK / USDT</option>
         <option value="DOT">DOT / USDT</option>
+        <option value="AAPL">AAPL (Finnhub)</option>
+        <option value="TSLA">TSLA (Finnhub)</option>
+        <option value="MSFT">MSFT (Finnhub)</option>
+        <option value="XAU">XAU (Altın)</option>
+        <option value="XAG">XAG (Gümüş)</option>
+        <option value="EURUSD">EUR/USD</option>
+        <option value="GBPUSD">GBP/USD</option>
       </select>
       <select id="selTf">
         <option value="1m">1m</option>
@@ -754,6 +778,10 @@ select:focus{border-color:var(--blue);}
         <div class="kv-row">
           <span class="kv-lbl">Aktif Kaynak</span>
           <span class="kv-val c-blue" id="kvSrc">—</span>
+        </div>
+        <div class="kv-row">
+          <span class="kv-lbl">Data Pool</span>
+          <span class="kv-val c-cyan" id="kvPool">—</span>
         </div>
       </div>
     </div>
@@ -855,7 +883,7 @@ select:focus{border-color:var(--blue);}
     </div>
   </div>
 
-  <!-- Strategy Signals: ICTSMARTPRO ONLY (GainzAlgo & Ultimate KALDIRILDI) -->
+  <!-- Strategy Signals: ICTSMARTPRO ONLY -->
   <div class="card">
     <div class="ch"><i class="fas fa-bolt"></i><span class="chl">ICTSMARTPRO STRATEJİSİ</span><span class="cbadge mleft" id="stratCount">0 sinyal</span></div>
     <div class="cb">
@@ -864,7 +892,7 @@ select:focus{border-color:var(--blue);}
         <!-- ICTSMARTPRO Ana Strateji -->
         <div class="strat-card">
           <div class="strat-head">
-            <div class="strat-icon isp"><i class="fas fa-chess-queen"></i></div> <!-- Şahane bir ikon -->
+            <div class="strat-icon isp"><i class="fas fa-chess-queen"></i></div>
             <div>
               <div class="strat-name">ICTSMARTPRO V9</div>
               <div class="strat-sub">HH/HL + S/R Bölgeleri + FVG + Order Blocks</div>
@@ -891,7 +919,7 @@ select:focus{border-color:var(--blue);}
           </div>
         </div>
 
-        <!-- İkinci kart (ileriye dönük, şimdilik aynı, ileride farklı TF stratejisi eklenebilir) -->
+        <!-- İkinci kart (Momentum) -->
         <div class="strat-card">
           <div class="strat-head">
             <div class="strat-icon isp"><i class="fas fa-chart-line"></i></div>
@@ -924,31 +952,32 @@ select:focus{border-color:var(--blue);}
       </div><!-- /#stratRow -->
     </div>
   </div>
- <!-- ICT BULL/BEAR DENGESİ (YENİ KART) -->
-<div class="card" id="ictBalanceCard">
-  <div class="ch"><i class="fas fa-scale-balanced"></i><span class="chl">ICT BULL/BEAR DENGESİ</span><span class="cbadge mleft" id="ictBalanceBadge">0 pattern</span></div>
-  <div class="cb">
-    <div class="ict-balance-grid">
-      <div class="ict-balance-box bull">
-        <div class="ict-balance-label">BOĞA PATERNLERİ</div>
-        <div class="ict-balance-number bull" id="ictBullCount">0</div>
+  
+  <!-- ICT BULL/BEAR DENGESİ -->
+  <div class="card" id="ictBalanceCard">
+    <div class="ch"><i class="fas fa-scale-balanced"></i><span class="chl">ICT BULL/BEAR DENGESİ</span><span class="cbadge mleft" id="ictBalanceBadge">0 pattern</span></div>
+    <div class="cb">
+      <div class="ict-balance-grid">
+        <div class="ict-balance-box bull">
+          <div class="ict-balance-label">BOĞA PATERNLERİ</div>
+          <div class="ict-balance-number bull" id="ictBullCount">0</div>
+        </div>
+        <div class="ict-balance-box bear">
+          <div class="ict-balance-label">AYI PATERNLERİ</div>
+          <div class="ict-balance-number bear" id="ictBearCount">0</div>
+        </div>
       </div>
-      <div class="ict-balance-box bear">
-        <div class="ict-balance-label">AYI PATERNLERİ</div>
-        <div class="ict-balance-number bear" id="ictBearCount">0</div>
+      
+      <div class="ict-balance-bar">
+        <div class="ict-balance-fill neutral" id="ictBalanceFill" style="width: 50%"></div>
       </div>
-    </div>
-    
-    <div class="ict-balance-bar">
-      <div class="ict-balance-fill neutral" id="ictBalanceFill" style="width: 50%"></div>
-    </div>
-    
-    <div class="ict-balance-result" id="ictBalanceResult">
-      <div class="ict-balance-direction neutral" id="ictDirection">TARAF BELİRSİZ</div>
-      <div class="ict-balance-desc" id="ictBalanceDesc">Analiz bekleniyor...</div>
+      
+      <div class="ict-balance-result" id="ictBalanceResult">
+        <div class="ict-balance-direction neutral" id="ictDirection">TARAF BELİRSİZ</div>
+        <div class="ict-balance-desc" id="ictBalanceDesc">Analiz bekleniyor...</div>
+      </div>
     </div>
   </div>
-</div>
 
   <!-- ICT Patterns -->
   <div class="card">
@@ -1055,6 +1084,8 @@ select:focus{border-color:var(--blue);}
       <div class="pool-row"><span class="pool-lbl">Cache TTL</span><span class="pool-val">45s</span></div>
       <div class="pool-row"><span class="pool-lbl">Mum Sayısı</span><span class="pool-val c-blue" id="poolCandles">—</span></div>
       <div class="pool-row"><span class="pool-lbl">Süre (ms)</span><span class="pool-val c-cyan" id="poolMs">—</span></div>
+      <div class="pool-row"><span class="pool-lbl">Toplam Sorgu</span><span class="pool-val c-white" id="poolTotalReqs">—</span></div>
+      <div class="pool-row"><span class="pool-lbl">Başarı Oranı</span><span class="pool-val c-green" id="poolSuccessRate">—</span></div>
       <div class="health-track"><div class="health-fill" id="healthFill" style="width:0%"></div></div>
       <div style="font-size:.7rem;color:var(--dim)" id="poolUpd">—</div>
     </div>
@@ -1065,6 +1096,14 @@ select:focus{border-color:var(--blue);}
     <div class="ch"><i class="fas fa-server"></i><span class="chl">KAYNAK DURUMU</span><span class="cbadge mleft" id="exBadge">0/4</span></div>
     <div class="cb" style="padding:12px">
       <div id="exGrid"></div>
+    </div>
+  </div>
+
+  <!-- WebSocket Collector Status -->
+  <div class="card">
+    <div class="ch"><i class="fas fa-wifi"></i><span class="chl">WEBSOCKET KOLLEKTÖR</span><span class="cbadge mleft" id="wsCollectorBadge">0/5</span></div>
+    <div class="cb" style="padding:12px">
+      <div id="wsCollectorGrid"></div>
     </div>
   </div>
 
@@ -1113,7 +1152,6 @@ function fmtN(n,d=2){ if(n===null||n===undefined||isNaN(n)) return '—'; return
 function fmtVol(v){ if(!v||isNaN(v)) return '—'; if(v>=1e9) return (v/1e9).toFixed(2)+'B'; if(v>=1e6) return (v/1e6).toFixed(2)+'M'; if(v>=1e3) return (v/1e3).toFixed(2)+'K'; return Number(v).toFixed(2); }
 function fmtT(d){ d=d||new Date(); return d.toLocaleTimeString('tr-TR',{hour:'2-digit',minute:'2-digit',second:'2-digit'}); }
 function dirCls(dir){ return (dir==='bullish'||dir==='bullish_reversal') ? 'c-green ict-dir-bull' : (dir==='bearish'||dir==='bearish_reversal') ? 'c-red ict-dir-bear' : 'c-dim'; }
-function dirEmoji(dir){ return (dir==='bullish'||dir==='bullish_reversal') ? '▲' : (dir==='bearish'||dir==='bearish_reversal') ? '▼' : '—'; }
 function chipCls(dir){ return (dir==='bullish'||dir==='bullish_reversal') ? 'chip chip-bull' : (dir==='bearish'||dir==='bearish_reversal') ? 'chip chip-bear' : 'chip chip-neut'; }
 
 // ─────────────────────────────────────────────────────────
@@ -1160,28 +1198,96 @@ function buildExGrid(){
 
 function updateExGrid(stats){
   if(!stats||typeof stats!=='object') return;
-  let active=0,fail=0;
+  let active=0,fail=0,totalReqs=0,totalSuccess=0;
+  
   for(const [name,data] of Object.entries(stats)){
     const id='ex_'+name.toLowerCase();
     const card=$(id), ico=$(id+'_ico'), rel=$(id+'_rel'), err=$(id+'_err');
     if(!card) continue;
+    
     const ok=(data.success||0)>0;
     const ko=(data.fail||0)>0&&!ok;
     card.className='ex-card'+(ok?' ok':ko?' err':'');
     if(ico) ico.textContent=ok?'✅':ko?'❌':'⏳';
-    const total=(data.success||0)+(data.fail||0);
-    if(rel) rel.textContent=total>0 ? Math.round((data.success||0)/total*100)+'%' : '—';
+    
+    const success=data.success||0;
+    const fail=data.fail||0;
+    const total=success+fail;
+    totalReqs += total;
+    totalSuccess += success;
+    
+    if(rel) rel.textContent=total>0 ? Math.round(success/total*100)+'%' : '—';
     if(err) err.textContent=(data.last_error||'').slice(0,22);
     if(ok) active++;
     if(ko) fail++;
   }
+  
   const total=EXCHANGES.length;
   set('exBadge',`${active}/${total}`);
   set('srcText',`${active}/${total} Kaynak`);
   set('poolActive', active);
   set('poolFail', fail);
+  set('poolTotalReqs', totalReqs);
+  set('poolSuccessRate', totalReqs>0 ? Math.round(totalSuccess/totalReqs*100)+'%' : '—');
+  
   $('healthFill').style.width = clamp(active/total*100,0,100)+'%';
   $('poolUpd').textContent='Güncellendi: '+fmtT();
+}
+
+// ─────────────────────────────────────────────────────────
+//  WEBSOCKET COLLECTOR GRID
+// ─────────────────────────────────────────────────────────
+async function updateWSCollectorStats(){
+  try{
+    const res=await fetch('/api/ws-stats');
+    if(!res.ok) return;
+    
+    const data=await res.json();
+    if(!data.success) return;
+    
+    const stats=data.stats||{};
+    const wsGrid=$('wsCollectorGrid');
+    if(!wsGrid) return;
+    
+    const exchanges=['binance','bybit','mexc','finnhub','yahoo'];
+    let html='';
+    let connectedCount=0;
+    
+    for(const ex of exchanges){
+      const stat=stats[ex]||{connected:false,messages:0,subscriptions:[]};
+      const connected=stat.connected||(ex==='yahoo'&&stat.connected!==false);
+      const msgCount=stat.messages||0;
+      const subs=stat.subscriptions||[];
+      
+      if(connected) connectedCount++;
+      
+      html+=`
+        <div class="ws-card ${connected?'ok':'err'}">
+          <span class="ws-name">${ex.toUpperCase()}</span>
+          <span class="ws-emoji">${connected?'✅':'❌'}</span>
+          <div class="ws-msgs">📨 ${msgCount.toLocaleString()}</div>
+          <div class="ws-subs" title="${subs.join(', ')}">${subs.slice(0,2).join(', ')}${subs.length>2?'...':''}</div>
+        </div>
+      `;
+    }
+    
+    wsGrid.innerHTML=html;
+    set('wsCollectorBadge', `${connectedCount}/5`);
+    
+    // WebSocket pill'ini güncelle
+    const wsPill=$('wsPill');
+    const wsLabel=$('wsLabel');
+    if(connectedCount>0){
+      wsPill.className='badge-pill green';
+      wsLabel.textContent=`${connectedCount}/5 AKTİF`;
+    } else {
+      wsPill.className='badge-pill dim';
+      wsLabel.textContent='BAĞLANTI YOK';
+    }
+    
+  } catch(e){
+    console.error('WS stats error:',e);
+  }
 }
 
 // ─────────────────────────────────────────────────────────
@@ -1189,8 +1295,20 @@ function updateExGrid(stats){
 // ─────────────────────────────────────────────────────────
 const TV_TF = {'1m':'1','5m':'5','15m':'15','30m':'30','1h':'60','4h':'240','1d':'D','1w':'W'};
 
+function getTVSymbol(sym){
+  const crypto=['BTC','ETH','SOL','BNB','XRP','ADA','DOGE','AVAX','LINK','DOT'];
+  if(crypto.includes(sym)) return `BINANCE:${sym}USDT`;
+  if(sym==='AAPL'||sym==='TSLA'||sym==='MSFT') return `NASDAQ:${sym}`;
+  if(sym==='XAU') return 'OANDA:XAUUSD';
+  if(sym==='XAG') return 'OANDA:XAGUSD';
+  if(sym==='EURUSD') return 'FX:EURUSD';
+  if(sym==='GBPUSD') return 'FX:GBPUSD';
+  return `BINANCE:${sym}USDT`;
+}
+
 function initTV(){
   const sym=$('selSym').value;
+  const tvSymbol=getTVSymbol(sym);
   const tf=TV_TF[$('selTf').value]||'60';
 
   if(S.tvW){ try{S.tvW.remove();}catch(e){} S.tvW=null; }
@@ -1202,7 +1320,7 @@ function initTV(){
   try{
     S.tvW = new TradingView.widget({
       autosize:true,
-      symbol:`BINANCE:${sym}USDT`,
+      symbol:tvSymbol,
       interval:tf,
       timezone:'Europe/Istanbul',
       theme:'dark',
@@ -1241,16 +1359,13 @@ function connectWS(){
 
     ws.onopen=()=>{
       S.wsRetries=0;
-      setPill('wsPill','green','BAĞLANDI');
       addLog(`WSS bağlandı: ${sym}`,'c-green');
     };
     ws.onmessage=e=>{
       try{ const d=JSON.parse(e.data); if(d.type==='price') updateWSPrice(d); }catch(e){}
     };
-    ws.onerror=()=>setPill('wsPill','red','HATA');
+    ws.onerror=()=>{};
     ws.onclose=()=>{
-      setPill('wsPill','dim','KAPALI');
-      set('wsLabel','KAPALI');
       if(S.wsRetries<8){
         S.wsRetries++;
         setTimeout(connectWS, 3000+S.wsRetries*1000);
@@ -1274,21 +1389,23 @@ function updateWSPrice(d){
   set('updText','Son güncelleme: '+fmtT());
 }
 
-function setPill(id,cls,label){
-  const el=$(id); if(!el) return;
-  el.className='badge-pill '+cls;
-  const sp=el.querySelector('span'); if(sp) sp.textContent=label;
-  set('wsLabel',label);
-}
-
 // ─────────────────────────────────────────────────────────
 //  MAIN ANALYZE
 // ─────────────────────────────────────────────────────────
 async function doAnalyze(){
-  const sym=$('selSym').value+'USDT';
+  let sym=$('selSym').value;
   const tf=$('selTf').value;
   const limit=$('selLimit').value;
   const btn=$('analyzeBtn');
+
+  // Symbol formatını düzelt
+  if(['BTC','ETH','SOL','BNB','XRP','ADA','DOGE','AVAX','LINK','DOT'].includes(sym)){
+    sym = sym+'USDT';
+  } else if(sym==='AAPL'||sym==='TSLA'||sym==='MSFT'){
+    // Finnhub için olduğu gibi kalır
+  } else if(sym==='XAU'||sym==='XAG'||sym==='EURUSD'||sym==='GBPUSD'){
+    // Yahoo/Finnhub için olduğu gibi kalır
+  }
 
   btn.innerHTML='<div class="spin"></div> Analiz Ediliyor...';
   btn.disabled=true;
@@ -1321,7 +1438,8 @@ async function doAnalyze(){
     set('updText','Son güncelleme: '+fmtT());
   }
 }
-  // ─────────────────────────────────────────────────────────
+
+// ─────────────────────────────────────────────────────────
 //  ICT BULL/BEAR DENGESİ HESAPLAMA
 // ─────────────────────────────────────────────────────────
 function calculateICTBalance(ict) {
@@ -1339,7 +1457,6 @@ function calculateICTBalance(ict) {
   let bullCount = 0;
   let bearCount = 0;
 
-  // Tüm ICT pattern kategorilerini tara
   for (const [category, patterns] of Object.entries(ict)) {
     if (!Array.isArray(patterns)) continue;
     
@@ -1351,16 +1468,12 @@ function calculateICTBalance(ict) {
       } else if (dir.includes('bear')) {
         bearCount++;
       }
-      // neutral olanları saymıyoruz
     }
   }
 
   const total = bullCount + bearCount;
-  
-  // Boğa yüzdesi (0-100 arası)
   let bullPercentage = total > 0 ? (bullCount / total) * 100 : 50;
   
-  // Yön belirle
   let direction = 'neutral';
   let directionText = 'TARAF BELİRSİZ';
   let description = '';
@@ -1423,52 +1536,49 @@ function calculateICTBalance(ict) {
 }
 
 // ─────────────────────────────────────────────────────────
-//  ICT DENGESİ RENDER (renderAll içinde çağrılacak)
+//  ICT DENGESİ RENDER
 // ─────────────────────────────────────────────────────────
 function renderICTBalance(ict) {
   const balance = calculateICTBalance(ict);
   
-  // Sayıları güncelle
   set('ictBullCount', balance.bullCount);
   set('ictBearCount', balance.bearCount);
   set('ictBalanceBadge', `${balance.total} pattern`);
   
-  // Denge çubuğunu güncelle
   const fillEl = $('ictBalanceFill');
   fillEl.style.width = balance.ratio + '%';
   fillEl.className = 'ict-balance-fill ' + balance.fillClass;
   
-  // Yön ve açıklamayı güncelle
   const dirEl = $('ictDirection');
   dirEl.textContent = balance.directionText;
   dirEl.className = 'ict-balance-direction ' + balance.direction;
   
   set('ictBalanceDesc', balance.description);
   
-  // Log'a da ekle
   addLog(`📊 ICT Dengesi: ${balance.bullCount} boğa, ${balance.bearCount} ayı → ${balance.directionText}`, 
          balance.direction === 'bull' ? 'c-green' : balance.direction === 'bear' ? 'c-red' : 'c-dim');
 }
 
 // ─────────────────────────────────────────────────────────
-//  RENDER ALL (Güncellendi: gainzalgo_signals -> ictsmartpro_signals)
+//  RENDER ALL
 // ─────────────────────────────────────────────────────────
- function renderAll(d){
+function renderAll(d){
   renderPrice(d);
   renderSignal(d.signal);
   renderHeikinAshi(d.technical);
   renderTechnical(d.technical);
   renderICTSMARTPROSignals(d.ictsmartpro_signals);
   renderICT(d.ict_patterns);
-  
-  // YENİ: ICT Bull/Bear dengesini hesapla ve göster
   renderICTBalance(d.ict_patterns);
-  
   renderCandlePatterns(d.candle_patterns);
   renderClassicalPatterns(d.classical_patterns);
   renderMarketStructure(d.market_structure);
   renderSidePanel(d);
+  
+  // Data Pool bilgisi
+  set('kvPool', `📦 ${d.data_points} mum / ${d.active_sources?.length||0} kaynak`);
 }
+
 // ─── PRICE ───────────────────────────────────────────────
 function renderPrice(d){
   if(!d) return;
@@ -1487,7 +1597,6 @@ function renderPrice(d){
     if(prev!==null) el.classList.add(cur>prev?'flash-green':'flash-red');
   }
 
-  // 24h change
   const chg=p.change_percent??0;
   const chgEl=$('priceChg');
   if(chg>0){
@@ -1620,17 +1729,15 @@ function renderTechnical(t){
   `).join(''));
 }
 
-// ─── ICTSMARTPRO STRATEJİ SİNYALLERİ (YENİ)
+// ─── ICTSMARTPRO STRATEJİ SİNYALLERİ
 function renderICTSMARTPROSignals(isp){
   const total=isp?.length||0;
   set('stratCount', total+' sinyal');
 
-  // İlk kart (Ana strateji)
   if(isp && isp.length){
     const first = isp[0];
     const isBull = first.direction === 'bullish' || first.direction === 'bullish_reversal';
     
-    // Sinyal metnini belirgin yap
     let signalText = '';
     if(first.pattern.includes('hh_hl')) signalText = 'ICTSMARTPRO BUY - HH/HL Yapısı';
     else if(first.pattern.includes('ll_lh')) signalText = 'ICTSMARTPRO SELL - LL/LH Yapısı';
@@ -1645,7 +1752,6 @@ function renderICTSMARTPROSignals(isp){
     set('ispSl', fmtP(first.sl_level));
     set('ispStr', (first.strength || '—') + '%');
 
-    // İkinci kart (varsa ikinci sinyal, yoksa aynısını veya boş göster)
     if(isp.length > 1){
       const second = isp[1];
       const isBull2 = second.direction === 'bullish' || second.direction === 'bullish_reversal';
@@ -1663,13 +1769,11 @@ function renderICTSMARTPROSignals(isp){
       set('ispMomSl', fmtP(second.sl_level));
       set('ispMomStr', (second.strength || '—') + '%');
     } else {
-      // İkinci sinyal yoksa boş göster
       $('ispMomSig').className = 'strat-sig none';
       $('ispMomSig').innerHTML = '<i class="fas fa-minus"></i> İkinci sinyal yok';
       ['ispMomEntry','ispMomTp','ispMomSl','ispMomStr'].forEach(id=>set(id,'—'));
     }
   } else {
-    // Hiç sinyal yoksa her iki kartı da boş göster
     $('ispSig').className = 'strat-sig none';
     $('ispSig').innerHTML = '<i class="fas fa-minus"></i> Sinyal Yok';
     ['ispEntry','ispTp','ispSl','ispStr'].forEach(id=>set(id,'—'));
@@ -1680,7 +1784,7 @@ function renderICTSMARTPROSignals(isp){
   }
 }
 
-// ─── ICT PATTERNS TABLE ──────────────────────────────────
+// ─── ICT PATTERNS TABLE
 function renderICT(ict){
   if(!ict||!Object.keys(ict).length){
     html('ictTbody','<tr><td colspan="5" class="empty" style="padding:12px">ICT pattern verisi yok</td></tr>');
@@ -1732,7 +1836,7 @@ function renderICT(ict){
   set('ictTotalBadge', total+' pattern');
 }
 
-// ─── CANDLE PATTERNS ─────────────────────────────────────
+// ─── CANDLE PATTERNS
 function renderCandlePatterns(pats){
   const count=pats?.length||0;
   set('candleBadge', count);
@@ -1740,7 +1844,6 @@ function renderCandlePatterns(pats){
     html('candleChips','<span class="empty">—</span>');
     return;
   }
-  // deduplicate
   const seen=new Set();
   const chips=[];
   for(const p of pats.slice(-20)){
@@ -1753,7 +1856,7 @@ function renderCandlePatterns(pats){
   html('candleChips', chips.join('')||'<span class="empty">—</span>');
 }
 
-// ─── CLASSICAL PATTERNS ──────────────────────────────────
+// ─── CLASSICAL PATTERNS
 function renderClassicalPatterns(pats){
   const count=pats?.length||0;
   set('classicBadge', count);
@@ -1768,7 +1871,7 @@ function renderClassicalPatterns(pats){
   html('classicChips', chips.join('')||'<span class="empty">—</span>');
 }
 
-// ─── MARKET STRUCTURE ────────────────────────────────────
+// ─── MARKET STRUCTURE
 function renderMarketStructure(ms){
   if(!ms) return;
   const t=ms.trend||'—';
@@ -1784,19 +1887,16 @@ function renderMarketStructure(ms){
   $('msMom').className='ms-val '+(ms.momentum?.includes('Bullish')?'c-green':ms.momentum?.includes('Bearish')?'c-red':'c-amber');
 }
 
-// ─── SIDE PANEL ──────────────────────────────────────────
+// ─── SIDE PANEL
 function renderSidePanel(d){
-  // Exchange stats
   if(d.exchange_stats) updateExGrid(d.exchange_stats);
 
-  // Pool
   set('poolCandles', d.data_points||'—');
   if(d.performance_ms!=null){
     set('poolMs', fmtN(d.performance_ms,1));
     set('perfMs', `⏱ ${fmtN(d.performance_ms,1)}ms`);
   }
 
-  // ML Models — simulate from confidence with slight variation
   const conf=d.signal?.confidence||50;
   const rnd=(offset,range)=>clamp(conf+offset+(Math.random()*range-range/2),1,99);
   const lgbm=rnd(0,8), xgb=rnd(-2,6), tf=rnd(3,10), rf=rnd(-1,7);
@@ -1840,7 +1940,7 @@ async function doTrain(){
 }
 
 // ─────────────────────────────────────────────────────────
-//  EVALUATE (Güncellendi: gainzalgo_signals -> ictsmartpro_signals)
+//  EVALUATE
 // ─────────────────────────────────────────────────────────
 function doEvaluate(){
   const d=S.data;
@@ -1857,7 +1957,7 @@ function doEvaluate(){
   const signalStr=(sig.signal||'NEUTRAL').replace(/_/g,' ');
   const conf=Math.round(sig.confidence||0);
   const ictTotal=Object.values(d.ict_patterns||{}).reduce((a,b)=>a+(b?.length||0),0);
-  const ispCount=(d.ictsmartpro_signals||[]).length; // GainzAlgo/Ultimate yerine
+  const ispCount=(d.ictsmartpro_signals||[]).length;
   const candleCount=(d.candle_patterns||[]).length;
   const classicCount=(d.classical_patterns||[]).length;
   const ictBalance = calculateICTBalance(d.ict_patterns);
@@ -1866,19 +1966,17 @@ function doEvaluate(){
   if(conf>75) verdict='🔥 Yüksek güven seviyesi. Sinyal güçlü.';
   else if(conf>60) verdict='✅ Orta güven. Ek teyit önerilir.';
   else verdict='⚠️ Düşük güven. Temkinli yaklaşılmalı.';
-  if(ictTotal>10) verdict+=' Yoğun ICT aktivitesi.';
-  if(ispCount>0) verdict+=` ${ispCount} ICTSMARTPRO sinyali mevcut.`;
-  // ICT dengesi bilgisini ekle
-if (ictBalance.total > 0) {
-  if (ictBalance.direction === 'bull') {
-    verdict += ` 📊 ICT'lerde ${ictBalance.bullCount}-${ictBalance.bearCount} boğa baskın.`;
-  } else if (ictBalance.direction === 'bear') {
-    verdict += ` 📊 ICT'lerde ${ictBalance.bearCount}-${ictBalance.bullCount} ayı baskın.`;
+  
+  if (ictBalance.total > 0) {
+    if (ictBalance.direction === 'bull') {
+      verdict += ` 📊 ICT'lerde ${ictBalance.bullCount}-${ictBalance.bearCount} boğa baskın.`;
+    } else if (ictBalance.direction === 'bear') {
+      verdict += ` 📊 ICT'lerde ${ictBalance.bearCount}-${ictBalance.bullCount} ayı baskın.`;
+    }
   }
-}
 
-if (ictBalance.total > 10) verdict += ' Yoğun ICT aktivitesi.';
-if (ispCount > 0) verdict += ` ${ispCount} ICTSMARTPRO sinyali mevcut.`;
+  if (ictTotal > 10) verdict += ' Yoğun ICT aktivitesi.';
+  if (ispCount > 0) verdict += ` ${ispCount} ICTSMARTPRO sinyali mevcut.`;
 
   const box=$('chatLog');
   const empty=box.querySelector('.chat-empty');
@@ -1895,6 +1993,7 @@ if (ispCount > 0) verdict += ` ${ispCount} ICTSMARTPRO sinyali mevcut.`;
       <b>Trend:</b> ${ms.trend||'—'} &nbsp; <b>Volatilite:</b> ${ms.volatility||'—'}<br>
       <b>ICT Pattern:</b> ${ictTotal} adet &nbsp; <b>Mum:</b> ${candleCount} &nbsp; <b>Klasik:</b> ${classicCount}<br>
       <b>ICTSMARTPRO:</b> ${ispCount} sinyal<br>
+      <b>Data Pool:</b> ${d.data_points} mum / ${d.active_sources?.length||0} kaynak<br>
       ${sig.tp_level?`<b>TP:</b> ${fmtP(sig.tp_level)} &nbsp; <b>SL:</b> ${fmtP(sig.sl_level)}<br>`:''}
       ${sig.recommendation?`<b>Öneri:</b> ${sig.recommendation.slice(0,120)}<br>`:''}
       <br><span style="color:var(--cyan)">${verdict}</span>
@@ -1946,7 +2045,6 @@ async function init(){
   buildExGrid();
   setupEventListeners();
 
-  // health check
   try{
     const r=await fetch('/health');
     if(r.ok){
@@ -1964,7 +2062,9 @@ async function init(){
   setTimeout(initTV, 100);
   connectWS();
   setTimeout(doAnalyze, 900);
+  
   setInterval(pollExchangeStats, 30000);
+  setInterval(updateWSCollectorStats, 10000);
 }
 
 window.addEventListener('load', init);
