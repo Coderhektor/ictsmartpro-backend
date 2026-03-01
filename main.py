@@ -119,7 +119,7 @@ class Config:
 
     ALLOWED_ORIGINS = os.getenv("ALLOWED_ORIGINS", "*").split(",")
     
-    FINNHUB_API_KEY = os.getenv("FINNHUB_API_KEY", "d6iabo1r01ql9cifj4lgd6iabo1r01ql9cifj4m0")
+    FINNHUB_API_KEY = os.getenv("FINNHUB_API_KEY", "")
     YAHOO_POLLING_INTERVAL = int(os.getenv("YAHOO_POLLING_INTERVAL", "10"))
 
 
@@ -424,60 +424,71 @@ class WebSocketCollector:
             self.connections.pop(exchange, None)
             self.stats[exchange]["connected"] = False
     
-    async def _run_yahoo_polling(self):
-        """Yahoo Finance HTTP polling (WebSocket olmadığı için)"""
-        logger.info("📡 Yahoo Finance polling başlatıldı")
-        
-        while self.running:
-            try:
-                # Abone olunan semboller için Yahoo'dan veri çek
-                symbols = self.subscriptions.get("yahoo", set())
-                
-                for symbol in symbols:
-                    try:
-                        # Yahoo formatına dönüştür
-                        yahoo_symbol = symbol.replace("USDT", "-USD")
-                        if symbol == "XAUUSD":
-                            yahoo_symbol = "XAUUSD=X"
-                        elif symbol == "XAGUSD":
-                            yahoo_symbol = "XAGUSD=X"
-                        elif "EUR" in symbol or "USD" in symbol:
-                            if "=" not in symbol:
-                                yahoo_symbol = f"{symbol}=X"
-                        
-                        # yfinance ile çek
-                        ticker = yf.Ticker(yahoo_symbol)
-                        data = ticker.history(period="1d", interval="1m")
-                        
-                        if not data.empty:
-                            last = data.iloc[-1]
-                            
-                            price_data = {
-                                "symbol": symbol,
-                                "price": float(last["Close"]),
-                                "high": float(last["High"]),
-                                "low": float(last["Low"]),
-                                "volume": float(last["Volume"]),
-                                "source": "yahoo",
-                                "timestamp": int(time.time() * 1000)
-                            }
-                            
-                            await self._process_price("yahoo", price_data)
-                            
-                        await asyncio.sleep(2)
-                        
-                    except Exception as e:
-                        logger.debug(f"Yahoo {symbol} hatası: {str(e)}")
-                
-                # Periyodik bekleme
-                for _ in range(self.yahoo_interval):
-                    if not self.running:
-                        break
-                    await asyncio.sleep(1)
+   async def _run_yahoo_polling(self):
+    """Yahoo Finance HTTP polling - DÜZELTİLMİŞ SEMBOL FORMATLARI"""
+    logger.info("📡 Yahoo Finance polling başlatıldı")
+    
+    while self.running:
+        try:
+            symbols = self.subscriptions.get("yahoo", set())
+            
+            for symbol in symbols:
+                try:
+                    # YAHOO SEMBOL FORMATLARI - DÜZELTİLDİ
+                    if symbol == "BTC-USD" or symbol == "BTCUSDT":
+                        yahoo_symbol = "BTC-USD"
+                    elif symbol == "ETH-USD" or symbol == "ETHUSDT":
+                        yahoo_symbol = "ETH-USD"
+                    elif symbol == "SOL-USD" or symbol == "SOLUSDT":
+                        yahoo_symbol = "SOL-USD"
+                    elif symbol == "XAUUSD" or symbol == "XAU":
+                        yahoo_symbol = "GC=F"  # Altın futures
+                    elif symbol == "XAGUSD" or symbol == "XAG":
+                        yahoo_symbol = "SI=F"  # Gümüş futures
+                    elif symbol == "EURUSD":
+                        yahoo_symbol = "EURUSD=X"
+                    elif symbol == "GBPUSD":
+                        yahoo_symbol = "GBPUSD=X"
+                    elif symbol == "USDTRY":
+                        yahoo_symbol = "USDTRY=X"
+                    elif symbol == "AAPL":
+                        yahoo_symbol = "AAPL"
+                    elif symbol == "TSLA":
+                        yahoo_symbol = "TSLA"
+                    elif symbol == "MSFT":
+                        yahoo_symbol = "MSFT"
+                    else:
+                        yahoo_symbol = symbol
                     
-            except Exception as e:
-                logger.error(f"Yahoo polling hatası: {str(e)}")
-                await asyncio.sleep(10)
+                    # Yahoo Finance API URL
+                    url = f"https://query1.finance.yahoo.com/v8/finance/chart/{yahoo_symbol}"
+                    
+                    # User-Agent ekle
+                    headers = {
+                        "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36"
+                    }
+                    
+                    async with aiohttp.ClientSession() as session:
+                        async with session.get(url, headers=headers, timeout=5) as response:
+                            if response.status == 200:
+                                data = await response.json()
+                                result = data.get('chart', {}).get('result', [])
+                                if result and len(result) > 0:
+                                    meta = result[0].get('meta', {})
+                                    price = meta.get('regularMarketPrice')
+                                    if price:
+                                        logger.debug(f"✅ Yahoo {symbol}: {price}")
+                    
+                    await asyncio.sleep(2)
+                    
+                except Exception as e:
+                    logger.debug(f"Yahoo {symbol} hatası: {str(e)}")
+                
+            await asyncio.sleep(self.yahoo_interval)
+            
+        except Exception as e:
+            logger.error(f"Yahoo polling hatası: {str(e)}")
+            await asyncio.sleep(30)
     
     # ========== PARSER FONKSİYONLARI ==========
     
