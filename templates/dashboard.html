@@ -1,1397 +1,1654 @@
 <!DOCTYPE html>
 <html lang="tr">
 <head>
-<meta charset="UTF-8">
-<meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>ICTSMARTPRO v9.0 - Ultimate Pattern Detector</title>
-<link href="https://fonts.googleapis.com/css2?family=Space+Mono:wght@400;700&family=Syne:wght@400;600;700;800&display=swap" rel="stylesheet">
-<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
-<script src="https://s3.tradingview.com/tv.js"></script>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>ICTSMARTPRO v9.0 - Ultimate Pattern Detector</title>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=JetBrains+Mono:wght@400;500;600;700&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <script src="https://s3.tradingview.com/tv.js"></script>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
 
-<style>
-/* ===== RESET & ROOT ===== */
-*, *::before, *::after { margin: 0; padding: 0; box-sizing: border-box; }
+        :root {
+            --bg-primary: #0A0C10;
+            --bg-secondary: #121418;
+            --bg-card: #1A1D24;
+            --bg-card-hover: #22262E;
+            --border: #2A2F38;
+            --border-light: #353B45;
+            --text-primary: #FFFFFF;
+            --text-secondary: #9AA4B2;
+            --text-tertiary: #6B7280;
+            --accent-blue: #3B82F6;
+            --accent-blue-dark: #2563EB;
+            --accent-green: #10B981;
+            --accent-green-dark: #059669;
+            --accent-red: #EF4444;
+            --accent-red-dark: #DC2626;
+            --accent-yellow: #F59E0B;
+            --accent-purple: #8B5CF6;
+            --accent-pink: #EC4899;
+            --accent-cyan: #06B6D4;
+            --success: #10B981;
+            --warning: #F59E0B;
+            --error: #EF4444;
+            --info: #3B82F6;
+            
+            --shadow-sm: 0 2px 4px rgba(0,0,0,0.3);
+            --shadow-md: 0 4px 8px rgba(0,0,0,0.4);
+            --shadow-lg: 0 8px 16px rgba(0,0,0,0.5);
+            
+            --radius-sm: 6px;
+            --radius-md: 8px;
+            --radius-lg: 12px;
+            --radius-xl: 16px;
+            
+            --font-mono: 'JetBrains Mono', monospace;
+            --font-sans: 'Inter', sans-serif;
+        }
 
-:root {
-  --bg:        #080b12;
-  --surface:   #0e1420;
-  --card:      #111827;
-  --border:    #1e2d45;
-  --border-hi: #2563eb;
-  --text:      #e2e8f0;
-  --muted:     #64748b;
-  --blue:      #2563eb;
-  --blue-glow: rgba(37,99,235,0.25);
-  --green:     #10b981;
-  --green-glow:rgba(16,185,129,0.2);
-  --red:       #ef4444;
-  --red-glow:  rgba(239,68,68,0.2);
-  --amber:     #f59e0b;
-  --purple:    #8b5cf6;
-  --cyan:      #22d3ee;
-  --r:         10px;
-  --r-sm:      6px;
-  font-size: 14px;
-}
+        body {
+            background: var(--bg-primary);
+            color: var(--text-primary);
+            font-family: var(--font-sans);
+            min-height: 100vh;
+            line-height: 1.5;
+            font-size: 14px;
+        }
 
-body {
-  background: var(--bg);
-  color: var(--text);
-  font-family: 'Syne', sans-serif;
-  min-height: 100vh;
-  line-height: 1.5;
-  overflow-x: hidden;
-}
+        /* Scrollbar */
+        ::-webkit-scrollbar {
+            width: 6px;
+            height: 6px;
+        }
+        ::-webkit-scrollbar-track {
+            background: var(--bg-secondary);
+        }
+        ::-webkit-scrollbar-thumb {
+            background: var(--border);
+            border-radius: 3px;
+        }
+        ::-webkit-scrollbar-thumb:hover {
+            background: var(--border-light);
+        }
 
-/* ===== TOPBAR ===== */
-#topbar {
-  position: sticky; top: 0; z-index: 100;
-  background: rgba(8,11,18,0.92);
-  backdrop-filter: blur(12px);
-  border-bottom: 1px solid var(--border);
-  display: flex; align-items: center; gap: 12px;
-  padding: 0 20px; height: 56px;
-}
+        /* Layout */
+        .app {
+            max-width: 1920px;
+            margin: 0 auto;
+            padding: 16px 20px;
+        }
 
-#topbar .brand {
-  font-size: 1.1rem; font-weight: 800; letter-spacing: -0.02em;
-  color: #fff; white-space: nowrap;
-}
-#topbar .brand span { color: var(--blue); }
+        /* Topbar */
+        .topbar {
+            background: rgba(18,20,24,0.95);
+            backdrop-filter: blur(12px);
+            border-bottom: 1px solid var(--border);
+            padding: 0 24px;
+            height: 60px;
+            display: flex;
+            align-items: center;
+            gap: 20px;
+            position: sticky;
+            top: 0;
+            z-index: 100;
+            margin-bottom: 20px;
+        }
 
-.pill {
-  display: inline-flex; align-items: center; gap: 6px;
-  padding: 4px 12px; border-radius: 99px;
-  font-family: 'Space Mono', monospace; font-size: 0.72rem; font-weight: 700;
-  border: 1px solid;
-  transition: all 0.3s;
-}
-.pill.green  { color: var(--green); border-color: var(--green); background: var(--green-glow); }
-.pill.red    { color: var(--red);   border-color: var(--red);   background: var(--red-glow);   }
-.pill.blue   { color: var(--blue);  border-color: var(--blue);  background: var(--blue-glow);  }
-.pill.muted  { color: var(--muted); border-color: var(--border); background: transparent;       }
+        .brand {
+            font-size: 1.2rem;
+            font-weight: 800;
+            letter-spacing: -0.02em;
+            background: linear-gradient(135deg, #fff, var(--accent-blue));
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+        }
 
-.dot {
-  width: 7px; height: 7px; border-radius: 50%;
-  background: currentColor; animation: blink 2s infinite;
-}
-@keyframes blink { 0%,100%{opacity:1} 50%{opacity:0.3} }
+        .brand span {
+            color: var(--accent-blue);
+            -webkit-text-fill-color: var(--accent-blue);
+        }
 
-#topbar .sep { width: 1px; height: 24px; background: var(--border); flex-shrink: 0; }
-#topbar .spacer { flex: 1; }
-#topbar .clock { font-family: 'Space Mono',monospace; font-size: 0.78rem; color: var(--muted); }
+        .pill {
+            display: inline-flex;
+            align-items: center;
+            gap: 8px;
+            padding: 6px 14px;
+            border-radius: 100px;
+            font-size: 0.75rem;
+            font-weight: 600;
+            font-family: var(--font-mono);
+            border: 1px solid;
+            transition: all 0.2s;
+        }
 
-/* ===== LAYOUT ===== */
-#app {
-  display: grid;
-  grid-template-columns: 1fr 340px;
-  grid-template-rows: auto;
-  gap: 16px;
-  padding: 16px 20px;
-  max-width: 1600px;
-  margin: 0 auto;
-}
+        .pill.green {
+            background: rgba(16,185,129,0.1);
+            border-color: var(--accent-green);
+            color: var(--accent-green);
+        }
+        .pill.red {
+            background: rgba(239,68,68,0.1);
+            border-color: var(--accent-red);
+            color: var(--accent-red);
+        }
+        .pill.blue {
+            background: rgba(59,130,246,0.1);
+            border-color: var(--accent-blue);
+            color: var(--accent-blue);
+        }
+        .pill.yellow {
+            background: rgba(245,158,11,0.1);
+            border-color: var(--accent-yellow);
+            color: var(--accent-yellow);
+        }
+        .pill.purple {
+            background: rgba(139,92,246,0.1);
+            border-color: var(--accent-purple);
+            color: var(--accent-purple);
+        }
 
-@media (max-width: 1024px) {
-  #app { grid-template-columns: 1fr; }
-}
+        .dot {
+            width: 8px;
+            height: 8px;
+            border-radius: 50%;
+            background: currentColor;
+            animation: pulse 2s infinite;
+        }
 
-/* ===== CARD ===== */
-.card {
-  background: var(--card);
-  border: 1px solid var(--border);
-  border-radius: var(--r);
-  overflow: hidden;
-}
-.card-head {
-  display: flex; align-items: center; gap: 8px;
-  padding: 12px 16px;
-  border-bottom: 1px solid var(--border);
-  font-weight: 700; font-size: 0.8rem; letter-spacing: 0.06em;
-  text-transform: uppercase; color: var(--muted);
-}
-.card-head i { color: var(--blue); font-size: 0.9rem; }
-.card-head .badge {
-  margin-left: auto;
-  background: var(--border); color: var(--text);
-  padding: 2px 8px; border-radius: 99px;
-  font-size: 0.7rem; font-family: 'Space Mono', monospace;
-}
-.card-body { padding: 16px; }
+        @keyframes pulse {
+            0%,100% { opacity: 1; }
+            50% { opacity: 0.3; }
+        }
 
-/* ===== CONTROLS ===== */
-#controls {
-  display: flex; flex-wrap: wrap; align-items: center; gap: 10px;
-  padding: 12px 16px;
-}
+        .clock {
+            font-family: var(--font-mono);
+            font-size: 0.85rem;
+            color: var(--text-secondary);
+            margin-left: auto;
+        }
 
-select, button {
-  font-family: 'Syne', sans-serif;
-  outline: none; border: none; cursor: pointer;
-}
-select {
-  background: var(--surface);
-  color: var(--text);
-  border: 1px solid var(--border);
-  border-radius: var(--r-sm);
-  padding: 8px 12px;
-  font-size: 0.85rem; font-weight: 600;
-  appearance: none;
-  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='10' height='6'%3E%3Cpath d='M0 0l5 6 5-6z' fill='%2364748b'/%3E%3C/svg%3E");
-  background-repeat: no-repeat;
-  background-position: right 10px center;
-  padding-right: 28px;
-  transition: border-color 0.2s;
-}
-select:focus { border-color: var(--blue); }
+        /* Grid Layout */
+        .dashboard-grid {
+            display: grid;
+            grid-template-columns: 1fr 360px;
+            gap: 20px;
+        }
 
-.btn {
-  display: inline-flex; align-items: center; gap: 6px;
-  padding: 8px 20px; border-radius: var(--r-sm);
-  font-size: 0.85rem; font-weight: 700;
-  transition: all 0.2s; cursor: pointer;
-}
-.btn-primary {
-  background: var(--blue); color: #fff;
-  border: 1px solid var(--blue);
-}
-.btn-primary:hover { background: #1d4ed8; }
-.btn-primary:active { transform: scale(0.97); }
-.btn-outline {
-  background: transparent; color: var(--blue);
-  border: 1px solid var(--border);
-}
-.btn-outline:hover { border-color: var(--blue); background: var(--blue-glow); }
+        @media (max-width: 1280px) {
+            .dashboard-grid {
+                grid-template-columns: 1fr;
+            }
+        }
 
-.spinner {
-  display: inline-block; width: 14px; height: 14px;
-  border: 2px solid rgba(255,255,255,0.3);
-  border-top-color: #fff;
-  border-radius: 50%;
-  animation: spin 0.7s linear infinite;
-}
-@keyframes spin { to { transform: rotate(360deg); } }
+        /* Cards */
+        .card {
+            background: var(--bg-card);
+            border: 1px solid var(--border);
+            border-radius: var(--radius-lg);
+            overflow: hidden;
+        }
 
-/* ===== PRICE PANEL ===== */
-#pricePanel {
-  display: grid;
-  grid-template-columns: 1fr 1fr;
-  gap: 16px;
-  margin-bottom: 16px;
-}
-@media (max-width: 600px) { #pricePanel { grid-template-columns: 1fr; } }
+        .card-header {
+            padding: 14px 18px;
+            border-bottom: 1px solid var(--border);
+            display: flex;
+            align-items: center;
+            gap: 8px;
+        }
 
-.price-card { position: relative; }
-.price-val {
-  font-family: 'Space Mono', monospace;
-  font-size: 2.4rem; font-weight: 700; line-height: 1;
-  background: linear-gradient(135deg, #fff 40%, var(--blue));
-  -webkit-background-clip: text; -webkit-text-fill-color: transparent;
-  word-break: break-all;
-}
-@media (max-width: 768px) { .price-val { font-size: 1.8rem; } }
+        .card-header i {
+            color: var(--accent-blue);
+            font-size: 1rem;
+        }
 
-.price-sym { font-size: 0.75rem; font-weight: 700; color: var(--muted); letter-spacing: 0.1em; margin-bottom: 8px; }
-.price-chg {
-  display: inline-flex; align-items: center; gap: 4px;
-  padding: 4px 12px; border-radius: 99px;
-  font-family: 'Space Mono', monospace; font-size: 0.8rem; font-weight: 700;
-  margin-top: 12px; margin-bottom: 16px;
-}
-.price-chg.up   { color: var(--green); background: var(--green-glow); border: 1px solid var(--green); }
-.price-chg.down { color: var(--red);   background: var(--red-glow);   border: 1px solid var(--red);   }
-.price-chg.flat { color: var(--muted); background: var(--border);     border: 1px solid var(--border); }
+        .card-header h3 {
+            font-size: 0.85rem;
+            font-weight: 600;
+            text-transform: uppercase;
+            letter-spacing: 0.05em;
+            color: var(--text-secondary);
+        }
 
-.stat-row { display: flex; justify-content: space-between; align-items: center; padding: 8px 0; border-bottom: 1px solid var(--border); }
-.stat-row:last-child { border-bottom: none; }
-.stat-row .label { font-size: 0.78rem; color: var(--muted); }
-.stat-row .val   { font-family: 'Space Mono', monospace; font-size: 0.82rem; font-weight: 700; }
+        .card-header .badge {
+            margin-left: auto;
+            background: var(--bg-secondary);
+            padding: 4px 8px;
+            border-radius: 100px;
+            font-size: 0.7rem;
+            font-family: var(--font-mono);
+            color: var(--text-secondary);
+        }
 
-.flash { animation: flashAnim 0.4s ease; }
-@keyframes flashAnim {
-  0%  { color: var(--cyan); }
-  100%{ color: inherit; }
-}
+        .card-body {
+            padding: 18px;
+        }
 
-/* ===== SIGNAL ===== */
-.signal-wrap { text-align: center; padding: 8px 0; }
-.signal-label {
-  display: inline-block;
-  padding: 14px 28px; border-radius: var(--r);
-  font-size: 1.2rem; font-weight: 800; letter-spacing: 0.06em;
-  margin-bottom: 16px; text-transform: uppercase; width: 100%;
-  transition: all 0.4s;
-}
-.sig-STRONG_BUY  { background: linear-gradient(135deg,#10b981,#059669); color:#fff; }
-.sig-BUY         { background: linear-gradient(135deg,#2563eb,#1d4ed8); color:#fff; }
-.sig-NEUTRAL     { background: linear-gradient(135deg,#475569,#334155); color:#fff; }
-.sig-SELL        { background: linear-gradient(135deg,#ef4444,#dc2626); color:#fff; }
-.sig-STRONG_SELL { background: linear-gradient(135deg,#dc2626,#b91c1c); color:#fff; }
-.sig-default     { background: var(--border); color: var(--muted); }
+        /* Controls */
+        .controls {
+            display: flex;
+            flex-wrap: wrap;
+            align-items: center;
+            gap: 10px;
+        }
 
-.conf-bar-wrap { background: var(--surface); border-radius: 99px; height: 8px; margin: 8px 0; overflow: hidden; }
-.conf-bar { height: 100%; border-radius: 99px; background: var(--blue); transition: width 0.6s ease; }
-.conf-pct { font-family: 'Space Mono', monospace; font-size: 0.78rem; color: var(--muted); }
-.rec-text { font-size: 0.82rem; color: var(--muted); margin-top: 8px; min-height: 20px; line-height: 1.4; }
+        select, button {
+            font-family: var(--font-sans);
+            outline: none;
+            border: none;
+            cursor: pointer;
+            background: var(--bg-secondary);
+            color: var(--text-primary);
+            border: 1px solid var(--border);
+            border-radius: var(--radius-md);
+            padding: 8px 14px;
+            font-size: 0.85rem;
+            font-weight: 500;
+            transition: all 0.2s;
+        }
 
-/* ===== TRADINGVIEW CHART ===== */
-#chartSection { margin-bottom: 16px; }
+        select {
+            min-width: 140px;
+            appearance: none;
+            background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='16' height='16' viewBox='0 0 24 24' fill='none' stroke='%239AA4B2' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpolyline points='6 9 12 15 18 9'%3E%3C/polyline%3E%3C/svg%3E");
+            background-repeat: no-repeat;
+            background-position: right 10px center;
+            padding-right: 36px;
+        }
 
-#chartOuter {
-  position: relative;
-  width: 100%;
-  padding-top: 56.25%; /* 16:9 */
-  min-height: 350px;
-  background: var(--surface);
-  border-radius: 0 0 var(--r) var(--r);
-  overflow: hidden;
-}
-@media (min-height: 700px) {
-  #chartOuter { padding-top: 0; height: 500px; }
-}
-@media (max-width: 768px) {
-  #chartOuter { padding-top: 0; height: 300px; }
-}
+        select:hover, button:hover {
+            border-color: var(--accent-blue);
+            background: var(--bg-card-hover);
+        }
 
-#tvContainer {
-  position: absolute; top: 0; left: 0; width: 100%; height: 100%;
-}
+        .btn-primary {
+            background: var(--accent-blue);
+            border-color: var(--accent-blue);
+            color: white;
+        }
+        .btn-primary:hover {
+            background: var(--accent-blue-dark);
+        }
 
-#chartSpinner {
-  position: absolute; inset: 0;
-  display: flex; flex-direction: column; align-items: center; justify-content: center;
-  background: var(--surface); gap: 12px;
-  transition: opacity 0.5s;
-  z-index: 5;
-}
-#chartSpinner .spin-big {
-  width: 40px; height: 40px;
-  border: 3px solid var(--border);
-  border-top-color: var(--blue);
-  border-radius: 50%;
-  animation: spin 1s linear infinite;
-}
-#chartSpinner p { color: var(--muted); font-size: 0.82rem; }
-#chartSpinner.hidden { opacity: 0; pointer-events: none; }
+        .btn-outline {
+            background: transparent;
+            border-color: var(--border);
+        }
+        .btn-outline:hover {
+            background: var(--bg-card-hover);
+            border-color: var(--accent-blue);
+        }
 
-/* ===== INDICATOR ROWS ===== */
-.ind-grid {
-  display: grid;
-  grid-template-columns: 1fr 1fr;
-  gap: 10px;
-}
-@media (max-width: 600px) { .ind-grid { grid-template-columns: 1fr; } }
+        .spinner {
+            display: inline-block;
+            width: 14px;
+            height: 14px;
+            border: 2px solid rgba(255,255,255,0.3);
+            border-top-color: white;
+            border-radius: 50%;
+            animation: spin 0.7s linear infinite;
+        }
+        @keyframes spin { to { transform: rotate(360deg); } }
 
-.ind-box {
-  background: var(--surface);
-  border: 1px solid var(--border);
-  border-radius: var(--r-sm);
-  padding: 12px;
-}
-.ind-box .ind-label { font-size: 0.7rem; color: var(--muted); letter-spacing: 0.06em; text-transform: uppercase; margin-bottom: 4px; }
-.ind-box .ind-val   { font-family: 'Space Mono', monospace; font-size: 1.1rem; font-weight: 700; }
-.ind-box .ind-sub   { font-size: 0.72rem; color: var(--muted); margin-top: 2px; }
+        /* Price Panel */
+        .price-panel {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 20px;
+            margin-bottom: 20px;
+        }
 
-.text-green  { color: var(--green) !important; }
-.text-red    { color: var(--red)   !important; }
-.text-amber  { color: var(--amber) !important; }
-.text-blue   { color: var(--blue)  !important; }
-.text-muted  { color: var(--muted) !important; }
-.text-white  { color: #fff !important; }
+        .price-value {
+            font-family: var(--font-mono);
+            font-size: 2.2rem;
+            font-weight: 700;
+            line-height: 1.2;
+            background: linear-gradient(135deg, #fff, var(--accent-blue));
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+        }
 
-/* ===== PATTERNS ===== */
-.pattern-chips { display: flex; flex-wrap: wrap; gap: 6px; min-height: 32px; }
-.chip {
-  padding: 4px 10px; border-radius: 99px;
-  font-size: 0.73rem; font-weight: 700; letter-spacing: 0.03em;
-}
-.chip.bull  { background: var(--green-glow); color: var(--green); border: 1px solid var(--green); }
-.chip.bear  { background: var(--red-glow);   color: var(--red);   border: 1px solid var(--red);   }
-.chip.neut  { background: var(--border);     color: var(--muted); border: 1px solid var(--border); }
+        .price-change {
+            display: inline-flex;
+            align-items: center;
+            gap: 6px;
+            padding: 6px 14px;
+            border-radius: 100px;
+            font-family: var(--font-mono);
+            font-weight: 600;
+            margin-top: 12px;
+        }
+        .price-change.up {
+            background: rgba(16,185,129,0.1);
+            color: var(--accent-green);
+            border: 1px solid var(--accent-green);
+        }
+        .price-change.down {
+            background: rgba(239,68,68,0.1);
+            color: var(--accent-red);
+            border: 1px solid var(--accent-red);
+        }
+        .price-change.flat {
+            background: var(--bg-secondary);
+            color: var(--text-secondary);
+            border: 1px solid var(--border);
+        }
 
-/* ===== ICT PATTERNS ===== */
-.ict-grid {
-  display: grid;
-  grid-template-columns: 1fr 1fr;
-  gap: 8px;
-}
-.ict-item {
-  background: var(--surface);
-  border: 1px solid var(--border);
-  border-radius: var(--r-sm);
-  padding: 10px;
-  text-align: center;
-}
-.ict-item .ict-type {
-  font-size: 0.65rem; font-weight: 700; color: var(--muted); text-transform: uppercase;
-  letter-spacing: 0.05em; margin-bottom: 4px;
-}
-.ict-item .ict-val {
-  font-family: 'Space Mono', monospace;
-  font-size: 0.9rem; font-weight: 700;
-}
-.ict-item .ict-sub {
-  font-size: 0.6rem; color: var(--muted);
-}
+        /* Stat Rows */
+        .stat-row {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            padding: 10px 0;
+            border-bottom: 1px solid var(--border);
+        }
+        .stat-row:last-child {
+            border-bottom: none;
+        }
+        .stat-label {
+            color: var(--text-secondary);
+            font-size: 0.8rem;
+        }
+        .stat-value {
+            font-family: var(--font-mono);
+            font-weight: 600;
+        }
 
-/* ===== GAINZALGO & ULTIMATE PATTERNS ===== */
-.patterns-row {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 8px;
-  margin-bottom: 12px;
-}
-.pattern-card {
-  flex: 1 1 calc(50% - 4px);
-  background: var(--surface);
-  border: 1px solid var(--border);
-  border-radius: var(--r-sm);
-  padding: 10px;
-}
-.pattern-card .pattern-title {
-  font-size: 0.7rem; font-weight: 700; color: var(--muted); text-transform: uppercase;
-  margin-bottom: 4px;
-}
-.pattern-card .pattern-price {
-  font-family: 'Space Mono', monospace;
-  font-size: 0.9rem; font-weight: 700;
-}
-.pattern-card .pattern-tpsl {
-  font-size: 0.65rem; color: var(--muted);
-  display: flex; justify-content: space-between;
-  margin-top: 6px;
-}
+        /* Signal Card */
+        .signal-label {
+            display: block;
+            padding: 16px;
+            border-radius: var(--radius-md);
+            font-size: 1.4rem;
+            font-weight: 800;
+            text-align: center;
+            margin-bottom: 16px;
+        }
+        .sig-STRONG_BUY { background: linear-gradient(135deg, #10B981, #059669); }
+        .sig-BUY { background: linear-gradient(135deg, #3B82F6, #2563EB); }
+        .sig-NEUTRAL { background: linear-gradient(135deg, #6B7280, #4B5563); }
+        .sig-SELL { background: linear-gradient(135deg, #EF4444, #DC2626); }
+        .sig-STRONG_SELL { background: linear-gradient(135deg, #DC2626, #B91C1C); }
 
-/* ===== MARKET STRUCTURE ===== */
-.ms-rows .ms-row {
-  display: flex; justify-content: space-between; align-items: center;
-  padding: 9px 0; border-bottom: 1px solid var(--border);
-}
-.ms-rows .ms-row:last-child { border-bottom: none; }
-.ms-rows .ms-row .ms-label { font-size: 0.78rem; color: var(--muted); }
-.ms-rows .ms-row .ms-val   { font-weight: 700; font-size: 0.85rem; }
+        .confidence-bar {
+            background: var(--bg-secondary);
+            height: 8px;
+            border-radius: 100px;
+            margin: 8px 0;
+            overflow: hidden;
+        }
+        .confidence-fill {
+            height: 100%;
+            background: var(--accent-blue);
+            border-radius: 100px;
+            transition: width 0.3s ease;
+        }
 
-/* ===== RIGHT COLUMN ===== */
-#rightCol { display: flex; flex-direction: column; gap: 16px; }
+        /* Pattern Grid */
+        .pattern-grid {
+            display: grid;
+            grid-template-columns: repeat(2, 1fr);
+            gap: 12px;
+        }
 
-/* ===== ML MODELS ===== */
-.ml-model { margin-bottom: 12px; }
-.ml-model:last-child { margin-bottom: 0; }
-.ml-model .ml-row  { display: flex; justify-content: space-between; margin-bottom: 4px; font-size: 0.8rem; }
-.ml-model .ml-name { color: var(--text); font-weight: 600; }
-.ml-model .ml-pct  { font-family: 'Space Mono', monospace; font-weight: 700; }
-.ml-bar-bg  { background: var(--surface); border-radius: 99px; height: 6px; overflow: hidden; }
-.ml-bar     { height: 100%; border-radius: 99px; transition: width 0.6s ease; }
-.ml-bar.info   { background: var(--cyan); }
-.ml-bar.succ   { background: var(--green); }
-.ml-bar.purp   { background: var(--purple); }
-.ml-bar.warn   { background: var(--amber); }
+        .pattern-item {
+            background: var(--bg-secondary);
+            border: 1px solid var(--border);
+            border-radius: var(--radius-md);
+            padding: 12px;
+            text-align: center;
+        }
 
-/* ===== DATA POOL ===== */
-.pool-stat { display: flex; justify-content: space-between; align-items: center; padding: 8px 0; border-bottom: 1px solid var(--border); }
-.pool-stat:last-child { border-bottom: none; }
-.pool-stat .ps-label { font-size: 0.78rem; color: var(--muted); }
-.pool-stat .ps-val   { font-family: 'Space Mono', monospace; font-size: 0.82rem; font-weight: 700; }
-.health-bar { background: var(--surface); border-radius: 99px; height: 8px; margin: 12px 0 8px; overflow: hidden; }
-.health-fill { height: 100%; border-radius: 99px; background: linear-gradient(90deg, var(--blue), var(--green)); transition: width 0.6s ease; }
+        .pattern-type {
+            font-size: 0.7rem;
+            color: var(--text-tertiary);
+            text-transform: uppercase;
+            letter-spacing: 0.05em;
+        }
 
-/* ===== EXCHANGE GRID ===== */
-#exchangeGrid {
-  display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(80px, 1fr));
-  gap: 6px;
-  max-height: 280px;
-  overflow-y: auto;
-  scrollbar-width: thin;
-  scrollbar-color: var(--border) transparent;
-}
-#exchangeGrid::-webkit-scrollbar { width: 4px; }
-#exchangeGrid::-webkit-scrollbar-thumb { background: var(--border); border-radius: 4px; }
+        .pattern-count {
+            font-family: var(--font-mono);
+            font-size: 1.4rem;
+            font-weight: 700;
+            line-height: 1.2;
+            margin: 4px 0;
+        }
 
-.ex-item {
-  background: var(--surface);
-  border: 1px solid var(--border);
-  border-radius: var(--r-sm);
-  padding: 8px 4px; text-align: center;
-  transition: all 0.2s;
-}
-.ex-item.ok   { border-color: var(--green); background: var(--green-glow); }
-.ex-item.err  { border-color: var(--red);   opacity: 0.55; }
-.ex-item .ex-name { font-size: 0.65rem; font-weight: 700; display: block; margin-bottom: 4px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; padding: 0 2px; }
-.ex-item .ex-status { font-size: 0.75rem; }
+        .pattern-badge {
+            display: inline-block;
+            padding: 2px 8px;
+            border-radius: 100px;
+            font-size: 0.65rem;
+            font-weight: 600;
+        }
+        .pattern-badge.bull { background: rgba(16,185,129,0.1); color: var(--accent-green); border: 1px solid var(--accent-green); }
+        .pattern-badge.bear { background: rgba(239,68,68,0.1); color: var(--accent-red); border: 1px solid var(--accent-red); }
+        .pattern-badge.neutral { background: var(--bg-card); color: var(--text-secondary); border: 1px solid var(--border); }
 
-/* ===== AI CHAT ===== */
-#chatBox {
-  background: var(--surface);
-  border: 1px solid var(--border);
-  border-radius: var(--r-sm);
-  padding: 12px;
-  min-height: 120px; max-height: 200px;
-  overflow-y: auto;
-  margin-bottom: 10px;
-  scrollbar-width: thin;
-}
-.chat-msg {
-  background: rgba(37,99,235,0.08);
-  border: 1px solid var(--border);
-  border-radius: var(--r-sm);
-  padding: 10px 12px;
-  margin-bottom: 8px;
-  font-size: 0.8rem;
-  line-height: 1.5;
-}
-.chat-msg .chat-head { font-weight: 700; color: var(--blue); margin-bottom: 4px; display: flex; align-items: center; gap: 6px; }
-.chat-msg .chat-warn { color: var(--amber); font-size: 0.72rem; margin-top: 6px; }
-.chat-empty { color: var(--muted); font-size: 0.8rem; }
+        /* Chip */
+        .chip {
+            display: inline-flex;
+            align-items: center;
+            gap: 4px;
+            padding: 4px 10px;
+            border-radius: 100px;
+            font-size: 0.75rem;
+            font-weight: 500;
+            background: var(--bg-secondary);
+            border: 1px solid var(--border);
+        }
+        .chip.bull { border-color: var(--accent-green); color: var(--accent-green); }
+        .chip.bear { border-color: var(--accent-red); color: var(--accent-red); }
 
-/* ===== ERROR / EMPTY STATES ===== */
-.state-empty { color: var(--muted); font-size: 0.8rem; font-style: italic; }
+        /* Market Structure */
+        .ms-grid {
+            display: grid;
+            gap: 8px;
+        }
+        .ms-item {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            padding: 8px 0;
+            border-bottom: 1px solid var(--border);
+        }
 
-/* ===== SCROLLBAR ===== */
-* { scrollbar-width: thin; scrollbar-color: var(--border) transparent; }
-::-webkit-scrollbar { width: 5px; height: 5px; }
-::-webkit-scrollbar-thumb { background: var(--border); border-radius: 4px; }
+        /* Exchange Grid */
+        .exchange-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fill, minmax(70px, 1fr));
+            gap: 6px;
+            max-height: 200px;
+            overflow-y: auto;
+        }
+        .exchange-item {
+            background: var(--bg-secondary);
+            border: 1px solid var(--border);
+            border-radius: var(--radius-sm);
+            padding: 8px 4px;
+            text-align: center;
+        }
+        .exchange-item.ok {
+            border-color: var(--accent-green);
+            background: rgba(16,185,129,0.05);
+        }
+        .exchange-name {
+            font-size: 0.65rem;
+            font-weight: 600;
+            display: block;
+            margin-bottom: 4px;
+        }
+        .exchange-status {
+            font-size: 0.75rem;
+        }
 
-/* ===== RESPONSIVE GRID ===== */
-#leftCol { display: flex; flex-direction: column; gap: 16px; }
+        /* Chart Container */
+        #tvContainer {
+            width: 100%;
+            height: 400px;
+            background: var(--bg-secondary);
+            border-radius: var(--radius-lg);
+            overflow: hidden;
+        }
 
-/* ===== BOTTOM ROW ===== */
-#bottomRow {
-  display: grid;
-  grid-template-columns: 1fr 1fr;
-  gap: 16px;
-}
-#bottomRow2 {
-  display: grid;
-  grid-template-columns: 1fr 1fr;
-  gap: 16px;
-}
-@media (max-width: 600px) {
-  #bottomRow, #bottomRow2 { grid-template-columns: 1fr; }
-}
+        /* Flash Animation */
+        .flash {
+            animation: flash 0.3s ease;
+        }
+        @keyframes flash {
+            0%,100% { color: inherit; }
+            50% { color: var(--accent-cyan); }
+        }
 
-/* ===== STATUS ROW ===== */
-#statusRow {
-  display: flex; align-items: center; gap: 8px;
-  padding: 0 20px 12px;
-  max-width: 1600px; margin: 0 auto;
-}
-#statusRow .update-time { font-family:'Space Mono',monospace; font-size:0.72rem; color:var(--muted); margin-left: auto; }
-</style>
+        /* Loading States */
+        .loading {
+            position: relative;
+            pointer-events: none;
+            opacity: 0.7;
+        }
+        .loading::after {
+            content: '';
+            position: absolute;
+            top: 0;
+            left: 0;
+            right: 0;
+            bottom: 0;
+            background: rgba(0,0,0,0.1);
+        }
+
+        /* Empty States */
+        .empty-state {
+            color: var(--text-tertiary);
+            font-size: 0.85rem;
+            text-align: center;
+            padding: 20px;
+            border: 1px dashed var(--border);
+            border-radius: var(--radius-md);
+        }
+
+        /* Tooltip */
+        [data-tooltip] {
+            position: relative;
+            cursor: help;
+        }
+        [data-tooltip]:before {
+            content: attr(data-tooltip);
+            position: absolute;
+            bottom: 100%;
+            left: 50%;
+            transform: translateX(-50%);
+            padding: 4px 8px;
+            background: var(--bg-card);
+            border: 1px solid var(--border);
+            border-radius: var(--radius-sm);
+            font-size: 0.7rem;
+            white-space: nowrap;
+            opacity: 0;
+            pointer-events: none;
+            transition: opacity 0.2s;
+            z-index: 10;
+        }
+        [data-tooltip]:hover:before {
+            opacity: 1;
+        }
+
+        /* Responsive */
+        @media (max-width: 768px) {
+            .price-panel {
+                grid-template-columns: 1fr;
+            }
+            .pattern-grid {
+                grid-template-columns: 1fr;
+            }
+            .topbar {
+                flex-wrap: wrap;
+                height: auto;
+                padding: 10px;
+            }
+        }
+
+        /* Status Row */
+        .status-row {
+            display: flex;
+            align-items: center;
+            gap: 16px;
+            margin-bottom: 16px;
+            flex-wrap: wrap;
+        }
+
+        /* Chat Messages */
+        .chat-message {
+            background: var(--bg-secondary);
+            border: 1px solid var(--border);
+            border-radius: var(--radius-md);
+            padding: 12px;
+            margin-bottom: 8px;
+            font-size: 0.85rem;
+        }
+        .chat-message .chat-header {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            margin-bottom: 8px;
+            color: var(--accent-blue);
+            font-weight: 600;
+        }
+        .chat-message .warning {
+            color: var(--accent-yellow);
+            font-size: 0.75rem;
+            margin-top: 8px;
+        }
+    </style>
 </head>
 <body>
-
-<!-- TOPBAR -->
-<div id="topbar">
-  <div class="brand">ICT<span>SMART</span>PRO <span style="color:var(--muted);font-size:0.75rem;font-weight:600;">v9.0</span></div>
-  <div class="sep"></div>
-  <div class="pill green" id="backendPill"><div class="dot"></div><span>BACKEND</span></div>
-  <div class="pill muted" id="wsPill"><i class="fas fa-wifi"></i><span id="wsLabel">WSS BAĞLANIYOR</span></div>
-  <div class="spacer"></div>
-  <div class="clock" id="clockEl"></div>
-</div>
-
-<!-- STATUS ROW -->
-<div id="statusRow">
-  <span id="sourceCountBadge" class="pill blue"><i class="fas fa-server"></i> 0/4 Kaynak</span>
-  <span id="lastUpdateText" class="update-time">Son güncelleme: —</span>
-</div>
-
-<!-- MAIN APP -->
-<div id="app">
-
-  <!-- LEFT COLUMN -->
-  <div id="leftCol">
-
-    <!-- Controls -->
-    <div class="card">
-      <div class="card-head"><i class="fas fa-sliders-h"></i> ANALİZ KONTROLÜ</div>
-      <div id="controls">
-        <select id="symbolSelect">
-          <option value="BTC">BTC/USDT</option>
-          <option value="ETH">ETH/USDT</option>
-          <option value="SOL">SOL/USDT</option>
-          <option value="BNB">BNB/USDT</option>
-          <option value="XRP">XRP/USDT</option>
-          <option value="ADA">ADA/USDT</option>
-          <option value="DOGE">DOGE/USDT</option>
-          <option value="AVAX">AVAX/USDT</option>
-        </select>
-        <select id="intervalSelect">
-          <option value="1m">1 Dakika</option>
-          <option value="5m">5 Dakika</option>
-          <option value="15m">15 Dakika</option>
-          <option value="30m">30 Dakika</option>
-          <option value="1h" selected>1 Saat</option>
-          <option value="4h">4 Saat</option>
-          <option value="1d">1 Gün</option>
-          <option value="1w">1 Hafta</option>
-        </select>
-        <button class="btn btn-primary" id="analyzeBtn" onclick="analyzeSymbol()">
-          <i class="fas fa-search"></i> ANALİZ ET
-        </button>
-      </div>
-    </div>
-
-    <!-- Price + Signal -->
-    <div id="pricePanel">
-
-      <!-- Price Card -->
-      <div class="card price-card">
-        <div class="card-head"><i class="fas fa-dollar-sign"></i> CANLI FİYAT</div>
-        <div class="card-body">
-          <div class="price-sym" id="priceSymLabel">BTC / USDT</div>
-          <div class="price-val" id="priceEl">—</div>
-          <div class="price-chg flat" id="priceChgEl"><i class="fas fa-minus"></i> 0.00%</div>
-          <div class="stat-row" style="margin-top:12px">
-            <span class="label">24s Hacim</span>
-            <span class="val" id="volEl">—</span>
-          </div>
-          <div class="stat-row">
-            <span class="label">Kaynak Sayısı</span>
-            <span class="val" id="srcCountEl">—</span>
-          </div>
-          <div class="stat-row">
-            <span class="label">Yüksek / Düşük</span>
-            <span class="val" id="hiLoEl">— / —</span>
-          </div>
-        </div>
-      </div>
-
-      <!-- Signal Card -->
-      <div class="card">
-        <div class="card-head"><i class="fas fa-brain"></i> ML SİNYALİ</div>
-        <div class="card-body signal-wrap">
-          <div class="signal-label sig-default" id="signalLabel">ANALİZ BEKLENİYOR</div>
-          <div>
-            <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:4px">
-              <span style="font-size:0.75rem;color:var(--muted)">Güven</span>
-              <span class="conf-pct" id="confPct">%0</span>
+    <div class="app">
+        <!-- Topbar -->
+        <div class="topbar">
+            <div class="brand">
+                ICT<span>SMART</span>PRO <span style="font-size:0.8rem;color:var(--text-secondary);">v9.0</span>
             </div>
-            <div class="conf-bar-wrap"><div class="conf-bar" id="confBar" style="width:0%"></div></div>
-          </div>
-          <div class="rec-text" id="recText">—</div>
-          <div style="display:flex; justify-content:space-between; margin-top:12px; font-size:0.7rem;">
-            <span>TP: <span id="tpLevel">—</span></span>
-            <span>SL: <span id="slLevel">—</span></span>
-          </div>
-        </div>
-      </div>
-
-    </div>
-
-    <!-- TradingView Chart -->
-    <div class="card" id="chartSection">
-      <div class="card-head">
-        <i class="fas fa-chart-candlestick"></i> CANLI GRAFİK
-        <span class="badge" id="chartBadge">TradingView</span>
-      </div>
-      <div id="chartOuter">
-        <div id="tvContainer"></div>
-        <div id="chartSpinner">
-          <div class="spin-big"></div>
-          <p>Grafik yükleniyor...</p>
-        </div>
-      </div>
-    </div>
-
-    <!-- Heikin Ashi + Technical -->
-    <div id="bottomRow">
-      <!-- Heikin Ashi -->
-      <div class="card">
-        <div class="card-head"><i class="fas fa-chart-bar"></i> HEİKİN ASHİ</div>
-        <div class="card-body">
-          <div class="ind-grid">
-            <div class="ind-box">
-              <div class="ind-label">Trend</div>
-              <div class="ind-val" id="haTrend">—</div>
+            <div class="pill green" id="backendPill">
+                <span class="dot"></span>
+                <span>BACKEND</span>
             </div>
-            <div class="ind-box">
-              <div class="ind-label">RSI</div>
-              <div class="ind-val" id="haRsi">—</div>
+            <div class="pill" id="wsPill">
+                <i class="fas fa-wifi"></i>
+                <span id="wsLabel">BAĞLANIYOR</span>
             </div>
-            <div class="ind-box">
-              <div class="ind-label">Güç</div>
-              <div class="ind-val" id="haStr">—</div>
+            <div class="clock" id="clockEl"></div>
+        </div>
+
+        <!-- Status Row -->
+        <div class="status-row">
+            <div class="pill blue" id="sourceCountBadge">
+                <i class="fas fa-server"></i>
+                <span>0/5 Kaynak</span>
             </div>
-            <div class="ind-box">
-              <div class="ind-label">Renk</div>
-              <div class="ind-val" id="haColor">⚪</div>
+            <div class="pill yellow" id="patternCountBadge">
+                <i class="fas fa-chart-pie"></i>
+                <span>0 Pattern</span>
             </div>
-          </div>
-        </div>
-      </div>
-
-      <!-- Technical -->
-      <div class="card">
-        <div class="card-head"><i class="fas fa-flask"></i> TEKNİK GÖSTERGELER</div>
-        <div class="card-body">
-          <div id="techRows">
-            <div class="state-empty">Analiz bekleniyor...</div>
-          </div>
-        </div>
-      </div>
-    </div>
-
-    <!-- ICT Patterns + GainzAlgo/Ultimate -->
-    <div id="bottomRow2">
-      <!-- ICT Patterns -->
-      <div class="card">
-        <div class="card-head"><i class="fas fa-chess-knight"></i> ICT PATTERNS</div>
-        <div class="card-body">
-          <div class="ict-grid" id="ictGrid">
-            <div class="state-empty">Analiz bekleniyor...</div>
-          </div>
-        </div>
-      </div>
-
-      <!-- GainzAlgo & Ultimate -->
-      <div class="card">
-        <div class="card-head"><i class="fas fa-bolt"></i> ÖZEL STRATEJİLER</div>
-        <div class="card-body">
-          <div class="patterns-row" id="gainzAlgoRow">
-            <div class="pattern-card">
-              <div class="pattern-title">GAINZALGO V2</div>
-              <div class="pattern-price" id="gainzAlgoPrice">—</div>
-              <div class="pattern-tpsl">
-                <span>TP: <span id="gainzAlgoTp">—</span></span>
-                <span>SL: <span id="gainzAlgoSl">—</span></span>
-              </div>
+            <div class="pill purple" id="lastUpdateText">
+                <i class="far fa-clock"></i>
+                <span>Son güncelleme: —</span>
             </div>
-            <div class="pattern-card">
-              <div class="pattern-title">ULTIMATE 2026</div>
-              <div class="pattern-price" id="ultimatePrice">—</div>
-              <div class="pattern-tpsl">
-                <span>TP: <span id="ultimateTp">—</span></span>
-                <span>SL: <span id="ultimateSl">—</span></span>
-              </div>
+        </div>
+
+        <!-- Dashboard Grid -->
+        <div class="dashboard-grid">
+            <!-- Left Column -->
+            <div class="left-col">
+                <!-- Controls -->
+                <div class="card">
+                    <div class="card-header">
+                        <i class="fas fa-sliders-h"></i>
+                        <h3>Analiz Kontrolü</h3>
+                    </div>
+                    <div class="card-body">
+                        <div class="controls">
+                            <select id="symbolSelect">
+                                <option value="BTC">BTC/USDT</option>
+                                <option value="ETH">ETH/USDT</option>
+                                <option value="SOL">SOL/USDT</option>
+                                <option value="BNB">BNB/USDT</option>
+                                <option value="XRP">XRP/USDT</option>
+                                <option value="ADA">ADA/USDT</option>
+                                <option value="DOGE">DOGE/USDT</option>
+                                <option value="AVAX">AVAX/USDT</option>
+                                <option value="LINK">LINK/USDT</option>
+                                <option value="DOT">DOT/USDT</option>
+                            </select>
+                            <select id="intervalSelect">
+                                <option value="1m">1 Dakika</option>
+                                <option value="5m">5 Dakika</option>
+                                <option value="15m">15 Dakika</option>
+                                <option value="30m">30 Dakika</option>
+                                <option value="1h" selected>1 Saat</option>
+                                <option value="4h">4 Saat</option>
+                                <option value="1d">1 Gün</option>
+                                <option value="1w">1 Hafta</option>
+                            </select>
+                            <button class="btn-primary" id="analyzeBtn">
+                                <i class="fas fa-search"></i>
+                                ANALİZ ET
+                            </button>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Price Panel -->
+                <div class="price-panel">
+                    <!-- Live Price -->
+                    <div class="card">
+                        <div class="card-header">
+                            <i class="fas fa-dollar-sign"></i>
+                            <h3>Canlı Fiyat</h3>
+                        </div>
+                        <div class="card-body">
+                            <div style="color: var(--text-secondary); font-size:0.8rem; margin-bottom:4px;" id="priceSymLabel">BTC/USDT</div>
+                            <div class="price-value" id="priceEl">—</div>
+                            <div class="price-change flat" id="priceChgEl">
+                                <i class="fas fa-minus"></i>
+                                <span>0.00%</span>
+                            </div>
+                            <div class="stat-row">
+                                <span class="stat-label">24s Hacim</span>
+                                <span class="stat-value" id="volEl">—</span>
+                            </div>
+                            <div class="stat-row">
+                                <span class="stat-label">Yüksek / Düşük</span>
+                                <span class="stat-value" id="hiLoEl">— / —</span>
+                            </div>
+                            <div class="stat-row">
+                                <span class="stat-label">Aktif Kaynak</span>
+                                <span class="stat-value" id="srcCountEl">—</span>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Signal -->
+                    <div class="card">
+                        <div class="card-header">
+                            <i class="fas fa-brain"></i>
+                            <h3>ML Sinyali</h3>
+                        </div>
+                        <div class="card-body">
+                            <div class="signal-label sig-default" id="signalLabel">ANALİZ BEKLENİYOR</div>
+                            <div class="stat-row">
+                                <span class="stat-label">Güven</span>
+                                <span class="stat-value" id="confPct">0%</span>
+                            </div>
+                            <div class="confidence-bar">
+                                <div class="confidence-fill" id="confBar" style="width:0%"></div>
+                            </div>
+                            <div class="stat-row">
+                                <span class="stat-label">TP / SL</span>
+                                <span class="stat-value" id="tpSlLevel">— / —</span>
+                            </div>
+                            <div class="stat-row">
+                                <span class="stat-label">Sinyal Sayısı</span>
+                                <span class="stat-value" id="signalCounts">B0 S0</span>
+                            </div>
+                            <div style="margin-top:12px; color:var(--text-secondary); font-size:0.8rem;" id="recText">—</div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- TradingView Chart -->
+                <div class="card">
+                    <div class="card-header">
+                        <i class="fas fa-chart-line"></i>
+                        <h3>TradingView</h3>
+                        <span class="badge">Canlı</span>
+                    </div>
+                    <div id="tvContainer"></div>
+                </div>
+
+                <!-- Technical Analysis Grid -->
+                <div style="display:grid; grid-template-columns:repeat(2,1fr); gap:20px; margin-top:20px;">
+                    <!-- Technical Indicators -->
+                    <div class="card">
+                        <div class="card-header">
+                            <i class="fas fa-flask"></i>
+                            <h3>Technical Analysis</h3>
+                        </div>
+                        <div class="card-body">
+                            <div class="stat-row"><span class="stat-label">OPEN</span><span class="stat-value" id="techOpen">—</span></div>
+                            <div class="stat-row"><span class="stat-label">HIGH</span><span class="stat-value" id="techHigh">—</span></div>
+                            <div class="stat-row"><span class="stat-label">LOW</span><span class="stat-value" id="techLow">—</span></div>
+                            <div class="stat-row"><span class="stat-label">VOL 24H</span><span class="stat-value" id="techVol">—</span></div>
+                            <div class="stat-row"><span class="stat-label">RSI (14)</span><span class="stat-value" id="techRsi">—</span></div>
+                            <div class="stat-row"><span class="stat-label">MACD</span><span class="stat-value" id="techMacd">—</span></div>
+                            <div class="stat-row"><span class="stat-label">MACD Hist</span><span class="stat-value" id="techMacdHist">—</span></div>
+                            <div class="stat-row"><span class="stat-label">ATR %</span><span class="stat-value" id="techAtr">—</span></div>
+                            <div class="stat-row"><span class="stat-label">BB Position</span><span class="stat-value" id="techBbPos">—</span></div>
+                            <div class="stat-row"><span class="stat-label">BB Width</span><span class="stat-value" id="techBbWidth">—</span></div>
+                            <div class="stat-row"><span class="stat-label">EMA 20</span><span class="stat-value" id="techEma20">—</span></div>
+                            <div class="stat-row"><span class="stat-label">EMA 50</span><span class="stat-value" id="techEma50">—</span></div>
+                            <div class="stat-row"><span class="stat-label">Mom 5</span><span class="stat-value" id="techMom5">—</span></div>
+                            <div class="stat-row"><span class="stat-label">Mom 10</span><span class="stat-value" id="techMom10">—</span></div>
+                            <div class="stat-row"><span class="stat-label">Vol Ratio</span><span class="stat-value" id="techVolRatio">—</span></div>
+                            <div class="stat-row"><span class="stat-label">Data Points</span><span class="stat-value" id="techDataPoints">—</span></div>
+                        </div>
+                    </div>
+
+                    <!-- Pattern Detection -->
+                    <div class="card">
+                        <div class="card-header">
+                            <i class="fas fa-chart-pie"></i>
+                            <h3>Detected Patterns</h3>
+                        </div>
+                        <div class="card-body">
+                            <div class="pattern-grid">
+                                <div class="pattern-item">
+                                    <div class="pattern-type">ICT</div>
+                                    <div class="pattern-count" id="patternIct">0</div>
+                                    <div>
+                                        <span class="pattern-badge bull" id="patternIctBull">0</span>
+                                        <span class="pattern-badge bear" id="patternIctBear">0</span>
+                                    </div>
+                                </div>
+                                <div class="pattern-item">
+                                    <div class="pattern-type">Candle</div>
+                                    <div class="pattern-count" id="patternCandle">0</div>
+                                    <div>
+                                        <span class="pattern-badge bull" id="patternCandleBull">0</span>
+                                        <span class="pattern-badge bear" id="patternCandleBear">0</span>
+                                    </div>
+                                </div>
+                                <div class="pattern-item">
+                                    <div class="pattern-type">Classical</div>
+                                    <div class="pattern-count" id="patternClassical">0</div>
+                                    <div>
+                                        <span class="pattern-badge bull" id="patternClassicalBull">0</span>
+                                        <span class="pattern-badge bear" id="patternClassicalBear">0</span>
+                                    </div>
+                                </div>
+                                <div class="pattern-item">
+                                    <div class="pattern-type">SmartPro</div>
+                                    <div class="pattern-count" id="patternSmartPro">0</div>
+                                    <div>
+                                        <span class="pattern-badge bull" id="patternSmartProBull">0</span>
+                                        <span class="pattern-badge bear" id="patternSmartProBear">0</span>
+                                    </div>
+                                </div>
+                            </div>
+                            
+                            <div style="margin-top:16px;">
+                                <div class="stat-row">
+                                    <span class="stat-label">Toplam Pattern</span>
+                                    <span class="stat-value" id="totalPatterns">0</span>
+                                </div>
+                                <div class="stat-row">
+                                    <span class="stat-label">Bullish / Bearish</span>
+                                    <span class="stat-value" id="bullBearRatio">0 / 0</span>
+                                </div>
+                            </div>
+                            
+                            <div id="patternsList" style="margin-top:16px; min-height:60px;">
+                                <div class="empty-state">◈ No data — run analysis</div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Recommendation & Market Structure -->
+                <div style="display:grid; grid-template-columns:1fr 1fr; gap:20px; margin-top:20px;">
+                    <!-- Recommendation -->
+                    <div class="card">
+                        <div class="card-header">
+                            <i class="fas fa-lightbulb"></i>
+                            <h3>Recommendation</h3>
+                        </div>
+                        <div class="card-body">
+                            <div id="recommendationText" style="color:var(--text-secondary); font-size:0.9rem; line-height:1.6;">
+                                Run an analysis to see the recommendation...
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Market Structure -->
+                    <div class="card">
+                        <div class="card-header">
+                            <i class="fas fa-water"></i>
+                            <h3>Market Structure</h3>
+                        </div>
+                        <div class="card-body">
+                            <div class="ms-grid">
+                                <div class="ms-item"><span class="stat-label">Trend</span><span class="stat-value" id="msTrend">—</span></div>
+                                <div class="ms-item"><span class="stat-label">Strength</span><span class="stat-value" id="msStrength">—</span></div>
+                                <div class="ms-item"><span class="stat-label">Structure</span><span class="stat-value" id="msStruct">—</span></div>
+                                <div class="ms-item"><span class="stat-label">Momentum</span><span class="stat-value" id="msMomentum">—</span></div>
+                                <div class="ms-item"><span class="stat-label">Volatility</span><span class="stat-value" id="msVol">—</span></div>
+                                <div class="ms-item"><span class="stat-label">Vol Index</span><span class="stat-value" id="msVolIndex">—</span></div>
+                            </div>
+                            
+                            <div style="margin-top:16px;">
+                                <div style="color:var(--text-secondary); font-size:0.8rem; margin-bottom:8px;">Swing Points (last 5)</div>
+                                <div class="stat-row"><span class="stat-label">HH / HL (Bullish)</span><span class="stat-value" id="swingBull">—</span></div>
+                                <div class="stat-row"><span class="stat-label">LH / LL (Bearish)</span><span class="stat-value" id="swingBear">—</span></div>
+                            </div>
+                            
+                            <div style="margin-top:16px;">
+                                <div style="color:var(--text-secondary); font-size:0.8rem; margin-bottom:8px;">Support & Resistance</div>
+                                <div id="srZones" class="empty-state">No zones detected</div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
             </div>
-          </div>
+
+            <!-- Right Column -->
+            <div class="right-col">
+                <!-- Data Sources -->
+                <div class="card">
+                    <div class="card-header">
+                        <i class="fas fa-cloud"></i>
+                        <h3>Data Sources</h3>
+                        <span class="badge" id="exActiveBadge">0/5</span>
+                    </div>
+                    <div class="card-body">
+                        <div class="exchange-grid" id="exchangeGrid"></div>
+                    </div>
+                </div>
+
+                <!-- Heikin Ashi -->
+                <div class="card">
+                    <div class="card-header">
+                        <i class="fas fa-chart-bar"></i>
+                        <h3>Heikin Ashi</h3>
+                    </div>
+                    <div class="card-body">
+                        <div class="stat-row"><span class="stat-label">Trend</span><span class="stat-value" id="haTrend">—</span></div>
+                        <div class="stat-row"><span class="stat-label">RSI</span><span class="stat-value" id="haRsi">—</span></div>
+                        <div class="stat-row"><span class="stat-label">Güç</span><span class="stat-value" id="haStr">—</span></div>
+                        <div class="stat-row"><span class="stat-label">Renk Değişimi</span><span class="stat-value" id="haColor">⚪</span></div>
+                        <div class="stat-row"><span class="stat-label">Momentum</span><span class="stat-value" id="haMom">—</span></div>
+                    </div>
+                </div>
+
+                <!-- System Stats -->
+                <div class="card">
+                    <div class="card-header">
+                        <i class="fas fa-microchip"></i>
+                        <h3>System Stats</h3>
+                    </div>
+                    <div class="card-body">
+                        <div class="stat-row"><span class="stat-label">Uptime</span><span class="stat-value" id="sysUptime">—</span></div>
+                        <div class="stat-row"><span class="stat-label">Success Rate</span><span class="stat-value" id="sysSuccess">—</span></div>
+                        <div class="stat-row"><span class="stat-label">Total Req.</span><span class="stat-value" id="sysTotal">—</span></div>
+                        <div class="stat-row"><span class="stat-label">Active WS</span><span class="stat-value" id="sysWs">—</span></div>
+                        <div class="stat-row"><span class="stat-label">Cache TTL</span><span class="stat-value">45s</span></div>
+                    </div>
+                </div>
+
+                <!-- AI Assistant -->
+                <div class="card">
+                    <div class="card-header">
+                        <i class="fas fa-robot"></i>
+                        <h3>AI Assistant</h3>
+                    </div>
+                    <div class="card-body">
+                        <div id="chatBox" style="max-height:200px; overflow-y:auto; margin-bottom:12px;">
+                            <div class="empty-state">
+                                <i class="fas fa-info-circle"></i> Analiz yaptıktan sonra değerlendir butonuna tıklayın.
+                            </div>
+                        </div>
+                        <button class="btn-primary" style="width:100%;" onclick="evaluateAI()">
+                            <i class="fas fa-brain"></i> DEĞERLENDİR
+                        </button>
+                    </div>
+                </div>
+            </div>
         </div>
-      </div>
     </div>
 
-    <!-- Market Structure -->
-    <div class="card">
-      <div class="card-head"><i class="fas fa-water"></i> MARKET YAPISI</div>
-      <div class="card-body">
-        <div class="ms-rows" id="msRows">
-          <div class="ms-row"><span class="ms-label">Trend</span><span class="ms-val" id="msTrend">—</span></div>
-          <div class="ms-row"><span class="ms-label">Yapı</span><span class="ms-val" id="msStruct">—</span></div>
-          <div class="ms-row"><span class="ms-label">Volatilite</span><span class="ms-val" id="msVol">—</span></div>
-          <div class="ms-row"><span class="ms-label">Momentum</span><span class="ms-val" id="msMomentum">—</span></div>
-        </div>
-      </div>
-    </div>
-
-    <!-- Candlestick Patterns -->
-    <div class="card">
-      <div class="card-head"><i class="fas fa-candles"></i> MUM PATERNLERİ</div>
-      <div class="card-body">
-        <div class="pattern-chips" id="patternsEl">
-          <span class="state-empty">—</span>
-        </div>
-      </div>
-    </div>
-
-    <!-- Classical Patterns -->
-    <div class="card">
-      <div class="card-head"><i class="fas fa-landmark"></i> KLASİK FORMASYONLAR</div>
-      <div class="card-body">
-        <div class="pattern-chips" id="classicalPatternsEl">
-          <span class="state-empty">—</span>
-        </div>
-      </div>
-    </div>
-
-  </div><!-- /leftCol -->
-
-  <!-- RIGHT COLUMN -->
-  <div id="rightCol">
-
-    <!-- ML Models -->
-    <div class="card">
-      <div class="card-head"><i class="fas fa-microchip"></i> ML MODELLERİ</div>
-      <div class="card-body">
-        <div class="ml-model">
-          <div class="ml-row"><span class="ml-name">LightGBM</span><span class="ml-pct" id="lgbmPct">0%</span></div>
-          <div class="ml-bar-bg"><div class="ml-bar info" id="lgbmBar" style="width:0%"></div></div>
-        </div>
-        <div class="ml-model">
-          <div class="ml-row"><span class="ml-name">XGBoost</span><span class="ml-pct" id="xgbPct">0%</span></div>
-          <div class="ml-bar-bg"><div class="ml-bar succ" id="xgbBar" style="width:0%"></div></div>
-        </div>
-        <div class="ml-model">
-          <div class="ml-row"><span class="ml-name">Transformer</span><span class="ml-pct" id="tfPct">0%</span></div>
-          <div class="ml-bar-bg"><div class="ml-bar purp" id="tfBar" style="width:0%"></div></div>
-        </div>
-        <div class="ml-model">
-          <div class="ml-row"><span class="ml-name">Random Forest</span><span class="ml-pct" id="rfPct">0%</span></div>
-          <div class="ml-bar-bg"><div class="ml-bar warn" id="rfBar" style="width:0%"></div></div>
-        </div>
-        <button class="btn btn-outline" style="width:100%;margin-top:14px;justify-content:center" id="trainBtn" onclick="trainModels()">
-          <i class="fas fa-sync-alt"></i> Modelleri Eğit
-        </button>
-      </div>
-    </div>
-
-    <!-- Data Pool -->
-    <div class="card">
-      <div class="card-head"><i class="fas fa-database"></i> VERİ HAVUZU</div>
-      <div class="card-body">
-        <div class="pool-stat"><span class="ps-label">Toplam Kaynak</span><span class="ps-val">4</span></div>
-        <div class="pool-stat"><span class="ps-label">Aktif Kaynak</span><span class="ps-val text-green" id="poolActive">—</span></div>
-        <div class="pool-stat"><span class="ps-label">Başarısız</span><span class="ps-val text-red" id="poolFail">—</span></div>
-        <div class="pool-stat"><span class="ps-label">Cache TTL</span><span class="ps-val">45s</span></div>
-        <div class="pool-stat"><span class="ps-label">Data Points</span><span class="ps-val" id="dataPoints">—</span></div>
-        <div class="health-bar"><div class="health-fill" id="healthFill" style="width:0%"></div></div>
-        <div style="font-size:0.72rem;color:var(--muted)" id="poolUpdate">—</div>
-      </div>
-    </div>
-
-    <!-- Exchange Status -->
-    <div class="card">
-      <div class="card-head">
-        <i class="fas fa-cloud"></i> KAYNAK DURUMU
-        <span class="badge" id="exActiveBadge">0/4</span>
-      </div>
-      <div class="card-body" style="padding:10px">
-        <div id="exchangeGrid"></div>
-      </div>
-    </div>
-
-    <!-- AI Assistant -->
-    <div class="card">
-      <div class="card-head"><i class="fas fa-robot"></i> AI ASİSTAN</div>
-      <div class="card-body">
-        <div id="chatBox">
-          <div class="chat-empty"><i class="fas fa-info-circle"></i> Analiz yaptıktan sonra "Değerlendir" butonuna tıklayın.</div>
-        </div>
-        <button class="btn btn-primary" style="width:100%;justify-content:center" onclick="evaluateAI()">
-          <i class="fas fa-brain"></i> DEĞERLENDİR
-        </button>
-      </div>
-    </div>
-
-  </div><!-- /rightCol -->
-
-</div><!-- /app -->
-
-<script>
-// =============================================
-//  CONSTANTS
-// =============================================
-const EXCHANGES = [
-  "Kraken", "Binance", "MEXC", "Yahoo"
-];
-
-// =============================================
-//  STATE
-// =============================================
-let state = {
-  ws: null, wsRetries: 0,
-  tvWidget: null, chartReady: false,
-  currentData: null,
-  lastPrice: null
-};
-
-// =============================================
-//  UTILS
-// =============================================
-function fmt(n, d = 2) {
-  if (n === null || n === undefined || isNaN(n)) return '—';
-  return Number(n).toLocaleString('tr-TR', { minimumFractionDigits: d, maximumFractionDigits: d });
-}
-function fmtVol(v) {
-  if (!v || isNaN(v)) return '—';
-  if (v >= 1e9) return (v / 1e9).toFixed(2) + 'B';
-  if (v >= 1e6) return (v / 1e6).toFixed(2) + 'M';
-  if (v >= 1e3) return (v / 1e3).toFixed(2) + 'K';
-  return Number(v).toFixed(2);
-}
-function fmtTime(d) {
-  d = d || new Date();
-  return d.toLocaleTimeString('tr-TR', { hour: '2-digit', minute: '2-digit', second: '2-digit' });
-}
-function fmtPrice(p) {
-  if (!p) return '—';
-  if (p >= 10000) return '$' + fmt(p, 0);
-  if (p >= 1)     return '$' + fmt(p, 2);
-  return '$' + Number(p).toFixed(6);
-}
-function clamp(v, lo, hi) { return Math.min(hi, Math.max(lo, v)); }
-
-const $ = id => document.getElementById(id);
-const set = (id, val) => { const el = $(id); if (el) el.textContent = val; };
-const setHTML = (id, val) => { const el = $(id); if (el) el.innerHTML = val; };
-
-// =============================================
-//  CLOCK
-// =============================================
-function tickClock() { $('clockEl').textContent = fmtTime(); }
-setInterval(tickClock, 1000); tickClock();
-
-// =============================================
-//  EXCHANGE GRID
-// =============================================
-function buildExchangeGrid() {
-  const grid = $('exchangeGrid');
-  if (!grid) return;
-  grid.innerHTML = EXCHANGES.map(ex => {
-    const id = 'ex_' + ex.toLowerCase().replace(/[^a-z0-9]/g, '');
-    return `<div class="ex-item" id="${id}">
-      <span class="ex-name">${ex}</span>
-      <span class="ex-status" id="${id}_s">⏳</span>
-    </div>`;
-  }).join('');
-}
-
-function updateExchangeGrid(stats) {
-  if (!stats || typeof stats !== 'object') return;
-  let active = 0, fail = 0;
-  for (const [name, data] of Object.entries(stats)) {
-    const id = 'ex_' + name.toLowerCase().replace(/[^a-z0-9]/g, '');
-    const el = $(id), st = $(id + '_s');
-    if (!el || !st) continue;
-    const ok = (data.success || 0) > 0;
-    const ko = (data.fail    || 0) > 0 && !ok;
-    el.className = 'ex-item' + (ok ? ' ok' : ko ? ' err' : '');
-    st.textContent = ok ? '✅' : ko ? '❌' : '⏳';
-    if (ok) active++;
-    if (ko) fail++;
-  }
-  $('exActiveBadge').textContent = `${active}/4`;
-  $('sourceCountBadge').innerHTML = `<i class="fas fa-server"></i> ${active}/4 Kaynak`;
-  set('poolActive', active);
-  set('poolFail', fail);
-  const health = active > 0 ? clamp((active / 4) * 100, 0, 100) : 0;
-  $('healthFill').style.width = health + '%';
-  $('poolUpdate').textContent = 'Güncellendi: ' + fmtTime();
-}
-
-// =============================================
-//  TRADINGVIEW
-// =============================================
-const TV_INTERVAL_MAP = {
-  '1m':'1','5m':'5','15m':'15','30m':'30',
-  '1h':'60','4h':'240','1d':'D','1w':'W'
-};
-
-function initTradingView() {
-  const sym      = $('symbolSelect').value;
-  const interval = TV_INTERVAL_MAP[$('intervalSelect').value] || '60';
-  const container = $('tvContainer');
-  if (!container) return;
-
-  if (state.tvWidget) {
-    try { state.tvWidget.remove(); } catch(e) {}
-    state.tvWidget = null;
-  }
-  container.innerHTML = '';
-  $('chartSpinner').classList.remove('hidden');
-  state.chartReady = false;
-
-  if (typeof TradingView === 'undefined') {
-    setTimeout(initTradingView, 800);
-    return;
-  }
-
-  try {
-    state.tvWidget = new TradingView.widget({
-      autosize:         true,
-      symbol:           `BINANCE:${sym}USDT`,
-      interval:         interval,
-      timezone:         'Europe/Istanbul',
-      theme:            'dark',
-      style:            '1',
-      locale:           'tr',
-      toolbar_bg:       '#0e1420',
-      enable_publishing: false,
-      allow_symbol_change: true,
-      hide_top_toolbar:  false,
-      hide_side_toolbar: false,
-      studies: ['RSI@tv-basicstudies','MACD@tv-basicstudies'],
-      container_id:     'tvContainer',
-      overrides: {
-        'paneProperties.background':              '#0e1420',
-        'paneProperties.vertGridProperties.color':'#1e2d45',
-        'paneProperties.horzGridProperties.color':'#1e2d45',
-      },
-      disabled_features: [
-        'header_saveload','header_undo_redo','header_screenshot',
-        'timeframes_toolbar'
-      ],
-      onready: () => {
-        state.chartReady = true;
-        setTimeout(() => {
-          $('chartSpinner').classList.add('hidden');
-        }, 400);
-      }
-    });
-  } catch(e) {
-    console.error('TradingView init error:', e);
-    $('chartSpinner').classList.add('hidden');
-  }
-
-  setTimeout(() => $('chartSpinner').classList.add('hidden'), 6000);
-}
-
-// =============================================
-//  WEBSOCKET
-// =============================================
-function connectWS() {
-  const sym = $('symbolSelect').value + 'USDT';
-  
-  const wsProtocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
-  const url = `${wsProtocol}//${window.location.host}/wss/${sym}`;
-  
-  console.log('🔌 WebSocket bağlanıyor:', url);
-
-  if (state.ws) {
-    try { state.ws.close(); } catch(e) {}
-    state.ws = null;
-  }
-
-  try {
-    const ws = new WebSocket(url);
-    state.ws = ws;
-
-    ws.onopen = () => {
-      state.wsRetries = 0;
-      setPill('wsPill','green','BAĞLANDI');
-      set('wsLabel', 'BAĞLANDI');
-      console.log('✅ WebSocket bağlantısı başarılı');
-    };
-
-    ws.onmessage = (e) => {
-      try {
-        const d = JSON.parse(e.data);
-        if (d.type === 'price') renderWSPrice(d);
-      } catch {}
-    };
-
-    ws.onerror = (e) => {
-      console.error('❌ WebSocket hatası:', e);
-      setPill('wsPill','red','HATA');
-    };
-
-    ws.onclose = () => {
-      console.log('WebSocket kapandı');
-      setPill('wsPill','muted','KAPALI');
-      set('wsLabel','KAPALI');
-      if (state.wsRetries < 8) {
-        state.wsRetries++;
-        setTimeout(connectWS, 3000 + state.wsRetries * 1000);
-      }
-    };
-  } catch(e) {
-    console.error('WS error:', e);
-  }
-}
-
-function setPill(id, cls, label) {
-  const el = $(id);
-  if (!el) return;
-  el.className = 'pill ' + cls;
-  const sp = el.querySelector('span');
-  if (sp) sp.textContent = label;
-}
-
-function renderWSPrice(d) {
-  const price = d.price;
-
-  const priceEl = $('priceEl');
-  if (state.lastPrice !== price) {
-    priceEl.classList.remove('flash');
-    void priceEl.offsetWidth;
-    priceEl.classList.add('flash');
-    state.lastPrice = price;
-  }
-  priceEl.textContent = fmtPrice(price);
-
-  set('lastUpdateText', 'Son güncelleme: ' + fmtTime());
-}
-
-// =============================================
-//  ANALYZE
-// =============================================
-async function analyzeSymbol() {
-  const sym      = $('symbolSelect').value + 'USDT';
-  const interval = $('intervalSelect').value;
-  const btn      = $('analyzeBtn');
-
-  btn.innerHTML = '<div class="spinner"></div> Analiz Ediliyor...';
-  btn.disabled = true;
-
-  set('lastUpdateText', 'Son güncelleme: Analiz yapılıyor...');
-
-  try {
-    const res = await fetch(`/api/analyze/${sym}?interval=${interval}&limit=200`);
-    
-    set('lastUpdateText', 'Son güncelleme: ' + fmtTime());
-
-    if (!res.ok) {
-      const errorText = await res.text();
-      throw new Error(`HTTP ${res.status}: ${errorText}`);
-    }
-    
-    const data = await res.json();
-    if (!data.success) throw new Error(data.detail || 'Başarısız');
-    
-    state.currentData = data;
-    renderDashboard(data);
-    
-  } catch(e) {
-    console.error('Analyze error:', e);
-    
-    $('signalLabel').textContent = 'HATA: ' + (e.message || 'Sunucu yanıtı alınamadı');
-    $('signalLabel').className = 'signal-label sig-NEUTRAL';
-    
-    const errEl = $('lastUpdateText');
-    errEl.textContent = 'Son güncelleme: HATA – ' + fmtTime();
-    errEl.style.color = 'var(--red)';
-    
-  } finally {
-    btn.innerHTML = '<i class="fas fa-search"></i> ANALİZ ET';
-    btn.disabled = false;
-  }
-}
-
-// =============================================
-//  RENDER DASHBOARD
-// =============================================
-function renderDashboard(d) {
-  if (!d) return;
-
-  // Symbol label
-  const sym = (d.symbol || 'BTC/USDT').replace('USDT', ' / USDT');
-  set('priceSymLabel', sym);
-
-  // Price
-  if (d.price) {
-    const pd = d.price;
-    const priceEl = $('priceEl');
-    priceEl.textContent = fmtPrice(pd.current);
-    priceEl.classList.remove('flash');
-    void priceEl.offsetWidth;
-    priceEl.classList.add('flash');
-
-    const chgEl = $('priceChgEl');
-    if (pd.change_percent !== undefined) {
-      const chg = pd.change_percent;
-      if (chg > 0) {
-        chgEl.className = 'price-chg up';
-        chgEl.innerHTML = `<i class="fas fa-arrow-up"></i> +${chg.toFixed(2)}%`;
-      } else if (chg < 0) {
-        chgEl.className = 'price-chg down';
-        chgEl.innerHTML = `<i class="fas fa-arrow-down"></i> ${chg.toFixed(2)}%`;
-      } else {
-        chgEl.className = 'price-chg flat';
-        chgEl.innerHTML = `<i class="fas fa-minus"></i> 0.00%`;
-      }
-    }
-
-    if (pd.volume_24h_approx !== undefined) set('volEl', fmtVol(pd.volume_24h_approx));
-    if (d.active_sources) set('srcCountEl', d.active_sources.length);
-    if (pd.high && pd.low) set('hiLoEl', `${fmtPrice(pd.high)} / ${fmtPrice(pd.low)}`);
-  }
-
-  // Signal
-  if (d.signal) {
-    const s = d.signal;
-    const sig = (s.signal || 'NEUTRAL').toUpperCase();
-    const conf = Number(s.confidence || 0);
-    const lbl = $('signalLabel');
-    lbl.textContent = sig.replace(/_/g, ' ');
-    lbl.className = 'signal-label sig-' + sig;
-    $('confBar').style.width = clamp(conf, 0, 100) + '%';
-    set('confPct', '%' + Math.round(conf));
-    set('recText', s.recommendation || '—');
-    
-    if (s.tp_level) set('tpLevel', fmtPrice(s.tp_level));
-    if (s.sl_level) set('slLevel', fmtPrice(s.sl_level));
-  }
-
-  // Heikin Ashi
-  if (d.technical) {
-    const t = d.technical;
-
-    const haColorVal = t.ha_color_change === 1 ? '🟢' : t.ha_color_change === -1 ? '🔴' : '⚪';
-    set('haTrend', t.ha_trend || '—');
-    set('haRsi',   t.ha_rsi   ? fmt(t.ha_rsi, 1) : '—');
-    set('haStr',   t.ha_trend_strength ? fmt(t.ha_trend_strength, 0) + '%' : '—');
-    set('haColor', haColorVal);
-
-    const rows = [];
-    if (t.rsi !== undefined)      rows.push(['RSI', fmt(t.rsi, 1), rsiColor(t.rsi)]);
-    if (t.macd_histogram !== undefined) rows.push(['MACD Hist.', (t.macd_histogram >= 0 ? '+' : '') + fmt(t.macd_histogram, 5), t.macd_histogram >= 0 ? 'text-green' : 'text-red']);
-    if (t.bb_position !== undefined) rows.push(['Bollinger %', fmt(t.bb_position, 1) + '%', '']);
-    if (t.volume_ratio !== undefined) rows.push(['Hacim Oranı', fmt(t.volume_ratio, 2) + 'x', t.volume_ratio > 1.5 ? 'text-green' : '']);
-    if (t.atr !== undefined)      rows.push(['ATR', fmt(t.atr, 4), 'text-amber']);
-    if (t.sma_20 !== undefined)   rows.push(['SMA 20', fmtPrice(t.sma_20), 'text-blue']);
-    if (t.sma_50 !== undefined)   rows.push(['SMA 50', fmtPrice(t.sma_50), 'text-blue']);
-
-    if (rows.length) {
-      setHTML('techRows', rows.map(([lbl, val, cls]) =>
-        `<div class="stat-row"><span class="label">${lbl}</span><span class="val ${cls}">${val}</span></div>`
-      ).join(''));
-    } else {
-      setHTML('techRows', '<span class="state-empty">Veri yok</span>');
-    }
-  }
-
-  // ICT Patterns
-  if (d.ict_patterns) {
-    const ict = d.ict_patterns;
-    const html = [];
-    
-    if (ict.fair_value_gaps && ict.fair_value_gaps.length) {
-      const fvg = ict.fair_value_gaps[0];
-      html.push(`<div class="ict-item"><div class="ict-type">FVG</div><div class="ict-val text-${fvg.direction === 'bullish' ? 'green' : 'red'}">${fvg.direction.toUpperCase()}</div><div class="ict-sub">${fmt(fvg.gap_percent, 2)}%</div></div>`);
-    } else {
-      html.push(`<div class="ict-item"><div class="ict-type">FVG</div><div class="ict-val">—</div></div>`);
-    }
-    
-    if (ict.order_blocks && ict.order_blocks.length) {
-      const ob = ict.order_blocks[0];
-      html.push(`<div class="ict-item"><div class="ict-type">OB</div><div class="ict-val text-${ob.direction === 'bullish' ? 'green' : 'red'}">${ob.direction.toUpperCase()}</div></div>`);
-    } else {
-      html.push(`<div class="ict-item"><div class="ict-type">OB</div><div class="ict-val">—</div></div>`);
-    }
-    
-    if (ict.break_of_structure && ict.break_of_structure.length) {
-      const bos = ict.break_of_structure[0];
-      html.push(`<div class="ict-item"><div class="ict-type">BOS</div><div class="ict-val text-${bos.direction === 'bullish' ? 'green' : 'red'}">${bos.direction.toUpperCase()}</div></div>`);
-    } else {
-      html.push(`<div class="ict-item"><div class="ict-type">BOS</div><div class="ict-val">—</div></div>`);
-    }
-    
-    if (ict.change_of_character && ict.change_of_character.length) {
-      const choch = ict.change_of_character[0];
-      html.push(`<div class="ict-item"><div class="ict-type">CHoCH</div><div class="ict-val text-${choch.direction === 'bullish' ? 'green' : 'red'}">${choch.direction.toUpperCase()}</div></div>`);
-    } else {
-      html.push(`<div class="ict-item"><div class="ict-type">CHoCH</div><div class="ict-val">—</div></div>`);
-    }
-    
-    if (ict.liquidity_sweeps && ict.liquidity_sweeps.length) {
-      const ls = ict.liquidity_sweeps[0];
-      const dir = ls.direction.includes('bullish') ? 'bullish' : 'bearish';
-      html.push(`<div class="ict-item"><div class="ict-type">LIQ SWP</div><div class="ict-val text-${dir === 'bullish' ? 'green' : 'red'}">${dir.toUpperCase()}</div></div>`);
-    } else {
-      html.push(`<div class="ict-item"><div class="ict-type">LIQ SWP</div><div class="ict-val">—</div></div>`);
-    }
-    
-    setHTML('ictGrid', html.join(''));
-  } else {
-    setHTML('ictGrid', '<div class="state-empty">ICT verisi yok</div>');
-  }
-
-  // GainzAlgo & Ultimate
-  if (d.gainzalgo_signals && d.gainzalgo_signals.length) {
-    const g = d.gainzalgo_signals[0];
-    $('gainzAlgoPrice').innerHTML = `${g.direction === 'bullish' ? '🟢' : '🔴'} ${fmtPrice(g.price)}`;
-    if (g.tp_level) set('gainzAlgoTp', fmtPrice(g.tp_level));
-    if (g.sl_level) set('gainzAlgoSl', fmtPrice(g.sl_level));
-  } else {
-    $('gainzAlgoPrice').innerHTML = '—';
-    set('gainzAlgoTp', '—');
-    set('gainzAlgoSl', '—');
-  }
-
-  if (d.ultimate_signals && d.ultimate_signals.length) {
-    const u = d.ultimate_signals[0];
-    $('ultimatePrice').innerHTML = `${u.direction === 'bullish' ? '🟢' : '🔴'} ${fmtPrice(u.price)}`;
-    if (u.tp_level) set('ultimateTp', fmtPrice(u.tp_level));
-    if (u.sl_level) set('ultimateSl', fmtPrice(u.sl_level));
-  } else {
-    $('ultimatePrice').innerHTML = '—';
-    set('ultimateTp', '—');
-    set('ultimateSl', '—');
-  }
-
-  // Candlestick Patterns
-  if (d.candle_patterns && d.candle_patterns.length > 0) {
-    setHTML('patternsEl', d.candle_patterns.slice(0, 10).map(p => {
-      const cls = p.direction === 'bullish' ? 'bull' : p.direction === 'bearish' ? 'bear' : 'neut';
-      return `<span class="chip ${cls}">${p.pattern.replace(/_/g, ' ')}</span>`;
-    }).join(''));
-  } else {
-    setHTML('patternsEl', '<span class="state-empty">Patern bulunamadı</span>');
-  }
-
-  // Classical Patterns
-  if (d.classical_patterns && d.classical_patterns.length > 0) {
-    setHTML('classicalPatternsEl', d.classical_patterns.slice(0, 10).map(p => {
-      const cls = p.direction === 'bullish' ? 'bull' : p.direction === 'bearish' ? 'bear' : 'neut';
-      return `<span class="chip ${cls}">${p.pattern.replace(/_/g, ' ')}</span>`;
-    }).join(''));
-  } else {
-    setHTML('classicalPatternsEl', '<span class="state-empty">Formasyon bulunamadı</span>');
-  }
-
-  // Market structure
-  if (d.market_structure) {
-    const ms = d.market_structure;
-    set('msTrend',  ms.trend      || '—');
-    set('msStruct', ms.structure  || '—');
-    set('msVol',    ms.volatility || '—');
-    set('msMomentum', ms.momentum  || '—');
-  }
-
-  // Data points
-  if (d.data_points) {
-    set('dataPoints', d.data_points);
-  }
-
-  // Update time
-  set('lastUpdateText', 'Son güncelleme: ' + fmtTime());
-
-  // Fetch exchange stats after analysis
-  fetchExchangeStats();
-}
-
-function rsiColor(v) {
-  if (v >= 70) return 'text-red';
-  if (v <= 30) return 'text-green';
-  return '';
-}
-
-// =============================================
-//  EXCHANGE STATS
-// =============================================
-async function fetchExchangeStats() {
-  try {
-    const res = await fetch('/api/exchange-stats');
-    if (!res.ok) return;
-    const d = await res.json();
-    if (d.success && d.stats) updateExchangeGrid(d.stats);
-  } catch(e) {
-    console.error('Exchange stats error:', e);
-  }
-}
-
-// =============================================
-//  TRAIN
-// =============================================
-async function trainModels() {
-  const sym = $('symbolSelect').value + 'USDT';
-  const btn = $('trainBtn');
-  btn.innerHTML = '<div class="spinner"></div> Eğitiliyor...';
-  btn.disabled = true;
-  try {
-    const res = await fetch(`/api/train/${sym}`, { method: 'POST' });
-    if (res.ok) {
-      btn.innerHTML = '<i class="fas fa-check"></i> Tamamlandı!';
-      setTimeout(analyzeSymbol, 1500);
-    } else {
-      btn.innerHTML = '<i class="fas fa-times"></i> Hata';
-    }
-  } catch(e) {
-    btn.innerHTML = '<i class="fas fa-times"></i> Bağlantı Hatası';
-  } finally {
-    setTimeout(() => {
-      btn.innerHTML = '<i class="fas fa-sync-alt"></i> Modelleri Eğit';
-      btn.disabled = false;
-    }, 3000);
-  }
-}
-
-// =============================================
-//  AI EVALUATE
-// =============================================
-function evaluateAI() {
-  const d = state.currentData;
-  if (!d) {
-    alert('Önce analiz yapın.');
-    return;
-  }
-  const chatBox = $('chatBox');
-  const sig     = d.signal?.signal || 'NEUTRAL';
-  const conf    = d.signal?.confidence || 0;
-  const price   = d.price?.current || 0;
-  const rsi     = d.technical?.rsi || 50;
-  const rec     = d.signal?.recommendation || '';
-  const trend   = d.market_structure?.trend || '—';
-  const vol     = d.market_structure?.volatility || '—';
-
-  const ictCount = (d.ict_patterns?.fair_value_gaps?.length || 0) +
-                   (d.ict_patterns?.order_blocks?.length || 0) +
-                   (d.ict_patterns?.break_of_structure?.length || 0) +
-                   (d.ict_patterns?.liquidity_sweeps?.length || 0);
-
-  const classicalCount = d.classical_patterns?.length || 0;
-  const candleCount = d.candle_patterns?.length || 0;
-  const gainzCount = d.gainzalgo_signals?.length || 0;
-  const ultCount = d.ultimate_signals?.length || 0;
-  const totalPatterns = ictCount + classicalCount + candleCount + gainzCount + ultCount;
-
-  let comment = '';
-  if (conf > 75) comment = '🔥 Yüksek güven seviyesi – sinyal güçlü görünüyor.';
-  else if (conf > 60) comment = '✅ Orta güven – ek teyit önerilir.';
-  else comment = '⚠️ Düşük güven – temkinli yaklaşılmalı.';
-  
-  if (ictCount > 3) comment += ' Yoğun ICT pattern aktivitesi.';
-  if (gainzCount > 0) comment += ' GainzAlgo sinyali mevcut.';
-  if (ultCount > 0) comment += ' Ultimate 2026 sinyali mevcut.';
-
-  const div = document.createElement('div');
-  div.className = 'chat-msg';
-  div.innerHTML = `
-    <div class="chat-head"><i class="fas fa-robot"></i> AI Özeti</div>
-    <div><b>Sinyal:</b> ${sig.replace(/_/g,' ')} (%${Math.round(conf)})</div>
-    <div><b>Fiyat:</b> ${fmtPrice(price)} | <b>RSI:</b> ${(+rsi).toFixed(1)}</div>
-    <div><b>Trend:</b> ${trend} | <b>Volatilite:</b> ${vol}</div>
-    <div><b>Toplam Pattern:</b> ${totalPatterns} (ICT:${ictCount} Klasik:${classicalCount} Mum:${candleCount})</div>
-    ${rec ? `<div><b>Öneri:</b> ${rec}</div>` : ''}
-    <div style="margin-top:6px;color:var(--cyan)">${comment}</div>
-    <div class="chat-warn"><i class="fas fa-triangle-exclamation"></i> Bu bir yatırım tavsiyesi değildir.</div>
-  `;
-  
-  const empty = chatBox.querySelector('.chat-empty');
-  if (empty) empty.remove();
-
-  chatBox.appendChild(div);
-  chatBox.scrollTop = chatBox.scrollHeight;
-}
-
-// =============================================
-//  EVENT LISTENERS
-// =============================================
-$('symbolSelect').addEventListener('change', () => {
-  initTradingView();
-  connectWS();
-  analyzeSymbol();
-});
-
-$('intervalSelect').addEventListener('change', () => {
-  initTradingView();
-  analyzeSymbol();
-});
-
-// =============================================
-//  INIT
-// =============================================
-async function init() {
-  buildExchangeGrid();
-
-  try {
-    const r = await fetch('/health');
-    if (r.ok) {
-      setPill('backendPill', 'green', 'BACKEND');
-    } else {
-      setPill('backendPill', 'red', 'BACKEND HATA');
-    }
-  } catch {
-    setPill('backendPill', 'red', 'BAĞLANTI YOK');
-  }
-
-  setTimeout(initTradingView, 100);
-  connectWS();
-  setTimeout(analyzeSymbol, 800);
-  setInterval(fetchExchangeStats, 30_000);
-}
-
-window.addEventListener('load', init);
-</script>
+    <script>
+        // =============================================
+        // CONSTANTS
+        // =============================================
+        const EXCHANGES = [
+            "Kraken", "Binance", "MEXC", "Bybit", "Yahoo"
+        ];
+
+        // =============================================
+        // STATE
+        // =============================================
+        let state = {
+            ws: null,
+            wsRetries: 0,
+            tvWidget: null,
+            currentData: null,
+            lastPrice: null,
+            uptimeInterval: null,
+            stats: null
+        };
+
+        // =============================================
+        // UTILS
+        // =============================================
+        function fmtNumber(n, d = 2) {
+            if (n === null || n === undefined || isNaN(n)) return '—';
+            return Number(n).toLocaleString('tr-TR', { 
+                minimumFractionDigits: d, 
+                maximumFractionDigits: d 
+            });
+        }
+
+        function fmtPrice(p) {
+            if (!p || isNaN(p)) return '—';
+            if (p >= 1000000) return '$' + (p / 1000000).toFixed(2) + 'M';
+            if (p >= 1000) return '$' + (p / 1000).toFixed(2) + 'K';
+            if (p >= 1) return '$' + fmtNumber(p, 2);
+            if (p >= 0.0001) return '$' + p.toFixed(6);
+            return '$' + p.toFixed(8);
+        }
+
+        function fmtVolume(v) {
+            if (!v || isNaN(v)) return '—';
+            if (v >= 1e9) return (v / 1e9).toFixed(2) + 'B';
+            if (v >= 1e6) return (v / 1e6).toFixed(2) + 'M';
+            if (v >= 1e3) return (v / 1e3).toFixed(2) + 'K';
+            return v.toFixed(2);
+        }
+
+        function fmtPercent(v) {
+            if (!v || isNaN(v)) return '—';
+            return (v > 0 ? '+' : '') + v.toFixed(2) + '%';
+        }
+
+        function fmtTime() {
+            const d = new Date();
+            return d.toLocaleTimeString('tr-TR', { 
+                hour: '2-digit', 
+                minute: '2-digit', 
+                second: '2-digit' 
+            });
+        }
+
+        function clamp(value, min, max) {
+            return Math.min(max, Math.max(min, value));
+        }
+
+        const $ = id => document.getElementById(id);
+        const setText = (id, val) => { 
+            const el = $(id); 
+            if (el) el.textContent = val; 
+        };
+        const setHtml = (id, val) => { 
+            const el = $(id); 
+            if (el) el.innerHTML = val; 
+        };
+
+        // =============================================
+        // CLOCK
+        // =============================================
+        function updateClock() {
+            $('clockEl').textContent = fmtTime();
+        }
+        setInterval(updateClock, 1000);
+        updateClock();
+
+        // =============================================
+        // PILL STATUS
+        // =============================================
+        function setPill(id, color, label) {
+            const el = $(id);
+            if (!el) return;
+            
+            el.className = 'pill ' + color;
+            const span = el.querySelector('span');
+            if (span) span.textContent = label;
+        }
+
+        // =============================================
+        // EXCHANGE GRID
+        // =============================================
+        function buildExchangeGrid() {
+            const grid = $('exchangeGrid');
+            if (!grid) return;
+            
+            grid.innerHTML = EXCHANGES.map(ex => {
+                const id = 'ex_' + ex.toLowerCase().replace(/[^a-z0-9]/g, '');
+                return `
+                    <div class="exchange-item" id="${id}">
+                        <span class="exchange-name">${ex}</span>
+                        <span class="exchange-status" id="${id}_s">⏳</span>
+                    </div>
+                `;
+            }).join('');
+        }
+
+        function updateExchangeGrid(stats) {
+            if (!stats) return;
+            
+            let active = 0;
+            let fail = 0;
+            
+            for (const [name, data] of Object.entries(stats)) {
+                const id = 'ex_' + name.toLowerCase().replace(/[^a-z0-9]/g, '');
+                const el = $(id);
+                const statusEl = $(id + '_s');
+                
+                if (!el || !statusEl) continue;
+                
+                const ok = (data.success || 0) > 0;
+                const ko = (data.fail || 0) > 0 && !ok;
+                
+                el.className = 'exchange-item' + (ok ? ' ok' : ko ? ' error' : '');
+                statusEl.textContent = ok ? '✅' : ko ? '❌' : '⏳';
+                
+                if (ok) active++;
+                if (ko) fail++;
+            }
+            
+            $('exActiveBadge').textContent = `${active}/5`;
+            
+            const sourceBadge = $('sourceCountBadge');
+            if (sourceBadge) {
+                sourceBadge.innerHTML = `<i class="fas fa-server"></i> <span>${active}/5 Kaynak</span>`;
+            }
+        }
+
+        // =============================================
+        // TRADINGVIEW
+        // =============================================
+        const TV_INTERVAL_MAP = {
+            '1m': '1', '5m': '5', '15m': '15', '30m': '30',
+            '1h': '60', '4h': '240', '1d': 'D', '1w': 'W'
+        };
+
+        function initTradingView() {
+            const symbol = $('symbolSelect').value;
+            const interval = TV_INTERVAL_MAP[$('intervalSelect').value] || '60';
+            const container = $('tvContainer');
+            
+            if (!container) return;
+            
+            if (state.tvWidget) {
+                try { state.tvWidget.remove(); } catch(e) {}
+                state.tvWidget = null;
+            }
+            
+            container.innerHTML = '';
+            
+            if (typeof TradingView === 'undefined') {
+                setTimeout(initTradingView, 500);
+                return;
+            }
+            
+            try {
+                state.tvWidget = new TradingView.widget({
+                    autosize: true,
+                    symbol: `BINANCE:${symbol}USDT`,
+                    interval: interval,
+                    timezone: 'Europe/Istanbul',
+                    theme: 'dark',
+                    style: '1',
+                    locale: 'tr',
+                    toolbar_bg: '#1A1D24',
+                    enable_publishing: false,
+                    allow_symbol_change: true,
+                    hide_top_toolbar: false,
+                    hide_side_toolbar: false,
+                    studies: ['RSI@tv-basicstudies', 'MACD@tv-basicstudies'],
+                    container_id: 'tvContainer',
+                    overrides: {
+                        'paneProperties.background': '#1A1D24',
+                        'paneProperties.vertGridProperties.color': '#2A2F38',
+                        'paneProperties.horzGridProperties.color': '#2A2F38',
+                    },
+                    disabled_features: [
+                        'header_saveload', 'header_undo_redo', 'header_screenshot',
+                        'timeframes_toolbar'
+                    ]
+                });
+            } catch(e) {
+                console.error('TradingView init error:', e);
+            }
+        }
+
+        // =============================================
+        // WEBSOCKET
+        // =============================================
+        function connectWS() {
+            const sym = $('symbolSelect').value + 'USDT';
+            
+            const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
+            const url = `${protocol}//${window.location.host}/wss/${sym}`;
+            
+            if (state.ws) {
+                try { state.ws.close(); } catch(e) {}
+                state.ws = null;
+            }
+            
+            try {
+                const ws = new WebSocket(url);
+                state.ws = ws;
+                
+                ws.onopen = () => {
+                    state.wsRetries = 0;
+                    setPill('wsPill', 'green', 'BAĞLANDI');
+                    $('wsLabel').textContent = 'BAĞLANDI';
+                };
+                
+                ws.onmessage = (e) => {
+                    try {
+                        const data = JSON.parse(e.data);
+                        if (data.type === 'price') {
+                            updatePrice(data);
+                        }
+                    } catch {}
+                };
+                
+                ws.onerror = () => {
+                    setPill('wsPill', 'red', 'HATA');
+                };
+                
+                ws.onclose = () => {
+                    setPill('wsPill', '', 'KAPALI');
+                    $('wsLabel').textContent = 'KAPALI';
+                    
+                    if (state.wsRetries < 5) {
+                        state.wsRetries++;
+                        setTimeout(connectWS, 3000 * state.wsRetries);
+                    }
+                };
+            } catch(e) {
+                console.error('WS error:', e);
+            }
+        }
+
+        function updatePrice(data) {
+            const price = data.price;
+            const priceEl = $('priceEl');
+            
+            if (state.lastPrice !== price) {
+                priceEl.classList.remove('flash');
+                void priceEl.offsetWidth;
+                priceEl.classList.add('flash');
+                state.lastPrice = price;
+            }
+            
+            priceEl.textContent = fmtPrice(price);
+            
+            const updateEl = $('lastUpdateText');
+            if (updateEl) {
+                updateEl.innerHTML = `<i class="far fa-clock"></i> <span>Son güncelleme: ${fmtTime()}</span>`;
+            }
+        }
+
+        // =============================================
+        // ANALYZE
+        // =============================================
+        async function analyzeSymbol() {
+            const symbol = $('symbolSelect').value + 'USDT';
+            const interval = $('intervalSelect').value;
+            const btn = $('analyzeBtn');
+            
+            btn.innerHTML = '<div class="spinner"></div> ANALİZ EDİLİYOR...';
+            btn.disabled = true;
+            
+            const updateEl = $('lastUpdateText');
+            if (updateEl) {
+                updateEl.innerHTML = '<i class="far fa-clock"></i> <span>Analiz yapılıyor...</span>';
+            }
+            
+            try {
+                const response = await fetch(`/api/analyze/${symbol}?interval=${interval}&limit=200`);
+                
+                if (!response.ok) {
+                    throw new Error(`HTTP ${response.status}`);
+                }
+                
+                const data = await response.json();
+                if (!data.success) {
+                    throw new Error(data.detail || 'Analiz başarısız');
+                }
+                
+                state.currentData = data;
+                renderDashboard(data);
+                
+            } catch(e) {
+                console.error('Analyze error:', e);
+                
+                $('signalLabel').textContent = 'HATA';
+                $('signalLabel').className = 'signal-label sig-NEUTRAL';
+                
+                if (updateEl) {
+                    updateEl.innerHTML = `<i class="far fa-clock"></i> <span>HATA - ${fmtTime()}</span>`;
+                }
+            } finally {
+                btn.innerHTML = '<i class="fas fa-search"></i> ANALİZ ET';
+                btn.disabled = false;
+            }
+        }
+
+        // =============================================
+        // RENDER DASHBOARD
+        // =============================================
+        function renderDashboard(data) {
+            if (!data) return;
+            
+            // Symbol
+            const sym = (data.symbol || 'BTC/USDT').replace('USDT', ' / USDT');
+            setText('priceSymLabel', sym);
+            
+            // Price
+            if (data.price) {
+                const p = data.price;
+                
+                setText('priceEl', fmtPrice(p.current));
+                setText('volEl', fmtVolume(p.volume_24h_approx));
+                setText('hiLoEl', `${fmtPrice(p.high)} / ${fmtPrice(p.low)}`);
+                setText('srcCountEl', data.active_sources?.length || 0);
+                
+                const chg = p.change_percent || 0;
+                const chgEl = $('priceChgEl');
+                if (chgEl) {
+                    if (chg > 0) {
+                        chgEl.className = 'price-change up';
+                        chgEl.innerHTML = `<i class="fas fa-arrow-up"></i> <span>+${chg.toFixed(2)}%</span>`;
+                    } else if (chg < 0) {
+                        chgEl.className = 'price-change down';
+                        chgEl.innerHTML = `<i class="fas fa-arrow-down"></i> <span>${chg.toFixed(2)}%</span>`;
+                    } else {
+                        chgEl.className = 'price-change flat';
+                        chgEl.innerHTML = `<i class="fas fa-minus"></i> <span>0.00%</span>`;
+                    }
+                }
+            }
+            
+            // Signal
+            if (data.signal) {
+                const s = data.signal;
+                const sig = (s.signal || 'NEUTRAL').toUpperCase();
+                const conf = s.confidence || 0;
+                
+                $('signalLabel').textContent = sig.replace(/_/g, ' ');
+                $('signalLabel').className = 'signal-label sig-' + sig;
+                
+                setText('confPct', '%' + Math.round(conf));
+                $('confBar').style.width = clamp(conf, 0, 100) + '%';
+                
+                const tp = s.tp_level ? fmtPrice(s.tp_level) : '—';
+                const sl = s.sl_level ? fmtPrice(s.sl_level) : '—';
+                setText('tpSlLevel', `${tp} / ${sl}`);
+                
+                setText('signalCounts', `B${s.buy_count || 0} S${s.sell_count || 0}`);
+                setText('recText', s.recommendation || '—');
+            }
+            
+            // Technical
+            if (data.technical) {
+                const t = data.technical;
+                
+                setText('techOpen', fmtPrice(t.open));
+                setText('techHigh', fmtPrice(t.high));
+                setText('techLow', fmtPrice(t.low));
+                setText('techVol', fmtVolume(t.volume));
+                setText('techRsi', t.rsi?.toFixed(1) || '—');
+                setText('techMacd', t.macd?.toFixed(2) || '—');
+                setText('techMacdHist', t.macd_histogram?.toFixed(2) || '—');
+                setText('techAtr', t.atr_percent?.toFixed(2) + '%' || '—');
+                setText('techBbPos', t.bb_position?.toFixed(1) + '%' || '—');
+                setText('techBbWidth', t.bb_width?.toFixed(1) + '%' || '—');
+                setText('techEma20', fmtPrice(t.sma_20));
+                setText('techEma50', fmtPrice(t.sma_50));
+                setText('techMom5', fmtPercent(t.momentum_5));
+                setText('techMom10', fmtPercent(t.momentum_10));
+                setText('techVolRatio', t.volume_ratio?.toFixed(2) + 'x' || '—');
+                setText('techDataPoints', data.data_points || '—');
+                
+                // Heikin Ashi
+                setText('haTrend', t.ha_trend || '—');
+                setText('haRsi', t.ha_rsi?.toFixed(1) || '—');
+                setText('haStr', t.ha_trend_strength ? t.ha_trend_strength + '%' : '—');
+                
+                const haColor = t.ha_color_change === 1 ? '🟢' : t.ha_color_change === -1 ? '🔴' : '⚪';
+                setText('haColor', haColor);
+                
+                setText('haMom', fmtPercent(t.ha_momentum));
+            }
+            
+            // Pattern Counts
+            let ictCount = 0, ictBull = 0, ictBear = 0;
+            let candleCount = 0, candleBull = 0, candleBear = 0;
+            let classicalCount = 0, classicalBull = 0, classicalBear = 0;
+            let smartProCount = 0, smartProBull = 0, smartProBear = 0;
+            
+            // ICT Patterns
+            if (data.ict_patterns) {
+                for (const [key, patterns] of Object.entries(data.ict_patterns)) {
+                    ictCount += patterns.length;
+                    patterns.forEach(p => {
+                        if (p.direction?.includes('bull')) ictBull++;
+                        else if (p.direction?.includes('bear')) ictBear++;
+                    });
+                }
+            }
+            
+            // Candle Patterns
+            if (data.candle_patterns) {
+                candleCount = data.candle_patterns.length;
+                data.candle_patterns.forEach(p => {
+                    if (p.direction?.includes('bull')) candleBull++;
+                    else if (p.direction?.includes('bear')) candleBear++;
+                });
+            }
+            
+            // Classical Patterns
+            if (data.classical_patterns) {
+                classicalCount = data.classical_patterns.length;
+                data.classical_patterns.forEach(p => {
+                    if (p.direction?.includes('bull')) classicalBull++;
+                    else if (p.direction?.includes('bear')) classicalBear++;
+                });
+            }
+            
+            // SmartPro
+            if (data.ictsmartpro_signals) {
+                smartProCount = data.ictsmartpro_signals.length;
+                data.ictsmartpro_signals.forEach(p => {
+                    if (p.direction?.includes('bull')) smartProBull++;
+                    else if (p.direction?.includes('bear')) smartProBear++;
+                });
+            }
+            
+            setText('patternIct', ictCount);
+            setText('patternIctBull', ictBull);
+            setText('patternIctBear', ictBear);
+            
+            setText('patternCandle', candleCount);
+            setText('patternCandleBull', candleBull);
+            setText('patternCandleBear', candleBear);
+            
+            setText('patternClassical', classicalCount);
+            setText('patternClassicalBull', classicalBull);
+            setText('patternClassicalBear', classicalBear);
+            
+            setText('patternSmartPro', smartProCount);
+            setText('patternSmartProBull', smartProBull);
+            setText('patternSmartProBear', smartProBear);
+            
+            const totalPatterns = ictCount + candleCount + classicalCount + smartProCount;
+            const totalBull = ictBull + candleBull + classicalBull + smartProBull;
+            const totalBear = ictBear + candleBear + classicalBear + smartProBear;
+            
+            setText('totalPatterns', totalPatterns);
+            setText('bullBearRatio', `${totalBull} / ${totalBear}`);
+            
+            // Pattern Badge
+            const patternBadge = $('patternCountBadge');
+            if (patternBadge) {
+                patternBadge.innerHTML = `<i class="fas fa-chart-pie"></i> <span>${totalPatterns} Pattern</span>`;
+            }
+            
+            // Pattern List
+            const patternsList = [];
+            if (data.ict_patterns) {
+                for (const [key, patterns] of Object.entries(data.ict_patterns)) {
+                    patterns.slice(0, 3).forEach(p => {
+                        const dir = p.direction?.includes('bull') ? 'bull' : p.direction?.includes('bear') ? 'bear' : 'neutral';
+                        patternsList.push(`<span class="chip ${dir}">${p.pattern || key}</span>`);
+                    });
+                }
+            }
+            
+            if (data.candle_patterns) {
+                data.candle_patterns.slice(0, 5).forEach(p => {
+                    const dir = p.direction?.includes('bull') ? 'bull' : p.direction?.includes('bear') ? 'bear' : 'neutral';
+                    patternsList.push(`<span class="chip ${dir}">${p.pattern}</span>`);
+                });
+            }
+            
+            if (data.classical_patterns) {
+                data.classical_patterns.slice(0, 5).forEach(p => {
+                    const dir = p.direction?.includes('bull') ? 'bull' : p.direction?.includes('bear') ? 'bear' : 'neutral';
+                    patternsList.push(`<span class="chip ${dir}">${p.pattern}</span>`);
+                });
+            }
+            
+            if (data.ictsmartpro_signals) {
+                data.ictsmartpro_signals.slice(0, 3).forEach(p => {
+                    const dir = p.direction?.includes('bull') ? 'bull' : p.direction?.includes('bear') ? 'bear' : 'neutral';
+                    patternsList.push(`<span class="chip ${dir}">${p.pattern}</span>`);
+                });
+            }
+            
+            if (patternsList.length > 0) {
+                setHtml('patternsList', patternsList.join(' '));
+            } else {
+                setHtml('patternsList', '<div class="empty-state">◈ No data — run analysis</div>');
+            }
+            
+            // Recommendation
+            if (data.signal?.recommendation) {
+                setHtml('recommendationText', data.signal.recommendation);
+            }
+            
+            // Market Structure
+            if (data.market_structure) {
+                const ms = data.market_structure;
+                
+                setText('msTrend', ms.trend || '—');
+                setText('msStrength', ms.trend_strength || '—');
+                setText('msStruct', ms.structure || '—');
+                setText('msMomentum', ms.momentum || '—');
+                setText('msVol', ms.volatility || '—');
+                setText('msVolIndex', ms.volatility_index || '—');
+                
+                if (ms.swings) {
+                    const hhCount = ms.swings.hh?.length || 0;
+                    const hlCount = ms.swings.hl?.length || 0;
+                    const lhCount = ms.swings.lh?.length || 0;
+                    const llCount = ms.swings.ll?.length || 0;
+                    
+                    setText('swingBull', `HH:${hhCount} HL:${hlCount}`);
+                    setText('swingBear', `LH:${lhCount} LL:${llCount}`);
+                }
+                
+                if (ms.support_resistance && ms.support_resistance.length > 0) {
+                    const zones = ms.support_resistance.slice(0, 5).map(z => 
+                        `<div class="stat-row">
+                            <span class="stat-label">${z.type}</span>
+                            <span class="stat-value">${z.level} (${z.strength}%)</span>
+                        </div>`
+                    ).join('');
+                    setHtml('srZones', zones);
+                } else {
+                    setHtml('srZones', '<div class="empty-state">No zones detected</div>');
+                }
+            }
+            
+            // Update time
+            const updateEl = $('lastUpdateText');
+            if (updateEl) {
+                updateEl.innerHTML = `<i class="far fa-clock"></i> <span>Son güncelleme: ${fmtTime()}</span>`;
+            }
+            
+            // Fetch stats
+            fetchStats();
+        }
+
+        // =============================================
+        // FETCH STATS
+        // =============================================
+        async function fetchStats() {
+            try {
+                const res = await fetch('/api/stats');
+                if (res.ok) {
+                    const data = await res.json();
+                    if (data.success) {
+                        state.stats = data;
+                        
+                        setText('sysUptime', data.uptime || '—');
+                        setText('sysSuccess', data.success_rate ? data.success_rate + '%' : '—');
+                        setText('sysTotal', data.total_requests || '—');
+                        setText('sysWs', data.active_websockets || '—');
+                    }
+                }
+                
+                const exchangeRes = await fetch('/api/exchange-stats');
+                if (exchangeRes.ok) {
+                    const exData = await exchangeRes.json();
+                    if (exData.success && exData.stats) {
+                        updateExchangeGrid(exData.stats);
+                    }
+                }
+            } catch(e) {
+                console.error('Stats error:', e);
+            }
+        }
+
+        // =============================================
+        // AI EVALUATE
+        // =============================================
+        function evaluateAI() {
+            if (!state.currentData) {
+                alert('Önce analiz yapın.');
+                return;
+            }
+            
+            const d = state.currentData;
+            const chatBox = $('chatBox');
+            
+            const sig = d.signal?.signal || 'NEUTRAL';
+            const conf = d.signal?.confidence || 0;
+            const price = d.price?.current || 0;
+            const rsi = d.technical?.rsi || 50;
+            const trend = d.market_structure?.trend || '—';
+            
+            const ictCount = (d.ict_patterns?.fair_value_gaps?.length || 0) +
+                            (d.ict_patterns?.order_blocks?.length || 0) +
+                            (d.ict_patterns?.break_of_structure?.length || 0);
+            
+            const candleCount = d.candle_patterns?.length || 0;
+            const classicalCount = d.classical_patterns?.length || 0;
+            const smartProCount = d.ictsmartpro_signals?.length || 0;
+            
+            let comment = '';
+            if (conf > 75) comment = '🔥 Yüksek güven – sinyal güçlü';
+            else if (conf > 60) comment = '✅ Orta güven – teyit önerilir';
+            else comment = '⚠️ Düşük güven – temkinli yaklaş';
+            
+            if (ictCount > 3) comment += ' • Yoğun ICT aktivitesi';
+            if (smartProCount > 0) comment += ' • SmartPro sinyali var';
+            
+            const empty = chatBox.querySelector('.empty-state');
+            if (empty) empty.remove();
+            
+            const div = document.createElement('div');
+            div.className = 'chat-message';
+            div.innerHTML = `
+                <div class="chat-header">
+                    <i class="fas fa-robot"></i>
+                    AI Özeti
+                </div>
+                <div style="margin-bottom:8px;">
+                    <strong>Sinyal:</strong> ${sig.replace(/_/g,' ')} (${Math.round(conf)}%)
+                </div>
+                <div><strong>Fiyat:</strong> ${fmtPrice(price)} | <strong>RSI:</strong> ${rsi.toFixed(1)}</div>
+                <div><strong>Trend:</strong> ${trend}</div>
+                <div><strong>Pattern:</strong> ICT:${ictCount} Candle:${candleCount} Klasik:${classicalCount} SP:${smartProCount}</div>
+                <div style="margin-top:8px; color:var(--accent-cyan);">${comment}</div>
+                <div class="warning">
+                    <i class="fas fa-triangle-exclamation"></i>
+                    Yatırım tavsiyesi değildir
+                </div>
+            `;
+            
+            chatBox.appendChild(div);
+            chatBox.scrollTop = chatBox.scrollHeight;
+        }
+
+        // =============================================
+        // INIT
+        // =============================================
+        async function init() {
+            buildExchangeGrid();
+            
+            try {
+                const res = await fetch('/health');
+                if (res.ok) {
+                    setPill('backendPill', 'green', 'BACKEND');
+                } else {
+                    setPill('backendPill', 'red', 'BACKEND HATA');
+                }
+            } catch {
+                setPill('backendPill', 'red', 'BAĞLANTI YOK');
+            }
+            
+            initTradingView();
+            connectWS();
+            fetchStats();
+            setInterval(fetchStats, 30000);
+            
+            setTimeout(analyzeSymbol, 500);
+        }
+
+        // =============================================
+        // EVENT LISTENERS
+        // =============================================
+        $('symbolSelect').addEventListener('change', () => {
+            initTradingView();
+            connectWS();
+            analyzeSymbol();
+        });
+        
+        $('intervalSelect').addEventListener('change', () => {
+            initTradingView();
+            analyzeSymbol();
+        });
+        
+        $('analyzeBtn').addEventListener('click', analyzeSymbol);
+        
+        window.addEventListener('load', init);
+    </script>
 </body>
-</html>  
+</html>
