@@ -8,7 +8,7 @@ import joblib
 import numpy as np
 import pandas as pd
 from datetime import datetime, timezone, timedelta
-from typing import Dict, List, Optional, Any, Tuple, Set
+from typing import Dict, List, Optional, Any, Tuple, Set 
 from collections import defaultdict
 from enum import Enum
 from pathlib import Path
@@ -1777,6 +1777,27 @@ startup_time = time.time()
 # ========================================================================================================
 # API ENDPOINTS
 # ========================================================================================================
+
+# ========================================================================================================
+# STATIC FILES & TEMPLATES
+# ========================================================================================================
+@app.get("/", response_class=HTMLResponse)
+async def root():
+    """Ana sayfa"""
+    index_path = Path(__file__).parent / "templates" / "index.html"
+    if index_path.exists():
+        return FileResponse(index_path)
+    return HTMLResponse("<h1>ICTSMARTPRO ML API</h1><p>Çalışıyor. <a href='/docs'>Dökümanlar</a></p>")
+
+
+@app.get("/dashboard", response_class=HTMLResponse)
+async def dashboard():
+    """Dashboard sayfası"""
+    dashboard_path = Path(__file__).parent / "templates" / "dashboard.html"
+    if dashboard_path.exists():
+        return FileResponse(dashboard_path)
+    return HTMLResponse("<h1>Dashboard bulunamadı</h1><p>dashboard.html dosyası eksik</p>", status_code=404)
+
 @app.get("/health")
 async def health_check():
     return {
