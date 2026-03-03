@@ -187,6 +187,7 @@ class AnalysisResponse(BaseModel):
 # ========================================================================================================
 # PRODUCTION EXCHANGE DATA FETCHER
 # ========================================================================================================
+ 
 class ExchangeDataFetcher:
     """Production data fetcher with multiple exchanges"""
     
@@ -234,16 +235,22 @@ class ExchangeDataFetcher:
         self.cache: Dict[str, Dict] = {}
         self.stats: Dict = defaultdict(lambda: {"success": 0, "fail": 0, "last_error": ""})
         self._lock = asyncio.Lock()
+        self._session_initialized = False
     
-    async def __aenter__(self):
-        timeout = ClientTimeout(total=Config.API_TIMEOUT)
-        connector = TCPConnector(limit=50, ttl_dns_cache=300)
-        self.session = aiohttp.ClientSession(connector=connector, timeout=timeout)
-        return self
+    async def ensure_session(self):
+        """Ensure session exists"""
+        if not self._session_initialized or not self.session or self.session.closed:
+            timeout = ClientTimeout(total=Config.API_TIMEOUT)
+            connector = TCPConnector(limit=50, ttl_dns_cache=300, force_close=False)
+            self.session = aiohttp.ClientSession(connector=connector, timeout=timeout)
+            self._session_initialized = True
+        return self.session
     
-    async def __aexit__(self, *args):
-        if self.session:
+    async def close_session(self):
+        """Close session"""
+        if self.session and not self.session.closed:
             await self.session.close()
+            self._session_initialized = False
     
     def _get_cache_key(self, symbol: str, interval: str) -> str:
         return f"{symbol}_{interval}"
@@ -256,6 +263,8 @@ class ExchangeDataFetcher:
     async def _fetch_exchange(self, exchange: Dict, symbol: str, interval: str, limit: int) -> Optional[List[Dict]]:
         """Fetch from single exchange"""
         try:
+            session = await self.ensure_session()
+            
             if interval not in exchange['interval_map']:
                 return None
             
@@ -265,7 +274,7 @@ class ExchangeDataFetcher:
                 'limit': limit
             }
             
-            async with self.session.get(
+            async with session.get(
                 exchange['base_url'],
                 params=params,
                 timeout=exchange['timeout']
@@ -289,6 +298,11 @@ class ExchangeDataFetcher:
                         self.stats[exchange['name']]['last_error'] = "Insufficient data"
                     return None
                     
+        except asyncio.TimeoutError:
+            async with self._lock:
+                self.stats[exchange['name']]['fail'] += 1
+                self.stats[exchange['name']]['last_error'] = "Timeout"
+            return None
         except Exception as e:
             async with self._lock:
                 self.stats[exchange['name']]['fail'] += 1
@@ -395,9 +409,14 @@ class ExchangeDataFetcher:
         
         # Try all exchanges
         tasks = [self._fetch_exchange(ex, symbol, interval, limit) for ex in self.EXCHANGES]
-        results = await asyncio.gather(*tasks)
+        results = await asyncio.gather(*tasks, return_exceptions=True)
         
-        valid_results = [r for r in results if r and len(r) >= Config.MIN_CANDLES]
+        valid_results = []
+        for r in results:
+            if isinstance(r, Exception):
+                logger.debug(f"Exchange error: {r}")
+            elif r and len(r) >= Config.MIN_CANDLES:
+                valid_results.append(r)
         
         if not valid_results:
             logger.error(f"No data from any exchange for {symbol}")
@@ -423,13 +442,14 @@ class ExchangeDataFetcher:
     async def get_current_price(self, symbol: str) -> Optional[float]:
         """Get current price from Binance"""
         try:
+            session = await self.ensure_session()
             url = f"https://api.binance.com/api/v3/ticker/price?symbol={symbol.replace('/', '')}"
-            async with self.session.get(url, timeout=5) as response:
+            async with session.get(url, timeout=5) as response:
                 if response.status == 200:
                     data = await response.json()
                     return float(data['price'])
-        except:
-            pass
+        except Exception as e:
+            logger.debug(f"Price fetch error: {e}")
         return None
     
     def get_stats(self) -> Dict:
