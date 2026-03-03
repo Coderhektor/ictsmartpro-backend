@@ -358,4 +358,4 @@ def main():
     logger.info("System shutdown complete.")
 
 if __name__ == "__main__":
-    main() şimdi proda hazirmı
+    main() 
