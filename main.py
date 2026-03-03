@@ -8,10 +8,14 @@ import joblib
 import numpy as np
 import pandas as pd
 from datetime import datetime, timezone, timedelta
-from typing import Dict, List, Optional, Any, Tuple, Set 
+from typing import Dict, List, Optional, Any, Tuple, Set
 from collections import defaultdict
 from enum import Enum
 from pathlib import Path
+from functools import wraps
+import hashlib
+import secrets
+from concurrent.futures import ThreadPoolExecutor
 
 # ML Libraries
 from sklearn.ensemble import RandomForestClassifier, GradientBoostingClassifier
@@ -22,10 +26,11 @@ import xgboost as xgb
 import lightgbm as lgb
 
 # FastAPI
-from fastapi import FastAPI, Request, HTTPException, Query, BackgroundTasks, WebSocket, WebSocketDisconnect
+from fastapi import FastAPI, Request, HTTPException, Query, BackgroundTasks, WebSocket, WebSocketDisconnect, Depends, Security
 from fastapi.responses import JSONResponse, HTMLResponse, FileResponse
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.middleware.gzip import GZipMiddleware
+from fastapi.security import APIKeyHeader
 
 # Pydantic
 from pydantic import BaseModel, Field
@@ -34,28 +39,42 @@ from pydantic import BaseModel, Field
 import aiohttp
 from aiohttp import ClientTimeout, TCPConnector
 
+# ========================================================================================================
+# PRODUCTION LOGGING (JSON Format)
+# ========================================================================================================
+class JSONFormatter(logging.Formatter):
+    def format(self, record):
+        log_data = {
+            "timestamp": datetime.now(timezone.utc).isoformat(),
+            "level": record.levelname,
+            "logger": record.name,
+            "message": record.getMessage(),
+            "module": record.module,
+            "function": record.funcName,
+            "line": record.lineno
+        }
+        if record.exc_info:
+            log_data["exception"] = self.formatException(record.exc_info)
+        return json.dumps(log_data)
 
-# ========================================================================================================
-# PRODUCTION LOGGING
-# ========================================================================================================
 logging.basicConfig(
     level=logging.INFO,
     format='%(asctime)s | %(levelname)-8s | %(message)s',
-    datefmt='%Y-%m-%d %H:%M:%S'
+    datefmt='%Y-%m-%d %H:%M:%S',
+    handlers=[logging.StreamHandler(sys.stdout)]
 )
 logger = logging.getLogger("ictsmartpro-ml")
-
 
 # ========================================================================================================
 # PRODUCTION CONFIGURATION
 # ========================================================================================================
 class Config:
     """Production config with ML settings"""
-    
     # Server
     ENV = os.getenv("ENV", "production")
     DEBUG = os.getenv("DEBUG", "false").lower() == "true"
     PORT = int(os.getenv("PORT", "8000"))
+    HOST = os.getenv("HOST", "0.0.0.0")
     
     # API Settings
     API_TIMEOUT = int(os.getenv("API_TIMEOUT", "10"))
@@ -77,8 +96,42 @@ class Config:
     MAX_PATTERNS = int(os.getenv("MAX_PATTERNS", "50"))
     
     # Security
-    ALLOWED_ORIGINS = os.getenv("ALLOWED_ORIGINS", "*").split(",")
+    ALLOWED_ORIGINS = os.getenv("ALLOWED_ORIGINS", "http://localhost:3000,http://localhost:8000").split(",")
+    API_KEY = os.getenv("API_KEY", "")
+    RATE_LIMIT_REQUESTS = int(os.getenv("RATE_LIMIT_REQUESTS", "100"))
+    RATE_LIMIT_WINDOW = int(os.getenv("RATE_LIMIT_WINDOW", "60"))
 
+# ========================================================================================================
+# SECURITY & RATE LIMITING
+# ========================================================================================================
+api_key_header = APIKeyHeader(name="X-API-Key", auto_error=False)
+
+class RateLimiter:
+    def __init__(self):
+        self.requests: Dict[str, List[float]] = defaultdict(list)
+        self._lock = asyncio.Lock()
+    
+    async def is_allowed(self, client_id: str) -> bool:
+        async with self._lock:
+            now = time.time()
+            window_start = now - Config.RATE_LIMIT_WINDOW
+            self.requests[client_id] = [t for t in self.requests[client_id] if t > window_start]
+            if len(self.requests[client_id]) >= Config.RATE_LIMIT_REQUESTS:
+                return False
+            self.requests[client_id].append(now)
+            return True
+
+rate_limiter = RateLimiter()
+
+async def get_api_key(api_key: str = Security(api_key_header)) -> str:
+    if Config.API_KEY and api_key != Config.API_KEY:
+        raise HTTPException(status_code=401, detail="Invalid API Key")
+    return api_key or "anonymous"
+
+async def check_rate_limit(request: Request, api_key: str = Depends(get_api_key)):
+    client_id = request.client.host if request.client else "unknown"
+    if not await rate_limiter.is_allowed(client_id):
+        raise HTTPException(status_code=429, detail="Rate limit exceeded")
 
 # ========================================================================================================
 # ENUMS
@@ -90,7 +143,6 @@ class Direction(str, Enum):
     BULLISH_REVERSAL = "bullish_reversal"
     BEARISH_REVERSAL = "bearish_reversal"
 
-
 class PatternType(str, Enum):
     ICT = "ict"
     CLASSICAL = "classical"
@@ -99,14 +151,12 @@ class PatternType(str, Enum):
     SUPPORT_RESISTANCE = "support_resistance"
     TREND = "trend"
 
-
 class SignalType(str, Enum):
     STRONG_BUY = "STRONG_BUY"
     BUY = "BUY"
     NEUTRAL = "NEUTRAL"
     SELL = "SELL"
     STRONG_SELL = "STRONG_SELL"
-
 
 # ========================================================================================================
 # DATA MODELS
@@ -121,7 +171,6 @@ class Candle(BaseModel):
     exchange: str
     source_count: Optional[int] = 1
 
-
 class Pattern(BaseModel):
     name: str
     type: PatternType
@@ -132,7 +181,6 @@ class Pattern(BaseModel):
     description: Optional[str] = None
     sl_level: Optional[float] = None
     tp_level: Optional[float] = None
-
 
 class MLFeatures(BaseModel):
     return_1: float
@@ -155,7 +203,6 @@ class MLFeatures(BaseModel):
     momentum_5: float
     momentum_10: float
 
-
 class MLPrediction(BaseModel):
     signal: SignalType
     confidence: float
@@ -164,7 +211,6 @@ class MLPrediction(BaseModel):
     features_used: List[str]
     buy_probability: float
     sell_probability: float
-
 
 class AnalysisResponse(BaseModel):
     success: bool
@@ -183,14 +229,11 @@ class AnalysisResponse(BaseModel):
     model_info: Dict[str, Any]
     performance_ms: float
 
-
 # ========================================================================================================
 # PRODUCTION EXCHANGE DATA FETCHER
 # ========================================================================================================
- 
 class ExchangeDataFetcher:
     """Production data fetcher with multiple exchanges"""
-    
     EXCHANGES = [
         {
             "name": "Binance",
@@ -237,6 +280,13 @@ class ExchangeDataFetcher:
         self._lock = asyncio.Lock()
         self._session_initialized = False
     
+    async def __aenter__(self):
+        await self.ensure_session()
+        return self
+    
+    async def __aexit__(self, exc_type, exc_val, exc_tb):
+        pass
+    
     async def ensure_session(self):
         """Ensure session exists"""
         if not self._session_initialized or not self.session or self.session.closed:
@@ -250,7 +300,7 @@ class ExchangeDataFetcher:
         """Close session"""
         if self.session and not self.session.closed:
             await self.session.close()
-            self._session_initialized = False
+        self._session_initialized = False
     
     def _get_cache_key(self, symbol: str, interval: str) -> str:
         return f"{symbol}_{interval}"
@@ -264,30 +314,25 @@ class ExchangeDataFetcher:
         """Fetch from single exchange"""
         try:
             session = await self.ensure_session()
-            
             if interval not in exchange['interval_map']:
                 return None
-            
             params = {
                 'symbol': exchange['symbol_fmt'](symbol),
                 'interval': exchange['interval_map'][interval],
                 'limit': limit
             }
-            
             async with session.get(
                 exchange['base_url'],
                 params=params,
-                timeout=exchange['timeout']
+                timeout=aiohttp.ClientTimeout(total=exchange['timeout'])
             ) as response:
                 if response.status != 200:
                     async with self._lock:
                         self.stats[exchange['name']]['fail'] += 1
                         self.stats[exchange['name']]['last_error'] = f"HTTP {response.status}"
                     return None
-                
                 data = await response.json()
                 candles = await self._parse_response(exchange['name'], data)
-                
                 if candles and len(candles) >= 10:
                     async with self._lock:
                         self.stats[exchange['name']]['success'] += 1
@@ -297,7 +342,6 @@ class ExchangeDataFetcher:
                         self.stats[exchange['name']]['fail'] += 1
                         self.stats[exchange['name']]['last_error'] = "Insufficient data"
                     return None
-                    
         except asyncio.TimeoutError:
             async with self._lock:
                 self.stats[exchange['name']]['fail'] += 1
@@ -312,7 +356,6 @@ class ExchangeDataFetcher:
     async def _parse_response(self, exchange: str, data: Any) -> List[Dict]:
         """Parse exchange response"""
         candles = []
-        
         try:
             if exchange in ["Binance", "MEXC"]:
                 if isinstance(data, list):
@@ -327,7 +370,6 @@ class ExchangeDataFetcher:
                                 "volume": float(item[5]),
                                 "exchange": exchange
                             })
-            
             elif exchange == "Kraken":
                 if isinstance(data, dict) and "result" in data:
                     result = data["result"]
@@ -345,10 +387,8 @@ class ExchangeDataFetcher:
                                         "exchange": exchange
                                     })
                             break
-            
             candles.sort(key=lambda x: x["timestamp"])
             return candles
-            
         except Exception as e:
             logger.debug(f"Parse error for {exchange}: {e}")
             return []
@@ -357,25 +397,16 @@ class ExchangeDataFetcher:
         """Merge candles from multiple sources"""
         if not all_candles:
             return []
-        
-        # Interval in ms
         interval_ms = self._interval_to_ms(interval)
-        
-        # Group by rounded timestamp
         timestamp_map = defaultdict(list)
-        
         for exchange_candles in all_candles:
             for candle in exchange_candles:
                 rounded_ts = (candle["timestamp"] // interval_ms) * interval_ms
                 timestamp_map[rounded_ts].append(candle)
-        
-        # Merge
         merged = []
         for timestamp in sorted(timestamp_map.keys()):
             candles = timestamp_map[timestamp]
-            
             if len(candles) >= 1:
-                # Simple average
                 merged.append({
                     "timestamp": timestamp,
                     "open": sum(c["open"] for c in candles) / len(candles),
@@ -386,7 +417,6 @@ class ExchangeDataFetcher:
                     "source_count": len(candles),
                     "exchange": "merged"
                 })
-        
         return merged
     
     def _interval_to_ms(self, interval: str) -> int:
@@ -399,44 +429,29 @@ class ExchangeDataFetcher:
     async def get_candles(self, symbol: str, interval: str = "1h", limit: int = 500) -> List[Dict]:
         """Get candles from multiple exchanges"""
         cache_key = self._get_cache_key(symbol, interval)
-        
-        # Check cache
         if self._is_cache_valid(cache_key):
             logger.info(f"Cache hit: {symbol} {interval}")
             return self.cache[cache_key]['data'][-limit:]
-        
         logger.info(f"Fetching {symbol} {interval} from exchanges...")
-        
-        # Try all exchanges
         tasks = [self._fetch_exchange(ex, symbol, interval, limit) for ex in self.EXCHANGES]
         results = await asyncio.gather(*tasks, return_exceptions=True)
-        
         valid_results = []
         for r in results:
             if isinstance(r, Exception):
                 logger.debug(f"Exchange error: {r}")
             elif r and len(r) >= Config.MIN_CANDLES:
                 valid_results.append(r)
-        
         if not valid_results:
             logger.error(f"No data from any exchange for {symbol}")
             return []
-        
         logger.info(f"Got data from {len(valid_results)} exchanges")
-        
-        # Merge candles
         merged = self._merge_candles(valid_results, interval)
-        
         if len(merged) < Config.MIN_CANDLES:
             logger.warning(f"Only {len(merged)} merged candles")
-            return merged[-limit:]
-        
-        # Update cache
         self.cache[cache_key] = {
             'data': merged,
             'timestamp': time.time()
         }
-        
         return merged[-limit:]
     
     async def get_current_price(self, symbol: str) -> Optional[float]:
@@ -444,7 +459,7 @@ class ExchangeDataFetcher:
         try:
             session = await self.ensure_session()
             url = f"https://api.binance.com/api/v3/ticker/price?symbol={symbol.replace('/', '')}"
-            async with session.get(url, timeout=5) as response:
+            async with session.get(url, timeout=aiohttp.ClientTimeout(total=5)) as response:
                 if response.status == 200:
                     data = await response.json()
                     return float(data['price'])
@@ -462,13 +477,11 @@ class ExchangeDataFetcher:
                 active.append(name)
         return active
 
-
 # ========================================================================================================
 # TECHNICAL INDICATORS
 # ========================================================================================================
 class TechnicalIndicatorCalculator:
     """Technical indicator calculator"""
-    
     @staticmethod
     def calculate_all(df: pd.DataFrame) -> Dict[str, pd.Series]:
         """Calculate all technical indicators"""
@@ -533,13 +546,11 @@ class TechnicalIndicatorCalculator:
             'ema_21': ema_21
         }
 
-
 # ========================================================================================================
 # MARKET STRUCTURE ANALYZER
 # ========================================================================================================
 class MarketStructureAnalyzer:
     """Market structure analysis"""
-    
     @staticmethod
     def analyze(df: pd.DataFrame) -> Dict[str, str]:
         if len(df) < 50:
@@ -549,7 +560,6 @@ class MarketStructureAnalyzer:
                 "volatility": "NORMAL",
                 "momentum": "NEUTRAL"
             }
-        
         close = df['close']
         
         # Trend analysis with EMAs
@@ -608,26 +618,21 @@ class MarketStructureAnalyzer:
             "momentum": momentum
         }
 
-
 # ========================================================================================================
 # ICT PATTERN DETECTOR
 # ========================================================================================================
 class ICTPatternDetector:
     """ICT (Inner Circle Trader) Pattern Detector"""
-    
     @staticmethod
     def detect_fair_value_gap(df: pd.DataFrame) -> List[Pattern]:
         """Fair Value Gap detection"""
         patterns = []
         if len(df) < 3:
             return patterns
-        
         for i in range(1, len(df) - 1):
-            # Bullish FVG
             if df['low'].iloc[i + 1] > df['high'].iloc[i - 1]:
                 gap_size = df['low'].iloc[i + 1] - df['high'].iloc[i - 1]
                 gap_percent = (gap_size / df['high'].iloc[i - 1]) * 100
-                
                 if gap_percent > 0.1:
                     patterns.append(Pattern(
                         name="bullish_fvg",
@@ -638,12 +643,9 @@ class ICTPatternDetector:
                         price=float(df['close'].iloc[i]),
                         description=f"Bullish FVG at {gap_percent:.2f}%"
                     ))
-            
-            # Bearish FVG
             elif df['high'].iloc[i + 1] < df['low'].iloc[i - 1]:
                 gap_size = df['low'].iloc[i - 1] - df['high'].iloc[i + 1]
                 gap_percent = (gap_size / df['low'].iloc[i - 1]) * 100
-                
                 if gap_percent > 0.1:
                     patterns.append(Pattern(
                         name="bearish_fvg",
@@ -654,7 +656,6 @@ class ICTPatternDetector:
                         price=float(df['close'].iloc[i]),
                         description=f"Bearish FVG at {gap_percent:.2f}%"
                     ))
-        
         return patterns[-10:]
     
     @staticmethod
@@ -663,17 +664,14 @@ class ICTPatternDetector:
         patterns = []
         if len(df) < 5:
             return patterns
-        
+        df = df.copy()
         df['is_bullish'] = df['close'] > df['open']
         df['is_bearish'] = df['close'] < df['open']
-        
         for i in range(2, len(df) - 2):
-            # Bullish Order Block
             if (df['is_bullish'].iloc[i] and
                 df['is_bearish'].iloc[i - 1] and
                 df['low'].iloc[i] < df['low'].iloc[i - 1] and
                 df['close'].iloc[i] > df['high'].iloc[i - 1]):
-                
                 patterns.append(Pattern(
                     name="bullish_order_block",
                     type=PatternType.ICT,
@@ -683,13 +681,10 @@ class ICTPatternDetector:
                     price=float(df['close'].iloc[i]),
                     description="Bullish Order Block - Smart money buying zone"
                 ))
-            
-            # Bearish Order Block
             elif (df['is_bearish'].iloc[i] and
                   df['is_bullish'].iloc[i - 1] and
                   df['high'].iloc[i] > df['high'].iloc[i - 1] and
                   df['close'].iloc[i] < df['low'].iloc[i - 1]):
-                
                 patterns.append(Pattern(
                     name="bearish_order_block",
                     type=PatternType.ICT,
@@ -699,7 +694,6 @@ class ICTPatternDetector:
                     price=float(df['close'].iloc[i]),
                     description="Bearish Order Block - Smart money selling zone"
                 ))
-        
         return patterns[-10:]
     
     @staticmethod
@@ -708,12 +702,9 @@ class ICTPatternDetector:
         patterns = []
         if len(df) < 15:
             return patterns
-        
         for i in range(10, len(df) - 1):
             recent_high = df['high'].iloc[i - 10:i].max()
             recent_low = df['low'].iloc[i - 10:i].min()
-            
-            # Bullish Breaker
             if (df['close'].iloc[i] > recent_high and
                 df['close'].iloc[i - 1] < recent_high):
                 patterns.append(Pattern(
@@ -725,8 +716,6 @@ class ICTPatternDetector:
                     price=float(df['close'].iloc[i]),
                     description="Bullish Breaker - Resistance turned support"
                 ))
-            
-            # Bearish Breaker
             elif (df['close'].iloc[i] < recent_low and
                   df['close'].iloc[i - 1] > recent_low):
                 patterns.append(Pattern(
@@ -738,7 +727,6 @@ class ICTPatternDetector:
                     price=float(df['close'].iloc[i]),
                     description="Bearish Breaker - Support turned resistance"
                 ))
-        
         return patterns[-10:]
     
     @staticmethod
@@ -747,12 +735,9 @@ class ICTPatternDetector:
         patterns = []
         if len(df) < 25:
             return patterns
-        
         for i in range(20, len(df)):
             swing_highs = df['high'].iloc[i - 20:i - 5].nlargest(3)
             swing_lows = df['low'].iloc[i - 20:i - 5].nsmallest(3)
-            
-            # Upward liquidity sweep (bearish)
             if len(swing_highs) > 0 and df['high'].iloc[i] > swing_highs.iloc[0] * 1.001:
                 if df['close'].iloc[i] < swing_highs.iloc[0]:
                     patterns.append(Pattern(
@@ -764,8 +749,6 @@ class ICTPatternDetector:
                         price=float(df['close'].iloc[i]),
                         description="Liquidity Sweep Above - Bearish reversal"
                     ))
-            
-            # Downward liquidity sweep (bullish)
             if len(swing_lows) > 0 and df['low'].iloc[i] < swing_lows.iloc[0] * 0.999:
                 if df['close'].iloc[i] > swing_lows.iloc[0]:
                     patterns.append(Pattern(
@@ -777,7 +760,6 @@ class ICTPatternDetector:
                         price=float(df['close'].iloc[i]),
                         description="Liquidity Sweep Below - Bullish reversal"
                     ))
-        
         return patterns[-10:]
     
     @staticmethod
@@ -786,12 +768,9 @@ class ICTPatternDetector:
         patterns = []
         if len(df) < 15:
             return patterns
-        
         for i in range(10, len(df)):
             recent_high = df['high'].iloc[i - 10:i].max()
             recent_low = df['low'].iloc[i - 10:i].min()
-            
-            # Bullish BOS
             if df['high'].iloc[i] > recent_high * 1.005:
                 bos_size = (df['high'].iloc[i] - recent_high) / recent_high * 100
                 patterns.append(Pattern(
@@ -803,8 +782,6 @@ class ICTPatternDetector:
                     price=float(df['close'].iloc[i]),
                     description=f"Bullish BOS at {bos_size:.2f}%"
                 ))
-            
-            # Bearish BOS
             elif df['low'].iloc[i] < recent_low * 0.995:
                 bos_size = (recent_low - df['low'].iloc[i]) / recent_low * 100
                 patterns.append(Pattern(
@@ -816,7 +793,6 @@ class ICTPatternDetector:
                     price=float(df['close'].iloc[i]),
                     description=f"Bearish BOS at {bos_size:.2f}%"
                 ))
-        
         return patterns[-10:]
     
     @staticmethod
@@ -825,11 +801,8 @@ class ICTPatternDetector:
         patterns = []
         if len(df) < 20:
             return patterns
-        
         for i in range(15, len(df)):
             recent_trend = df['close'].iloc[i - 10:i].pct_change().mean()
-            
-            # Bullish CHoCH
             if recent_trend < -0.001 and df['close'].iloc[i] > df['high'].iloc[i - 1]:
                 patterns.append(Pattern(
                     name="bullish_choch",
@@ -840,8 +813,6 @@ class ICTPatternDetector:
                     price=float(df['close'].iloc[i]),
                     description="Bullish Change of Character"
                 ))
-            
-            # Bearish CHoCH
             elif recent_trend > 0.001 and df['close'].iloc[i] < df['low'].iloc[i - 1]:
                 patterns.append(Pattern(
                     name="bearish_choch",
@@ -852,7 +823,6 @@ class ICTPatternDetector:
                     price=float(df['close'].iloc[i]),
                     description="Bearish Change of Character"
                 ))
-        
         return patterns[-10:]
     
     @staticmethod
@@ -861,21 +831,17 @@ class ICTPatternDetector:
         patterns = []
         if len(df) < 30:
             return patterns
-        
         for i in range(25, len(df)):
             window = df.iloc[i - 20:i]
             if window.empty:
                 continue
-            
             high_idx = window['high'].idxmax()
             low_idx = window['low'].idxmin()
-            
             if high_idx is not None and low_idx is not None:
                 high_val = float(window.loc[high_idx, 'high'])
                 low_val = float(window.loc[low_idx, 'low'])
-                
                 if high_val > low_val:
-                    if window.index.get_loc(high_idx) < window.index.get_loc(low_idx):  # Downtrend
+                    if window.index.get_loc(high_idx) < window.index.get_loc(low_idx):
                         retrace = (high_val - df['close'].iloc[i]) / (high_val - low_val)
                         if 0.618 <= retrace <= 0.79:
                             patterns.append(Pattern(
@@ -887,7 +853,7 @@ class ICTPatternDetector:
                                 price=float(df['close'].iloc[i]),
                                 description=f"Bearish OTE at {retrace:.2f} retracement"
                             ))
-                    else:  # Uptrend
+                    else:
                         retrace = (df['close'].iloc[i] - low_val) / (high_val - low_val)
                         if 0.618 <= retrace <= 0.79:
                             patterns.append(Pattern(
@@ -899,7 +865,6 @@ class ICTPatternDetector:
                                 price=float(df['close'].iloc[i]),
                                 description=f"Bullish OTE at {retrace:.2f} retracement"
                             ))
-        
         return patterns[-10:]
     
     @staticmethod
@@ -908,12 +873,9 @@ class ICTPatternDetector:
         patterns = []
         if len(df) < 30:
             return patterns
-        
         for i in range(25, len(df)):
             period_high = df['high'].iloc[i - 20:i].max()
             period_low = df['low'].iloc[i - 20:i].min()
-            
-            # False breakout above (bearish)
             if df['high'].iloc[i] > period_high * 1.001 and df['close'].iloc[i] < period_high:
                 patterns.append(Pattern(
                     name="turtle_soup_bearish",
@@ -924,8 +886,6 @@ class ICTPatternDetector:
                     price=float(df['close'].iloc[i]),
                     description="Turtle Soup - False breakout above"
                 ))
-            
-            # False breakout below (bullish)
             elif df['low'].iloc[i] < period_low * 0.999 and df['close'].iloc[i] > period_low:
                 patterns.append(Pattern(
                     name="turtle_soup_bullish",
@@ -936,7 +896,6 @@ class ICTPatternDetector:
                     price=float(df['close'].iloc[i]),
                     description="Turtle Soup - False breakout below"
                 ))
-        
         return patterns[-10:]
     
     @staticmethod
@@ -953,25 +912,20 @@ class ICTPatternDetector:
         patterns.extend(ICTPatternDetector.detect_turtle_soup(df))
         return patterns[-Config.MAX_PATTERNS:]
 
-
 # ========================================================================================================
 # CLASSICAL PATTERN DETECTOR
 # ========================================================================================================
 class ClassicalPatternDetector:
     """Classical chart pattern detector"""
-    
     @staticmethod
     def detect_double_top_bottom(df: pd.DataFrame) -> List[Pattern]:
         """Double Top/Bottom detection"""
         patterns = []
         if len(df) < 30:
             return patterns
-        
         for i in range(20, len(df)):
-            # Double Top
             high1 = df['high'].iloc[i - 15:i - 5].max()
             high2 = df['high'].iloc[i - 5:i].max()
-            
             if high1 > 0 and abs(high1 - high2) / high1 < 0.02 and df['close'].iloc[i] < high2 * 0.98:
                 patterns.append(Pattern(
                     name="double_top",
@@ -982,11 +936,8 @@ class ClassicalPatternDetector:
                     price=float(df['close'].iloc[i]),
                     description="Double Top - Bearish reversal"
                 ))
-            
-            # Double Bottom
             low1 = df['low'].iloc[i - 15:i - 5].min()
             low2 = df['low'].iloc[i - 5:i].min()
-            
             if low1 > 0 and abs(low1 - low2) / low1 < 0.02 and df['close'].iloc[i] > low2 * 1.02:
                 patterns.append(Pattern(
                     name="double_bottom",
@@ -997,7 +948,6 @@ class ClassicalPatternDetector:
                     price=float(df['close'].iloc[i]),
                     description="Double Bottom - Bullish reversal"
                 ))
-        
         return patterns[-5:]
     
     @staticmethod
@@ -1006,13 +956,10 @@ class ClassicalPatternDetector:
         patterns = []
         if len(df) < 40:
             return patterns
-        
         for i in range(30, len(df)):
-            # Head and Shoulders Top
             left_shoulder = df['high'].iloc[i - 25:i - 15].max()
             head = df['high'].iloc[i - 15:i - 5].max()
             right_shoulder = df['high'].iloc[i - 5:i].max()
-            
             if (head > left_shoulder * 1.02 and head > right_shoulder * 1.02 and
                 abs(left_shoulder - right_shoulder) / left_shoulder < 0.05 and
                 df['close'].iloc[i] < head * 0.98):
@@ -1025,12 +972,9 @@ class ClassicalPatternDetector:
                     price=float(df['close'].iloc[i]),
                     description="Head and Shoulders - Bearish reversal"
                 ))
-            
-            # Inverse Head and Shoulders
             left_shoulder = df['low'].iloc[i - 25:i - 15].min()
             head = df['low'].iloc[i - 15:i - 5].min()
             right_shoulder = df['low'].iloc[i - 5:i].min()
-            
             if (head < left_shoulder * 0.98 and head < right_shoulder * 0.98 and
                 abs(left_shoulder - right_shoulder) / left_shoulder < 0.05 and
                 df['close'].iloc[i] > head * 1.02):
@@ -1043,7 +987,6 @@ class ClassicalPatternDetector:
                     price=float(df['close'].iloc[i]),
                     description="Inverse Head and Shoulders - Bullish reversal"
                 ))
-        
         return patterns[-5:]
     
     @staticmethod
@@ -1052,12 +995,10 @@ class ClassicalPatternDetector:
         patterns = []
         if len(df) < 35:
             return patterns
-        
         for i in range(30, len(df)):
             first_bottom = df['low'].iloc[i - 25:i - 15].min()
             peak = df['high'].iloc[i - 15:i - 8].max()
             second_bottom = df['low'].iloc[i - 8:i - 2].min()
-            
             if (first_bottom > 0 and second_bottom > 0 and peak > 0 and
                 abs(first_bottom - second_bottom) / first_bottom < 0.03 and
                 peak > first_bottom * 1.05 and
@@ -1071,7 +1012,6 @@ class ClassicalPatternDetector:
                     price=float(df['close'].iloc[i]),
                     description="W Pattern - Bullish reversal"
                 ))
-        
         return patterns[-5:]
     
     @staticmethod
@@ -1080,12 +1020,10 @@ class ClassicalPatternDetector:
         patterns = []
         if len(df) < 35:
             return patterns
-        
         for i in range(30, len(df)):
             first_top = df['high'].iloc[i - 25:i - 15].max()
             bottom = df['low'].iloc[i - 15:i - 8].min()
             second_top = df['high'].iloc[i - 8:i - 2].max()
-            
             if (first_top > 0 and second_top > 0 and bottom > 0 and
                 abs(first_top - second_top) / first_top < 0.03 and
                 bottom < first_top * 0.95 and
@@ -1099,7 +1037,6 @@ class ClassicalPatternDetector:
                     price=float(df['close'].iloc[i]),
                     description="M Pattern - Bearish reversal"
                 ))
-        
         return patterns[-5:]
     
     @staticmethod
@@ -1108,17 +1045,13 @@ class ClassicalPatternDetector:
         patterns = []
         if len(df) < 30:
             return patterns
-        
         for i in range(25, len(df)):
             highs = df['high'].iloc[i - 20:i].values
             lows = df['low'].iloc[i - 20:i].values
-            
             if len(highs) >= 5:
                 x = np.arange(len(highs))
                 high_slope = np.polyfit(x, highs, 1)[0]
                 low_slope = np.polyfit(x, lows, 1)[0]
-                
-                # Rising Wedge (Bearish)
                 if high_slope > 0 and low_slope > 0 and high_slope < low_slope * 1.1:
                     if df['close'].iloc[i] < lows[-1]:
                         patterns.append(Pattern(
@@ -1130,8 +1063,6 @@ class ClassicalPatternDetector:
                             price=float(df['close'].iloc[i]),
                             description="Rising Wedge - Bearish breakdown"
                         ))
-                
-                # Falling Wedge (Bullish)
                 if high_slope < 0 and low_slope < 0 and low_slope < high_slope:
                     if df['close'].iloc[i] > highs[-1]:
                         patterns.append(Pattern(
@@ -1143,7 +1074,6 @@ class ClassicalPatternDetector:
                             price=float(df['close'].iloc[i]),
                             description="Falling Wedge - Bullish breakout"
                         ))
-        
         return patterns[-5:]
     
     @staticmethod
@@ -1157,13 +1087,11 @@ class ClassicalPatternDetector:
         patterns.extend(ClassicalPatternDetector.detect_triangle_patterns(df))
         return patterns[-Config.MAX_PATTERNS:]
 
-
 # ========================================================================================================
 # CANDLESTICK PATTERN DETECTOR
 # ========================================================================================================
 class CandlestickPatternDetector:
     """Candlestick pattern detector"""
-    
     @staticmethod
     def _calculate_shadows(candle: pd.Series) -> tuple:
         body_top = max(candle['open'], candle['close'])
@@ -1177,7 +1105,6 @@ class CandlestickPatternDetector:
     def detect_doji(candle: pd.Series, idx, df) -> Optional[Pattern]:
         upper, lower, body = CandlestickPatternDetector._calculate_shadows(candle)
         total_range = candle['high'] - candle['low']
-        
         if total_range > 0 and body / total_range < 0.1:
             return Pattern(
                 name="doji",
@@ -1193,7 +1120,6 @@ class CandlestickPatternDetector:
     @staticmethod
     def detect_hammer(candle: pd.Series, idx, df) -> Optional[Pattern]:
         upper, lower, body = CandlestickPatternDetector._calculate_shadows(candle)
-        
         if body > 0 and lower > 2 * body and upper < body and candle['close'] > candle['open']:
             return Pattern(
                 name="hammer",
@@ -1209,7 +1135,6 @@ class CandlestickPatternDetector:
     @staticmethod
     def detect_shooting_star(candle: pd.Series, idx, df) -> Optional[Pattern]:
         upper, lower, body = CandlestickPatternDetector._calculate_shadows(candle)
-        
         if body > 0 and upper > 2 * body and lower < body and candle['close'] < candle['open']:
             return Pattern(
                 name="shooting_star",
@@ -1225,7 +1150,6 @@ class CandlestickPatternDetector:
     @staticmethod
     def detect_marubozu(candle: pd.Series, idx, df) -> Optional[Pattern]:
         upper, lower, body = CandlestickPatternDetector._calculate_shadows(candle)
-        
         if body > 0 and upper < body * 0.1 and lower < body * 0.1:
             direction = Direction.BULLISH if candle['close'] > candle['open'] else Direction.BEARISH
             return Pattern(
@@ -1243,15 +1167,12 @@ class CandlestickPatternDetector:
     def detect_engulfing(df: pd.DataFrame, idx: int) -> Optional[Pattern]:
         if idx < 1:
             return None
-        
         curr = df.iloc[idx]
         prev = df.iloc[idx - 1]
-        
         curr_bullish = curr['close'] > curr['open']
         curr_bearish = curr['close'] < curr['open']
         prev_bearish = prev['close'] < prev['open']
         prev_bullish = prev['close'] > prev['open']
-        
         if curr_bullish and prev_bearish and curr['open'] < prev['close'] and curr['close'] > prev['open']:
             return Pattern(
                 name="bullish_engulfing",
@@ -1262,7 +1183,6 @@ class CandlestickPatternDetector:
                 price=float(curr['close']),
                 description="Bullish Engulfing - Strong reversal"
             )
-        
         elif curr_bearish and prev_bullish and curr['open'] > prev['close'] and curr['close'] < prev['open']:
             return Pattern(
                 name="bearish_engulfing",
@@ -1273,25 +1193,20 @@ class CandlestickPatternDetector:
                 price=float(curr['close']),
                 description="Bearish Engulfing - Strong reversal"
             )
-        
         return None
     
     @staticmethod
     def detect_harami(df: pd.DataFrame, idx: int) -> Optional[Pattern]:
         if idx < 1:
             return None
-        
         curr = df.iloc[idx]
         prev = df.iloc[idx - 1]
-        
         curr_range = abs(curr['close'] - curr['open'])
         prev_range = abs(prev['close'] - prev['open'])
-        
         if prev_range == 0:
             return None
-        
         if curr_range < prev_range * 0.6:
-            if prev['close'] > prev['open']:  # Bullish previous
+            if prev['close'] > prev['open']:
                 if curr['close'] < prev['close'] and curr['open'] > prev['open']:
                     return Pattern(
                         name="bearish_harami",
@@ -1302,7 +1217,7 @@ class CandlestickPatternDetector:
                         price=float(curr['close']),
                         description="Bearish Harami"
                     )
-            else:  # Bearish previous
+            else:
                 if curr['close'] > prev['close'] and curr['open'] < prev['open']:
                     return Pattern(
                         name="bullish_harami",
@@ -1313,18 +1228,15 @@ class CandlestickPatternDetector:
                         price=float(curr['close']),
                         description="Bullish Harami"
                     )
-        
         return None
     
     @staticmethod
     def detect_morning_star(df: pd.DataFrame, idx: int) -> Optional[Pattern]:
         if idx < 2:
             return None
-        
         c1 = df.iloc[idx - 2]
         c2 = df.iloc[idx - 1]
         c3 = df.iloc[idx]
-        
         if c1['close'] < c1['open'] and c3['close'] > c3['open']:
             body2 = abs(c2['close'] - c2['open'])
             range2 = c2['high'] - c2['low']
@@ -1339,18 +1251,15 @@ class CandlestickPatternDetector:
                         price=float(c3['close']),
                         description="Morning Star - Bullish reversal"
                     )
-        
         return None
     
     @staticmethod
     def detect_evening_star(df: pd.DataFrame, idx: int) -> Optional[Pattern]:
         if idx < 2:
             return None
-        
         c1 = df.iloc[idx - 2]
         c2 = df.iloc[idx - 1]
         c3 = df.iloc[idx]
-        
         if c1['close'] > c1['open'] and c3['close'] < c3['open']:
             body2 = abs(c2['close'] - c2['open'])
             range2 = c2['high'] - c2['low']
@@ -1365,14 +1274,12 @@ class CandlestickPatternDetector:
                         price=float(c3['close']),
                         description="Evening Star - Bearish reversal"
                     )
-        
         return None
     
     @staticmethod
     def detect_three_white_soldiers(df: pd.DataFrame, idx: int) -> Optional[Pattern]:
         if idx < 2:
             return None
-        
         if (df['close'].iloc[idx - 2] > df['open'].iloc[idx - 2] and
             df['close'].iloc[idx - 1] > df['open'].iloc[idx - 1] and
             df['close'].iloc[idx] > df['open'].iloc[idx] and
@@ -1393,7 +1300,6 @@ class CandlestickPatternDetector:
     def detect_three_black_crows(df: pd.DataFrame, idx: int) -> Optional[Pattern]:
         if idx < 2:
             return None
-        
         if (df['close'].iloc[idx - 2] < df['open'].iloc[idx - 2] and
             df['close'].iloc[idx - 1] < df['open'].iloc[idx - 1] and
             df['close'].iloc[idx] < df['open'].iloc[idx] and
@@ -1414,14 +1320,10 @@ class CandlestickPatternDetector:
     def analyze(df: pd.DataFrame) -> List[Pattern]:
         """Run all candlestick pattern detectors"""
         patterns = []
-        
         if len(df) < 10:
             return patterns
-        
-        # Single candle patterns
         for i in range(len(df) - 10, len(df)):
             candle = df.iloc[i]
-            
             for detector in [
                 CandlestickPatternDetector.detect_doji,
                 CandlestickPatternDetector.detect_hammer,
@@ -1431,8 +1333,6 @@ class CandlestickPatternDetector:
                 pattern = detector(candle, i, df)
                 if pattern:
                     patterns.append(pattern)
-        
-        # Multi-candle patterns
         for i in range(max(2, len(df) - 10), len(df)):
             for detector in [
                 CandlestickPatternDetector.detect_engulfing,
@@ -1445,21 +1345,19 @@ class CandlestickPatternDetector:
                 pattern = detector(df, i)
                 if pattern:
                     patterns.append(pattern)
-        
         return patterns[-Config.MAX_PATTERNS:]
-
 
 # ========================================================================================================
 # ML MODEL TRAINER
 # ========================================================================================================
 class MLModelTrainer:
     """ML Model Trainer with feature engineering"""
-    
     def __init__(self, model_dir: str = "models"):
         self.model_dir = Path(model_dir)
         self.model_dir.mkdir(parents=True, exist_ok=True)
         self.models: Dict[str, Dict] = {}
         self.scalers: Dict[str, StandardScaler] = {}
+        self.executor = ThreadPoolExecutor(max_workers=4)
         self._load_models()
     
     def _load_models(self):
@@ -1470,11 +1368,9 @@ class MLModelTrainer:
                 if not model_key.endswith('_scaler'):
                     model_data = joblib.load(model_file)
                     self.models[model_key] = model_data
-                    
                     scaler_file = self.model_dir / f"{model_key}_scaler.joblib"
                     if scaler_file.exists():
                         self.scalers[model_key] = joblib.load(scaler_file)
-                    
                     logger.info(f"Loaded model: {model_key}")
             except Exception as e:
                 logger.error(f"Failed to load {model_file}: {e}")
@@ -1485,29 +1381,21 @@ class MLModelTrainer:
     def _engineer_features(self, df: pd.DataFrame) -> pd.DataFrame:
         """Feature engineering for ML"""
         df = df.copy()
-        
-        # Returns
         df['return_1'] = df['close'].pct_change(1)
         df['return_5'] = df['close'].pct_change(5)
         df['return_10'] = df['close'].pct_change(10)
         df['volatility'] = df['return_1'].rolling(20).std() * np.sqrt(252)
-        
-        # RSI
         delta = df['close'].diff()
         gain = (delta.where(delta > 0, 0)).rolling(window=14).mean()
         loss = (-delta.where(delta < 0, 0)).rolling(window=14).mean()
         rs = gain / loss.replace(0, np.nan)
         df['rsi_14'] = 100 - (100 / (1 + rs))
         df['rsi_14_change'] = df['rsi_14'].diff(3)
-        
-        # MACD
         exp1 = df['close'].ewm(span=12).mean()
         exp2 = df['close'].ewm(span=26).mean()
         df['macd'] = exp1 - exp2
         df['macd_signal'] = df['macd'].ewm(span=9).mean()
         df['macd_histogram'] = df['macd'] - df['macd_signal']
-        
-        # Bollinger
         sma20 = df['close'].rolling(20).mean()
         std20 = df['close'].rolling(20).std()
         bb_upper = sma20 + (std20 * 2)
@@ -1515,42 +1403,30 @@ class MLModelTrainer:
         bb_range = (bb_upper - bb_lower).replace(0, 1)
         df['bb_position'] = ((df['close'] - bb_lower) / bb_range * 100).clip(0, 100)
         df['bb_width'] = (bb_upper - bb_lower) / sma20
-        
-        # Moving averages
         df['sma20'] = df['close'].rolling(20).mean()
         df['sma50'] = df['close'].rolling(50).mean()
         df['price_to_sma20'] = df['close'] / df['sma20'] - 1
         df['price_to_sma50'] = df['close'] / df['sma50'] - 1
         df['sma20_above_sma50'] = (df['sma20'] > df['sma50']).astype(int)
-        
-        # Volume
         df['volume_sma20'] = df['volume'].rolling(20).mean()
         df['volume_ratio'] = df['volume'] / df['volume_sma20'].replace(0, 1)
         df['volume_trend'] = df['volume'].rolling(5).mean() / df['volume'].rolling(20).mean()
-        
-        # ATR
         tr1 = df['high'] - df['low']
         tr2 = (df['high'] - df['close'].shift()).abs()
         tr3 = (df['low'] - df['close'].shift()).abs()
         tr = pd.concat([tr1, tr2, tr3], axis=1).max(axis=1)
         df['atr'] = tr.rolling(14).mean()
         df['atr_percent'] = df['atr'] / df['close']
-        
-        # Momentum
         df['momentum_5'] = df['close'].pct_change(5) * 100
         df['momentum_10'] = df['close'].pct_change(10) * 100
-        
-        # Clean up
         df = df.ffill().bfill()
         df = df.fillna(0)
         df = df.replace([np.inf, -np.inf], 0)
-        
         return df
     
     def _prepare_training_data(self, df: pd.DataFrame) -> Tuple[pd.DataFrame, pd.Series]:
         """Prepare features and labels"""
         df_features = self._engineer_features(df)
-        
         feature_columns = [
             'return_1', 'return_5', 'return_10', 'volatility',
             'rsi_14', 'rsi_14_change',
@@ -1561,128 +1437,92 @@ class MLModelTrainer:
             'atr_percent',
             'momentum_5', 'momentum_10'
         ]
-        
-        # Target: 1 if price up in next 5 periods, 0 otherwise
         future_return = df['close'].shift(-5) / df['close'] - 1
         target = (future_return > 0.005).astype(int)
-        
         features = df_features[feature_columns].copy()
-        
-        # Align
         valid_idx = ~(target.isna() | features.isna().any(axis=1))
         features = features[valid_idx]
         target = target[valid_idx]
-        
         return features, target
     
-    async def train(self, symbol: str, interval: str, df: pd.DataFrame, force: bool = False) -> Dict:
-        """Train ML model"""
+    def _train_sync(self, symbol: str, interval: str, df: pd.DataFrame, force: bool = False) -> Dict:
+        """Synchronous training logic (runs in executor)"""
         model_key = self._get_model_key(symbol, interval)
         model_path = self.model_dir / f"{model_key}.joblib"
-        
-        # Check if retraining needed
         if not force and model_path.exists():
             model_data = joblib.load(model_path)
             last_train = datetime.fromisoformat(model_data.get('trained_at', '2000-01-01'))
             hours_since = (datetime.now() - last_train).total_seconds() / 3600
             if hours_since < Config.ML_RETRAIN_HOURS:
                 return model_data
-        
         logger.info(f"Training ML model for {symbol} @ {interval}")
-        
-        try:
-            features, target = self._prepare_training_data(df)
-            
-            if len(features) < Config.ML_MIN_TRAINING_SAMPLES:
-                raise ValueError(f"Insufficient samples: {len(features)}")
-            
-            logger.info(f"Training samples: {len(features)}, Features: {len(features.columns)}")
-            
-            # Time-series split
-            split_idx = int(len(features) * 0.8)
-            X_train, X_test = features.iloc[:split_idx], features.iloc[split_idx:]
-            y_train, y_test = target.iloc[:split_idx], target.iloc[split_idx:]
-            
-            # Scale
-            scaler = StandardScaler()
-            X_train_scaled = scaler.fit_transform(X_train)
-            X_test_scaled = scaler.transform(X_test)
-            
-            # Train models
-            models = {
-                'xgboost': xgb.XGBClassifier(n_estimators=200, max_depth=8, learning_rate=0.05, random_state=42),
-                'lightgbm': lgb.LGBMClassifier(n_estimators=200, max_depth=10, learning_rate=0.05, random_state=42, verbose=-1),
-                'random_forest': RandomForestClassifier(n_estimators=200, max_depth=15, random_state=42)
-            }
-            
-            results = {}
-            trained_models = {}
-            
-            for name, model in models.items():
-                try:
-                    model.fit(X_train_scaled, y_train)
-                    y_pred = model.predict(X_test_scaled)
-                    
-                    accuracy = accuracy_score(y_test, y_pred)
-                    precision = precision_score(y_test, y_pred, zero_division=0)
-                    recall = recall_score(y_test, y_pred, zero_division=0)
-                    
-                    # Time series cross-validation
-                    tscv = TimeSeriesSplit(n_splits=3)
-                    cv_scores = cross_val_score(model, X_train_scaled, y_train, cv=tscv, scoring='accuracy')
-                    
-                    results[name] = {
-                        'accuracy': round(accuracy * 100, 2),
-                        'precision': round(precision * 100, 2),
-                        'recall': round(recall * 100, 2),
-                        'cv_mean': round(cv_scores.mean() * 100, 2),
-                        'cv_std': round(cv_scores.std() * 100, 2)
-                    }
-                    
-                    trained_models[name] = model
-                    logger.info(f"✅ {name}: Accuracy={accuracy*100:.1f}%")
-                    
-                except Exception as e:
-                    logger.error(f"❌ {name} failed: {e}")
-                    results[name] = {'error': str(e)}
-            
-            # Select best model
-            best_model = max(
-                [(n, r.get('accuracy', 0)) for n, r in results.items() if 'accuracy' in r],
-                key=lambda x: x[1]
-            )[0]
-            
-            # Save
-            model_data = {
-                'models': trained_models,
-                'best_model': best_model,
-                'results': results,
-                'feature_names': list(features.columns),
-                'trained_at': datetime.now().isoformat(),
-                'symbol': symbol,
-                'interval': interval,
-                'training_samples': len(features)
-            }
-            
-            joblib.dump(model_data, model_path)
-            joblib.dump(scaler, self.model_dir / f"{model_key}_scaler.joblib")
-            
-            self.models[model_key] = model_data
-            self.scalers[model_key] = scaler
-            
-            logger.info(f"✅ Model saved: {model_key} (best: {best_model})")
-            
-            return model_data
-            
-        except Exception as e:
-            logger.error(f"Training failed: {e}")
-            raise
+        features, target = self._prepare_training_data(df)
+        if len(features) < Config.ML_MIN_TRAINING_SAMPLES:
+            raise ValueError(f"Insufficient samples: {len(features)}")
+        logger.info(f"Training samples: {len(features)}, Features: {len(features.columns)}")
+        split_idx = int(len(features) * 0.8)
+        X_train, X_test = features.iloc[:split_idx], features.iloc[split_idx:]
+        y_train, y_test = target.iloc[:split_idx], target.iloc[split_idx:]
+        scaler = StandardScaler()
+        X_train_scaled = scaler.fit_transform(X_train)
+        X_test_scaled = scaler.transform(X_test)
+        models = {
+            'xgboost': xgb.XGBClassifier(n_estimators=200, max_depth=8, learning_rate=0.05, random_state=42),
+            'lightgbm': lgb.LGBMClassifier(n_estimators=200, max_depth=10, learning_rate=0.05, random_state=42, verbose=-1),
+            'random_forest': RandomForestClassifier(n_estimators=200, max_depth=15, random_state=42)
+        }
+        results = {}
+        trained_models = {}
+        for name, model in models.items():
+            try:
+                model.fit(X_train_scaled, y_train)
+                y_pred = model.predict(X_test_scaled)
+                accuracy = accuracy_score(y_test, y_pred)
+                precision = precision_score(y_test, y_pred, zero_division=0)
+                recall = recall_score(y_test, y_pred, zero_division=0)
+                tscv = TimeSeriesSplit(n_splits=3)
+                cv_scores = cross_val_score(model, X_train_scaled, y_train, cv=tscv, scoring='accuracy')
+                results[name] = {
+                    'accuracy': round(accuracy * 100, 2),
+                    'precision': round(precision * 100, 2),
+                    'recall': round(recall * 100, 2),
+                    'cv_mean': round(cv_scores.mean() * 100, 2),
+                    'cv_std': round(cv_scores.std() * 100, 2)
+                }
+                trained_models[name] = model
+                logger.info(f"✅ {name}: Accuracy={accuracy*100:.1f}%")
+            except Exception as e:
+                logger.error(f"❌ {name} failed: {e}")
+                results[name] = {'error': str(e)}
+        best_model = max(
+            [(n, r.get('accuracy', 0)) for n, r in results.items() if 'accuracy' in r],
+            key=lambda x: x[1]
+        )[0]
+        model_data = {
+            'models': trained_models,
+            'best_model': best_model,
+            'results': results,
+            'feature_names': list(features.columns),
+            'trained_at': datetime.now().isoformat(),
+            'symbol': symbol,
+            'interval': interval,
+            'training_samples': len(features)
+        }
+        joblib.dump(model_data, model_path)
+        joblib.dump(scaler, self.model_dir / f"{model_key}_scaler.joblib")
+        self.models[model_key] = model_data
+        self.scalers[model_key] = scaler
+        logger.info(f"✅ Model saved: {model_key} (best: {best_model})")
+        return model_data
     
-    async def predict(self, symbol: str, interval: str, df: pd.DataFrame) -> MLPrediction:
-        """Make prediction using trained model"""
+    async def train(self, symbol: str, interval: str, df: pd.DataFrame, force: bool = False) -> Dict:
+        """Train ML model (non-blocking)"""
+        loop = asyncio.get_event_loop()
+        return await loop.run_in_executor(self.executor, self._train_sync, symbol, interval, df, force)
+    
+    def _predict_sync(self, symbol: str, interval: str, df: pd.DataFrame) -> MLPrediction:
+        """Synchronous prediction logic"""
         model_key = self._get_model_key(symbol, interval)
-        
-        # Load model if not in memory
         if model_key not in self.models:
             model_path = self.model_dir / f"{model_key}.joblib"
             if model_path.exists():
@@ -1691,7 +1531,6 @@ class MLModelTrainer:
                 if scaler_path.exists():
                     self.scalers[model_key] = joblib.load(scaler_path)
             else:
-                # Return fallback prediction
                 return MLPrediction(
                     signal=SignalType.NEUTRAL,
                     confidence=50.0,
@@ -1701,27 +1540,16 @@ class MLModelTrainer:
                     buy_probability=0.5,
                     sell_probability=0.5
                 )
-        
         model_data = self.models[model_key]
         scaler = self.scalers.get(model_key)
-        
-        # Engineer features
         df_features = self._engineer_features(df)
         feature_names = model_data['feature_names']
-        
-        # Get latest features
         latest = df_features[feature_names].iloc[-1:].fillna(0)
-        
-        # Scale
         if scaler:
             X_scaled = scaler.transform(latest)
         else:
             X_scaled = latest.values
-        
-        # Get best model
         best_model = model_data['models'][model_data['best_model']]
-        
-        # Predict probabilities
         if hasattr(best_model, 'predict_proba'):
             proba = best_model.predict_proba(X_scaled)[0]
             buy_prob = float(proba[1]) if len(proba) > 1 else 0.5
@@ -1730,10 +1558,7 @@ class MLModelTrainer:
             pred = best_model.predict(X_scaled)[0]
             buy_prob = 0.8 if pred == 1 else 0.2
             sell_prob = 0.2 if pred == 1 else 0.8
-        
-        # Determine signal
         confidence = buy_prob * 100
-        
         if buy_prob > 0.7:
             signal = SignalType.STRONG_BUY
         elif buy_prob > 0.55:
@@ -1744,7 +1569,6 @@ class MLModelTrainer:
             signal = SignalType.SELL
         else:
             signal = SignalType.NEUTRAL
-        
         return MLPrediction(
             signal=signal,
             confidence=round(confidence, 1),
@@ -1754,6 +1578,11 @@ class MLModelTrainer:
             buy_probability=round(buy_prob, 3),
             sell_probability=round(sell_prob, 3)
         )
+    
+    async def predict(self, symbol: str, interval: str, df: pd.DataFrame) -> MLPrediction:
+        """Make prediction using trained model (non-blocking)"""
+        loop = asyncio.get_event_loop()
+        return await loop.run_in_executor(self.executor, self._predict_sync, symbol, interval, df)
     
     def get_model_info(self, symbol: str, interval: str) -> Optional[Dict]:
         """Get model info"""
@@ -1768,7 +1597,6 @@ class MLModelTrainer:
                 'feature_names': data['feature_names'][:10]
             }
         return None
-
 
 # ========================================================================================================
 # FASTAPI APPLICATION
@@ -1793,30 +1621,139 @@ data_fetcher = ExchangeDataFetcher()
 ml_trainer = MLModelTrainer(model_dir=Config.ML_MODEL_DIR)
 startup_time = time.time()
 
+# ========================================================================================================
+# GLOBAL EXCEPTION HANDLER
+# ========================================================================================================
+@app.exception_handler(Exception)
+async def global_exception_handler(request: Request, exc: Exception):
+    logger.exception(f"Global exception: {exc}")
+    return JSONResponse(
+        status_code=500,
+        content={"success": False, "error": str(exc)[:200]}
+    )
 
 # ========================================================================================================
 # API ENDPOINTS
 # ========================================================================================================
-
-# ========================================================================================================
-# STATIC FILES & TEMPLATES
-# ========================================================================================================
 @app.get("/", response_class=HTMLResponse)
 async def root():
     """Ana sayfa"""
-    index_path = Path(__file__).parent / "templates" / "index.html"
-    if index_path.exists():
-        return FileResponse(index_path)
-    return HTMLResponse("<h1>ICTSMARTPRO ML API</h1><p>Çalışıyor. <a href='/docs'>Dökümanlar</a></p>")
-
+    return HTMLResponse("""
+    <!DOCTYPE html>
+    <html>
+    <head>
+        <title>ICTSMARTPRO ML API</title>
+        <style>
+            body { font-family: Arial, sans-serif; max-width: 800px; margin: 50px auto; padding: 20px; }
+            h1 { color: #2c3e50; }
+            .endpoint { background: #f8f9fa; padding: 15px; margin: 10px 0; border-radius: 5px; }
+            .method { display: inline-block; padding: 5px 10px; border-radius: 3px; font-weight: bold; }
+            .get { background: #61affe; color: white; }
+            .post { background: #49cc90; color: white; }
+        </style>
+    </head>
+    <body>
+        <h1>🚀 ICTSMARTPRO ML API</h1>
+        <p>Production Ready - Crypto Analysis with ML</p>
+        <div class="endpoint">
+            <span class="method get">GET</span>
+            <strong>/docs</strong> - Swagger Documentation
+        </div>
+        <div class="endpoint">
+            <span class="method get">GET</span>
+            <strong>/health</strong> - Health Check
+        </div>
+        <div class="endpoint">
+            <span class="method get">GET</span>
+            <strong>/api/analyze/{symbol}</strong> - Full Analysis
+        </div>
+        <div class="endpoint">
+            <span class="method post">POST</span>
+            <strong>/api/train/{symbol}</strong> - Train Model
+        </div>
+        <div class="endpoint">
+            <span class="method get">GET</span>
+            <strong>/api/models</strong> - List Models
+        </div>
+        <div class="endpoint">
+            <span class="method get">GET</span>
+            <strong>/api/stats</strong> - System Stats
+        </div>
+    </body>
+    </html>
+    """)
 
 @app.get("/dashboard", response_class=HTMLResponse)
 async def dashboard():
     """Dashboard sayfası"""
-    dashboard_path = Path(__file__).parent / "templates" / "dashboard.html"
-    if dashboard_path.exists():
-        return FileResponse(dashboard_path)
-    return HTMLResponse("<h1>Dashboard bulunamadı</h1><p>dashboard.html dosyası eksik</p>", status_code=404)
+    return HTMLResponse("""
+    <!DOCTYPE html>
+    <html>
+    <head>
+        <title>ICTSMARTPRO Dashboard</title>
+        <style>
+            body { font-family: Arial, sans-serif; margin: 20px; background: #f5f5f5; }
+            .container { max-width: 1200px; margin: 0 auto; }
+            .card { background: white; padding: 20px; margin: 10px 0; border-radius: 8px; box-shadow: 0 2px 4px rgba(0,0,0,0.1); }
+            h1 { color: #2c3e50; }
+            .status { padding: 10px; border-radius: 5px; margin: 10px 0; }
+            .healthy { background: #d4edda; color: #155724; }
+            input, button { padding: 10px; margin: 5px; }
+            button { background: #007bff; color: white; border: none; border-radius: 5px; cursor: pointer; }
+            button:hover { background: #0056b3; }
+            #results { white-space: pre-wrap; background: #f8f9fa; padding: 15px; border-radius: 5px; }
+        </style>
+    </head>
+    <body>
+        <div class="container">
+            <h1>📊 ICTSMARTPRO Dashboard</h1>
+            <div class="card">
+                <h2>System Status</h2>
+                <div id="status" class="status healthy">Checking...</div>
+            </div>
+            <div class="card">
+                <h2>Analyze Symbol</h2>
+                <input type="text" id="symbol" placeholder="BTCUSDT" value="BTCUSDT">
+                <input type="text" id="interval" placeholder="1h" value="1h">
+                <button onclick="analyze()">Analyze</button>
+            </div>
+            <div class="card">
+                <h2>Results</h2>
+                <div id="results">Click Analyze to see results</div>
+            </div>
+        </div>
+        <script>
+            async function checkStatus() {
+                try {
+                    const res = await fetch('/health');
+                    const data = await res.json();
+                    document.getElementById('status').innerHTML = 
+                        `Status: ${data.status} | Models: ${data.models_loaded} | Uptime: ${data.uptime}`;
+                } catch (e) {
+                    document.getElementById('status').innerHTML = 'Error: ' + e.message;
+                    document.getElementById('status').className = 'status';
+                    document.getElementById('status').style.background = '#f8d7da';
+                    document.getElementById('status').style.color = '#721c24';
+                }
+            }
+            async function analyze() {
+                const symbol = document.getElementById('symbol').value;
+                const interval = document.getElementById('interval').value;
+                document.getElementById('results').innerHTML = 'Loading...';
+                try {
+                    const res = await fetch(`/api/analyze/${symbol}?interval=${interval}`);
+                    const data = await res.json();
+                    document.getElementById('results').innerHTML = JSON.stringify(data, null, 2);
+                } catch (e) {
+                    document.getElementById('results').innerHTML = 'Error: ' + e.message;
+                }
+            }
+            checkStatus();
+            setInterval(checkStatus, 30000);
+        </script>
+    </body>
+    </html>
+    """)
 
 @app.get("/health")
 async def health_check():
@@ -1827,53 +1764,36 @@ async def health_check():
         "uptime": str(timedelta(seconds=int(time.time() - startup_time)))
     }
 
-
 @app.get("/api/analyze/{symbol}", response_model=AnalysisResponse)
 async def analyze_symbol(
+    request: Request,
     symbol: str,
     interval: str = Query("1h", regex="^(1m|5m|15m|30m|1h|4h|1d|1w)$"),
     limit: int = Query(500, ge=100, le=1000),
-    background_tasks: BackgroundTasks = None
+    background_tasks: BackgroundTasks = None,
+    api_key: str = Depends(check_rate_limit)
 ):
     """Full analysis with ML + all patterns"""
-    
-    # Format symbol
     symbol = symbol.upper()
     if not symbol.endswith("USDT") and symbol not in ["BTC", "ETH", "BNB"]:
         symbol = f"{symbol}USDT"
-    
     logger.info(f"Analysis: {symbol} @ {interval}")
     start_time_local = time.time()
-    
     try:
-        # Fetch data
         async with data_fetcher as fetcher:
             candles = await fetcher.get_candles(symbol, interval, limit)
-        
         if not candles or len(candles) < Config.MIN_CANDLES:
             raise HTTPException(422, f"Insufficient data: {len(candles) if candles else 0}")
-        
-        # DataFrame
         df = pd.DataFrame(candles)
         df['timestamp'] = pd.to_datetime(df['timestamp'], unit='ms')
         df = df.set_index('timestamp').sort_index()
-        
-        # Technical indicators
         indicators = TechnicalIndicatorCalculator.calculate_all(df)
-        technical = {k: float(v.iloc[-1]) for k, v in indicators.items()}
-        
-        # Market structure
+        technical = {k: float(v.iloc[-1]) if not np.isnan(v.iloc[-1]) else 0.0 for k, v in indicators.items()}
         market_structure = MarketStructureAnalyzer.analyze(df)
-        
-        # Pattern detection
         ict_patterns = ICTPatternDetector.analyze(df)
         classical_patterns = ClassicalPatternDetector.analyze(df)
         candlestick_patterns = CandlestickPatternDetector.analyze(df)
-        
-        # ML Prediction
         ml_pred = await ml_trainer.predict(symbol, interval, df)
-        
-        # Auto-train if needed
         if background_tasks and Config.ML_AUTO_RETRAIN:
             model_info = ml_trainer.get_model_info(symbol, interval)
             if not model_info:
@@ -1885,8 +1805,6 @@ async def analyze_symbol(
                     df=df,
                     force=False
                 )
-        
-        # Model info
         model_info = ml_trainer.get_model_info(symbol, interval) or {
             'best_model': 'none',
             'trained_at': 'never',
@@ -1894,11 +1812,8 @@ async def analyze_symbol(
             'training_samples': 0,
             'feature_names': []
         }
-        
-        # Price data
         last = df.iloc[-1]
         first = df.iloc[0]
-        
         response = AnalysisResponse(
             success=True,
             symbol=symbol,
@@ -1924,75 +1839,69 @@ async def analyze_symbol(
             model_info=model_info,
             performance_ms=round((time.time() - start_time_local) * 1000, 2)
         )
-        
         logger.info(f"✅ Complete: {ml_pred.signal.value} ({ml_pred.confidence:.1f}%) | "
                    f"ICT:{len(ict_patterns)} Class:{len(classical_patterns)} Candle:{len(candlestick_patterns)} | "
                    f"{response.performance_ms}ms")
-        
         return response
-        
+    except HTTPException:
+        raise
     except Exception as e:
         logger.exception(f"Analysis failed: {e}")
         raise HTTPException(500, f"Analysis failed: {str(e)[:200]}")
 
-
 @app.post("/api/train/{symbol}")
 async def train_model(
+    request: Request,
     symbol: str,
     interval: str = Query("1h", regex="^(1m|5m|15m|30m|1h|4h|1d|1w)$"),
     force: bool = False,
-    background_tasks: BackgroundTasks = None
+    background_tasks: BackgroundTasks = None,
+    api_key: str = Depends(check_rate_limit)
 ):
     """Train ML model"""
     symbol = symbol.upper()
     if not symbol.endswith("USDT"):
         symbol = f"{symbol}USDT"
-    
     logger.info(f"Training request: {symbol} @ {interval}")
-    
     try:
         async with data_fetcher as fetcher:
             candles = await fetcher.get_candles(symbol, interval, 1000)
-        
         if not candles or len(candles) < Config.ML_MIN_TRAINING_SAMPLES:
             raise HTTPException(422, f"Insufficient data: {len(candles) if candles else 0}")
-        
         df = pd.DataFrame(candles)
         df['timestamp'] = pd.to_datetime(df['timestamp'], unit='ms')
         df = df.set_index('timestamp').sort_index()
-        
         if background_tasks:
             background_tasks.add_task(ml_trainer.train, symbol, interval, df, force)
             return {"success": True, "message": f"Training started for {symbol}"}
         else:
             result = await ml_trainer.train(symbol, interval, df, force)
             return {"success": True, "message": "Training completed", "result": result}
-            
+    except HTTPException:
+        raise
     except Exception as e:
         logger.error(f"Training failed: {e}")
         raise HTTPException(500, f"Training failed: {str(e)[:200]}")
-
 
 @app.get("/api/models")
 async def list_models():
     """List all trained models"""
     models = []
-    for model_file in Path(Config.ML_MODEL_DIR).glob("*_meta.json"):
+    for model_file in Path(Config.ML_MODEL_DIR).glob("*.joblib"):
         try:
-            with open(model_file, 'r') as f:
-                data = json.load(f)
+            if not model_file.stem.endswith('_scaler'):
+                model_data = joblib.load(model_file)
                 models.append({
-                    'symbol': data.get('symbol'),
-                    'interval': data.get('interval'),
-                    'trained_at': data.get('trained_at'),
-                    'best_model': data.get('best_model'),
-                    'accuracy': data.get('results', {}).get(data.get('best_model'), {}).get('accuracy', 0)
+                    'symbol': model_data.get('symbol'),
+                    'interval': model_data.get('interval'),
+                    'trained_at': model_data.get('trained_at'),
+                    'best_model': model_data.get('best_model'),
+                    'accuracy': model_data.get('results', {}).get(model_data.get('best_model'), {}).get('accuracy', 0)
                 })
-        except:
+        except Exception as e:
+            logger.debug(f"Error loading model {model_file}: {e}")
             continue
-    
     return {"success": True, "count": len(models), "models": models}
-
 
 @app.get("/api/stats")
 async def get_stats():
@@ -2006,23 +1915,19 @@ async def get_stats():
         "models_loaded": len(ml_trainer.models)
     }
 
-
 @app.websocket("/ws/{symbol}")
 async def websocket_endpoint(websocket: WebSocket, symbol: str):
     """WebSocket price feed"""
     symbol = symbol.upper()
     if not symbol.endswith("USDT"):
         symbol = f"{symbol}USDT"
-    
     await websocket.accept()
     logger.info(f"WebSocket connected: {symbol}")
-    
     try:
         last_price = None
         while True:
             async with data_fetcher as fetcher:
                 price = await fetcher.get_current_price(symbol)
-            
             if price and price != last_price:
                 await websocket.send_json({
                     "type": "price",
@@ -2031,16 +1936,14 @@ async def websocket_endpoint(websocket: WebSocket, symbol: str):
                     "timestamp": datetime.now(timezone.utc).isoformat()
                 })
                 last_price = price
-            
             await asyncio.sleep(3)
     except WebSocketDisconnect:
         logger.info(f"WebSocket disconnected: {symbol}")
     except Exception as e:
         logger.error(f"WebSocket error: {e}")
 
-
 # ========================================================================================================
-# STARTUP
+# STARTUP & SHUTDOWN
 # ========================================================================================================
 @app.on_event("startup")
 async def startup():
@@ -2051,17 +1954,26 @@ async def startup():
     logger.info(f"Models loaded: {len(ml_trainer.models)}")
     logger.info(f"Patterns: ICT(8), Classical(5), Candlestick(10+)")
     logger.info(f"Auto-retrain: {Config.ML_AUTO_RETRAIN}")
+    logger.info(f"Rate Limit: {Config.RATE_LIMIT_REQUESTS} requests / {Config.RATE_LIMIT_WINDOW}s")
     logger.info("=" * 70)
+    await data_fetcher.ensure_session()
 
+@app.on_event("shutdown")
+async def shutdown():
+    logger.info("Shutting down...")
+    await data_fetcher.close_session()
+    ml_trainer.executor.shutdown(wait=True)
+    logger.info("Shutdown complete")
 
 # ========================================================================================================
 # MAIN
 # ========================================================================================================
 if __name__ == "__main__":
     import uvicorn
+    current_file = Path(__file__).stem
     uvicorn.run(
-        "main:app",
-        host="0.0.0.0",
+        f"{current_file}:app",
+        host=Config.HOST,
         port=Config.PORT,
         reload=Config.DEBUG,
         log_level="info"
