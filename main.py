@@ -1685,69 +1685,900 @@ async def root():
 
 @app.get("/dashboard", response_class=HTMLResponse)
 async def dashboard():
-    """Dashboard sayfası"""
+    """Dashboard sayfası - Kullanıcı dostu görüntüleme"""
     return HTMLResponse("""
     <!DOCTYPE html>
-    <html>
+    <html lang="tr">
     <head>
+        <meta charset="UTF-8">
+        <meta name="viewport" content="width=device-width, initial-scale=1.0">
         <title>ICTSMARTPRO Dashboard</title>
         <style>
-            body { font-family: Arial, sans-serif; margin: 20px; background: #f5f5f5; }
-            .container { max-width: 1200px; margin: 0 auto; }
-            .card { background: white; padding: 20px; margin: 10px 0; border-radius: 8px; box-shadow: 0 2px 4px rgba(0,0,0,0.1); }
-            h1 { color: #2c3e50; }
-            .status { padding: 10px; border-radius: 5px; margin: 10px 0; }
-            .healthy { background: #d4edda; color: #155724; }
-            input, button { padding: 10px; margin: 5px; }
-            button { background: #007bff; color: white; border: none; border-radius: 5px; cursor: pointer; }
-            button:hover { background: #0056b3; }
-            #results { white-space: pre-wrap; background: #f8f9fa; padding: 15px; border-radius: 5px; }
+            * {
+                margin: 0;
+                padding: 0;
+                box-sizing: border-box;
+            }
+            body {
+                font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+                background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+                min-height: 100vh;
+                padding: 20px;
+            }
+            .container {
+                max-width: 1400px;
+                margin: 0 auto;
+            }
+            .header {
+                background: white;
+                padding: 30px;
+                border-radius: 15px;
+                margin-bottom: 20px;
+                box-shadow: 0 10px 40px rgba(0,0,0,0.2);
+                text-align: center;
+            }
+            .header h1 {
+                color: #2c3e50;
+                font-size: 2.5em;
+                margin-bottom: 10px;
+            }
+            .header p {
+                color: #7f8c8d;
+                font-size: 1.1em;
+            }
+            .search-box {
+                background: white;
+                padding: 25px;
+                border-radius: 15px;
+                margin-bottom: 20px;
+                box-shadow: 0 10px 40px rgba(0,0,0,0.2);
+                display: flex;
+                gap: 15px;
+                flex-wrap: wrap;
+                align-items: center;
+            }
+            .search-box input, .search-box select {
+                padding: 12px 20px;
+                border: 2px solid #e0e0e0;
+                border-radius: 8px;
+                font-size: 16px;
+                flex: 1;
+                min-width: 150px;
+            }
+            .search-box input:focus, .search-box select:focus {
+                outline: none;
+                border-color: #667eea;
+            }
+            .search-box button {
+                padding: 12px 30px;
+                background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+                color: white;
+                border: none;
+                border-radius: 8px;
+                font-size: 16px;
+                font-weight: bold;
+                cursor: pointer;
+                transition: transform 0.2s;
+            }
+            .search-box button:hover {
+                transform: translateY(-2px);
+            }
+            .search-box button:disabled {
+                opacity: 0.6;
+                cursor: not-allowed;
+            }
+            .status-bar {
+                background: white;
+                padding: 15px 25px;
+                border-radius: 15px;
+                margin-bottom: 20px;
+                box-shadow: 0 10px 40px rgba(0,0,0,0.2);
+                display: flex;
+                justify-content: space-between;
+                align-items: center;
+                flex-wrap: wrap;
+                gap: 15px;
+            }
+            .status-item {
+                display: flex;
+                align-items: center;
+                gap: 8px;
+            }
+            .status-dot {
+                width: 12px;
+                height: 12px;
+                border-radius: 50%;
+                background: #2ecc71;
+                animation: pulse 2s infinite;
+            }
+            @keyframes pulse {
+                0%, 100% { opacity: 1; }
+                50% { opacity: 0.5; }
+            }
+            .grid {
+                display: grid;
+                grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
+                gap: 20px;
+                margin-bottom: 20px;
+            }
+            .card {
+                background: white;
+                border-radius: 15px;
+                padding: 25px;
+                box-shadow: 0 10px 40px rgba(0,0,0,0.2);
+            }
+            .card h3 {
+                color: #2c3e50;
+                margin-bottom: 20px;
+                padding-bottom: 10px;
+                border-bottom: 3px solid #667eea;
+                font-size: 1.3em;
+            }
+            .price-card {
+                background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+                color: white;
+            }
+            .price-card h3 {
+                color: white;
+                border-bottom-color: rgba(255,255,255,0.3);
+            }
+            .price-value {
+                font-size: 2.5em;
+                font-weight: bold;
+                margin: 15px 0;
+            }
+            .price-change {
+                font-size: 1.2em;
+                padding: 8px 15px;
+                border-radius: 20px;
+                display: inline-block;
+            }
+            .price-change.positive {
+                background: rgba(46, 204, 113, 0.3);
+            }
+            .price-change.negative {
+                background: rgba(231, 76, 60, 0.3);
+            }
+            .ml-signal {
+                text-align: center;
+                padding: 30px;
+            }
+            .signal-badge {
+                display: inline-block;
+                padding: 15px 40px;
+                border-radius: 50px;
+                font-size: 1.8em;
+                font-weight: bold;
+                margin: 20px 0;
+                text-transform: uppercase;
+            }
+            .signal-STRONG_BUY {
+                background: linear-gradient(135deg, #00b894 0%, #00cec9 100%);
+                color: white;
+            }
+            .signal-BUY {
+                background: linear-gradient(135deg, #55efc4 0%, #81ecec 100%);
+                color: #2d3436;
+            }
+            .signal-NEUTRAL {
+                background: linear-gradient(135deg, #b2bec3 0%, #dfe6e9 100%);
+                color: #2d3436;
+            }
+            .signal-SELL {
+                background: linear-gradient(135deg, #fab1a0 0%, #ff7675 100%);
+                color: white;
+            }
+            .signal-STRONG_SELL {
+                background: linear-gradient(135deg, #d63031 0%, #e17055 100%);
+                color: white;
+            }
+            .confidence-meter {
+                background: #f0f0f0;
+                border-radius: 10px;
+                height: 30px;
+                margin: 20px 0;
+                overflow: hidden;
+                position: relative;
+            }
+            .confidence-fill {
+                height: 100%;
+                background: linear-gradient(90deg, #667eea 0%, #764ba2 100%);
+                border-radius: 10px;
+                transition: width 0.5s ease;
+                display: flex;
+                align-items: center;
+                justify-content: flex-end;
+                padding-right: 15px;
+                color: white;
+                font-weight: bold;
+            }
+            .indicator-grid {
+                display: grid;
+                grid-template-columns: repeat(2, 1fr);
+                gap: 15px;
+            }
+            .indicator-item {
+                background: #f8f9fa;
+                padding: 15px;
+                border-radius: 10px;
+                text-align: center;
+            }
+            .indicator-label {
+                color: #7f8c8d;
+                font-size: 0.9em;
+                margin-bottom: 5px;
+            }
+            .indicator-value {
+                font-size: 1.3em;
+                font-weight: bold;
+                color: #2c3e50;
+            }
+            .indicator-value.bullish {
+                color: #27ae60;
+            }
+            .indicator-value.bearish {
+                color: #e74c3c;
+            }
+            .pattern-list {
+                max-height: 400px;
+                overflow-y: auto;
+            }
+            .pattern-item {
+                background: #f8f9fa;
+                padding: 15px;
+                border-radius: 10px;
+                margin-bottom: 10px;
+                border-left: 5px solid #667eea;
+            }
+            .pattern-item.bullish {
+                border-left-color: #27ae60;
+            }
+            .pattern-item.bearish {
+                border-left-color: #e74c3c;
+            }
+            .pattern-item.neutral {
+                border-left-color: #95a5a6;
+            }
+            .pattern-name {
+                font-weight: bold;
+                color: #2c3e50;
+                margin-bottom: 5px;
+                text-transform: capitalize;
+            }
+            .pattern-type {
+                font-size: 0.85em;
+                color: #7f8c8d;
+                background: #e0e0e0;
+                padding: 3px 10px;
+                border-radius: 15px;
+                display: inline-block;
+                margin-bottom: 8px;
+            }
+            .pattern-confidence {
+                font-size: 0.9em;
+                color: #667eea;
+                font-weight: bold;
+            }
+            .pattern-description {
+                color: #7f8c8d;
+                font-size: 0.9em;
+                margin-top: 8px;
+            }
+            .market-structure {
+                display: grid;
+                grid-template-columns: repeat(2, 1fr);
+                gap: 15px;
+            }
+            .structure-item {
+                background: #f8f9fa;
+                padding: 15px;
+                border-radius: 10px;
+                text-align: center;
+            }
+            .structure-label {
+                color: #7f8c8d;
+                font-size: 0.9em;
+                margin-bottom: 5px;
+            }
+            .structure-value {
+                font-size: 1.1em;
+                font-weight: bold;
+                padding: 8px 15px;
+                border-radius: 20px;
+                display: inline-block;
+            }
+            .structure-value.uptrend {
+                background: #d4edda;
+                color: #155724;
+            }
+            .structure-value.downtrend {
+                background: #f8d7da;
+                color: #721c24;
+            }
+            .structure-value.neutral {
+                background: #e2e3e5;
+                color: #383d41;
+            }
+            .loading {
+                text-align: center;
+                padding: 50px;
+                color: white;
+                font-size: 1.5em;
+            }
+            .loading-spinner {
+                border: 5px solid #f3f3f3;
+                border-top: 5px solid #667eea;
+                border-radius: 50%;
+                width: 50px;
+                height: 50px;
+                animation: spin 1s linear infinite;
+                margin: 0 auto 20px;
+            }
+            @keyframes spin {
+                0% { transform: rotate(0deg); }
+                100% { transform: rotate(360deg); }
+            }
+            .error-message {
+                background: #f8d7da;
+                color: #721c24;
+                padding: 20px;
+                border-radius: 10px;
+                margin: 20px 0;
+                text-align: center;
+            }
+            .hidden {
+                display: none;
+            }
+            .tab-container {
+                margin-bottom: 20px;
+            }
+            .tabs {
+                display: flex;
+                gap: 10px;
+                margin-bottom: 15px;
+                flex-wrap: wrap;
+            }
+            .tab {
+                padding: 10px 25px;
+                background: white;
+                border: none;
+                border-radius: 25px;
+                cursor: pointer;
+                font-weight: bold;
+                transition: all 0.3s;
+                box-shadow: 0 5px 15px rgba(0,0,0,0.1);
+            }
+            .tab.active {
+                background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+                color: white;
+            }
+            .tab:hover:not(.active) {
+                transform: translateY(-2px);
+            }
+            .tab-content {
+                display: none;
+            }
+            .tab-content.active {
+                display: block;
+            }
+            .sources-list {
+                display: flex;
+                gap: 10px;
+                flex-wrap: wrap;
+            }
+            .source-badge {
+                background: #e0e0e0;
+                padding: 8px 15px;
+                border-radius: 20px;
+                font-size: 0.9em;
+            }
+            .source-badge.active {
+                background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+                color: white;
+            }
+            .model-info {
+                background: #f8f9fa;
+                padding: 15px;
+                border-radius: 10px;
+                margin-top: 15px;
+            }
+            .model-info-row {
+                display: flex;
+                justify-content: space-between;
+                padding: 8px 0;
+                border-bottom: 1px solid #e0e0e0;
+            }
+            .model-info-row:last-child {
+                border-bottom: none;
+            }
+            .probability-bars {
+                margin: 20px 0;
+            }
+            .prob-bar-container {
+                display: flex;
+                align-items: center;
+                gap: 15px;
+                margin-bottom: 10px;
+            }
+            .prob-label {
+                width: 80px;
+                font-weight: bold;
+            }
+            .prob-bar {
+                flex: 1;
+                height: 25px;
+                background: #e0e0e0;
+                border-radius: 15px;
+                overflow: hidden;
+            }
+            .prob-fill {
+                height: 100%;
+                border-radius: 15px;
+                display: flex;
+                align-items: center;
+                padding-left: 10px;
+                color: white;
+                font-weight: bold;
+                transition: width 0.5s ease;
+            }
+            .prob-fill.buy {
+                background: linear-gradient(90deg, #00b894 0%, #00cec9 100%);
+            }
+            .prob-fill.sell {
+                background: linear-gradient(90deg, #d63031 0%, #e17055 100%);
+            }
+            @media (max-width: 768px) {
+                .grid {
+                    grid-template-columns: 1fr;
+                }
+                .search-box {
+                    flex-direction: column;
+                }
+                .search-box input, .search-box select, .search-box button {
+                    width: 100%;
+                }
+                .indicator-grid {
+                    grid-template-columns: 1fr;
+                }
+                .market-structure {
+                    grid-template-columns: 1fr;
+                }
+            }
         </style>
     </head>
     <body>
         <div class="container">
-            <h1>📊 ICTSMARTPRO Dashboard</h1>
-            <div class="card">
-                <h2>System Status</h2>
-                <div id="status" class="status healthy">Checking...</div>
+            <div class="header">
+                <h1>📊 ICTSMARTPRO Dashboard</h1>
+                <p>Professional Crypto Analysis with ML + 30+ Patterns</p>
             </div>
-            <div class="card">
-                <h2>Analyze Symbol</h2>
-                <input type="text" id="symbol" placeholder="BTCUSDT" value="BTCUSDT">
-                <input type="text" id="interval" placeholder="1h" value="1h">
-                <button onclick="analyze()">Analyze</button>
+            
+            <div class="search-box">
+                <input type="text" id="symbol" placeholder="Sembol (örn: BTCUSDT)" value="BTCUSDT">
+                <select id="interval">
+                    <option value="1m">1 Dakika</option>
+                    <option value="5m">5 Dakika</option>
+                    <option value="15m">15 Dakika</option>
+                    <option value="30m">30 Dakika</option>
+                    <option value="1h" selected>1 Saat</option>
+                    <option value="4h">4 Saat</option>
+                    <option value="1d">1 Gün</option>
+                    <option value="1w">1 Hafta</option>
+                </select>
+                <button onclick="analyze()" id="analyzeBtn">🔍 Analiz Et</button>
             </div>
-            <div class="card">
-                <h2>Results</h2>
-                <div id="results">Click Analyze to see results</div>
+            
+            <div class="status-bar" id="statusBar">
+                <div class="status-item">
+                    <div class="status-dot"></div>
+                    <span id="statusText">Sistem Hazır</span>
+                </div>
+                <div class="status-item">
+                    <span id="uptimeText">Uptime: Hesaplanıyor...</span>
+                </div>
+                <div class="status-item">
+                    <span id="modelsText">Modeller: 0</span>
+                </div>
+            </div>
+            
+            <div id="loading" class="loading hidden">
+                <div class="loading-spinner"></div>
+                <div>Analiz ediliyor, lütfen bekleyin...</div>
+            </div>
+            
+            <div id="error" class="error-message hidden"></div>
+            
+            <div id="results" class="hidden">
+                <div class="grid">
+                    <div class="card price-card">
+                        <h3>💰 Fiyat Bilgisi</h3>
+                        <div class="price-value" id="currentPrice">$0.00</div>
+                        <div id="priceChange" class="price-change">0.00%</div>
+                        <div style="margin-top: 15px; font-size: 0.9em; opacity: 0.9;">
+                            <div>Açılış: <span id="openPrice">$0.00</span></div>
+                            <div>Yüksek: <span id="highPrice">$0.00</span></div>
+                            <div>Düşük: <span id="lowPrice">$0.00</span></div>
+                            <div>Hacim: <span id="volumeValue">0</span></div>
+                        </div>
+                    </div>
+                    
+                    <div class="card">
+                        <h3>🤖 ML Tahmini</h3>
+                        <div class="ml-signal">
+                            <div class="signal-badge" id="mlSignal">NEUTRAL</div>
+                            <div class="confidence-meter">
+                                <div class="confidence-fill" id="confidenceFill" style="width: 50%;">50%</div>
+                            </div>
+                            <div class="probability-bars">
+                                <div class="prob-bar-container">
+                                    <div class="prob-label">AL</div>
+                                    <div class="prob-bar">
+                                        <div class="prob-fill buy" id="buyProbBar" style="width: 50%;">50%</div>
+                                    </div>
+                                </div>
+                                <div class="prob-bar-container">
+                                    <div class="prob-label">SAT</div>
+                                    <div class="prob-bar">
+                                        <div class="prob-fill sell" id="sellProbBar" style="width: 50%;">50%</div>
+                                    </div>
+                                </div>
+                            </div>
+                            <div style="font-size: 0.9em; color: #7f8c8d;">
+                                Model: <span id="modelVersion">-</span>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+                
+                <div class="card" style="margin-bottom: 20px;">
+                    <h3>📈 Teknik İndikatörler</h3>
+                    <div class="indicator-grid" id="indicatorGrid">
+                        <!-- Dinamik doldurulacak -->
+                    </div>
+                </div>
+                
+                <div class="card" style="margin-bottom: 20px;">
+                    <h3>🏛️ Piyasa Yapısı</h3>
+                    <div class="market-structure" id="marketStructure">
+                        <!-- Dinamik doldurulacak -->
+                    </div>
+                </div>
+                
+                <div class="tab-container">
+                    <div class="tabs">
+                        <button class="tab active" onclick="showTab('ict')">🎯 ICT Patternler (<span id="ictCount">0</span>)</button>
+                        <button class="tab" onclick="showTab('classical')">📐 Klasik Patternler (<span id="classicalCount">0</span>)</button>
+                        <button class="tab" onclick="showTab('candlestick')">🕯️ Mum Patternler (<span id="candlestickCount">0</span>)</button>
+                        <button class="tab" onclick="showTab('model')">📊 Model Bilgisi</button>
+                    </div>
+                    
+                    <div class="tab-content active" id="tab-ict">
+                        <div class="card">
+                            <h3>ICT Patternler</h3>
+                            <div class="pattern-list" id="ictPatterns">
+                                <div style="text-align: center; color: #7f8c8d; padding: 20px;">
+                                    Pattern bulunamadı
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                    
+                    <div class="tab-content" id="tab-classical">
+                        <div class="card">
+                            <h3>Klasik Patternler</h3>
+                            <div class="pattern-list" id="classicalPatterns">
+                                <div style="text-align: center; color: #7f8c8d; padding: 20px;">
+                                    Pattern bulunamadı
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                    
+                    <div class="tab-content" id="tab-candlestick">
+                        <div class="card">
+                            <h3>Mum Patternler</h3>
+                            <div class="pattern-list" id="candlestickPatterns">
+                                <div style="text-align: center; color: #7f8c8d; padding: 20px;">
+                                    Pattern bulunamadı
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                    
+                    <div class="tab-content" id="tab-model">
+                        <div class="card">
+                            <h3>Model Bilgisi</h3>
+                            <div class="model-info" id="modelInfo">
+                                <div style="text-align: center; color: #7f8c8d; padding: 20px;">
+                                    Model bilgisi yok
+                                </div>
+                            </div>
+                            <div style="margin-top: 20px;">
+                                <h4 style="margin-bottom: 15px; color: #2c3e50;">Aktif Veri Kaynakları</h4>
+                                <div class="sources-list" id="activeSources">
+                                    <!-- Dinamik doldurulacak -->
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+                
+                <div class="card" style="margin-top: 20px;">
+                    <h3>⚡ Performans</h3>
+                    <div style="display: flex; gap: 20px; flex-wrap: wrap;">
+                        <div class="structure-item">
+                            <div class="structure-label">İşlem Süresi</div>
+                            <div class="structure-value" id="performanceMs" style="background: #d4edda; color: #155724;">0ms</div>
+                        </div>
+                        <div class="structure-item">
+                            <div class="structure-label">Veri Noktası</div>
+                            <div class="structure-value" id="dataPoints" style="background: #d1ecf1; color: #0c5460;">0</div>
+                        </div>
+                        <div class="structure-item">
+                            <div class="structure-label">Toplam Pattern</div>
+                            <div class="structure-value" id="totalPatterns" style="background: #fff3cd; color: #856404;">0</div>
+                        </div>
+                    </div>
+                </div>
             </div>
         </div>
+        
         <script>
+            let currentData = null;
+            
             async function checkStatus() {
                 try {
                     const res = await fetch('/health');
                     const data = await res.json();
-                    document.getElementById('status').innerHTML = 
-                        `Status: ${data.status} | Models: ${data.models_loaded} | Uptime: ${data.uptime}`;
+                    document.getElementById('statusText').textContent = 'Sistem Sağlıklı';
+                    document.getElementById('uptimeText').textContent = 'Uptime: ' + data.uptime;
+                    document.getElementById('modelsText').textContent = 'Modeller: ' + data.models_loaded;
                 } catch (e) {
-                    document.getElementById('status').innerHTML = 'Error: ' + e.message;
-                    document.getElementById('status').className = 'status';
-                    document.getElementById('status').style.background = '#f8d7da';
-                    document.getElementById('status').style.color = '#721c24';
+                    document.getElementById('statusText').textContent = 'Bağlantı Hatası';
+                    document.getElementById('statusText').style.color = '#e74c3c';
                 }
             }
+            
+            function showTab(tabName) {
+                document.querySelectorAll('.tab').forEach(t => t.classList.remove('active'));
+                document.querySelectorAll('.tab-content').forEach(c => c.classList.remove('active'));
+                event.target.classList.add('active');
+                document.getElementById('tab-' + tabName).classList.add('active');
+            }
+            
+            function getDirectionClass(direction) {
+                if (direction.includes('bullish')) return 'bullish';
+                if (direction.includes('bearish')) return 'bearish';
+                return 'neutral';
+            }
+            
+            function formatPatternName(name) {
+                return name.replace(/_/g, ' ').replace(/\b\w/g, l => l.toUpperCase());
+            }
+            
+            function createPatternCard(pattern) {
+                const directionClass = getDirectionClass(pattern.direction);
+                return `
+                    <div class="pattern-item ${directionClass}">
+                        <div class="pattern-name">${formatPatternName(pattern.name)}</div>
+                        <div class="pattern-type">${pattern.type}</div>
+                        <div class="pattern-confidence">Güven: ${pattern.confidence.toFixed(1)}%</div>
+                        <div class="pattern-description">${pattern.description || ''}</div>
+                        <div style="margin-top: 8px; font-size: 0.85em; color: #95a5a6;">
+                            Fiyat: $${pattern.price.toFixed(2)} | ${new Date(pattern.timestamp).toLocaleString('tr-TR')}
+                        </div>
+                    </div>
+                `;
+            }
+            
+            function renderPatterns(patterns, containerId) {
+                const container = document.getElementById(containerId);
+                if (!patterns || patterns.length === 0) {
+                    container.innerHTML = '<div style="text-align: center; color: #7f8c8d; padding: 20px;">Pattern bulunamadı</div>';
+                    return;
+                }
+                container.innerHTML = patterns.map(p => createPatternCard(p)).join('');
+            }
+            
+            function renderIndicators(technical) {
+                const container = document.getElementById('indicatorGrid');
+                const indicators = [
+                    { key: 'rsi', label: 'RSI (14)', bullish: 70, bearish: 30 },
+                    { key: 'macd', label: 'MACD', bullish: 0, bearish: 0 },
+                    { key: 'bb_position', label: 'BB Pozisyon', bullish: 50, bearish: 50 },
+                    { key: 'volume_ratio', label: 'Hacim Oranı', bullish: 1.5, bearish: 0 },
+                    { key: 'atr', label: 'ATR', bullish: null, bearish: null },
+                    { key: 'sma_20', label: 'SMA 20', bullish: null, bearish: null },
+                    { key: 'ema_9', label: 'EMA 9', bullish: null, bearish: null },
+                    { key: 'ema_21', label: 'EMA 21', bullish: null, bearish: null }
+                ];
+                
+                let html = '';
+                indicators.forEach(ind => {
+                    if (technical[ind.key] !== undefined) {
+                        const value = technical[ind.key].toFixed(ind.key.includes('ratio') || ind.key.includes('position') ? 2 : 4);
+                        let valueClass = '';
+                        if (ind.bullish !== null) {
+                            if (technical[ind.key] > ind.bullish) valueClass = 'bullish';
+                            else if (technical[ind.key] < ind.bearish) valueClass = 'bearish';
+                        }
+                        html += `
+                            <div class="indicator-item">
+                                <div class="indicator-label">${ind.label}</div>
+                                <div class="indicator-value ${valueClass}">${value}</div>
+                            </div>
+                        `;
+                    }
+                });
+                container.innerHTML = html;
+            }
+            
+            function renderMarketStructure(structure) {
+                const container = document.getElementById('marketStructure');
+                const items = [
+                    { key: 'trend', label: 'Trend' },
+                    { key: 'trend_strength', label: 'Trend Gücü' },
+                    { key: 'volatility', label: 'Volatilite' },
+                    { key: 'momentum', label: 'Momentum' }
+                ];
+                
+                let html = '';
+                items.forEach(item => {
+                    const value = structure[item.key] || 'N/A';
+                    let valueClass = 'neutral';
+                    if (value.includes('UP') || value.includes('BULL')) valueClass = 'uptrend';
+                    else if (value.includes('DOWN') || value.includes('BEAR')) valueClass = 'downtrend';
+                    
+                    html += `
+                        <div class="structure-item">
+                            <div class="structure-label">${item.label}</div>
+                            <div class="structure-value ${valueClass}">${value.replace(/_/g, ' ')}</div>
+                        </div>
+                    `;
+                });
+                container.innerHTML = html;
+            }
+            
+            function renderModelInfo(info) {
+                const container = document.getElementById('modelInfo');
+                if (!info || info.best_model === 'none') {
+                    container.innerHTML = '<div style="text-align: center; color: #7f8c8d; padding: 20px;">Model henüz eğitilmedi</div>';
+                    return;
+                }
+                
+                const bestModelResults = info.results[info.best_model] || {};
+                container.innerHTML = `
+                    <div class="model-info-row">
+                        <span>En İyi Model</span>
+                        <strong>${info.best_model}</strong>
+                    </div>
+                    <div class="model-info-row">
+                        <span>Eğitim Tarihi</span>
+                        <span>${new Date(info.trained_at).toLocaleString('tr-TR')}</span>
+                    </div>
+                    <div class="model-info-row">
+                        <span>Eğitim Örnekleri</span>
+                        <strong>${info.training_samples}</strong>
+                    </div>
+                    <div class="model-info-row">
+                        <span>Doğruluk</span>
+                        <strong>${bestModelResults.accuracy || 'N/A'}%</strong>
+                    </div>
+                    <div class="model-info-row">
+                        <span>Precision</span>
+                        <strong>${bestModelResults.precision || 'N/A'}%</strong>
+                    </div>
+                    <div class="model-info-row">
+                        <span>Recall</span>
+                        <strong>${bestModelResults.recall || 'N/A'}%</strong>
+                    </div>
+                `;
+            }
+            
+            function renderActiveSources(sources) {
+                const container = document.getElementById('activeSources');
+                if (!sources || sources.length === 0) {
+                    container.innerHTML = '<div style="color: #7f8c8d;">Kaynak bilgisi yok</div>';
+                    return;
+                }
+                container.innerHTML = sources.map(s => 
+                    `<div class="source-badge active">✅ ${s}</div>`
+                ).join('');
+            }
+            
             async function analyze() {
-                const symbol = document.getElementById('symbol').value;
+                const symbol = document.getElementById('symbol').value.toUpperCase();
                 const interval = document.getElementById('interval').value;
-                document.getElementById('results').innerHTML = 'Loading...';
+                const btn = document.getElementById('analyzeBtn');
+                const loading = document.getElementById('loading');
+                const results = document.getElementById('results');
+                const error = document.getElementById('error');
+                
+                btn.disabled = true;
+                loading.classList.remove('hidden');
+                results.classList.add('hidden');
+                error.classList.add('hidden');
+                
                 try {
                     const res = await fetch(`/api/analyze/${symbol}?interval=${interval}`);
+                    if (!res.ok) {
+                        const errData = await res.json();
+                        throw new Error(errData.detail || 'Analiz başarısız');
+                    }
                     const data = await res.json();
-                    document.getElementById('results').innerHTML = JSON.stringify(data, null, 2);
+                    currentData = data;
+                    
+                    // Fiyat bilgisi
+                    document.getElementById('currentPrice').textContent = '$' + data.price.current.toLocaleString('en-US', {minimumFractionDigits: 2, maximumFractionDigits: 2});
+                    document.getElementById('openPrice').textContent = '$' + data.price.open.toLocaleString('en-US', {minimumFractionDigits: 2, maximumFractionDigits: 2});
+                    document.getElementById('highPrice').textContent = '$' + data.price.high.toLocaleString('en-US', {minimumFractionDigits: 2, maximumFractionDigits: 2});
+                    document.getElementById('lowPrice').textContent = '$' + data.price.low.toLocaleString('en-US', {minimumFractionDigits: 2, maximumFractionDigits: 2});
+                    document.getElementById('volumeValue').textContent = data.price.volume.toLocaleString('en-US');
+                    
+                    const changeEl = document.getElementById('priceChange');
+                    const change = data.price.change;
+                    changeEl.textContent = (change >= 0 ? '+' : '') + change.toFixed(2) + '%';
+                    changeEl.className = 'price-change ' + (change >= 0 ? 'positive' : 'negative');
+                    
+                    // ML Tahmini
+                    const mlPred = data.ml_prediction;
+                    const signalEl = document.getElementById('mlSignal');
+                    signalEl.textContent = mlPred.signal.replace('_', ' ');
+                    signalEl.className = 'signal-badge signal-' + mlPred.signal;
+                    
+                    document.getElementById('confidenceFill').style.width = mlPred.confidence + '%';
+                    document.getElementById('confidenceFill').textContent = mlPred.confidence.toFixed(1) + '%';
+                    
+                    document.getElementById('buyProbBar').style.width = (mlPred.buy_probability * 100) + '%';
+                    document.getElementById('buyProbBar').textContent = (mlPred.buy_probability * 100).toFixed(1) + '%';
+                    document.getElementById('sellProbBar').style.width = (mlPred.sell_probability * 100) + '%';
+                    document.getElementById('sellProbBar').textContent = (mlPred.sell_probability * 100).toFixed(1) + '%';
+                    
+                    document.getElementById('modelVersion').textContent = mlPred.model_version;
+                    
+                    // Teknik İndikatörler
+                    renderIndicators(data.technical);
+                    
+                    // Piyasa Yapısı
+                    renderMarketStructure(data.market_structure);
+                    
+                    // Patternler
+                    document.getElementById('ictCount').textContent = data.ict_patterns.length;
+                    document.getElementById('classicalCount').textContent = data.classical_patterns.length;
+                    document.getElementById('candlestickCount').textContent = data.candlestick_patterns.length;
+                    
+                    renderPatterns(data.ict_patterns, 'ictPatterns');
+                    renderPatterns(data.classical_patterns, 'classicalPatterns');
+                    renderPatterns(data.candlestick_patterns, 'candlestickPatterns');
+                    
+                    // Model Bilgisi
+                    renderModelInfo(data.model_info);
+                    renderActiveSources(data.active_sources);
+                    
+                    // Performans
+                    document.getElementById('performanceMs').textContent = data.performance_ms + 'ms';
+                    document.getElementById('dataPoints').textContent = data.data_points;
+                    document.getElementById('totalPatterns').textContent = 
+                        data.ict_patterns.length + data.classical_patterns.length + data.candlestick_patterns.length;
+                    
+                    loading.classList.add('hidden');
+                    results.classList.remove('hidden');
+                    
                 } catch (e) {
-                    document.getElementById('results').innerHTML = 'Error: ' + e.message;
+                    loading.classList.add('hidden');
+                    error.classList.remove('hidden');
+                    error.textContent = 'Hata: ' + e.message;
+                } finally {
+                    btn.disabled = false;
                 }
             }
+            
+            // Enter tuşu ile analiz
+            document.getElementById('symbol').addEventListener('keypress', function(e) {
+                if (e.key === 'Enter') analyze();
+            });
+            
+            // Sayfa yüklendiğinde status kontrolü
             checkStatus();
             setInterval(checkStatus, 30000);
         </script>
