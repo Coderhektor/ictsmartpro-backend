@@ -265,10 +265,9 @@ class WebSocketCollector:
         await asyncio.gather(*tasks)
     
     async def stop(self):
-        """Tüm bağlantıları durdur - DÜZELTİLDİ"""
+        """Tüm bağlantıları durdur"""
         self.running = False
         
-        # Dictionary'nin bir kopyasını al
         connections_copy = list(self.connections.items())
         
         for exchange, ws in connections_copy:
@@ -402,7 +401,7 @@ class WebSocketCollector:
             self.stats[exchange]["connected"] = False
     
     async def _run_yahoo_polling(self):
-        """Yahoo Finance HTTP polling - DÜZELTİLMİŞ SEMBOL FORMATLARI"""
+        """Yahoo Finance HTTP polling"""
         logger.info("📡 Yahoo Finance polling başlatıldı")
         
         while self.running:
@@ -411,7 +410,7 @@ class WebSocketCollector:
                 
                 for symbol in symbols:
                     try:
-                        # YAHOO SEMBOL FORMATLARI - DÜZELTİLDİ
+                        # YAHOO SEMBOL FORMATLARI
                         if symbol == "BTC-USD" or symbol == "BTCUSDT":
                             yahoo_symbol = "BTC-USD"
                         elif symbol == "ETH-USD" or symbol == "ETHUSDT":
@@ -1021,12 +1020,130 @@ class ExchangeDataFetcher:
 
 
 # ========================================================================================================
-# ORTAK DATAFRAME HAZIRLAMA FONKSİYONU
+# İNDİKATÖR FONKSİYONLARI (UT BOT + PSAR)
 # ========================================================================================================
-def prepare_dataframe(df: pd.DataFrame) -> pd.DataFrame:
-    """Tüm indikatörleri tek yerde hesapla"""
+def calculate_atr(df, period=10):
+    """Basit ATR hesaplama"""
+    high_low = df['high'] - df['low']
+    high_close = np.abs(df['high'] - df['close'].shift())
+    low_close = np.abs(df['low'] - df['close'].shift())
+    tr = pd.concat([high_low, high_close, low_close], axis=1).max(axis=1)
+    atr = tr.rolling(window=period).mean()
+    return atr
+
+
+def calculate_psar(df, acceleration=0.02, maximum=0.2):
+    """
+    Parabolic SAR hesaplama
+    """
+    high = df['high'].values
+    low = df['low'].values
+    
+    psar = np.zeros(len(df))
+    psar_dir = np.zeros(len(df))
+    af = acceleration
+    ep = high[0]
+    
+    # İlk değer
+    psar[0] = low[0]
+    psar_dir[0] = 1
+    
+    for i in range(1, len(df)):
+        prev_psar = psar[i-1]
+        prev_dir = psar_dir[i-1]
+        
+        if prev_dir > 0:  # Yükseliş
+            psar[i] = prev_psar + af * (ep - prev_psar)
+            
+            if high[i] > ep:
+                ep = high[i]
+                af = min(af + acceleration, maximum)
+            
+            if low[i] < psar[i]:
+                psar_dir[i] = -1
+                psar[i] = ep
+                ep = low[i]
+                af = acceleration
+            else:
+                psar_dir[i] = 1
+                
+        else:  # Düşüş
+            psar[i] = prev_psar - af * (prev_psar - ep)
+            
+            if low[i] < ep:
+                ep = low[i]
+                af = min(af + acceleration, maximum)
+            
+            if high[i] > psar[i]:
+                psar_dir[i] = 1
+                psar[i] = ep
+                ep = high[i]
+                af = acceleration
+            else:
+                psar_dir[i] = -1
+    
+    df['psar'] = psar
+    df['psar_dir'] = psar_dir
+    df['psar_buy'] = (psar_dir > 0) & (np.roll(psar_dir, 1) <= 0)
+    df['psar_sell'] = (psar_dir < 0) & (np.roll(psar_dir, 1) >= 0)
+    
+    return df
+
+
+def calculate_ut_bot(df, key_value=1.0, atr_period=10):
+    """
+    UT Bot Alerts hesaplama
+    """
     df = df.copy()
     
+    # ATR
+    df['ut_atr'] = calculate_atr(df, atr_period)
+    df['n_loss'] = key_value * df['ut_atr']
+    
+    # Trailing Stop
+    trailing_stop = np.zeros(len(df))
+    position = np.zeros(len(df))
+    
+    # İlk bar
+    trailing_stop[0] = df['close'].iloc[0] - df['n_loss'].iloc[0]
+    position[0] = 1 if df['close'].iloc[0] > trailing_stop[0] else -1
+    
+    for i in range(1, len(df)):
+        prev_stop = trailing_stop[i-1]
+        prev_close = df['close'].iloc[i-1]
+        curr_close = df['close'].iloc[i]
+        curr_loss = df['n_loss'].iloc[i]
+        
+        if curr_close > prev_stop and prev_close > prev_stop:
+            trailing_stop[i] = max(prev_stop, curr_close - curr_loss)
+        elif curr_close < prev_stop and prev_close < prev_stop:
+            trailing_stop[i] = min(prev_stop, curr_close + curr_loss)
+        elif curr_close > prev_stop:
+            trailing_stop[i] = curr_close - curr_loss
+        else:
+            trailing_stop[i] = curr_close + curr_loss
+        
+        # Pozisyon
+        if prev_close <= prev_stop and curr_close > prev_stop:
+            position[i] = 1
+        elif prev_close >= prev_stop and curr_close < prev_stop:
+            position[i] = -1
+        else:
+            position[i] = position[i-1]
+    
+    df['ut_trailing_stop'] = trailing_stop
+    df['ut_position'] = position
+    df['ut_buy'] = (df['close'] > trailing_stop) & (df['close'].shift(1) <= df['ut_trailing_stop'].shift(1))
+    df['ut_sell'] = (df['close'] < trailing_stop) & (df['close'].shift(1) >= df['ut_trailing_stop'].shift(1))
+    
+    return df
+
+
+def prepare_dataframe(df: pd.DataFrame) -> pd.DataFrame:
+    """Tüm indikatörleri tek yerde hesapla - Bollinger ve ADX KALDIRILDI, UT+PSAR EKLENDİ"""
+    df = df.copy()
+    
+    # Temel mum özellikleri
     df['is_bullish'] = df['close'] > df['open']
     df['is_bearish'] = df['close'] < df['open']
     df['body'] = abs(df['close'] - df['open'])
@@ -1035,6 +1152,7 @@ def prepare_dataframe(df: pd.DataFrame) -> pd.DataFrame:
     df['lower_shadow'] = df[['close', 'open']].min(axis=1) - df['low']
     df['body_percent'] = df['body'] / df['range'].replace(0, 1)
     
+    # RSI (14)
     delta = df['close'].diff()
     gain = (delta.where(delta > 0, 0)).rolling(window=14).mean()
     loss = (-delta.where(delta < 0, 0)).rolling(window=14).mean()
@@ -1042,39 +1160,46 @@ def prepare_dataframe(df: pd.DataFrame) -> pd.DataFrame:
     df['rsi'] = 100 - (100 / (1 + rs))
     df['rsi'] = df['rsi'].fillna(50)
     
+    # EMAlar
     df['ema_9'] = df['close'].ewm(span=9, adjust=False).mean()
     df['ema_20'] = df['close'].ewm(span=20, adjust=False).mean()
     df['ema_50'] = df['close'].ewm(span=50, adjust=False).mean()
     df['ema_200'] = df['close'].ewm(span=200, adjust=False).mean()
     
-    tr1 = df['high'] - df['low']
-    tr2 = (df['high'] - df['close'].shift(1)).abs()
-    tr3 = (df['low'] - df['close'].shift(1)).abs()
-    tr = pd.concat([tr1, tr2, tr3], axis=1).max(axis=1)
-    df['atr'] = tr.rolling(window=14).mean()
-    df['atr'] = df['atr'].fillna(df['range'].rolling(14).mean())
+    # MACD
+    exp1 = df['close'].ewm(span=12, adjust=False).mean()
+    exp2 = df['close'].ewm(span=26, adjust=False).mean()
+    df['macd'] = exp1 - exp2
+    df['macd_signal'] = df['macd'].ewm(span=9, adjust=False).mean()
+    df['macd_hist'] = df['macd'] - df['macd_signal']
     
+    # ========== UT BOT ALERTS ==========
+    df = calculate_ut_bot(df, key_value=1.0, atr_period=10)
+    
+    # ========== PSAR ==========
+    df = calculate_psar(df, acceleration=0.02, maximum=0.2)
+    
+    # Momentum
+    df['mom_5'] = df['close'].pct_change(5) * 100
+    df['mom_10'] = df['close'].pct_change(10) * 100
+    
+    # Volume
     df['volume_sma'] = df['volume'].rolling(window=20).mean()
     df['volume_ratio'] = df['volume'] / df['volume_sma'].replace(0, 1)
     df['volume_ratio'] = df['volume_ratio'].fillna(1.0)
     
-    df['bb_middle'] = df['close'].rolling(window=20).mean()
-    df['bb_std'] = df['close'].rolling(window=20).std()
-    df['bb_upper'] = df['bb_middle'] + (df['bb_std'] * 2)
-    df['bb_lower'] = df['bb_middle'] - (df['bb_std'] * 2)
-    bb_range = (df['bb_upper'] - df['bb_lower']).replace(0, 1)
-    df['bb_position'] = ((df['close'] - df['bb_lower']) / bb_range * 100).clip(0, 100)
+    # ATR (genel)
+    df['atr'] = calculate_atr(df, 14)
     
-    df['mom_5'] = df['close'].pct_change(5) * 100
-    df['mom_10'] = df['close'].pct_change(10) * 100
-    
+    # NaN doldur
     df = df.ffill().bfill()
     df = df.fillna({
         'rsi': 50,
         'volume_ratio': 1.0,
         'mom_5': 0,
         'mom_10': 0,
-        'bb_position': 50
+        'ut_position': 0,
+        'psar_dir': 0
     })
     
     return df
@@ -1293,6 +1418,168 @@ class MarketStructureAnalyzer:
         }
         
         logger.info(f"📊 Market Structure: {trend} ({trend_strength}) | Vol:{vol_regime} | Mom:{momentum}")
+        
+        return result
+
+
+# ========================================================================================================
+# TECHNICAL ANALYZER (GÜNCELLENMİŞ - UT+PSAR)
+# ========================================================================================================
+class TechnicalAnalyzer:
+
+    @staticmethod
+    def calculate_heikin_ashi(df: pd.DataFrame) -> Dict[str, Any]:
+        try:
+            if len(df) < 20:
+                return {}
+            
+            ha_close = (df['open'] + df['high'] + df['low'] + df['close']) / 4
+            
+            ha_open = ha_close.copy()
+            for i in range(1, len(ha_open)):
+                ha_open.iloc[i] = (ha_open.iloc[i - 1] + ha_close.iloc[i - 1]) / 2
+            
+            ha_high = pd.concat([df['high'], ha_open, ha_close], axis=1).max(axis=1)
+            ha_low = pd.concat([df['low'], ha_open, ha_close], axis=1).min(axis=1)
+            
+            ha_bullish = sum(1 for i in range(-8, 0) if ha_close.iloc[i] > ha_open.iloc[i])
+            ha_bearish = sum(1 for i in range(-8, 0) if ha_close.iloc[i] < ha_open.iloc[i])
+            
+            if ha_bullish >= 6:
+                ha_trend = "STRONG_BULLISH"
+                ha_strength = ha_bullish * 12.5
+            elif ha_bullish >= 4:
+                ha_trend = "BULLISH"
+                ha_strength = ha_bullish * 12.5
+            elif ha_bearish >= 6:
+                ha_trend = "STRONG_BEARISH"
+                ha_strength = ha_bearish * 12.5
+            elif ha_bearish >= 4:
+                ha_trend = "BEARISH"
+                ha_strength = ha_bearish * 12.5
+            else:
+                ha_trend = "NEUTRAL"
+                ha_strength = 50
+            
+            delta = ha_close.diff()
+            gain = (delta.where(delta > 0, 0)).rolling(window=14).mean()
+            loss = (-delta.where(delta < 0, 0)).rolling(window=14).mean()
+            rs = gain / loss.replace(0, np.nan)
+            ha_rsi = 100 - (100 / (1 + rs))
+            
+            ha_color_change = 0
+            if ha_close.iloc[-1] > ha_open.iloc[-1] and ha_close.iloc[-2] <= ha_open.iloc[-2]:
+                ha_color_change = 1
+            elif ha_close.iloc[-1] < ha_open.iloc[-1] and ha_close.iloc[-2] >= ha_open.iloc[-2]:
+                ha_color_change = -1
+            
+            return {
+                "ha_trend": ha_trend,
+                "ha_trend_strength": round(min(ha_strength, 100), 1),
+                "ha_close": round(float(ha_close.iloc[-1]), 2),
+                "ha_open": round(float(ha_open.iloc[-1]), 2),
+                "ha_rsi": round(float(ha_rsi.iloc[-1]), 1) if not pd.isna(ha_rsi.iloc[-1]) else 50.0,
+                "ha_color_change": ha_color_change,
+                "ha_momentum": round(float((ha_close.iloc[-1] - ha_close.iloc[-5]) / ha_close.iloc[-5] * 100), 2)
+            }
+        
+        except Exception as e:
+            logger.error(f"Heikin Ashi error: {str(e)}")
+            return {}
+    
+    @staticmethod
+    def analyze(df: pd.DataFrame) -> Dict[str, Any]:
+        if len(df) < 30:
+            return {}
+        
+        close = df['close']
+        high = df['high']
+        low = df['low']
+        
+        # RSI
+        rsi = df['rsi'] if 'rsi' in df.columns else 50
+        
+        # MACD
+        macd = df['macd'] if 'macd' in df.columns else 0
+        macd_signal = df['macd_signal'] if 'macd_signal' in df.columns else 0
+        macd_hist = df['macd_hist'] if 'macd_hist' in df.columns else 0
+        
+        # ========== UT BOT ==========
+        ut_buy = df['ut_buy'].iloc[-1] if 'ut_buy' in df.columns else False
+        ut_sell = df['ut_sell'].iloc[-1] if 'ut_sell' in df.columns else False
+        ut_position = df['ut_position'].iloc[-1] if 'ut_position' in df.columns else 0
+        ut_trailing_stop = df['ut_trailing_stop'].iloc[-1] if 'ut_trailing_stop' in df.columns else close.iloc[-1]
+        
+        # ========== PSAR ==========
+        psar = df['psar'].iloc[-1] if 'psar' in df.columns else close.iloc[-1]
+        psar_dir = df['psar_dir'].iloc[-1] if 'psar_dir' in df.columns else 0
+        psar_buy = df['psar_buy'].iloc[-1] if 'psar_buy' in df.columns else False
+        psar_sell = df['psar_sell'].iloc[-1] if 'psar_sell' in df.columns else False
+        
+        # ATR
+        atr = df['atr'] if 'atr' in df.columns else (high - low).rolling(14).mean()
+        atr_percent = (atr / close * 100).fillna(0)
+        
+        # Volume
+        volume_ratio = df['volume_ratio'] if 'volume_ratio' in df.columns else 1.0
+        
+        # SMA
+        sma_20 = df['ema_20'] if 'ema_20' in df.columns else close.rolling(20).mean()
+        sma_50 = df['ema_50'] if 'ema_50' in df.columns else close.rolling(50).mean()
+        
+        # Momentum
+        mom_5 = df['mom_5'] if 'mom_5' in df.columns else close.pct_change(5) * 100
+        mom_10 = df['mom_10'] if 'mom_10' in df.columns else close.pct_change(10) * 100
+        
+        heikin_ashi = TechnicalAnalyzer.calculate_heikin_ashi(df)
+        
+        result = {
+            # RSI/MACD
+            "rsi": round(float(rsi.iloc[-1]), 1) if hasattr(rsi, 'iloc') else float(rsi),
+            "macd": round(float(macd.iloc[-1]), 2) if hasattr(macd, 'iloc') else float(macd),
+            "macd_signal": round(float(macd_signal.iloc[-1]), 2) if hasattr(macd_signal, 'iloc') else float(macd_signal),
+            "macd_histogram": round(float(macd_hist.iloc[-1]), 2) if hasattr(macd_hist, 'iloc') else float(macd_hist),
+            
+            # UT BOT
+            "ut_buy": bool(ut_buy),
+            "ut_sell": bool(ut_sell),
+            "ut_position": int(ut_position),
+            "ut_position_str": "LONG" if ut_position > 0 else "SHORT" if ut_position < 0 else "NEUTRAL",
+            "ut_trailing_stop": round(float(ut_trailing_stop), 2),
+            "ut_distance": round(float((close.iloc[-1] - ut_trailing_stop) / ut_trailing_stop * 100), 2),
+            
+            # PSAR
+            "psar": round(float(psar), 2),
+            "psar_dir": int(psar_dir),
+            "psar_dir_str": "UP" if psar_dir > 0 else "DOWN",
+            "psar_buy": bool(psar_buy),
+            "psar_sell": bool(psar_sell),
+            "psar_distance": round(float((close.iloc[-1] - psar) / psar * 100), 2),
+            
+            # Kombine sinyal
+            "ut_psar_agreement": (ut_position > 0 and psar_dir > 0) or (ut_position < 0 and psar_dir < 0),
+            
+            # ATR
+            "atr": round(float(atr.iloc[-1]), 2) if hasattr(atr, 'iloc') else float(atr),
+            "atr_percent": round(float(atr_percent.iloc[-1]), 2) if hasattr(atr_percent, 'iloc') else float(atr_percent),
+            
+            # Volume
+            "volume_ratio": round(float(volume_ratio.iloc[-1]), 2) if hasattr(volume_ratio, 'iloc') else float(volume_ratio),
+            
+            # SMA
+            "sma_20": round(float(sma_20.iloc[-1]), 2) if hasattr(sma_20, 'iloc') else float(sma_20),
+            "sma_50": round(float(sma_50.iloc[-1]), 2) if hasattr(sma_50, 'iloc') else float(sma_50),
+            
+            # Momentum
+            "momentum_5": round(float(mom_5.iloc[-1]), 2) if hasattr(mom_5, 'iloc') else float(mom_5),
+            "momentum_10": round(float(mom_10.iloc[-1]), 2) if hasattr(mom_10, 'iloc') else float(mom_10),
+            
+            # Fiyat vs SMA
+            "price_vs_sma20": round(float((close.iloc[-1] / sma_20.iloc[-1] - 1) * 100), 1) if hasattr(sma_20, 'iloc') else 0,
+            "price_vs_sma50": round(float((close.iloc[-1] / sma_50.iloc[-1] - 1) * 100), 1) if hasattr(sma_50, 'iloc') else 0,
+        }
+        
+        result.update(heikin_ashi)
         
         return result
 
@@ -2412,133 +2699,7 @@ class CandlestickPatternDetector:
 
 
 # ========================================================================================================
-# TECHNICAL ANALYZER
-# ========================================================================================================
-class TechnicalAnalyzer:
-
-    @staticmethod
-    def calculate_heikin_ashi(df: pd.DataFrame) -> Dict[str, Any]:
-        try:
-            if len(df) < 20:
-                return {}
-            
-            ha_close = (df['open'] + df['high'] + df['low'] + df['close']) / 4
-            
-            ha_open = ha_close.copy()
-            for i in range(1, len(ha_open)):
-                ha_open.iloc[i] = (ha_open.iloc[i - 1] + ha_close.iloc[i - 1]) / 2
-            
-            ha_high = pd.concat([df['high'], ha_open, ha_close], axis=1).max(axis=1)
-            ha_low = pd.concat([df['low'], ha_open, ha_close], axis=1).min(axis=1)
-            
-            ha_bullish = sum(1 for i in range(-8, 0) if ha_close.iloc[i] > ha_open.iloc[i])
-            ha_bearish = sum(1 for i in range(-8, 0) if ha_close.iloc[i] < ha_open.iloc[i])
-            
-            if ha_bullish >= 6:
-                ha_trend = "STRONG_BULLISH"
-                ha_strength = ha_bullish * 12.5
-            elif ha_bullish >= 4:
-                ha_trend = "BULLISH"
-                ha_strength = ha_bullish * 12.5
-            elif ha_bearish >= 6:
-                ha_trend = "STRONG_BEARISH"
-                ha_strength = ha_bearish * 12.5
-            elif ha_bearish >= 4:
-                ha_trend = "BEARISH"
-                ha_strength = ha_bearish * 12.5
-            else:
-                ha_trend = "NEUTRAL"
-                ha_strength = 50
-            
-            delta = ha_close.diff()
-            gain = (delta.where(delta > 0, 0)).rolling(window=14).mean()
-            loss = (-delta.where(delta < 0, 0)).rolling(window=14).mean()
-            rs = gain / loss.replace(0, np.nan)
-            ha_rsi = 100 - (100 / (1 + rs))
-            
-            ha_color_change = 0
-            if ha_close.iloc[-1] > ha_open.iloc[-1] and ha_close.iloc[-2] <= ha_open.iloc[-2]:
-                ha_color_change = 1
-            elif ha_close.iloc[-1] < ha_open.iloc[-1] and ha_close.iloc[-2] >= ha_open.iloc[-2]:
-                ha_color_change = -1
-            
-            return {
-                "ha_trend": ha_trend,
-                "ha_trend_strength": round(min(ha_strength, 100), 1),
-                "ha_close": round(float(ha_close.iloc[-1]), 2),
-                "ha_open": round(float(ha_open.iloc[-1]), 2),
-                "ha_rsi": round(float(ha_rsi.iloc[-1]), 1) if not pd.isna(ha_rsi.iloc[-1]) else 50.0,
-                "ha_color_change": ha_color_change,
-                "ha_momentum": round(float((ha_close.iloc[-1] - ha_close.iloc[-5]) / ha_close.iloc[-5] * 100), 2)
-            }
-        
-        except Exception as e:
-            logger.error(f"Heikin Ashi error: {str(e)}")
-            return {}
-    
-    @staticmethod
-    def analyze(df: pd.DataFrame) -> Dict[str, Any]:
-        if len(df) < 30:
-            return {}
-        
-        close = df['close']
-        high = df['high']
-        low = df['low']
-        
-        rsi = df['rsi'] if 'rsi' in df.columns else 50
-        
-        exp1 = close.ewm(span=12, adjust=False).mean()
-        exp2 = close.ewm(span=26, adjust=False).mean()
-        macd = exp1 - exp2
-        signal = macd.ewm(span=9, adjust=False).mean()
-        macd_hist = macd - signal
-        
-        bb_upper = df['bb_upper'] if 'bb_upper' in df.columns else close.rolling(20).mean() + close.rolling(20).std() * 2
-        bb_middle = df['bb_middle'] if 'bb_middle' in df.columns else close.rolling(20).mean()
-        bb_lower = df['bb_lower'] if 'bb_lower' in df.columns else close.rolling(20).mean() - close.rolling(20).std() * 2
-        bb_position = df['bb_position'] if 'bb_position' in df.columns else 50
-        
-        atr = df['atr'] if 'atr' in df.columns else (high - low).rolling(14).mean()
-        atr_percent = (atr / close * 100).fillna(0)
-        
-        volume_ratio = df['volume_ratio'] if 'volume_ratio' in df.columns else 1.0
-        
-        sma_20 = close.rolling(20).mean()
-        sma_50 = close.rolling(50).mean()
-        
-        mom_5 = df['mom_5'] if 'mom_5' in df.columns else close.pct_change(5) * 100
-        mom_10 = df['mom_10'] if 'mom_10' in df.columns else close.pct_change(10) * 100
-        
-        heikin_ashi = TechnicalAnalyzer.calculate_heikin_ashi(df)
-        
-        result = {
-            "rsi": round(float(rsi.iloc[-1]), 1),
-            "macd": round(float(macd.iloc[-1]), 2),
-            "macd_signal": round(float(signal.iloc[-1]), 2),
-            "macd_histogram": round(float(macd_hist.iloc[-1]), 2),
-            "bb_upper": round(float(bb_upper.iloc[-1]), 2),
-            "bb_middle": round(float(bb_middle.iloc[-1]), 2),
-            "bb_lower": round(float(bb_lower.iloc[-1]), 2),
-            "bb_position": round(float(bb_position.iloc[-1]), 1),
-            "bb_width": round(float((bb_upper.iloc[-1] - bb_lower.iloc[-1]) / bb_middle.iloc[-1] * 100), 1),
-            "atr": round(float(atr.iloc[-1]), 2),
-            "atr_percent": round(float(atr_percent.iloc[-1]), 2),
-            "volume_ratio": round(float(volume_ratio.iloc[-1]), 2),
-            "sma_20": round(float(sma_20.iloc[-1]), 2),
-            "sma_50": round(float(sma_50.iloc[-1]), 2),
-            "price_vs_sma20": round(float((close.iloc[-1] / sma_20.iloc[-1] - 1) * 100), 1),
-            "price_vs_sma50": round(float((close.iloc[-1] / sma_50.iloc[-1] - 1) * 100), 1),
-            "momentum_5": round(float(mom_5.iloc[-1]), 2),
-            "momentum_10": round(float(mom_10.iloc[-1]), 2)
-        }
-        
-        result.update(heikin_ashi)
-        
-        return result
-
-
-# ========================================================================================================
-# SIGNAL GENERATOR
+# SIGNAL GENERATOR (GÜNCELLENMİŞ - UT+PSAR AĞIRLIKLI)
 # ========================================================================================================
 class SignalGenerator:
 
@@ -2557,95 +2718,137 @@ class SignalGenerator:
         weights = []
         all_patterns = []
         
+        # ========== UT BOT Sinyalleri (YÜKSEK AĞIRLIK) ==========
+        if technical.get('ut_buy', False):
+            signals.append('BUY')
+            confidences.append(0.85)
+            weights.append(3.0)  # Çok yüksek ağırlık
+        if technical.get('ut_sell', False):
+            signals.append('SELL')
+            confidences.append(0.85)
+            weights.append(3.0)
+        
+        # ========== PSAR Sinyalleri ==========
+        if technical.get('psar_buy', False):
+            signals.append('BUY')
+            confidences.append(0.75)
+            weights.append(2.5)
+        if technical.get('psar_sell', False):
+            signals.append('SELL')
+            confidences.append(0.75)
+            weights.append(2.5)
+        
+        # ========== UT + PSAR Uyumu (EKSTRA GÜÇLÜ) ==========
+        ut_position = technical.get('ut_position', 0)
+        psar_dir = technical.get('psar_dir', 0)
+        
+        if ut_position > 0 and psar_dir > 0:
+            signals.append('BUY')
+            confidences.append(0.95)
+            weights.append(4.0)  # En yüksek ağırlık - trend uyumu
+        elif ut_position < 0 and psar_dir < 0:
+            signals.append('SELL')
+            confidences.append(0.95)
+            weights.append(4.0)
+        
+        # ========== ICTSMARTPRO ==========
         for sig in ictsmartpro_signals:
             if sig.get('direction') in ['bullish', 'bullish_reversal']:
                 signals.append('BUY')
                 confidences.append(sig.get('strength', 70) / 100)
-                weights.append(2.5)
+                weights.append(2.2)
                 all_patterns.append(sig)
             elif sig.get('direction') in ['bearish', 'bearish_reversal']:
                 signals.append('SELL')
                 confidences.append(sig.get('strength', 70) / 100)
-                weights.append(2.5)
+                weights.append(2.2)
                 all_patterns.append(sig)
         
+        # ========== ICT Patternleri ==========
         for pattern_list in ict_patterns.values():
             for pattern in pattern_list[:3]:
                 if pattern.get('direction') in ['bullish', 'bullish_reversal']:
                     signals.append('BUY')
                     confidences.append(pattern.get('strength', 70) / 100)
-                    weights.append(1.8)
+                    weights.append(1.6)
                     all_patterns.append(pattern)
                 elif pattern.get('direction') in ['bearish', 'bearish_reversal']:
                     signals.append('SELL')
                     confidences.append(pattern.get('strength', 70) / 100)
-                    weights.append(1.8)
+                    weights.append(1.6)
                     all_patterns.append(pattern)
         
+        # ========== Classical Patterns ==========
         for pattern in classical_patterns[:5]:
             if pattern.get('direction') in ['bullish', 'bullish_reversal']:
                 signals.append('BUY')
                 confidences.append(pattern.get('strength', 70) / 100)
-                weights.append(1.5)
+                weights.append(1.3)
                 all_patterns.append(pattern)
             elif pattern.get('direction') in ['bearish', 'bearish_reversal']:
                 signals.append('SELL')
                 confidences.append(pattern.get('strength', 70) / 100)
-                weights.append(1.5)
+                weights.append(1.3)
                 all_patterns.append(pattern)
         
+        # ========== Candle Patterns ==========
         for pattern in candle_patterns[-5:]:
             if pattern.get('direction') in ['bullish', 'bullish_reversal']:
                 signals.append('BUY')
                 confidences.append(pattern.get('strength', 60) / 100)
-                weights.append(1.2)
+                weights.append(1.0)
                 all_patterns.append(pattern)
             elif pattern.get('direction') in ['bearish', 'bearish_reversal']:
                 signals.append('SELL')
                 confidences.append(pattern.get('strength', 60) / 100)
-                weights.append(1.2)
+                weights.append(1.0)
                 all_patterns.append(pattern)
         
+        # ========== Heikin Ashi ==========
         ha_trend = technical.get('ha_trend', 'NEUTRAL')
         if ha_trend in ['STRONG_BULLISH', 'BULLISH']:
             signals.append('BUY')
             confidences.append(0.72)
-            weights.append(1.5)
+            weights.append(1.2)
         elif ha_trend in ['STRONG_BEARISH', 'BEARISH']:
             signals.append('SELL')
             confidences.append(0.72)
-            weights.append(1.5)
+            weights.append(1.2)
         
+        # ========== RSI ==========
         rsi = technical.get('rsi', 50)
         if rsi < 30:
             signals.append('BUY')
             confidences.append(0.64)
-            weights.append(1.1)
+            weights.append(0.9)
         elif rsi > 70:
             signals.append('SELL')
             confidences.append(0.64)
-            weights.append(1.1)
+            weights.append(0.9)
         
+        # ========== MACD ==========
         macd_hist = technical.get('macd_histogram', 0)
         if macd_hist > 0:
             signals.append('BUY')
             confidences.append(0.62)
-            weights.append(1.0)
+            weights.append(0.8)
         elif macd_hist < 0:
             signals.append('SELL')
             confidences.append(0.62)
-            weights.append(1.0)
+            weights.append(0.8)
         
+        # ========== Market Structure ==========
         trend = market_structure.get('trend', 'NEUTRAL')
         if 'UPTREND' in trend:
             signals.append('BUY')
             confidences.append(0.70)
-            weights.append(1.3)
+            weights.append(1.1)
         elif 'DOWNTREND' in trend:
             signals.append('SELL')
             confidences.append(0.70)
-            weights.append(1.3)
+            weights.append(1.1)
         
+        # Sinyal yoksa nötr dön
         if not signals:
             return {
                 "signal": "NEUTRAL",
@@ -2657,13 +2860,11 @@ class SignalGenerator:
                 "sl_level": None
             }
         
+        # Skor hesapla
         buy_score = 0.0
         sell_score = 0.0
         buy_count = 0
         sell_count = 0
-        
-        best_pattern = None
-        max_strength = 0
         
         for i in range(len(signals)):
             s = signals[i]
@@ -2676,42 +2877,55 @@ class SignalGenerator:
             elif s == 'SELL':
                 sell_score += c * w
                 sell_count += 1
-            
-            if i < len(all_patterns):
-                strength = all_patterns[i].get('strength', 0)
-                if strength > max_strength:
-                    max_strength = strength
-                    best_pattern = all_patterns[i]
         
-        if buy_score > sell_score:
+        # Final sinyal
+        if buy_score > sell_score * 1.2:  # 1.2x eşik
             final_signal = "BUY"
             total_score = buy_score + sell_score
             avg_conf = (buy_score / total_score * 100) if total_score > 0 else Config.DEFAULT_CONFIDENCE
-            tp_level = best_pattern.get('tp_level') if best_pattern and best_pattern.get('direction') in ['bullish', 'bullish_reversal'] else None
-            sl_level = best_pattern.get('sl_level') if best_pattern and best_pattern.get('direction') in ['bullish', 'bullish_reversal'] else None
-        elif sell_score > buy_score:
+        elif sell_score > buy_score * 1.2:
             final_signal = "SELL"
             total_score = buy_score + sell_score
             avg_conf = (sell_score / total_score * 100) if total_score > 0 else Config.DEFAULT_CONFIDENCE
-            tp_level = best_pattern.get('tp_level') if best_pattern and best_pattern.get('direction') in ['bearish', 'bearish_reversal'] else None
-            sl_level = best_pattern.get('sl_level') if best_pattern and best_pattern.get('direction') in ['bearish', 'bearish_reversal'] else None
         else:
             final_signal = "NEUTRAL"
             avg_conf = Config.DEFAULT_CONFIDENCE
-            tp_level = None
-            sl_level = None
         
+        # Confidence sınırla
         avg_conf = min(float(avg_conf), Config.MAX_CONFIDENCE)
         avg_conf = max(float(avg_conf), 45.0)
         
-        if avg_conf > 75 and buy_count > sell_count * 2:
+        # Güçlü sinyaller
+        if avg_conf > 80 and buy_count > sell_count * 2:
             final_signal = "STRONG_BUY"
-        elif avg_conf > 75 and sell_count > buy_count * 2:
+        elif avg_conf > 80 and sell_count > buy_count * 2:
             final_signal = "STRONG_SELL"
         
+        # TP/SL (PSAR veya UT'den al)
+        tp_level = None
+        sl_level = None
+        
+        if final_signal in ["BUY", "STRONG_BUY"]:
+            # LONG için: PSAR veya UT trailing stop SL olabilir
+            sl_level = technical.get('ut_trailing_stop', None)
+            if sl_level is None:
+                sl_level = technical.get('psar', None)
+            
+            if sl_level:
+                tp_level = sl_level * 1.05  # %5 TP
+        
+        elif final_signal in ["SELL", "STRONG_SELL"]:
+            # SHORT için
+            sl_level = technical.get('ut_trailing_stop', None)
+            if sl_level is None:
+                sl_level = technical.get('psar', None)
+            
+            if sl_level:
+                tp_level = sl_level * 0.95  # %5 TP
+        
+        # Recommendation
         rec = SignalGenerator._generate_recommendation(
-            final_signal, avg_conf, technical, market_structure, ict_patterns,
-            buy_count, sell_count
+            final_signal, avg_conf, technical, buy_count, sell_count
         )
         
         return {
@@ -2725,20 +2939,23 @@ class SignalGenerator:
         }
     
     @staticmethod
-    def _generate_recommendation(signal, conf, technical, structure, ict_patterns, buy_count, sell_count):
+    def _generate_recommendation(signal, conf, technical, buy_count, sell_count):
         parts = []
+        
+        # UT Bot durumu
+        ut_pos = technical.get('ut_position_str', 'NEUTRAL')
+        psar_dir = technical.get('psar_dir_str', '')
+        agreement = technical.get('ut_psar_agreement', False)
+        
+        if agreement:
+            parts.append(f"🔥 UT+PSAR UYUMLU: {ut_pos}")
+        
+        parts.append(f"UT: {ut_pos}")
+        parts.append(f"PSAR: {psar_dir}")
         
         ha_trend = technical.get('ha_trend', '')
         if ha_trend:
-            parts.append(f"Heikin Ashi: {ha_trend}")
-        
-        total_ict = sum(len(v) for v in ict_patterns.values())
-        if total_ict > 0:
-            parts.append(f"ICT: {total_ict} patterns")
-        
-        trend = structure.get('trend', '')
-        if trend != 'NEUTRAL':
-            parts.append(f"Trend: {trend}")
+            parts.append(f"HA: {ha_trend}")
         
         if signal == "STRONG_BUY":
             base = "🟢 STRONG BUY - Multiple strong bullish signals"
@@ -2753,7 +2970,7 @@ class SignalGenerator:
         
         parts.insert(0, base)
         
-        if conf > 75:
+        if conf > 80:
             parts.append(f"🔥 High confidence ({conf:.0f}%)")
         elif conf > 65:
             parts.append(f"✅ Moderate confidence ({conf:.0f}%)")
@@ -2770,7 +2987,7 @@ class SignalGenerator:
 # ========================================================================================================
 app = FastAPI(
     title="ICTSMARTPRO v9.0 - Ultimate Pattern Detector",
-    description="AI-Powered Crypto Analysis with ICT & Classical Patterns",
+    description="AI-Powered Crypto Analysis with UT Bot & PSAR",
     version="9.0.0",
     docs_url="/docs" if Config.DEBUG else None,
     redoc_url=None
@@ -3265,6 +3482,7 @@ async def startup_event():
     logger.info(f"Debug Mode: {Config.DEBUG}")
     logger.info(f"Sources: Kraken, Binance, MEXC, Yahoo, Bybit")
     logger.info(f"Pattern Types: ICT (15+), Classical (10+), Candlestick (15+), ICTSMARTPRO")
+    logger.info(f"NEW: UT Bot Alerts + PSAR Integrated")
     logger.info(f"Max Confidence: {Config.MAX_CONFIDENCE}%")
     logger.info(f"Min Candles: {Config.MIN_CANDLES}")
     logger.info(f"Cache TTL: {Config.CACHE_TTL}s")
