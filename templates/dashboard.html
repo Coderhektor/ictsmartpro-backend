@@ -1104,7 +1104,7 @@
         };
 
         // SmartPro Elite v9.0 PSAR Major Indikatörü
-        const SMART_PRO_INDICATOR = `//@version=6
+        const ICTSMARTPRO = `//@version=5
 indicator("SmartPro Elite v9.0 - PSAR Major Sistemi", shorttitle="ICTSMARTPRO", overlay=true, 
          max_labels_count=500, max_lines_count=500, max_boxes_count=500)
 
@@ -1507,7 +1507,7 @@ if barstate.islast
                         'MACD@tv-basicstudies',
                         {
                             name: 'SmartPro Elite v9.0',
-                            content: SMART_PRO_INDICATOR
+                            content: ICTSMARTPRO
                         }
                     ],
                     container_id: 'tvContainer',
