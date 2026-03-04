@@ -1096,10 +1096,7 @@
         }
 
         // =============================================
-        // TRADINGVIEW - GÜNCELLENMİŞ (ICTSMARTPRO INDICATOR)
-        // =============================================
-               // =============================================
-        // TRADINGVIEW - SADECE GRAFİK (INDIKATÖR YOK)
+        // TRADINGVIEW
         // =============================================
         const TV_INTERVAL_MAP = {
             '1m': '1', '5m': '5', '15m': '15', '30m': '30',
@@ -1139,7 +1136,7 @@
                     allow_symbol_change: true,
                     hide_top_toolbar: false,
                     hide_side_toolbar: false,
-                    // studies: []  // HİÇBİR İNDİKATÖR EKLENMİYOR
+                    studies: ['ICTSMARTPRO@tv-basicstudies', 'MACD@tv-basicstudies'],
                     container_id: 'tvContainer',
                     overrides: {
                         'paneProperties.background': '#1A1D24',
@@ -1151,8 +1148,6 @@
                         'timeframes_toolbar'
                     ]
                 });
-                
-                console.log('TradingView chart initialized (no indicators)');
             } catch(e) {
                 console.error('TradingView init error:', e);
             }
