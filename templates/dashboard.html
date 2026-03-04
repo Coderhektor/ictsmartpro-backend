@@ -1424,57 +1424,73 @@
         '1h': '60', '4h': '240', '1d': 'D', '1w': 'W'
     };
     
-    function initTradingView() {
-        const symbol = $('symbolSelect').value + 'USDT';
-        const interval = TV_INTERVALS[$('intervalSelect').value] || '60';
-        
-        if (AppState.tvWidget) {
-            try { AppState.tvWidget.remove(); } catch (e) {}
-            AppState.tvWidget = null;
-        }
-        
-        $('tvContainer').innerHTML = '';
-        $('tvPlaceholder').style.display = 'flex';
-        
-        if (typeof TradingView === 'undefined') {
-            setTimeout(initTradingView, 500);
-            return;
-        }
-        
-        try {
-            AppState.tvWidget = new TradingView.widget({
-                autosize: true,
-                symbol: 'BINANCE:' + symbol,
-                interval: interval,
-                timezone: 'Europe/Istanbul',
-                theme: 'dark',
-                style: '1',
-                locale: 'tr',
-                toolbar_bg: '#12141E',
-                enable_publishing: false,
-                allow_symbol_change: true,
-                studies: ['MACD@tv-basicstudies', 'RSI@tv-basicstudies', 'Volume@tv-basicstudies'],
-                container_id: 'tvContainer',
-                overrides: {
-                    'paneProperties.background': '#12141E',
-                    'paneProperties.vertGridProperties.color': '#2A2F3F',
-                    'paneProperties.horzGridProperties.color': '#2A2F3F',
-                    'symbolWatermarkProperties.transparency': 90
-                },
-                disabled_features: [
-                    'header_saveload', 'header_undo_redo',
-                    'header_screenshot', 'timeframes_toolbar'
-                ]
-            });
-            
-            $('tvPlaceholder').style.display = 'none';
-            console.log('✅ TradingView initialized');
-            
-        } catch (err) {
-            console.error('TradingView error:', err);
-            $('tvPlaceholder').innerHTML = '<span style="color: var(--accent-red);">Grafik yüklenemedi</span>';
-        }
+  function initTradingView() {
+    const symbol = $('symbolSelect').value + 'USDT';
+    const interval = TV_INTERVALS[$('intervalSelect').value] || '60';
+    
+    if (AppState.tvWidget) {
+        try { AppState.tvWidget.remove(); } catch (e) {}
+        AppState.tvWidget = null;
     }
+    
+    $('tvContainer').innerHTML = '';
+    $('tvPlaceholder').style.display = 'flex';
+    
+    if (typeof TradingView === 'undefined') {
+        setTimeout(initTradingView, 500);
+        return;
+    }
+    
+    try {
+        AppState.tvWidget = new TradingView.widget({
+            autosize: true,
+            symbol: 'BINANCE:' + symbol,
+            interval: interval,
+            timezone: 'Europe/Istanbul',
+            theme: 'dark',
+            style: '1',
+            locale: 'tr',
+            toolbar_bg: '#12141E',
+            enable_publishing: false,
+            allow_symbol_change: true,
+            // UT BOT ALERT EKLENDİ
+            studies: [
+                'MACD@tv-basicstudies', 
+                'RSI@tv-basicstudies', 
+                'Volume@tv-basicstudies',
+                {
+                    name: "UT Bot Alert",  // Özel indikatör adı
+                    force_overlay: true,
+                    settings: {
+                        "input.source": "close",
+                        "input.sensitivity": 150,
+                        "input.fastLength": 20,
+                        "input.slowLength": 40,
+                        "input.signalLength": 9
+                    }
+                }
+            ],
+            container_id: 'tvContainer',
+            overrides: {
+                'paneProperties.background': '#12141E',
+                'paneProperties.vertGridProperties.color': '#2A2F3F',
+                'paneProperties.horzGridProperties.color': '#2A2F3F',
+                'symbolWatermarkProperties.transparency': 90
+            },
+            disabled_features: [
+                'header_saveload', 'header_undo_redo',
+                'header_screenshot', 'timeframes_toolbar'
+            ]
+        });
+        
+        $('tvPlaceholder').style.display = 'none';
+        console.log('✅ TradingView initialized with UT Bot Alert');
+        
+    } catch (err) {
+        console.error('TradingView error:', err);
+        $('tvPlaceholder').innerHTML = '<span style="color: var(--accent-red);">Grafik yüklenemedi</span>';
+    }
+}
     
     // ------------------------------------------------------------
     // WEBSOCKET CONNECTION
