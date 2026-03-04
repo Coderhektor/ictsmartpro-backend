@@ -1424,7 +1424,7 @@
         '1h': '60', '4h': '240', '1d': 'D', '1w': 'W'
     };
     
-  function initTradingView() {
+ function initTradingView() {
     const symbol = $('symbolSelect').value + 'USDT';
     const interval = TV_INTERVALS[$('intervalSelect').value] || '60';
     
@@ -1453,12 +1453,11 @@
             toolbar_bg: '#12141E',
             enable_publishing: false,
             allow_symbol_change: true,
-            // UT BOT ALERT EKLENDİ
+            // SADECE MACD ve UT BOT ALERTS
             studies: [
                 'MACD@tv-basicstudies', 
-                'RSI@tv-basicstudies', 
-                                 {
-                    name: "UT Bot Alerts@tv-script-studies",  // Genel format
+                {
+                    name: "UT Bot Alerts@tv-script-studies",
                     force_overlay: true,
                     settings: {
                         "input.source": "close",
@@ -1483,7 +1482,7 @@
         });
         
         $('tvPlaceholder').style.display = 'none';
-        console.log('✅ TradingView initialized with UT Bot Alert');
+        console.log('✅ TradingView initialized with MACD and UT Bot Alert');
         
     } catch (err) {
         console.error('TradingView error:', err);
