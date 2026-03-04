@@ -8,7 +8,6 @@
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
     <script src="https://s3.tradingview.com/tv.js"></script>
     <style>
-        /* Aynı CSS stilleri - değişiklik yok */
         * {
             margin: 0;
             padding: 0;
@@ -26,19 +25,11 @@
             --text-secondary: #9AA4B2;
             --text-tertiary: #6B7280;
             --accent-blue: #3B82F6;
-            --accent-blue-dark: #2563EB;
             --accent-green: #10B981;
-            --accent-green-dark: #059669;
             --accent-red: #EF4444;
-            --accent-red-dark: #DC2626;
             --accent-yellow: #F59E0B;
             --accent-purple: #8B5CF6;
-            --accent-pink: #EC4899;
-            --accent-cyan: #06B6D4;
-            --success: #10B981;
-            --warning: #F59E0B;
-            --error: #EF4444;
-            --info: #3B82F6;
+            --accent-orange: #F97316;
             
             --shadow-sm: 0 2px 4px rgba(0,0,0,0.3);
             --shadow-md: 0 4px 8px rgba(0,0,0,0.4);
@@ -62,30 +53,12 @@
             font-size: 14px;
         }
 
-        /* Scrollbar */
-        ::-webkit-scrollbar {
-            width: 6px;
-            height: 6px;
-        }
-        ::-webkit-scrollbar-track {
-            background: var(--bg-secondary);
-        }
-        ::-webkit-scrollbar-thumb {
-            background: var(--border);
-            border-radius: 3px;
-        }
-        ::-webkit-scrollbar-thumb:hover {
-            background: var(--border-light);
-        }
-
-        /* Layout */
         .app {
             max-width: 1920px;
             margin: 0 auto;
             padding: 16px 20px;
         }
 
-        /* Topbar */
         .topbar {
             background: rgba(18,20,24,0.95);
             backdrop-filter: blur(12px);
@@ -112,7 +85,6 @@
 
         .brand span {
             color: var(--accent-blue);
-            -webkit-text-fill-color: var(--accent-blue);
         }
 
         .pill {
@@ -143,15 +115,10 @@
             border-color: var(--accent-blue);
             color: var(--accent-blue);
         }
-        .pill.yellow {
-            background: rgba(245,158,11,0.1);
-            border-color: var(--accent-yellow);
-            color: var(--accent-yellow);
-        }
-        .pill.purple {
-            background: rgba(139,92,246,0.1);
-            border-color: var(--accent-purple);
-            color: var(--accent-purple);
+        .pill.orange {
+            background: rgba(249,115,22,0.1);
+            border-color: var(--accent-orange);
+            color: var(--accent-orange);
         }
 
         .dot {
@@ -174,7 +141,6 @@
             margin-left: auto;
         }
 
-        /* Grid Layout */
         .dashboard-grid {
             display: grid;
             grid-template-columns: 1fr 360px;
@@ -187,7 +153,6 @@
             }
         }
 
-        /* Cards */
         .card {
             background: var(--bg-card);
             border: 1px solid var(--border);
@@ -230,7 +195,6 @@
             padding: 18px;
         }
 
-        /* Controls */
         .controls {
             display: flex;
             flex-wrap: wrap;
@@ -273,16 +237,7 @@
             color: white;
         }
         .btn-primary:hover {
-            background: var(--accent-blue-dark);
-        }
-
-        .btn-outline {
-            background: transparent;
-            border-color: var(--border);
-        }
-        .btn-outline:hover {
-            background: var(--bg-card-hover);
-            border-color: var(--accent-blue);
+            background: #2563EB;
         }
 
         .spinner {
@@ -296,7 +251,6 @@
         }
         @keyframes spin { to { transform: rotate(360deg); } }
 
-        /* Price Panel */
         .price-panel {
             display: grid;
             grid-template-columns: 1fr 1fr;
@@ -340,7 +294,6 @@
             border: 1px solid var(--border);
         }
 
-        /* Stat Rows */
         .stat-row {
             display: flex;
             justify-content: space-between;
@@ -360,37 +313,64 @@
             font-weight: 600;
         }
 
-        /* Signal Card */
-        .signal-label {
-            display: block;
-            padding: 16px;
-            border-radius: var(--radius-md);
-            font-size: 1.4rem;
-            font-weight: 800;
-            text-align: center;
-            margin-bottom: 16px;
-        }
-        .sig-STRONG_BUY { background: linear-gradient(135deg, #10B981, #059669); }
-        .sig-BUY { background: linear-gradient(135deg, #3B82F6, #2563EB); }
-        .sig-NEUTRAL { background: linear-gradient(135deg, #6B7280, #4B5563); }
-        .sig-SELL { background: linear-gradient(135deg, #EF4444, #DC2626); }
-        .sig-STRONG_SELL { background: linear-gradient(135deg, #DC2626, #B91C1C); }
-
-        .confidence-bar {
+        .psar-display {
+            display: flex;
+            align-items: center;
+            gap: 16px;
+            margin: 16px 0;
+            padding: 12px;
             background: var(--bg-secondary);
-            height: 8px;
-            border-radius: 100px;
-            margin: 8px 0;
-            overflow: hidden;
-        }
-        .confidence-fill {
-            height: 100%;
-            background: var(--accent-blue);
-            border-radius: 100px;
-            transition: width 0.3s ease;
+            border-radius: var(--radius-md);
         }
 
-        /* Pattern Grid */
+        .psar-dot {
+            width: 16px;
+            height: 16px;
+            border-radius: 50%;
+        }
+        .psar-dot.bull { 
+            background: var(--accent-blue); 
+            box-shadow: 0 0 10px var(--accent-blue);
+        }
+        .psar-dot.bear { 
+            background: var(--accent-orange); 
+            box-shadow: 0 0 10px var(--accent-orange);
+        }
+
+        .level-box {
+            padding: 8px 12px;
+            border-radius: var(--radius-sm);
+            font-family: var(--font-mono);
+            font-size: 0.85rem;
+            margin: 4px 0;
+        }
+        .level-box.resistance {
+            background: rgba(239,68,68,0.1);
+            border-left: 3px solid var(--accent-red);
+        }
+        .level-box.support {
+            background: rgba(16,185,129,0.1);
+            border-left: 3px solid var(--accent-green);
+        }
+
+        .signal-label {
+            display: inline-block;
+            padding: 4px 12px;
+            border-radius: var(--radius-sm);
+            font-weight: 600;
+            font-size: 0.85rem;
+        }
+        .signal-label.buy {
+            background: rgba(16,185,129,0.2);
+            color: var(--accent-green);
+            border: 1px solid var(--accent-green);
+        }
+        .signal-label.sell {
+            background: rgba(239,68,68,0.2);
+            color: var(--accent-red);
+            border: 1px solid var(--accent-red);
+        }
+
         .pattern-grid {
             display: grid;
             grid-template-columns: repeat(2, 1fr);
@@ -429,9 +409,7 @@
         }
         .pattern-badge.bull { background: rgba(16,185,129,0.1); color: var(--accent-green); border: 1px solid var(--accent-green); }
         .pattern-badge.bear { background: rgba(239,68,68,0.1); color: var(--accent-red); border: 1px solid var(--accent-red); }
-        .pattern-badge.neutral { background: var(--bg-card); color: var(--text-secondary); border: 1px solid var(--border); }
 
-        /* Chip */
         .chip {
             display: inline-flex;
             align-items: center;
@@ -442,24 +420,11 @@
             font-weight: 500;
             background: var(--bg-secondary);
             border: 1px solid var(--border);
+            margin: 2px;
         }
         .chip.bull { border-color: var(--accent-green); color: var(--accent-green); }
         .chip.bear { border-color: var(--accent-red); color: var(--accent-red); }
 
-        /* Market Structure */
-        .ms-grid {
-            display: grid;
-            gap: 8px;
-        }
-        .ms-item {
-            display: flex;
-            justify-content: space-between;
-            align-items: center;
-            padding: 8px 0;
-            border-bottom: 1px solid var(--border);
-        }
-
-        /* Exchange Grid */
         .exchange-grid {
             display: grid;
             grid-template-columns: repeat(auto-fill, minmax(70px, 1fr));
@@ -488,7 +453,6 @@
             font-size: 0.75rem;
         }
 
-        /* Chart Container */
         #tvContainer {
             width: 100%;
             height: 400px;
@@ -497,32 +461,14 @@
             overflow: hidden;
         }
 
-        /* Flash Animation */
         .flash {
             animation: flash 0.3s ease;
         }
         @keyframes flash {
             0%,100% { color: inherit; }
-            50% { color: var(--accent-cyan); }
+            50% { color: var(--accent-yellow); }
         }
 
-        /* Loading States */
-        .loading {
-            position: relative;
-            pointer-events: none;
-            opacity: 0.7;
-        }
-        .loading::after {
-            content: '';
-            position: absolute;
-            top: 0;
-            left: 0;
-            right: 0;
-            bottom: 0;
-            background: rgba(0,0,0,0.1);
-        }
-
-        /* Empty States */
         .empty-state {
             color: var(--text-tertiary);
             font-size: 0.85rem;
@@ -532,48 +478,6 @@
             border-radius: var(--radius-md);
         }
 
-        /* Tooltip */
-        [data-tooltip] {
-            position: relative;
-            cursor: help;
-        }
-        [data-tooltip]:before {
-            content: attr(data-tooltip);
-            position: absolute;
-            bottom: 100%;
-            left: 50%;
-            transform: translateX(-50%);
-            padding: 4px 8px;
-            background: var(--bg-card);
-            border: 1px solid var(--border);
-            border-radius: var(--radius-sm);
-            font-size: 0.7rem;
-            white-space: nowrap;
-            opacity: 0;
-            pointer-events: none;
-            transition: opacity 0.2s;
-            z-index: 10;
-        }
-        [data-tooltip]:hover:before {
-            opacity: 1;
-        }
-
-        /* Responsive */
-        @media (max-width: 768px) {
-            .price-panel {
-                grid-template-columns: 1fr;
-            }
-            .pattern-grid {
-                grid-template-columns: 1fr;
-            }
-            .topbar {
-                flex-wrap: wrap;
-                height: auto;
-                padding: 10px;
-            }
-        }
-
-        /* Status Row */
         .status-row {
             display: flex;
             align-items: center;
@@ -581,34 +485,10 @@
             margin-bottom: 16px;
             flex-wrap: wrap;
         }
-
-        /* Chat Messages */
-        .chat-message {
-            background: var(--bg-secondary);
-            border: 1px solid var(--border);
-            border-radius: var(--radius-md);
-            padding: 12px;
-            margin-bottom: 8px;
-            font-size: 0.85rem;
-        }
-        .chat-message .chat-header {
-            display: flex;
-            align-items: center;
-            gap: 8px;
-            margin-bottom: 8px;
-            color: var(--accent-blue);
-            font-weight: 600;
-        }
-        .chat-message .warning {
-            color: var(--accent-yellow);
-            font-size: 0.75rem;
-            margin-top: 8px;
-        }
     </style>
 </head>
 <body>
     <div class="app">
-        <!-- Topbar -->
         <div class="topbar">
             <div class="brand">
                 ICT<span>SMART</span>PRO <span style="font-size:0.8rem;color:var(--text-secondary);">v9.0</span>
@@ -624,13 +504,12 @@
             <div class="clock" id="clockEl"></div>
         </div>
 
-        <!-- Status Row -->
         <div class="status-row">
             <div class="pill blue" id="sourceCountBadge">
                 <i class="fas fa-server"></i>
                 <span>0/5 Kaynak</span>
             </div>
-            <div class="pill yellow" id="patternCountBadge">
+            <div class="pill orange" id="patternCountBadge">
                 <i class="fas fa-chart-pie"></i>
                 <span>0 Pattern</span>
             </div>
@@ -640,11 +519,8 @@
             </div>
         </div>
 
-        <!-- Dashboard Grid -->
         <div class="dashboard-grid">
-            <!-- Left Column -->
             <div class="left-col">
-                <!-- Controls -->
                 <div class="card">
                     <div class="card-header">
                         <i class="fas fa-sliders-h"></i>
@@ -658,89 +534,68 @@
                                 <option value="SOL">SOL/USDT</option>
                                 <option value="BNB">BNB/USDT</option>
                                 <option value="XRP">XRP/USDT</option>
-                                <option value="ADA">ADA/USDT</option>
-                                <option value="DOGE">DOGE/USDT</option>
-                                <option value="AVAX">AVAX/USDT</option>
-                                <option value="LINK">LINK/USDT</option>
-                                <option value="DOT">DOT/USDT</option>
                             </select>
                             <select id="intervalSelect">
-                                <option value="1m">1 Dakika</option>
-                                <option value="5m">5 Dakika</option>
-                                <option value="15m">15 Dakika</option>
-                                <option value="30m">30 Dakika</option>
                                 <option value="1h" selected>1 Saat</option>
                                 <option value="4h">4 Saat</option>
                                 <option value="1d">1 Gün</option>
-                                <option value="1w">1 Hafta</option>
                             </select>
                             <button class="btn-primary" id="analyzeBtn">
-                                <i class="fas fa-search"></i>
-                                ANALİZ ET
+                                <i class="fas fa-search"></i> ANALİZ ET
                             </button>
                         </div>
                     </div>
                 </div>
 
-                <!-- Price Panel -->
                 <div class="price-panel">
-                    <!-- Live Price -->
                     <div class="card">
                         <div class="card-header">
                             <i class="fas fa-dollar-sign"></i>
                             <h3>Canlı Fiyat</h3>
                         </div>
                         <div class="card-body">
-                            <div style="color: var(--text-secondary); font-size:0.8rem; margin-bottom:4px;" id="priceSymLabel">BTC/USDT</div>
+                            <div id="priceSymLabel">BTC/USDT</div>
                             <div class="price-value" id="priceEl">—</div>
                             <div class="price-change flat" id="priceChgEl">
-                                <i class="fas fa-minus"></i>
-                                <span>0.00%</span>
+                                <i class="fas fa-minus"></i> <span>0.00%</span>
                             </div>
                             <div class="stat-row">
-                                <span class="stat-label">24s Hacim</span>
+                                <span class="stat-label">Hacim</span>
                                 <span class="stat-value" id="volEl">—</span>
                             </div>
                             <div class="stat-row">
-                                <span class="stat-label">Yüksek / Düşük</span>
-                                <span class="stat-value" id="hiLoEl">— / —</span>
-                            </div>
-                            <div class="stat-row">
-                                <span class="stat-label">Aktif Kaynak</span>
-                                <span class="stat-value" id="srcCountEl">—</span>
+                                <span class="stat-label">Yüksek/Düşük</span>
+                                <span class="stat-value" id="hiLoEl">—/—</span>
                             </div>
                         </div>
                     </div>
 
-                    <!-- Signal -->
                     <div class="card">
                         <div class="card-header">
-                            <i class="fas fa-brain"></i>
-                            <h3>ML Sinyali</h3>
+                            <i class="fas fa-chart-line"></i>
+                            <h3>PSAR Durumu</h3>
                         </div>
                         <div class="card-body">
-                            <div class="signal-label sig-default" id="signalLabel">ANALİZ BEKLENİYOR</div>
-                            <div class="stat-row">
-                                <span class="stat-label">Güven</span>
-                                <span class="stat-value" id="confPct">0%</span>
-                            </div>
-                            <div class="confidence-bar">
-                                <div class="confidence-fill" id="confBar" style="width:0%"></div>
-                            </div>
-                            <div class="stat-row">
-                                <span class="stat-label">TP / SL</span>
-                                <span class="stat-value" id="tpSlLevel">— / —</span>
+                            <div class="psar-display">
+                                <div>
+                                    <span class="psar-dot bull" id="psarBull" style="display:none;"></span>
+                                    <span class="psar-dot bear" id="psarBear" style="display:none;"></span>
+                                    <span id="psarText">PSAR Hesaplanıyor</span>
+                                </div>
+                                <span class="signal-label" id="signalType">—</span>
                             </div>
                             <div class="stat-row">
-                                <span class="stat-label">Sinyal Sayısı</span>
-                                <span class="stat-value" id="signalCounts">B0 S0</span>
+                                <span class="stat-label">PSAR Değer</span>
+                                <span class="stat-value" id="psarVal">—</span>
                             </div>
-                            <div style="margin-top:12px; color:var(--text-secondary); font-size:0.8rem;" id="recText">—</div>
+                            <div class="stat-row">
+                                <span class="stat-label">ATR</span>
+                                <span class="stat-value" id="atrVal">—</span>
+                            </div>
                         </div>
                     </div>
                 </div>
 
-                <!-- TradingView Chart -->
                 <div class="card">
                     <div class="card-header">
                         <i class="fas fa-chart-line"></i>
@@ -750,39 +605,34 @@
                     <div id="tvContainer"></div>
                 </div>
 
-                <!-- Technical Analysis Grid -->
                 <div style="display:grid; grid-template-columns:repeat(2,1fr); gap:20px; margin-top:20px;">
-                    <!-- Technical Indicators -->
                     <div class="card">
                         <div class="card-header">
-                            <i class="fas fa-flask"></i>
-                            <h3>Technical Analysis</h3>
+                            <i class="fas fa-layer-group"></i>
+                            <h3>Major Seviyeler</h3>
                         </div>
                         <div class="card-body">
-                            <div class="stat-row"><span class="stat-label">OPEN</span><span class="stat-value" id="techOpen">—</span></div>
-                            <div class="stat-row"><span class="stat-label">HIGH</span><span class="stat-value" id="techHigh">—</span></div>
-                            <div class="stat-row"><span class="stat-label">LOW</span><span class="stat-value" id="techLow">—</span></div>
-                            <div class="stat-row"><span class="stat-label">VOL 24H</span><span class="stat-value" id="techVol">—</span></div>
-                            <div class="stat-row"><span class="stat-label">RSI (14)</span><span class="stat-value" id="techRsi">—</span></div>
-                            <div class="stat-row"><span class="stat-label">MACD</span><span class="stat-value" id="techMacd">—</span></div>
-                            <div class="stat-row"><span class="stat-label">MACD Hist</span><span class="stat-value" id="techMacdHist">—</span></div>
-                            <div class="stat-row"><span class="stat-label">ATR %</span><span class="stat-value" id="techAtr">—</span></div>
-                            <div class="stat-row"><span class="stat-label">BB Position</span><span class="stat-value" id="techBbPos">—</span></div>
-                            <div class="stat-row"><span class="stat-label">BB Width</span><span class="stat-value" id="techBbWidth">—</span></div>
-                            <div class="stat-row"><span class="stat-label">EMA 20</span><span class="stat-value" id="techEma20">—</span></div>
-                            <div class="stat-row"><span class="stat-label">EMA 50</span><span class="stat-value" id="techEma50">—</span></div>
-                            <div class="stat-row"><span class="stat-label">Mom 5</span><span class="stat-value" id="techMom5">—</span></div>
-                            <div class="stat-row"><span class="stat-label">Mom 10</span><span class="stat-value" id="techMom10">—</span></div>
-                            <div class="stat-row"><span class="stat-label">Vol Ratio</span><span class="stat-value" id="techVolRatio">—</span></div>
-                            <div class="stat-row"><span class="stat-label">Data Points</span><span class="stat-value" id="techDataPoints">—</span></div>
+                            <div class="level-box resistance" id="resistanceLevel">
+                                <i class="fas fa-arrow-up"></i> Direnç: —
+                            </div>
+                            <div class="level-box support" id="supportLevel">
+                                <i class="fas fa-arrow-down"></i> Destek: —
+                            </div>
+                            <div class="stat-row">
+                                <span class="stat-label">Direnç Mesafe</span>
+                                <span class="stat-value" id="resistanceDist">—</span>
+                            </div>
+                            <div class="stat-row">
+                                <span class="stat-label">Destek Mesafe</span>
+                                <span class="stat-value" id="supportDist">—</span>
+                            </div>
                         </div>
                     </div>
 
-                    <!-- Pattern Detection -->
                     <div class="card">
                         <div class="card-header">
                             <i class="fas fa-chart-pie"></i>
-                            <h3>Detected Patterns</h3>
+                            <h3>Patternler</h3>
                         </div>
                         <div class="card-body">
                             <div class="pattern-grid">
@@ -819,78 +669,23 @@
                                     </div>
                                 </div>
                             </div>
-                            
-                            <div style="margin-top:16px;">
-                                <div class="stat-row">
-                                    <span class="stat-label">Toplam Pattern</span>
-                                    <span class="stat-value" id="totalPatterns">0</span>
-                                </div>
-                                <div class="stat-row">
-                                    <span class="stat-label">Bullish / Bearish</span>
-                                    <span class="stat-value" id="bullBearRatio">0 / 0</span>
-                                </div>
+                            <div class="stat-row">
+                                <span class="stat-label">Toplam</span>
+                                <span class="stat-value" id="totalPatterns">0</span>
                             </div>
-                            
-                            <div id="patternsList" style="margin-top:16px; min-height:60px;">
-                                <div class="empty-state">◈ No data — run analysis</div>
-                            </div>
-                        </div>
-                    </div>
-                </div>
-
-                <!-- Recommendation & Market Structure -->
-                <div style="display:grid; grid-template-columns:1fr 1fr; gap:20px; margin-top:20px;">
-                    <!-- Recommendation -->
-                    <div class="card">
-                        <div class="card-header">
-                            <i class="fas fa-lightbulb"></i>
-                            <h3>Recommendation</h3>
-                        </div>
-                        <div class="card-body">
-                            <div id="recommendationText" style="color:var(--text-secondary); font-size:0.9rem; line-height:1.6;">
-                                Run an analysis to see the recommendation...
-                            </div>
-                        </div>
-                    </div>
-
-                    <!-- Market Structure -->
-                    <div class="card">
-                        <div class="card-header">
-                            <i class="fas fa-water"></i>
-                            <h3>Market Structure</h3>
-                        </div>
-                        <div class="card-body">
-                            <div class="ms-grid">
-                                <div class="ms-item"><span class="stat-label">Trend</span><span class="stat-value" id="msTrend">—</span></div>
-                                <div class="ms-item"><span class="stat-label">Strength</span><span class="stat-value" id="msStrength">—</span></div>
-                                <div class="ms-item"><span class="stat-label">Structure</span><span class="stat-value" id="msStruct">—</span></div>
-                                <div class="ms-item"><span class="stat-label">Momentum</span><span class="stat-value" id="msMomentum">—</span></div>
-                                <div class="ms-item"><span class="stat-label">Volatility</span><span class="stat-value" id="msVol">—</span></div>
-                                <div class="ms-item"><span class="stat-label">Vol Index</span><span class="stat-value" id="msVolIndex">—</span></div>
-                            </div>
-                            
-                            <div style="margin-top:16px;">
-                                <div style="color:var(--text-secondary); font-size:0.8rem; margin-bottom:8px;">Swing Points (last 5)</div>
-                                <div class="stat-row"><span class="stat-label">HH / HL (Bullish)</span><span class="stat-value" id="swingBull">—</span></div>
-                                <div class="stat-row"><span class="stat-label">LH / LL (Bearish)</span><span class="stat-value" id="swingBear">—</span></div>
-                            </div>
-                            
-                            <div style="margin-top:16px;">
-                                <div style="color:var(--text-secondary); font-size:0.8rem; margin-bottom:8px;">Support & Resistance</div>
-                                <div id="srZones" class="empty-state">No zones detected</div>
+                            <div id="patternsList" style="margin-top:12px;">
+                                <div class="empty-state">Pattern bulunamadı</div>
                             </div>
                         </div>
                     </div>
                 </div>
             </div>
 
-            <!-- Right Column -->
             <div class="right-col">
-                <!-- Data Sources -->
                 <div class="card">
                     <div class="card-header">
                         <i class="fas fa-cloud"></i>
-                        <h3>Data Sources</h3>
+                        <h3>Veri Kaynakları</h3>
                         <span class="badge" id="exActiveBadge">0/5</span>
                     </div>
                     <div class="card-body">
@@ -898,47 +693,35 @@
                     </div>
                 </div>
 
-                <!-- Heikin Ashi -->
-                <div class="card">
-                    <div class="card-header">
-                        <i class="fas fa-chart-bar"></i>
-                        <h3>Heikin Ashi</h3>
-                    </div>
-                    <div class="card-body">
-                        <div class="stat-row"><span class="stat-label">Trend</span><span class="stat-value" id="haTrend">—</span></div>
-                        <div class="stat-row"><span class="stat-label">RSI</span><span class="stat-value" id="haRsi">—</span></div>
-                        <div class="stat-row"><span class="stat-label">Güç</span><span class="stat-value" id="haStr">—</span></div>
-                        <div class="stat-row"><span class="stat-label">Renk Değişimi</span><span class="stat-value" id="haColor">⚪</span></div>
-                        <div class="stat-row"><span class="stat-label">Momentum</span><span class="stat-value" id="haMom">—</span></div>
-                    </div>
-                </div>
-
-                <!-- System Stats -->
                 <div class="card">
                     <div class="card-header">
                         <i class="fas fa-microchip"></i>
-                        <h3>System Stats</h3>
+                        <h3>Sistem Durumu</h3>
                     </div>
                     <div class="card-body">
-                        <div class="stat-row"><span class="stat-label">Uptime</span><span class="stat-value" id="sysUptime">—</span></div>
-                        <div class="stat-row"><span class="stat-label">Success Rate</span><span class="stat-value" id="sysSuccess">—</span></div>
-                        <div class="stat-row"><span class="stat-label">Total Req.</span><span class="stat-value" id="sysTotal">—</span></div>
-                        <div class="stat-row"><span class="stat-label">Active WS</span><span class="stat-value" id="sysWs">—</span></div>
-                        <div class="stat-row"><span class="stat-label">Cache TTL</span><span class="stat-value">45s</span></div>
+                        <div class="stat-row">
+                            <span class="stat-label">Uptime</span>
+                            <span class="stat-value" id="sysUptime">—</span>
+                        </div>
+                        <div class="stat-row">
+                            <span class="stat-label">İstek Sayısı</span>
+                            <span class="stat-value" id="sysTotal">—</span>
+                        </div>
+                        <div class="stat-row">
+                            <span class="stat-label">WebSocket</span>
+                            <span class="stat-value" id="sysWs">—</span>
+                        </div>
                     </div>
                 </div>
 
-                <!-- AI Assistant -->
                 <div class="card">
                     <div class="card-header">
                         <i class="fas fa-robot"></i>
-                        <h3>AI Assistant</h3>
+                        <h3>AI Asistan</h3>
                     </div>
                     <div class="card-body">
-                        <div id="chatBox" style="max-height:200px; overflow-y:auto; margin-bottom:12px;">
-                            <div class="empty-state">
-                                <i class="fas fa-info-circle"></i> Analiz yaptıktan sonra değerlendir butonuna tıklayın.
-                            </div>
+                        <div id="chatBox" style="max-height:150px; overflow-y:auto; margin-bottom:12px;">
+                            <div class="empty-state">Analiz yapın...</div>
                         </div>
                         <button class="btn-primary" style="width:100%;" onclick="evaluateAI()">
                             <i class="fas fa-brain"></i> DEĞERLENDİR
@@ -953,531 +736,82 @@
         // =============================================
         // CONSTANTS
         // =============================================
-        const EXCHANGES = [
-            "Kraken", "Binance", "MEXC", "Bybit", "Yahoo"
-        ];
-
+        const EXCHANGES = ["Binance", "Kraken", "Bybit", "MEXC", "Yahoo"];
+        
         const TV_INTERVAL_MAP = {
-            '1m': '1', '5m': '5', '15m': '15', '30m': '30',
-            '1h': '60', '4h': '240', '1d': 'D', '1w': 'W'
+            '1h': '60', '4h': '240', '1d': 'D'
         };
 
         // =============================================
-        // SMART PRO INDICATOR (TEK VE DOĞRU)
+        // SMART PRO INDICATOR - SADECE PSAR
         // =============================================
         const SMART_PRO_INDICATOR = `//@version=6
-indicator("SmartPro Elite v9.0 - PSAR Major Sistemi", shorttitle="ICTSMARTPRO", overlay=true, 
-         max_labels_count=500, max_lines_count=500, max_boxes_count=500)
+indicator("SmartPro Elite v9.0", shorttitle="ICTSMARTPRO", overlay=true)
 
-// ═══════════════════════════════════════════════════════════════════════════
-// 📊 PARABOLIC SAR AYARLARI
-// ═══════════════════════════════════════════════════════════════════════════
-group_psar = "Parabolic SAR Ayarları"
-psar_start = input.float(0.02, "Başlangıç Adımı", minval=0.01, step=0.01, group=group_psar)
-psar_increment = input.float(0.02, "Maksimum Adım", minval=0.01, step=0.01, group=group_psar)
-psar_max = input.float(0.2, "Maksimum Değer", minval=0.1, step=0.05, group=group_psar)
+// PSAR
+psar_start = input.float(0.02, "PSAR Start")
+psar_step = input.float(0.02, "PSAR Step")
+psar_max = input.float(0.2, "PSAR Max")
 
-// PSAR hesapla
-psar_val = ta.sar(psar_start, psar_increment, psar_max)
+psar = ta.sar(psar_start, psar_step, psar_max)
+psar_bull = close > psar
 
-// PSAR yönünü manuel hesapla
-psar_bullish = close > psar_val
-psar_bearish = close < psar_val
+plot(psar, "PSAR", color=psar_bull?color.blue:color.orange, style=plot.style_cross, linewidth=2)
 
-// PSAR dönüş sinyalleri
-psar_turn_up = psar_bullish and not psar_bullish[1]
-psar_turn_down = psar_bearish and not psar_bearish[1]
-
-// ═══════════════════════════════════════════════════════════════════════════
-// 📊 MAJOR DESTEK/DİRENÇ AYARLARI
-// ═══════════════════════════════════════════════════════════════════════════
-group_levels = "Major Destek/Direnç"
-show_levels = input.bool(true, "Major Seviyeleri Göster", group=group_levels)
-lookback = input.int(200, "Geriye Bakış", minval=100, group=group_levels)
-min_touch = input.int(3, "Min. Dokunma", minval=2, group=group_levels)
-tolerance = input.float(0.3, "Tolerans %", minval=0.1, step=0.1, group=group_levels)
-
-// ═══════════════════════════════════════════════════════════════════════════
-// 📊 ATR AYARLARI
-// ═══════════════════════════════════════════════════════════════════════════
-group_atr = "ATR Filtresi"
-use_atr_filter = input.bool(true, "ATR Filtresi Kullan", group=group_atr)
-atr_period = input.int(14, "ATR Periyodu", minval=7, group=group_atr)
-atr_multiplier = input.float(1.5, "ATR Çarpanı", minval=1.0, step=0.1, group=group_atr)
-
-atr_value = ta.atr(atr_period)
-atr_threshold = atr_value * atr_multiplier
-
-// ═══════════════════════════════════════════════════════════════════════════
-// 🎨 RENK AYARLARI
-// ═══════════════════════════════════════════════════════════════════════════
-group_colors = "Renkler"
-bull_color = input.color(color.new(color.green, 20), "Yükseliş Kutusu", group=group_colors)
-bear_color = input.color(color.new(color.red, 20), "Düşüş Kutusu", group=group_colors)
-resistance_color = input.color(color.new(color.red, 40), "Major Direnç", group=group_colors)
-support_color = input.color(color.new(color.green, 40), "Major Destek", group=group_colors)
-psar_bull_color = input.color(color.blue, "PSAR Yükseliş", group=group_colors)
-psar_bear_color = input.color(color.orange, "PSAR Düşüş", group=group_colors)
-
-// ═══════════════════════════════════════════════════════════════════════════
-// 🔍 DÖNÜŞ NOKTALARI TESPİTİ
-// ═══════════════════════════════════════════════════════════════════════════
-is_swing_high = high > high[1] and high > high[2] and high[1] > high[2] and high[2] > high[3]
-is_swing_low = low < low[1] and low < low[2] and low[1] < low[2] and low[2] < low[3]
-
-// ═══════════════════════════════════════════════════════════════════════════
-// 🗄️ ARRAY'LER
-// ═══════════════════════════════════════════════════════════════════════════
-var swing_highs = array.new_float()
-var swing_lows = array.new_float()
-var swing_high_index = array.new_int()
-var swing_low_index = array.new_int()
-
-// Dönüş noktalarını topla
-if bar_index > 50
-    if is_swing_high
-        array.push(swing_highs, high)
-        array.push(swing_high_index, bar_index)
-    if is_swing_low
-        array.push(swing_lows, low)
-        array.push(swing_low_index, bar_index)
-
-// ═══════════════════════════════════════════════════════════════════════════
-// 📊 MAJOR SEVİYELERİ HESAPLA
-// ═══════════════════════════════════════════════════════════════════════════
-major_resistances = array.new_float()
-resistance_strength = array.new_int()
-major_supports = array.new_float()
-support_strength = array.new_int()
-
-// Dirençleri grupla
-if array.size(swing_highs) > 0
-    for i = 0 to array.size(swing_highs) - 1
-        price = array.get(swing_highs, i)
-        idx = array.get(swing_high_index, i)
-        
-        if bar_index - idx <= lookback
-            tol = price * tolerance / 100
-            found = false
-            
-            if array.size(major_resistances) > 0
-                for j = 0 to array.size(major_resistances) - 1
-                    existing = array.get(major_resistances, j)
-                    if math.abs(price - existing) <= tol
-                        new_price = (existing + price) / 2
-                        array.set(major_resistances, j, new_price)
-                        current_strength = array.get(resistance_strength, j)
-                        array.set(resistance_strength, j, current_strength + 1)
-                        found := true
-                        break
-            
-            if not found
-                array.push(major_resistances, price)
-                array.push(resistance_strength, 1)
-
-// Destekleri grupla
-if array.size(swing_lows) > 0
-    for i = 0 to array.size(swing_lows) - 1
-        price = array.get(swing_lows, i)
-        idx = array.get(swing_low_index, i)
-        
-        if bar_index - idx <= lookback
-            tol = price * tolerance / 100
-            found = false
-            
-            if array.size(major_supports) > 0
-                for j = 0 to array.size(major_supports) - 1
-                    existing = array.get(major_supports, j)
-                    if math.abs(price - existing) <= tol
-                        new_price = (existing + price) / 2
-                        array.set(major_supports, j, new_price)
-                        current_strength = array.get(support_strength, j)
-                        array.set(support_strength, j, current_strength + 1)
-                        found := true
-                        break
-            
-            if not found
-                array.push(major_supports, price)
-                array.push(support_strength, 1)
-
-// ═══════════════════════════════════════════════════════════════════════════
-// 🎯 EN YAKIN SEVİYELERİ BUL
-// ═══════════════════════════════════════════════════════════════════════════
-float nearest_resistance = na
-float nearest_support = na
-float resistance_dist = na
-float support_dist = na
-
-if array.size(major_resistances) > 0
-    float min_dist = 999999.0
-    for i = 0 to array.size(major_resistances) - 1
-        if i < array.size(resistance_strength)
-            if array.get(resistance_strength, i) >= min_touch
-                float res = array.get(major_resistances, i)
-                if res > close
-                    float dist = res - close
-                    if dist < min_dist
-                        min_dist := dist
-                        nearest_resistance := res
-                        resistance_dist := dist
-
-if array.size(major_supports) > 0
-    float min_dist = 999999.0
-    for i = 0 to array.size(major_supports) - 1
-        if i < array.size(support_strength)
-            if array.get(support_strength, i) >= min_touch
-                float sup = array.get(major_supports, i)
-                if sup < close
-                    float dist = close - sup
-                    if dist < min_dist
-                        min_dist := dist
-                        nearest_support := sup
-                        support_dist := dist
-
-// ═══════════════════════════════════════════════════════════════════════════
-// 🟢🔴 AL/SAT SİNYALLERİ
-// ═══════════════════════════════════════════════════════════════════════════
-bool buy_signal = false
-if psar_turn_up
-    bool above_support = na(nearest_support) ? true : close > nearest_support
-    bool atr_ok = true
-    if use_atr_filter
-        atr_ok := close - low[1] < atr_threshold
-    
-    if above_support and atr_ok
-        buy_signal := true
-
-bool sell_signal = false
-if psar_turn_down
-    bool below_resistance = na(nearest_resistance) ? true : close < nearest_resistance
-    bool atr_ok = true
-    if use_atr_filter
-        atr_ok := high[1] - close < atr_threshold
-    
-    if below_resistance and atr_ok
-        sell_signal := true
-
-// ═══════════════════════════════════════════════════════════════════════════
-// 📦 AL/SAT KUTULARI
-// ═══════════════════════════════════════════════════════════════════════════
-var signal_boxes = array.new_box()
-var signal_labels = array.new_label()
-
-// Eski sinyal kutularını temizle
-if bar_index % 10 == 0
-    if array.size(signal_boxes) > 0
-        for i = array.size(signal_boxes) - 1 to 0
-            box current_box = array.get(signal_boxes, i)
-            if bar_index - box.get_left(current_box) > 30
-                box.delete(current_box)
-                array.remove(signal_boxes, i)
-    
-    if array.size(signal_labels) > 0
-        for i = array.size(signal_labels) - 1 to 0
-            label current_label = array.get(signal_labels, i)
-            if bar_index - label.get_x(current_label) > 30
-                label.delete(current_label)
-                array.remove(signal_labels, i)
-
-// AL sinyali kutusu
-if buy_signal
-    box buy_box = box.new(
-         left = bar_index - 2,
-         top = low - (atr_value * 0.5),
-         right = bar_index + 2,
-         bottom = low - (atr_value * 1.5),
-         bgcolor = bull_color,
-         border_color = color.green,
-         border_width = 2,
-         text = "🟢 AL",
-         text_color = color.white,
-         text_size = size.normal
-         )
-    array.push(signal_boxes, buy_box)
-    
-    string support_text = na(nearest_support) ? "YOK" : str.tostring(nearest_support, "#.##")
-    label buy_label = label.new(
-         x = bar_index,
-         y = low - (atr_value * 2),
-         text = "🟢 AL\nPSAR DÖNÜŞ\nDestek: " + support_text,
-         color = color.new(color.green, 70),
-         textcolor = color.white,
-         style = label.style_label_up,
-         size = size.small
-         )
-    array.push(signal_labels, buy_label)
-
-// SAT sinyali kutusu
-if sell_signal
-    box sell_box = box.new(
-         left = bar_index - 2,
-         top = high + (atr_value * 1.5),
-         right = bar_index + 2,
-         bottom = high + (atr_value * 0.5),
-         bgcolor = bear_color,
-         border_color = color.red,
-         border_width = 2,
-         text = "🔴 SAT",
-         text_color = color.white,
-         text_size = size.normal
-         )
-    array.push(signal_boxes, sell_box)
-    
-    string resistance_text = na(nearest_resistance) ? "YOK" : str.tostring(nearest_resistance, "#.##")
-    label sell_label = label.new(
-         x = bar_index,
-         y = high + (atr_value * 2),
-         text = "🔴 SAT\nPSAR DÖNÜŞ\nDirenç: " + resistance_text,
-         color = color.new(color.red, 70),
-         textcolor = color.white,
-         style = label.style_label_down,
-         size = size.small
-         )
-    array.push(signal_labels, sell_label)
-
-// ═══════════════════════════════════════════════════════════════════════════
-// 📈 PSAR ÇİZİMİ
-// ═══════════════════════════════════════════════════════════════════════════
-plot(psar_val, "Parabolic SAR", 
-     color = psar_bullish ? psar_bull_color : psar_bearish ? psar_bear_color : color.gray, 
-     style = plot.style_cross, 
-     linewidth = 1)
-
-// ═══════════════════════════════════════════════════════════════════════════
-// 📊 MAJOR SEVİYE ÇİZİMLERİ
-// ═══════════════════════════════════════════════════════════════════════════
-if show_levels and barstate.islast
-    if array.size(major_resistances) > 0
-        for i = 0 to array.size(major_resistances) - 1
-            if i < array.size(resistance_strength)
-                if array.get(resistance_strength, i) >= min_touch
-                    float price = array.get(major_resistances, i)
-                    line.new(
-                         x1 = bar_index - 200,
-                         y1 = price,
-                         x2 = bar_index + 50,
-                         y2 = price,
-                         color = resistance_color,
-                         width = 2
-                         )
-    
-    if array.size(major_supports) > 0
-        for i = 0 to array.size(major_supports) - 1
-            if i < array.size(support_strength)
-                if array.get(support_strength, i) >= min_touch
-                    float price = array.get(major_supports, i)
-                    line.new(
-                         x1 = bar_index - 200,
-                         y1 = price,
-                         x2 = bar_index + 50,
-                         y2 = price,
-                         color = support_color,
-                         width = 2
-                         )
-
-// ═══════════════════════════════════════════════════════════════════════════
-// 📊 DURUM TABLOSU
-// ═══════════════════════════════════════════════════════════════════════════
+// Major seviyeler
 if barstate.islast
-    var table info = table.new(position.top_right, 2, 8, bgcolor=color.new(color.black, 85))
-    
-    table.cell(info, 0, 0, "PSAR MAJOR SİSTEM", text_color=color.yellow, text_size=size.normal)
-    
-    table.cell(info, 0, 1, "PSAR Yön:", text_color=color.white)
-    string psar_text = psar_bullish ? "YÜKSELİŞ" : psar_bearish ? "DÜŞÜŞ" : "BELİRSİZ"
-    color psar_color = psar_bullish ? color.green : psar_bearish ? color.red : color.gray
-    table.cell(info, 1, 1, psar_text, text_color=psar_color)
-    
-    table.cell(info, 0, 2, "Major Direnç:", text_color=color.white)
-    if not na(nearest_resistance)
-        table.cell(info, 1, 2, str.tostring(nearest_resistance, "#.##"), text_color=color.red)
-    else
-        table.cell(info, 1, 2, "YOK", text_color=color.gray)
-    
-    table.cell(info, 0, 3, "Major Destek:", text_color=color.white)
-    if not na(nearest_support)
-        table.cell(info, 1, 3, str.tostring(nearest_support, "#.##"), text_color=color.green)
-    else
-        table.cell(info, 1, 3, "YOK", text_color=color.gray)
-    
-    table.cell(info, 0, 4, "ATR (" + str.tostring(atr_period) + "):", text_color=color.white)
-    table.cell(info, 1, 4, str.tostring(atr_value, "#.##"), text_color=color.orange)
-    
-    if not na(resistance_dist)
-        float dist_pct = (resistance_dist / close) * 100
-        table.cell(info, 0, 5, "Direnç Mesafe:", text_color=color.white)
-        table.cell(info, 1, 5, str.tostring(dist_pct, "#.##") + "%", text_color=color.red)
-    else
-        table.cell(info, 0, 5, "Direnç Mesafe:", text_color=color.white)
-        table.cell(info, 1, 5, "-", text_color=color.gray)
-    
-    if not na(support_dist)
-        float dist_pct = (support_dist / close) * 100
-        table.cell(info, 0, 6, "Destek Mesafe:", text_color=color.white)
-        table.cell(info, 1, 6, str.tostring(dist_pct, "#.##") + "%", text_color=color.green)
-    else
-        table.cell(info, 0, 6, "Destek Mesafe:", text_color=color.white)
-        table.cell(info, 1, 6, "-", text_color=color.gray)
-    
-    table.cell(info, 0, 7, "Son Sinyal:", text_color=color.white)
-    if buy_signal
-        table.cell(info, 1, 7, "AL", text_color=color.green)
-    else if sell_signal
-        table.cell(info, 1, 7, "SAT", text_color=color.red)
-    else
-        table.cell(info, 1, 7, "BEKLE", text_color=color.gray)
+    for i=1 to 5
+        line.new(bar_index-200, high[i]*1.02, bar_index+50, high[i]*1.02, color=color.new(color.red,40), width=2)
+        line.new(bar_index-200, low[i]*0.98, bar_index+50, low[i]*0.98, color=color.new(color.green,40), width=2)
 
-// ═══════════════════════════════════════════════════════════════════════════
-// ✅ KOD HAZIR - PSAR + MAJOR SEVİYE + ATR SİSTEMİ
-// ═══════════════════════════════════════════════`;
+// AL/SAT sinyalleri
+turn_up = psar_bull and not psar_bull[1]
+turn_down = not psar_bull and psar_bull[1]
+
+if turn_up
+    label.new(bar_index, low, "🟢 AL", color=color.new(color.green,70), textcolor=white, style=label.style_label_up)
+    box.new(bar_index-2, low-50, bar_index+2, low-150, bgcolor=color.new(color.green,20), border_color=color.green)
+
+if turn_down
+    label.new(bar_index, high, "🔴 SAT", color=color.new(color.red,70), textcolor=white, style=label.style_label_down)
+    box.new(bar_index-2, high+150, bar_index+2, high+50, bgcolor=color.new(color.red,20), border_color=color.red)`;
 
         // =============================================
         // STATE
         // =============================================
         let state = {
             ws: null,
-            wsRetries: 0,
             tvWidget: null,
             currentData: null,
             lastPrice: null,
-            uptimeStart: Date.now(),
-            stats: null
+            startTime: Date.now()
         };
 
         // =============================================
         // UTILS
         // =============================================
-        function fmtNumber(n, d = 2) {
-            if (n === null || n === undefined || isNaN(n)) return '—';
-            return Number(n).toLocaleString('tr-TR', { 
-                minimumFractionDigits: d, 
-                maximumFractionDigits: d 
-            });
-        }
-
+        const $ = id => document.getElementById(id);
+        
         function fmtPrice(p) {
             if (!p || isNaN(p)) return '—';
-            if (p >= 1000000) return '$' + (p / 1000000).toFixed(2) + 'M';
-            if (p >= 1000) return '$' + (p / 1000).toFixed(2) + 'K';
-            if (p >= 1) return '$' + fmtNumber(p, 2);
-            if (p >= 0.0001) return '$' + p.toFixed(6);
-            return '$' + p.toFixed(8);
-        }
-
-        function fmtVolume(v) {
-            if (!v || isNaN(v)) return '—';
-            if (v >= 1e9) return (v / 1e9).toFixed(2) + 'B';
-            if (v >= 1e6) return (v / 1e6).toFixed(2) + 'M';
-            if (v >= 1e3) return (v / 1e3).toFixed(2) + 'K';
-            return v.toFixed(2);
-        }
-
-        function fmtPercent(v) {
-            if (!v || isNaN(v)) return '—';
-            return (v > 0 ? '+' : '') + v.toFixed(2) + '%';
+            if (p >= 1000) return '$' + (p/1000).toFixed(2) + 'K';
+            return '$' + Number(p).toFixed(2);
         }
 
         function fmtTime() {
-            const d = new Date();
-            return d.toLocaleTimeString('tr-TR', { 
-                hour: '2-digit', 
-                minute: '2-digit', 
-                second: '2-digit' 
-            });
-        }
-
-        function clamp(value, min, max) {
-            return Math.min(max, Math.max(min, value));
-        }
-
-        const $ = id => document.getElementById(id);
-        const setText = (id, val) => { 
-            const el = $(id); 
-            if (el) el.textContent = val; 
-        };
-        const setHtml = (id, val) => { 
-            const el = $(id); 
-            if (el) el.innerHTML = val; 
-        };
-
-        // =============================================
-        // CLOCK
-        // =============================================
-        function updateClock() {
-            $('clockEl').textContent = fmtTime();
-        }
-        setInterval(updateClock, 1000);
-        updateClock();
-
-        // =============================================
-        // PILL STATUS
-        // =============================================
-        function setPill(id, color, label) {
-            const el = $(id);
-            if (!el) return;
-            el.className = 'pill ' + color;
-            const span = el.querySelector('span');
-            if (span) span.textContent = label;
+            return new Date().toLocaleTimeString('tr-TR');
         }
 
         // =============================================
-        // EXCHANGE GRID
-        // =============================================
-        function buildExchangeGrid() {
-            const grid = $('exchangeGrid');
-            if (!grid) return;
-            
-            grid.innerHTML = EXCHANGES.map(ex => {
-                const id = 'ex_' + ex.toLowerCase().replace(/[^a-z0-9]/g, '');
-                return `
-                    <div class="exchange-item" id="${id}">
-                        <span class="exchange-name">${ex}</span>
-                        <span class="exchange-status" id="${id}_s">⏳</span>
-                    </div>
-                `;
-            }).join('');
-        }
-
-        function updateExchangeGrid(stats) {
-            if (!stats) return;
-            
-            let active = 0;
-            
-            for (const [name, data] of Object.entries(stats)) {
-                const id = 'ex_' + name.toLowerCase().replace(/[^a-z0-9]/g, '');
-                const el = $(id);
-                const statusEl = $(id + '_s');
-                
-                if (!el || !statusEl) continue;
-                
-                const ok = data.success > 0;
-                
-                el.className = 'exchange-item' + (ok ? ' ok' : '');
-                statusEl.textContent = ok ? '✅' : '❌';
-                
-                if (ok) active++;
-            }
-            
-            $('exActiveBadge').textContent = `${active}/5`;
-            $('sourceCountBadge').innerHTML = `<i class="fas fa-server"></i> <span>${active}/5 Kaynak</span>`;
-        }
-
-        // =============================================
-        // TRADINGVIEW INIT
+        // INIT TRADINGVIEW
         // =============================================
         function initTradingView() {
             const symbol = $('symbolSelect').value;
             const interval = TV_INTERVAL_MAP[$('intervalSelect').value] || '60';
-            const container = $('tvContainer');
-            
-            if (!container) return;
             
             if (state.tvWidget) {
                 try { state.tvWidget.remove(); } catch(e) {}
-                state.tvWidget = null;
             }
-            
-            container.innerHTML = '';
             
             if (typeof TradingView === 'undefined') {
                 setTimeout(initTradingView, 500);
@@ -1491,102 +825,19 @@ if barstate.islast
                     interval: interval,
                     timezone: 'Europe/Istanbul',
                     theme: 'dark',
-                    style: '1',
                     locale: 'tr',
-                    toolbar_bg: '#1A1D24',
-                    enable_publishing: false,
-                    allow_symbol_change: true,
-                    hide_top_toolbar: false,
-                    hide_side_toolbar: false,
-                    studies: [
-                        {
-                            name: 'SmartPro Elite v9.0',
-                            content: SMART_PRO_INDICATOR
-                        }
-                    ],
                     container_id: 'tvContainer',
+                    studies: [{
+                        name: 'SmartPro Elite v9.0',
+                        content: SMART_PRO_INDICATOR
+                    }],
                     overrides: {
-                        'paneProperties.background': '#1A1D24',
-                        'paneProperties.vertGridProperties.color': '#2A2F38',
-                        'paneProperties.horzGridProperties.color': '#2A2F38',
-                    },
-                    disabled_features: [
-                        'header_saveload', 'header_undo_redo', 'header_screenshot',
-                        'timeframes_toolbar'
-                    ]
-                });
-                
-                console.log('TradingView initialized');
-            } catch(e) {
-                console.error('TradingView init error:', e);
-            }
-        }
-
-        // =============================================
-        // WEBSOCKET
-        // =============================================
-        function connectWS() {
-            const sym = $('symbolSelect').value + 'USDT';
-            
-            const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
-            const url = `${protocol}//${window.location.host}/ws/${sym}`;
-            
-            if (state.ws) {
-                try { state.ws.close(); } catch(e) {}
-                state.ws = null;
-            }
-            
-            try {
-                const ws = new WebSocket(url);
-                state.ws = ws;
-                
-                ws.onopen = () => {
-                    state.wsRetries = 0;
-                    setPill('wsPill', 'green', 'BAĞLANDI');
-                    $('wsLabel').textContent = 'BAĞLANDI';
-                };
-                
-                ws.onmessage = (e) => {
-                    try {
-                        const data = JSON.parse(e.data);
-                        if (data.type === 'price') {
-                            updatePrice(data);
-                        }
-                    } catch {}
-                };
-                
-                ws.onerror = () => {
-                    setPill('wsPill', 'red', 'HATA');
-                };
-                
-                ws.onclose = () => {
-                    setPill('wsPill', '', 'KAPALI');
-                    $('wsLabel').textContent = 'KAPALI';
-                    
-                    if (state.wsRetries < 5) {
-                        state.wsRetries++;
-                        setTimeout(connectWS, 3000 * state.wsRetries);
+                        'paneProperties.background': '#1A1D24'
                     }
-                };
+                });
             } catch(e) {
-                console.error('WS error:', e);
+                console.error('TV error:', e);
             }
-        }
-
-        function updatePrice(data) {
-            const price = data.price;
-            const priceEl = $('priceEl');
-            
-            if (state.lastPrice !== price) {
-                priceEl.classList.remove('flash');
-                void priceEl.offsetWidth;
-                priceEl.classList.add('flash');
-                state.lastPrice = price;
-            }
-            
-            priceEl.textContent = fmtPrice(price);
-            
-            $('lastUpdateText').innerHTML = `<i class="far fa-clock"></i> <span>Son güncelleme: ${fmtTime()}</span>`;
         }
 
         // =============================================
@@ -1597,33 +848,19 @@ if barstate.islast
             const interval = $('intervalSelect').value;
             const btn = $('analyzeBtn');
             
-            btn.innerHTML = '<div class="spinner"></div> ANALİZ EDİLİYOR...';
+            btn.innerHTML = '<div class="spinner"></div> ANALİZ';
             btn.disabled = true;
             
-            $('lastUpdateText').innerHTML = '<i class="far fa-clock"></i> <span>Analiz yapılıyor...</span>';
-            
             try {
-                const response = await fetch(`/api/analyze/${symbol}?interval=${interval}&limit=200`);
+                const res = await fetch(`/api/analyze/${symbol}?interval=${interval}`);
+                const data = await res.json();
                 
-                if (!response.ok) {
-                    throw new Error(`HTTP ${response.status}`);
+                if (data.success) {
+                    state.currentData = data;
+                    renderDashboard(data);
                 }
-                
-                const data = await response.json();
-                
-                if (!data.success) {
-                    throw new Error(data.detail || 'Analiz başarısız');
-                }
-                
-                state.currentData = data;
-                renderDashboard(data);
-                
             } catch(e) {
                 console.error('Analyze error:', e);
-                
-                $('signalLabel').textContent = 'HATA';
-                $('signalLabel').className = 'signal-label sig-NEUTRAL';
-                $('lastUpdateText').innerHTML = `<i class="far fa-clock"></i> <span>HATA - ${fmtTime()}</span>`;
             } finally {
                 btn.innerHTML = '<i class="fas fa-search"></i> ANALİZ ET';
                 btn.disabled = false;
@@ -1631,187 +868,147 @@ if barstate.islast
         }
 
         // =============================================
-        // RENDER DASHBOARD - GERÇEK VERİ
+        // RENDER - SADECE PSAR VE PATTERNS
         // =============================================
         function renderDashboard(data) {
-            if (!data) return;
-            
-            // Symbol
-            setText('priceSymLabel', (data.symbol || 'BTC/USDT').replace('USDT', '/USDT'));
-            
-            // Price
+            // Fiyat
             if (data.price) {
                 const p = data.price;
-                
-                setText('priceEl', fmtPrice(p.current));
-                setText('volEl', fmtVolume(p.volume_24h));
-                setText('hiLoEl', `${fmtPrice(p.high_24h)} / ${fmtPrice(p.low_24h)}`);
-                setText('srcCountEl', data.active_sources?.length || 0);
+                $('priceEl').textContent = fmtPrice(p.current);
+                $('volEl').textContent = (p.volume_24h/1e6).toFixed(2) + 'M';
+                $('hiLoEl').textContent = `${fmtPrice(p.high_24h)}/${fmtPrice(p.low_24h)}`;
                 
                 const chg = p.change_24h_percent || 0;
                 const chgEl = $('priceChgEl');
-                if (chg > 0.01) {
+                if (chg > 0) {
                     chgEl.className = 'price-change up';
                     chgEl.innerHTML = `<i class="fas fa-arrow-up"></i> <span>+${chg.toFixed(2)}%</span>`;
-                } else if (chg < -0.01) {
+                } else if (chg < 0) {
                     chgEl.className = 'price-change down';
                     chgEl.innerHTML = `<i class="fas fa-arrow-down"></i> <span>${chg.toFixed(2)}%</span>`;
-                } else {
-                    chgEl.className = 'price-change flat';
-                    chgEl.innerHTML = `<i class="fas fa-minus"></i> <span>0.00%</span>`;
                 }
             }
-            
-            // Signal
-            if (data.signal) {
-                const s = data.signal;
-                const sig = (s.signal || 'NEUTRAL').toUpperCase();
-                const conf = s.confidence || 0;
-                
-                $('signalLabel').textContent = sig.replace(/_/g, ' ');
-                $('signalLabel').className = 'signal-label sig-' + sig;
-                
-                setText('confPct', Math.round(conf) + '%');
-                $('confBar').style.width = clamp(conf, 0, 100) + '%';
-                
-                setText('tpSlLevel', `${fmtPrice(s.tp_level)} / ${fmtPrice(s.sl_level)}`);
-                setText('signalCounts', `B${s.buy_signals || 0} S${s.sell_signals || 0}`);
-                setText('recText', s.recommendation || '—');
-            }
-            
-            // Technical
+
+            // PSAR
             if (data.technical) {
                 const t = data.technical;
+                $('psarVal').textContent = fmtPrice(t.psar);
+                $('atrVal').textContent = '$' + (t.atr || 0).toFixed(2);
                 
-                setText('techOpen', fmtPrice(t.open));
-                setText('techHigh', fmtPrice(t.high));
-                setText('techLow', fmtPrice(t.low));
-                setText('techVol', fmtVolume(t.volume));
-                setText('techRsi', t.rsi?.toFixed(1) || '—');
-                setText('techMacd', t.macd?.toFixed(2) || '—');
-                setText('techMacdHist', t.macd_histogram?.toFixed(2) || '—');
-                setText('techAtr', t.atr_percent?.toFixed(2) + '%' || '—');
-                setText('techBbPos', t.bb_position?.toFixed(1) + '%' || '—');
-                setText('techBbWidth', t.bb_width?.toFixed(1) + '%' || '—');
-                setText('techEma20', fmtPrice(t.ema_20));
-                setText('techEma50', fmtPrice(t.ema_50));
-                setText('techMom5', fmtPercent(t.momentum_5));
-                setText('techMom10', fmtPercent(t.momentum_10));
-                setText('techVolRatio', t.volume_ratio?.toFixed(2) + 'x' || '—');
-                setText('techDataPoints', data.data_points || '—');
-                
-                // Heikin Ashi
-                setText('haTrend', t.ha_trend || '—');
-                setText('haRsi', t.ha_rsi?.toFixed(1) || '—');
-                setText('haStr', t.ha_trend_strength ? t.ha_trend_strength + '%' : '—');
-                setText('haColor', t.ha_color === 1 ? '🟢' : t.ha_color === -1 ? '🔴' : '⚪');
-                setText('haMom', fmtPercent(t.ha_momentum));
-            }
-            
-            // Pattern Counts
-            if (data.patterns) {
-                setText('patternIct', data.patterns.ict?.total || 0);
-                setText('patternIctBull', data.patterns.ict?.bullish || 0);
-                setText('patternIctBear', data.patterns.ict?.bearish || 0);
-                
-                setText('patternCandle', data.patterns.candle?.total || 0);
-                setText('patternCandleBull', data.patterns.candle?.bullish || 0);
-                setText('patternCandleBear', data.patterns.candle?.bearish || 0);
-                
-                setText('patternClassical', data.patterns.classical?.total || 0);
-                setText('patternClassicalBull', data.patterns.classical?.bullish || 0);
-                setText('patternClassicalBear', data.patterns.classical?.bearish || 0);
-                
-                setText('patternSmartPro', data.patterns.smartpro?.total || 0);
-                setText('patternSmartProBull', data.patterns.smartpro?.bullish || 0);
-                setText('patternSmartProBear', data.patterns.smartpro?.bearish || 0);
-                
-                const total = (data.patterns.ict?.total || 0) + (data.patterns.candle?.total || 0) + 
-                             (data.patterns.classical?.total || 0) + (data.patterns.smartpro?.total || 0);
-                const totalBull = (data.patterns.ict?.bullish || 0) + (data.patterns.candle?.bullish || 0) + 
-                                 (data.patterns.classical?.bullish || 0) + (data.patterns.smartpro?.bullish || 0);
-                const totalBear = (data.patterns.ict?.bearish || 0) + (data.patterns.candle?.bearish || 0) + 
-                                 (data.patterns.classical?.bearish || 0) + (data.patterns.smartpro?.bearish || 0);
-                
-                setText('totalPatterns', total);
-                setText('bullBearRatio', `${totalBull} / ${totalBear}`);
-                $('patternCountBadge').innerHTML = `<i class="fas fa-chart-pie"></i> <span>${total} Pattern</span>`;
-            }
-            
-            // Market Structure
-            if (data.market_structure) {
-                const ms = data.market_structure;
-                
-                setText('msTrend', ms.trend || '—');
-                setText('msStrength', ms.trend_strength || '—');
-                setText('msStruct', ms.structure || '—');
-                setText('msMomentum', ms.momentum || '—');
-                setText('msVol', ms.volatility || '—');
-                setText('msVolIndex', ms.volatility_index || '—');
-                
-                if (ms.swings) {
-                    setText('swingBull', `HH:${ms.swings.hh_count || 0} HL:${ms.swings.hl_count || 0}`);
-                    setText('swingBear', `LH:${ms.swings.lh_count || 0} LL:${ms.swings.ll_count || 0}`);
-                }
-                
-                if (ms.support_resistance?.length > 0) {
-                    const zones = ms.support_resistance.slice(0, 5).map(z => 
-                        `<div class="stat-row">
-                            <span class="stat-label">${z.type}</span>
-                            <span class="stat-value">${fmtPrice(z.level)} (${z.strength}%)</span>
-                        </div>`
-                    ).join('');
-                    setHtml('srZones', zones);
+                if (t.psar_bull) {
+                    $('psarBull').style.display = 'inline-block';
+                    $('psarBear').style.display = 'none';
+                    $('psarText').innerHTML = 'PSAR: <span style="color:var(--accent-blue);">YÜKSELİŞ</span>';
+                } else {
+                    $('psarBull').style.display = 'none';
+                    $('psarBear').style.display = 'inline-block';
+                    $('psarText').innerHTML = 'PSAR: <span style="color:var(--accent-orange);">DÜŞÜŞ</span>';
                 }
             }
-            
-            // Recommendation
-            if (data.signal?.recommendation_text) {
-                setHtml('recommendationText', data.signal.recommendation_text);
-            }
-            
-            // Update time
-            $('lastUpdateText').innerHTML = `<i class="far fa-clock"></i> <span>Son güncelleme: ${fmtTime()}</span>`;
-            
-            // Fetch stats
-            fetchStats();
-        }
 
-        // =============================================
-        // FETCH STATS
-        // =============================================
-        async function fetchStats() {
-            try {
-                const [statsRes, exchangeRes] = await Promise.all([
-                    fetch('/api/stats'),
-                    fetch('/api/exchange-stats')
-                ]);
+            // Major seviyeler
+            if (data.levels) {
+                const l = data.levels;
+                $('resistanceLevel').innerHTML = `<i class="fas fa-arrow-up"></i> Direnç: ${fmtPrice(l.resistance)}`;
+                $('supportLevel').innerHTML = `<i class="fas fa-arrow-down"></i> Destek: ${fmtPrice(l.support)}`;
                 
-                if (statsRes.ok) {
-                    const data = await statsRes.json();
-                    if (data.success) {
-                        state.stats = data;
-                        
-                        const uptime = Math.floor((Date.now() - state.uptimeStart) / 1000);
-                        const hours = Math.floor(uptime / 3600);
-                        const minutes = Math.floor((uptime % 3600) / 60);
-                        
-                        setText('sysUptime', `${hours}s ${minutes}d`);
-                        setText('sysSuccess', data.success_rate ? data.success_rate + '%' : '—');
-                        setText('sysTotal', data.total_requests || '—');
-                        setText('sysWs', data.active_websockets || '—');
-                    }
+                if (data.price?.current) {
+                    const resDist = ((l.resistance - data.price.current)/data.price.current*100).toFixed(1);
+                    const supDist = ((data.price.current - l.support)/data.price.current*100).toFixed(1);
+                    $('resistanceDist').textContent = resDist + '%';
+                    $('supportDist').textContent = supDist + '%';
                 }
-                
-                if (exchangeRes.ok) {
-                    const exData = await exchangeRes.json();
-                    if (exData.success && exData.stats) {
-                        updateExchangeGrid(exData.stats);
-                    }
-                }
-            } catch(e) {
-                console.error('Stats error:', e);
             }
+
+            // SİNYAL
+            if (data.signal) {
+                const sig = data.signal.signal || 'BEKLE';
+                $('signalType').textContent = sig;
+                $('signalType').className = 'signal-label ' + (sig === 'AL' ? 'buy' : sig === 'SAT' ? 'sell' : '');
+            }
+
+            // ============= PATTERNS =============
+            let ictTotal = 0, ictBull = 0, ictBear = 0;
+            let candleTotal = 0, candleBull = 0, candleBear = 0;
+            let classicalTotal = 0, classicalBull = 0, classicalBear = 0;
+            let smartTotal = 0, smartBull = 0, smartBear = 0;
+            const allPatterns = [];
+
+            // ICT Patterns
+            if (data.ict_patterns) {
+                Object.values(data.ict_patterns).forEach(arr => {
+                    if (Array.isArray(arr)) {
+                        ictTotal += arr.length;
+                        arr.forEach(p => {
+                            if (p.direction?.includes('bull')) ictBull++;
+                            else if (p.direction?.includes('bear')) ictBear++;
+                            allPatterns.push(p);
+                        });
+                    }
+                });
+            }
+
+            // Candle Patterns
+            if (data.candle_patterns) {
+                candleTotal = data.candle_patterns.length;
+                data.candle_patterns.forEach(p => {
+                    if (p.direction?.includes('bull')) candleBull++;
+                    else if (p.direction?.includes('bear')) candleBear++;
+                    allPatterns.push(p);
+                });
+            }
+
+            // Classical Patterns
+            if (data.classical_patterns) {
+                classicalTotal = data.classical_patterns.length;
+                data.classical_patterns.forEach(p => {
+                    if (p.direction?.includes('bull')) classicalBull++;
+                    else if (p.direction?.includes('bear')) classicalBear++;
+                    allPatterns.push(p);
+                });
+            }
+
+            // SmartPro Patterns
+            if (data.ictsmartpro_signals) {
+                smartTotal = data.ictsmartpro_signals.length;
+                data.ictsmartpro_signals.forEach(p => {
+                    if (p.direction?.includes('bull')) smartBull++;
+                    else if (p.direction?.includes('bear')) smartBear++;
+                    allPatterns.push(p);
+                });
+            }
+
+            // Pattern sayılarını güncelle
+            $('patternIct').textContent = ictTotal;
+            $('patternIctBull').textContent = ictBull;
+            $('patternIctBear').textContent = ictBear;
+            
+            $('patternCandle').textContent = candleTotal;
+            $('patternCandleBull').textContent = candleBull;
+            $('patternCandleBear').textContent = candleBear;
+            
+            $('patternClassical').textContent = classicalTotal;
+            $('patternClassicalBull').textContent = classicalBull;
+            $('patternClassicalBear').textContent = classicalBear;
+            
+            $('patternSmartPro').textContent = smartTotal;
+            $('patternSmartProBull').textContent = smartBull;
+            $('patternSmartProBear').textContent = smartBear;
+
+            const total = ictTotal + candleTotal + classicalTotal + smartTotal;
+            $('totalPatterns').textContent = total;
+            $('patternCountBadge').innerHTML = `<i class="fas fa-chart-pie"></i> <span>${total} Pattern</span>`;
+
+            // Pattern listesi
+            if (allPatterns.length > 0) {
+                const list = allPatterns.slice(0, 8).map(p => {
+                    const dir = p.direction?.includes('bull') ? 'bull' : p.direction?.includes('bear') ? 'bear' : '';
+                    return `<span class="chip ${dir}">${p.pattern || p.name || 'Pattern'}</span>`;
+                }).join('');
+                $('patternsList').innerHTML = list;
+            }
+
+            $('lastUpdateText').innerHTML = `<i class="far fa-clock"></i> <span>${fmtTime()}</span>`;
         }
 
         // =============================================
@@ -1819,75 +1016,69 @@ if barstate.islast
         // =============================================
         function evaluateAI() {
             if (!state.currentData) {
-                alert('Önce analiz yapın.');
+                alert('Önce analiz yapın');
                 return;
             }
-            
+
             const d = state.currentData;
             const chatBox = $('chatBox');
             
-            const sig = d.signal?.signal || 'NEUTRAL';
-            const conf = d.signal?.confidence || 0;
+            const sig = d.signal?.signal || 'BELİRSİZ';
             const price = d.price?.current || 0;
-            const rsi = d.technical?.rsi || 50;
-            const trend = d.market_structure?.trend || '—';
             
-            const patternTotal = (d.patterns?.ict?.total || 0) + (d.patterns?.candle?.total || 0) + 
-                                (d.patterns?.classical?.total || 0) + (d.patterns?.smartpro?.total || 0);
-            
-            let comment = '';
-            if (conf > 75) comment = '🔥 Yüksek güven – sinyal güçlü';
-            else if (conf > 60) comment = '✅ Orta güven – teyit önerilir';
-            else comment = '⚠️ Düşük güven – temkinli yaklaş';
-            
-            if (d.patterns?.smartpro?.total > 0) comment += ' • SmartPro sinyali var';
-            
-            const empty = chatBox.querySelector('.empty-state');
-            if (empty) empty.remove();
-            
-            const div = document.createElement('div');
-            div.className = 'chat-message';
-            div.innerHTML = `
-                <div class="chat-header">
-                    <i class="fas fa-robot"></i>
-                    AI Özeti
+            const msg = document.createElement('div');
+            msg.className = 'chat-message';
+            msg.style.cssText = 'background:var(--bg-secondary);padding:12px;border-radius:var(--radius-md);margin-bottom:8px;';
+            msg.innerHTML = `
+                <div style="color:var(--accent-blue);margin-bottom:8px;">
+                    <i class="fas fa-robot"></i> AI Özeti
                 </div>
-                <div style="margin-bottom:8px;">
-                    <strong>Sinyal:</strong> ${sig.replace(/_/g,' ')} (${Math.round(conf)}%)
-                </div>
-                <div><strong>Fiyat:</strong> ${fmtPrice(price)} | <strong>RSI:</strong> ${rsi.toFixed(1)}</div>
-                <div><strong>Trend:</strong> ${trend}</div>
-                <div><strong>Toplam Pattern:</strong> ${patternTotal}</div>
-                <div style="margin-top:8px; color:var(--accent-cyan);">${comment}</div>
-                <div class="warning">
-                    <i class="fas fa-triangle-exclamation"></i>
-                    Yatırım tavsiyesi değildir
+                <div><strong>Sinyal:</strong> ${sig}</div>
+                <div><strong>Fiyat:</strong> ${fmtPrice(price)}</div>
+                <div><strong>Pattern:</strong> ${$('totalPatterns').textContent}</div>
+                <div style="margin-top:8px; color:var(--accent-yellow); font-size:0.75rem;">
+                    ⚠️ Yatırım tavsiyesi değildir
                 </div>
             `;
             
-            chatBox.appendChild(div);
-            chatBox.scrollTop = chatBox.scrollHeight;
+            chatBox.innerHTML = '';
+            chatBox.appendChild(msg);
         }
 
         // =============================================
         // INIT
         // =============================================
-        async function init() {
-            buildExchangeGrid();
-            
-            try {
-                const res = await fetch('/health');
-                setPill('backendPill', res.ok ? 'green' : 'red', res.ok ? 'BACKEND' : 'BACKEND HATA');
-            } catch {
-                setPill('backendPill', 'red', 'BAĞLANTI YOK');
-            }
-            
+        function init() {
+            // Exchange grid
+            const grid = $('exchangeGrid');
+            grid.innerHTML = EXCHANGES.map(ex => 
+                `<div class="exchange-item"><span class="exchange-name">${ex}</span><span>⏳</span></div>`
+            ).join('');
+
+            // Backend sağlık kontrolü
+            fetch('/health').then(res => {
+                $('backendPill').className = 'pill ' + (res.ok ? 'green' : 'red');
+            }).catch(() => {
+                $('backendPill').className = 'pill red';
+            });
+
             initTradingView();
-            connectWS();
-            fetchStats();
-            setInterval(fetchStats, 30000);
             
+            // İlk analiz
             setTimeout(analyzeSymbol, 1000);
+            
+            // Her 30 saniyede güncelle
+            setInterval(() => {
+                if (document.visibilityState === 'visible') analyzeSymbol();
+            }, 30000);
+
+            // Uptime
+            setInterval(() => {
+                const sec = Math.floor((Date.now() - state.startTime) / 1000);
+                const h = Math.floor(sec / 3600);
+                const m = Math.floor((sec % 3600) / 60);
+                $('sysUptime').textContent = h + 's ' + m + 'd';
+            }, 1000);
         }
 
         // =============================================
@@ -1895,7 +1086,6 @@ if barstate.islast
         // =============================================
         $('symbolSelect').addEventListener('change', () => {
             initTradingView();
-            connectWS();
             analyzeSymbol();
         });
         
