@@ -1454,21 +1454,23 @@
             enable_publishing: false,
             allow_symbol_change: true,
             // SADECE MACD ve UT BOT ALERTS
-            studies: [
-                'MACD@tv-basicstudies',
-                
-                {
-                    name: "UT Bot Alerts@tv-script-studies",
-                    force_overlay: true,
-                    settings: {
-                        "input.source": "close",
-                        "input.sensitivity": 150,
-                        "input.fastLength": 20,
-                        "input.slowLength": 40,
-                        "input.signalLength": 9
-                    }
-                }
-            ],
+          studies: [
+    // 1. MACD (built-in)
+    'MACD@tv-basicstudies',
+
+    // 2. UT Bot Alerts (en popüler community sürümü)
+    {
+        id: "UTBotAlerts",
+        name: "UT Bot Alerts@tv-script-studies",
+        force_overlay: true,
+        settings: {
+            "Sensitivity": 2,           // genelde 1-5 arası mantıklı
+            "Key Value": 1,             // ATR çarpanı
+            "Use Heikin Ashi": false    // çoğu kişi false tercih eder
+            // "Lookback": 10           // bazı versiyonlarda var
+        }
+    }
+],
             container_id: 'tvContainer',
             overrides: {
                 'paneProperties.background': '#12141E',
