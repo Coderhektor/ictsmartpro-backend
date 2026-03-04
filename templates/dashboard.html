@@ -3,11 +3,12 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>ICTSMARTPRO v9.0 - Ultimate Pattern Detector</title>
+    <title>ICTSMARTPRO v9.0 - PSAR Major System</title>
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=JetBrains+Mono:wght@400;500;600;700&display=swap" rel="stylesheet">
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
     <script src="https://s3.tradingview.com/tv.js"></script>
     <style>
+        /* Aynı CSS stilleri - değişiklik yok */
         * {
             margin: 0;
             padding: 0;
@@ -956,155 +957,15 @@
             "Kraken", "Binance", "MEXC", "Bybit", "Yahoo"
         ];
 
-        // =============================================
-        // STATE
-        // =============================================
-        let state = {
-            ws: null,
-            wsRetries: 0,
-            tvWidget: null,
-            currentData: null,
-            lastPrice: null,
-            uptimeInterval: null,
-            stats: null
+        const TV_INTERVAL_MAP = {
+            '1m': '1', '5m': '5', '15m': '15', '30m': '30',
+            '1h': '60', '4h': '240', '1d': 'D', '1w': 'W'
         };
 
         // =============================================
-        // UTILS
+        // SMART PRO INDICATOR (TEK VE DOĞRU)
         // =============================================
-        function fmtNumber(n, d = 2) {
-            if (n === null || n === undefined || isNaN(n)) return '—';
-            return Number(n).toLocaleString('tr-TR', { 
-                minimumFractionDigits: d, 
-                maximumFractionDigits: d 
-            });
-        }
-
-        function fmtPrice(p) {
-            if (!p || isNaN(p)) return '—';
-            if (p >= 1000000) return '$' + (p / 1000000).toFixed(2) + 'M';
-            if (p >= 1000) return '$' + (p / 1000).toFixed(2) + 'K';
-            if (p >= 1) return '$' + fmtNumber(p, 2);
-            if (p >= 0.0001) return '$' + p.toFixed(6);
-            return '$' + p.toFixed(8);
-        }
-
-        function fmtVolume(v) {
-            if (!v || isNaN(v)) return '—';
-            if (v >= 1e9) return (v / 1e9).toFixed(2) + 'B';
-            if (v >= 1e6) return (v / 1e6).toFixed(2) + 'M';
-            if (v >= 1e3) return (v / 1e3).toFixed(2) + 'K';
-            return v.toFixed(2);
-        }
-
-        function fmtPercent(v) {
-            if (!v || isNaN(v)) return '—';
-            return (v > 0 ? '+' : '') + v.toFixed(2) + '%';
-        }
-
-        function fmtTime() {
-            const d = new Date();
-            return d.toLocaleTimeString('tr-TR', { 
-                hour: '2-digit', 
-                minute: '2-digit', 
-                second: '2-digit' 
-            });
-        }
-
-        function clamp(value, min, max) {
-            return Math.min(max, Math.max(min, value));
-        }
-
-        const $ = id => document.getElementById(id);
-        const setText = (id, val) => { 
-            const el = $(id); 
-            if (el) el.textContent = val; 
-        };
-        const setHtml = (id, val) => { 
-            const el = $(id); 
-            if (el) el.innerHTML = val; 
-        };
-
-        // =============================================
-        // CLOCK
-        // =============================================
-        function updateClock() {
-            $('clockEl').textContent = fmtTime();
-        }
-        setInterval(updateClock, 1000);
-        updateClock();
-
-        // =============================================
-        // PILL STATUS
-        // =============================================
-        function setPill(id, color, label) {
-            const el = $(id);
-            if (!el) return;
-            
-            el.className = 'pill ' + color;
-            const span = el.querySelector('span');
-            if (span) span.textContent = label;
-        }
-
-        // =============================================
-        // EXCHANGE GRID
-        // =============================================
-        function buildExchangeGrid() {
-            const grid = $('exchangeGrid');
-            if (!grid) return;
-            
-            grid.innerHTML = EXCHANGES.map(ex => {
-                const id = 'ex_' + ex.toLowerCase().replace(/[^a-z0-9]/g, '');
-                return `
-                    <div class="exchange-item" id="${id}">
-                        <span class="exchange-name">${ex}</span>
-                        <span class="exchange-status" id="${id}_s">⏳</span>
-                    </div>
-                `;
-            }).join('');
-        }
-
-        function updateExchangeGrid(stats) {
-            if (!stats) return;
-            
-            let active = 0;
-            let fail = 0;
-            
-            for (const [name, data] of Object.entries(stats)) {
-                const id = 'ex_' + name.toLowerCase().replace(/[^a-z0-9]/g, '');
-                const el = $(id);
-                const statusEl = $(id + '_s');
-                
-                if (!el || !statusEl) continue;
-                
-                const ok = (data.success || 0) > 0;
-                const ko = (data.fail || 0) > 0 && !ok;
-                
-                el.className = 'exchange-item' + (ok ? ' ok' : ko ? ' error' : '');
-                statusEl.textContent = ok ? '✅' : ko ? '❌' : '⏳';
-                
-                if (ok) active++;
-                if (ko) fail++;
-            }
-            
-            $('exActiveBadge').textContent = `${active}/5`;
-            
-            const sourceBadge = $('sourceCountBadge');
-            if (sourceBadge) {
-                sourceBadge.innerHTML = `<i class="fas fa-server"></i> <span>${active}/5 Kaynak</span>`;
-            }
-        }
-
-      // =============================================
-// TRADINGVIEW - ÖZEL INDIKATOR EKLEME
-// =============================================
-const TV_INTERVAL_MAP = {
-    '1m': '1', '5m': '5', '15m': '15', '30m': '30',
-    '1h': '60', '4h': '240', '1d': 'D', '1w': 'W'
-};
-
-// SmartPro Elite v9.0 PSAR Major Indikatörü
-const SMART_PRO_INDICATOR = `//@version=6
+        const SMART_PRO_INDICATOR = `//@version=6
 indicator("SmartPro Elite v9.0 - PSAR Major Sistemi", shorttitle="ICTSMARTPRO", overlay=true, 
          max_labels_count=500, max_lines_count=500, max_boxes_count=500)
 
@@ -1122,382 +983,6 @@ psar_val = ta.sar(psar_start, psar_increment, psar_max)
 // PSAR yönünü manuel hesapla
 psar_bullish = close > psar_val
 psar_bearish = close < psar_val
-psar_dir = psar_bullish ? 1 : psar_bearish ? -1 : 0
-
-// PSAR dönüş sinyalleri
-psar_turn_up = psar_bullish and not psar_bullish[1]
-psar_turn_down = psar_bearish and not psar_bearish[1]
-
-// ═══════════════════════════════════════════════════════════════════════════
-// 📊 MAJOR DESTEK/DİRENÇ AYARLARI
-// ═══════════════════════════════════════════════════════════════════════════
-group_levels = "Major Destek/Direnç"
-show_levels = input.bool(true, "Major Seviyeleri Göster", group=group_levels)
-lookback = input.int(200, "Geriye Bakış", minval=100, group=group_levels)
-min_touch = input.int(3, "Min. Dokunma", minval=2, group=group_levels)
-tolerance = input.float(0.3, "Tolerans %", minval=0.1, step=0.1, group=group_levels)
-
-// ═══════════════════════════════════════════════════════════════════════════
-// 📊 ATR AYARLARI
-// ═══════════════════════════════════════════════════════════════════════════
-group_atr = "ATR Filtresi"
-use_atr_filter = input.bool(true, "ATR Filtresi Kullan", group=group_atr)
-atr_period = input.int(14, "ATR Periyodu", minval=7, group=group_atr)
-atr_multiplier = input.float(1.5, "ATR Çarpanı", minval=1.0, step=0.1, group=group_atr)
-
-atr_value = ta.atr(atr_period)
-atr_threshold = atr_value * atr_multiplier
-
-// ═══════════════════════════════════════════════════════════════════════════
-// 🎨 RENK AYARLARI
-// ═══════════════════════════════════════════════════════════════════════════
-group_colors = "Renkler"
-bull_color = input.color(color.new(color.green, 20), "Yükseliş Kutusu", group=group_colors)
-bear_color = input.color(color.new(color.red, 20), "Düşüş Kutusu", group=group_colors)
-resistance_color = input.color(color.new(color.red, 40), "Major Direnç", group=group_colors)
-support_color = input.color(color.new(color.green, 40), "Major Destek", group=group_colors)
-psar_bull_color = input.color(color.blue, "PSAR Yükseliş", group=group_colors)
-psar_bear_color = input.color(color.orange, "PSAR Düşüş", group=group_colors)
-
-// ═══════════════════════════════════════════════════════════════════════════
-// 🔍 DÖNÜŞ NOKTALARI TESPİTİ
-// ═══════════════════════════════════════════════════════════════════════════
-is_swing_high = high > high[1] and high > high[2] and high[1] > high[2] and high[2] > high[3]
-is_swing_low = low < low[1] and low < low[2] and low[1] < low[2] and low[2] < low[3]
-
-// ═══════════════════════════════════════════════════════════════════════════
-// 🗄️ ARRAY'LER
-// ═══════════════════════════════════════════════════════════════════════════
-var swing_highs = array.new_float()
-var swing_lows = array.new_float()
-var swing_high_index = array.new_int()
-var swing_low_index = array.new_int()
-
-// Dönüş noktalarını topla
-if bar_index > 50
-    if is_swing_high
-        array.push(swing_highs, high)
-        array.push(swing_high_index, bar_index)
-    if is_swing_low
-        array.push(swing_lows, low)
-        array.push(swing_low_index, bar_index)
-
-// ═══════════════════════════════════════════════════════════════════════════
-// 📊 MAJOR SEVİYELERİ HESAPLA
-// ═══════════════════════════════════════════════════════════════════════════
-major_resistances = array.new_float()
-resistance_strength = array.new_int()
-major_supports = array.new_float()
-support_strength = array.new_int()
-
-// Dirençleri grupla
-if array.size(swing_highs) > 0
-    for i = 0 to array.size(swing_highs) - 1
-        price = array.get(swing_highs, i)
-        idx = array.get(swing_high_index, i)
-        
-        if bar_index - idx <= lookback
-            tol = price * tolerance / 100
-            found = false
-            
-            if array.size(major_resistances) > 0
-                for j = 0 to array.size(major_resistances) - 1
-                    existing = array.get(major_resistances, j)
-                    if math.abs(price - existing) <= tol
-                        new_price = (existing + price) / 2
-                        array.set(major_resistances, j, new_price)
-                        current_strength = array.get(resistance_strength, j)
-                        array.set(resistance_strength, j, current_strength + 1)
-                        found := true
-                        break
-            
-            if not found
-                array.push(major_resistances, price)
-                array.push(resistance_strength, 1)
-
-// Destekleri grupla
-if array.size(swing_lows) > 0
-    for i = 0 to array.size(swing_lows) - 1
-        price = array.get(swing_lows, i)
-        idx = array.get(swing_low_index, i)
-        
-        if bar_index - idx <= lookback
-            tol = price * tolerance / 100
-            found = false
-            
-            if array.size(major_supports) > 0
-                for j = 0 to array.size(major_supports) - 1
-                    existing = array.get(major_supports, j)
-                    if math.abs(price - existing) <= tol
-                        new_price = (existing + price) / 2
-                        array.set(major_supports, j, new_price)
-                        current_strength = array.get(support_strength, j)
-                        array.set(support_strength, j, current_strength + 1)
-                        found := true
-                        break
-            
-            if not found
-                array.push(major_supports, price)
-                array.push(support_strength, 1)
-
-// ═══════════════════════════════════════════════════════════════════════════
-// 🎯 EN YAKIN SEVİYELERİ BUL
-// ═══════════════════════════════════════════════════════════════════════════
-float nearest_resistance = na
-float nearest_support = na
-float resistance_dist = na
-float support_dist = na
-
-if array.size(major_resistances) > 0
-    float min_dist = 999999.0
-    for i = 0 to array.size(major_resistances) - 1
-        if i < array.size(resistance_strength)
-            if array.get(resistance_strength, i) >= min_touch
-                float res = array.get(major_resistances, i)
-                if res > close
-                    float dist = res - close
-                    if dist < min_dist
-                        min_dist := dist
-                        nearest_resistance := res
-                        resistance_dist := dist
-
-if array.size(major_supports) > 0
-    float min_dist = 999999.0
-    for i = 0 to array.size(major_supports) - 1
-        if i < array.size(support_strength)
-            if array.get(support_strength, i) >= min_touch
-                float sup = array.get(major_supports, i)
-                if sup < close
-                    float dist = close - sup
-                    if dist < min_dist
-                        min_dist := dist
-                        nearest_support := sup
-                        support_dist := dist
-
-// ═══════════════════════════════════════════════════════════════════════════
-// 🟢🔴 AL/SAT SİNYALLERİ
-// ═══════════════════════════════════════════════════════════════════════════
-bool buy_signal = false
-if psar_turn_up
-    bool above_support = na(nearest_support) ? true : close > nearest_support
-    bool atr_ok = true
-    if use_atr_filter
-        atr_ok := close - low[1] < atr_threshold
-    
-    if above_support and atr_ok
-        buy_signal := true
-
-bool sell_signal = false
-if psar_turn_down
-    bool below_resistance = na(nearest_resistance) ? true : close < nearest_resistance
-    bool atr_ok = true
-    if use_atr_filter
-        atr_ok := high[1] - close < atr_threshold
-    
-    if below_resistance and atr_ok
-        sell_signal := true
-
-// ═══════════════════════════════════════════════════════════════════════════
-// 📦 AL/SAT KUTULARI
-// ═══════════════════════════════════════════════════════════════════════════
-var signal_boxes = array.new_box()
-var signal_labels = array.new_label()
-
-// Eski sinyal kutularını temizle
-if bar_index % 10 == 0
-    if array.size(signal_boxes) > 0
-        for i = array.size(signal_boxes) - 1 to 0
-            box current_box = array.get(signal_boxes, i)
-            if bar_index - box.get_left(current_box) > 30
-                box.delete(current_box)
-                array.remove(signal_boxes, i)
-    
-    if array.size(signal_labels) > 0
-        for i = array.size(signal_labels) - 1 to 0
-            label current_label = array.get(signal_labels, i)
-            if bar_index - label.get_x(current_label) > 30
-                label.delete(current_label)
-                array.remove(signal_labels, i)
-
-// AL sinyali kutusu
-if buy_signal
-    box buy_box = box.new(
-         left = bar_index - 2,
-         top = low - (atr_value * 0.5),
-         right = bar_index + 2,
-         bottom = low - (atr_value * 1.5),
-         bgcolor = bull_color,
-         border_color = color.green,
-         border_width = 2,
-         text = "🟢 AL",
-         text_color = color.white,
-         text_size = size.normal
-         )
-    array.push(signal_boxes, buy_box)
-    
-    string support_text = na(nearest_support) ? "YOK" : str.tostring(nearest_support, "#.##")
-    label buy_label = label.new(
-         x = bar_index,
-         y = low - (atr_value * 2),
-         text = "🟢 AL\nPSAR DÖNÜŞ\nDestek: " + support_text,
-         color = color.new(color.green, 70),
-         textcolor = color.white,
-         style = label.style_label_up,
-         size = size.small
-         )
-    array.push(signal_labels, buy_label)
-
-// SAT sinyali kutusu
-if sell_signal
-    box sell_box = box.new(
-         left = bar_index - 2,
-         top = high + (atr_value * 1.5),
-         right = bar_index + 2,
-         bottom = high + (atr_value * 0.5),
-         bgcolor = bear_color,
-         border_color = color.red,
-         border_width = 2,
-         text = "🔴 SAT",
-         text_color = color.white,
-         text_size = size.normal
-         )
-    array.push(signal_boxes, sell_box)
-    
-    string resistance_text = na(nearest_resistance) ? "YOK" : str.tostring(nearest_resistance, "#.##")
-    label sell_label = label.new(
-         x = bar_index,
-         y = high + (atr_value * 2),
-         text = "🔴 SAT\nPSAR DÖNÜŞ\nDirenç: " + resistance_text,
-         color = color.new(color.red, 70),
-         textcolor = color.white,
-         style = label.style_label_down,
-         size = size.small
-         )
-    array.push(signal_labels, sell_label)
-
-// ═══════════════════════════════════════════════════════════════════════════
-// 📈 PSAR ÇİZİMİ
-// ═══════════════════════════════════════════════════════════════════════════
-plot(psar_val, "Parabolic SAR", 
-     color = psar_bullish ? psar_bull_color : psar_bearish ? psar_bear_color : color.gray, 
-     style = plot.style_cross, 
-     linewidth = 1)
-
-// ═══════════════════════════════════════════════════════════════════════════
-// 📊 MAJOR SEVİYE ÇİZİMLERİ
-// ═══════════════════════════════════════════════════════════════════════════
-if show_levels and barstate.islast
-    if array.size(major_resistances) > 0
-        for i = 0 to array.size(major_resistances) - 1
-            if i < array.size(resistance_strength)
-                if array.get(resistance_strength, i) >= min_touch
-                    float price = array.get(major_resistances, i)
-                    line.new(
-                         x1 = bar_index - 200,
-                         y1 = price,
-                         x2 = bar_index + 50,
-                         y2 = price,
-                         color = resistance_color,
-                         width = 2
-                         )
-    
-    if array.size(major_supports) > 0
-        for i = 0 to array.size(major_supports) - 1
-            if i < array.size(support_strength)
-                if array.get(support_strength, i) >= min_touch
-                    float price = array.get(major_supports, i)
-                    line.new(
-                         x1 = bar_index - 200,
-                         y1 = price,
-                         x2 = bar_index + 50,
-                         y2 = price,
-                         color = support_color,
-                         width = 2
-                         )
-
-// ═══════════════════════════════════════════════════════════════════════════
-// 📊 DURUM TABLOSU
-// ═══════════════════════════════════════════════════════════════════════════
-if barstate.islast
-    var table info = table.new(position.top_right, 2, 8, bgcolor=color.new(color.black, 85))
-    
-    table.cell(info, 0, 0, "PSAR MAJOR SİSTEM", text_color=color.yellow, text_size=size.normal)
-    
-    table.cell(info, 0, 1, "PSAR Yön:", text_color=color.white)
-    string psar_text = psar_bullish ? "YÜKSELİŞ" : psar_bearish ? "DÜŞÜŞ" : "BELİRSİZ"
-    color psar_color = psar_bullish ? color.green : psar_bearish ? color.red : color.gray
-    table.cell(info, 1, 1, psar_text, text_color=psar_color)
-    
-    table.cell(info, 0, 2, "Major Direnç:", text_color=color.white)
-    if not na(nearest_resistance)
-        table.cell(info, 1, 2, str.tostring(nearest_resistance, "#.##"), text_color=color.red)
-    else
-        table.cell(info, 1, 2, "YOK", text_color=color.gray)
-    
-    table.cell(info, 0, 3, "Major Destek:", text_color=color.white)
-    if not na(nearest_support)
-        table.cell(info, 1, 3, str.tostring(nearest_support, "#.##"), text_color=color.green)
-    else
-        table.cell(info, 1, 3, "YOK", text_color=color.gray)
-    
-    table.cell(info, 0, 4, "ATR (" + str.tostring(atr_period) + "):", text_color=color.white)
-    table.cell(info, 1, 4, str.tostring(atr_value, "#.##"), text_color=color.orange)
-    
-    if not na(resistance_dist)
-        float dist_pct = (resistance_dist / close) * 100
-        table.cell(info, 0, 5, "Direnç Mesafe:", text_color=color.white)
-        table.cell(info, 1, 5, str.tostring(dist_pct, "#.##") + "%", text_color=color.red)
-    else
-        table.cell(info, 0, 5, "Direnç Mesafe:", text_color=color.white)
-        table.cell(info, 1, 5, "-", text_color=color.gray)
-    
-    if not na(support_dist)
-        float dist_pct = (support_dist / close) * 100
-        table.cell(info, 0, 6, "Destek Mesafe:", text_color=color.white)
-        table.cell(info, 1, 6, str.tostring(dist_pct, "#.##") + "%", text_color=color.green)
-    else
-        table.cell(info, 0, 6, "Destek Mesafe:", text_color=color.white)
-        table.cell(info, 1, 6, "-", text_color=color.gray)
-    
-    table.cell(info, 0, 7, "Son Sinyal:", text_color=color.white)
-    if buy_signal
-        table.cell(info, 1, 7, "AL", text_color=color.green)
-    else if sell_signal
-        table.cell(info, 1, 7, "SAT", text_color=color.red)
-    else
-        table.cell(info, 1, 7, "BEKLE", text_color=color.gray)
-
-// ═══════════════════════════════════════════════════════════════════════════
-// ✅ KOD HAZIR - PSAR + MAJOR SEVİYE + ATR SİSTEMİ
-// ═══════════════════════════════════════════════`
-        // =============================================
-// TRADINGVIEW - ÖZEL INDIKATOR EKLEME
-// =============================================
-const TV_INTERVAL_MAP = {
-    '1m': '1', '5m': '5', '15m': '15', '30m': '30',
-    '1h': '60', '4h': '240', '1d': 'D', '1w': 'W'
-};
-
-// SmartPro Elite v9.0 PSAR Major Indikatörü
-const SMART_PRO_INDICATOR = `//@version=6
-indicator("SmartPro Elite v9.0 - PSAR Major Sistemi", shorttitle="ICTSMARTPRO", overlay=true, 
-         max_labels_count=500, max_lines_count=500, max_boxes_count=500)
-
-// ═══════════════════════════════════════════════════════════════════════════
-// 📊 PARABOLIC SAR AYARLARI
-// ═══════════════════════════════════════════════════════════════════════════
-group_psar = "Parabolic SAR Ayarları"
-psar_start = input.float(0.02, "Başlangıç Adımı", minval=0.01, step=0.01, group=group_psar)
-psar_increment = input.float(0.02, "Maksimum Adım", minval=0.01, step=0.01, group=group_psar)
-psar_max = input.float(0.2, "Maksimum Değer", minval=0.1, step=0.05, group=group_psar)
-
-// PSAR hesapla
-psar_val = ta.sar(psar_start, psar_increment, psar_max)
-
-// PSAR yönünü manuel hesapla
-psar_bullish = close > psar_val
-psar_bearish = close < psar_val
-psar_dir = psar_bullish ? 1 : psar_bearish ? -1 : 0
 
 // PSAR dönüş sinyalleri
 psar_turn_up = psar_bullish and not psar_bullish[1]
@@ -1846,69 +1331,197 @@ if barstate.islast
 // ✅ KOD HAZIR - PSAR + MAJOR SEVİYE + ATR SİSTEMİ
 // ═══════════════════════════════════════════════`;
 
-function initTradingView() {
-    const symbol = $('symbolSelect').value;
-    const interval = TV_INTERVAL_MAP[$('intervalSelect').value] || '60';
-    const container = $('tvContainer');
-    
-    if (!container) return;
-    
-    if (state.tvWidget) {
-        try { state.tvWidget.remove(); } catch(e) {}
-        state.tvWidget = null;
-    }
-    
-    container.innerHTML = '';
-    
-    if (typeof TradingView === 'undefined') {
-        setTimeout(initTradingView, 500);
-        return;
-    }
-    
-    try {
-        state.tvWidget = new TradingView.widget({
-            autosize: true,
-            symbol: `BINANCE:${symbol}USDT`,
-            interval: interval,
-            timezone: 'Europe/Istanbul',
-            theme: 'dark',
-            style: '1',
-            locale: 'tr',
-            toolbar_bg: '#1A1D24',
-            enable_publishing: false,
-            allow_symbol_change: true,
-            hide_top_toolbar: false,
-            hide_side_toolbar: false,
-            studies: [
-                {
-                    name: 'SmartPro Elite v9.0',
-                    content: SMART_PRO_INDICATOR
-                },
-                'RSI@tv-basicstudies',
-                'MACD@tv-basicstudies'
-            ],
-            container_id: 'tvContainer',
-            overrides: {
-                'paneProperties.background': '#1A1D24',
-                'paneProperties.vertGridProperties.color': '#2A2F38',
-                'paneProperties.horzGridProperties.color': '#2A2F38',
-            },
-            disabled_features: [
-                'header_saveload', 'header_undo_redo', 'header_screenshot',
-                'timeframes_toolbar'
-            ],
-            studies_overrides: {
-                'RSI.length': 14,
-                'MACD.fast_length': 12,
-                'MACD.slow_length': 26,
-                'MACD.signal_smoothing': 9
+        // =============================================
+        // STATE
+        // =============================================
+        let state = {
+            ws: null,
+            wsRetries: 0,
+            tvWidget: null,
+            currentData: null,
+            lastPrice: null,
+            uptimeStart: Date.now(),
+            stats: null
+        };
+
+        // =============================================
+        // UTILS
+        // =============================================
+        function fmtNumber(n, d = 2) {
+            if (n === null || n === undefined || isNaN(n)) return '—';
+            return Number(n).toLocaleString('tr-TR', { 
+                minimumFractionDigits: d, 
+                maximumFractionDigits: d 
+            });
+        }
+
+        function fmtPrice(p) {
+            if (!p || isNaN(p)) return '—';
+            if (p >= 1000000) return '$' + (p / 1000000).toFixed(2) + 'M';
+            if (p >= 1000) return '$' + (p / 1000).toFixed(2) + 'K';
+            if (p >= 1) return '$' + fmtNumber(p, 2);
+            if (p >= 0.0001) return '$' + p.toFixed(6);
+            return '$' + p.toFixed(8);
+        }
+
+        function fmtVolume(v) {
+            if (!v || isNaN(v)) return '—';
+            if (v >= 1e9) return (v / 1e9).toFixed(2) + 'B';
+            if (v >= 1e6) return (v / 1e6).toFixed(2) + 'M';
+            if (v >= 1e3) return (v / 1e3).toFixed(2) + 'K';
+            return v.toFixed(2);
+        }
+
+        function fmtPercent(v) {
+            if (!v || isNaN(v)) return '—';
+            return (v > 0 ? '+' : '') + v.toFixed(2) + '%';
+        }
+
+        function fmtTime() {
+            const d = new Date();
+            return d.toLocaleTimeString('tr-TR', { 
+                hour: '2-digit', 
+                minute: '2-digit', 
+                second: '2-digit' 
+            });
+        }
+
+        function clamp(value, min, max) {
+            return Math.min(max, Math.max(min, value));
+        }
+
+        const $ = id => document.getElementById(id);
+        const setText = (id, val) => { 
+            const el = $(id); 
+            if (el) el.textContent = val; 
+        };
+        const setHtml = (id, val) => { 
+            const el = $(id); 
+            if (el) el.innerHTML = val; 
+        };
+
+        // =============================================
+        // CLOCK
+        // =============================================
+        function updateClock() {
+            $('clockEl').textContent = fmtTime();
+        }
+        setInterval(updateClock, 1000);
+        updateClock();
+
+        // =============================================
+        // PILL STATUS
+        // =============================================
+        function setPill(id, color, label) {
+            const el = $(id);
+            if (!el) return;
+            el.className = 'pill ' + color;
+            const span = el.querySelector('span');
+            if (span) span.textContent = label;
+        }
+
+        // =============================================
+        // EXCHANGE GRID
+        // =============================================
+        function buildExchangeGrid() {
+            const grid = $('exchangeGrid');
+            if (!grid) return;
+            
+            grid.innerHTML = EXCHANGES.map(ex => {
+                const id = 'ex_' + ex.toLowerCase().replace(/[^a-z0-9]/g, '');
+                return `
+                    <div class="exchange-item" id="${id}">
+                        <span class="exchange-name">${ex}</span>
+                        <span class="exchange-status" id="${id}_s">⏳</span>
+                    </div>
+                `;
+            }).join('');
+        }
+
+        function updateExchangeGrid(stats) {
+            if (!stats) return;
+            
+            let active = 0;
+            
+            for (const [name, data] of Object.entries(stats)) {
+                const id = 'ex_' + name.toLowerCase().replace(/[^a-z0-9]/g, '');
+                const el = $(id);
+                const statusEl = $(id + '_s');
+                
+                if (!el || !statusEl) continue;
+                
+                const ok = data.success > 0;
+                
+                el.className = 'exchange-item' + (ok ? ' ok' : '');
+                statusEl.textContent = ok ? '✅' : '❌';
+                
+                if (ok) active++;
             }
-        });
-    } catch(e) {
-        console.error('TradingView init error:', e);
-    }
-}
- 
+            
+            $('exActiveBadge').textContent = `${active}/5`;
+            $('sourceCountBadge').innerHTML = `<i class="fas fa-server"></i> <span>${active}/5 Kaynak</span>`;
+        }
+
+        // =============================================
+        // TRADINGVIEW INIT
+        // =============================================
+        function initTradingView() {
+            const symbol = $('symbolSelect').value;
+            const interval = TV_INTERVAL_MAP[$('intervalSelect').value] || '60';
+            const container = $('tvContainer');
+            
+            if (!container) return;
+            
+            if (state.tvWidget) {
+                try { state.tvWidget.remove(); } catch(e) {}
+                state.tvWidget = null;
+            }
+            
+            container.innerHTML = '';
+            
+            if (typeof TradingView === 'undefined') {
+                setTimeout(initTradingView, 500);
+                return;
+            }
+            
+            try {
+                state.tvWidget = new TradingView.widget({
+                    autosize: true,
+                    symbol: `BINANCE:${symbol}USDT`,
+                    interval: interval,
+                    timezone: 'Europe/Istanbul',
+                    theme: 'dark',
+                    style: '1',
+                    locale: 'tr',
+                    toolbar_bg: '#1A1D24',
+                    enable_publishing: false,
+                    allow_symbol_change: true,
+                    hide_top_toolbar: false,
+                    hide_side_toolbar: false,
+                    studies: [
+                        {
+                            name: 'SmartPro Elite v9.0',
+                            content: SMART_PRO_INDICATOR
+                        }
+                    ],
+                    container_id: 'tvContainer',
+                    overrides: {
+                        'paneProperties.background': '#1A1D24',
+                        'paneProperties.vertGridProperties.color': '#2A2F38',
+                        'paneProperties.horzGridProperties.color': '#2A2F38',
+                    },
+                    disabled_features: [
+                        'header_saveload', 'header_undo_redo', 'header_screenshot',
+                        'timeframes_toolbar'
+                    ]
+                });
+                
+                console.log('TradingView initialized');
+            } catch(e) {
+                console.error('TradingView init error:', e);
+            }
+        }
+
         // =============================================
         // WEBSOCKET
         // =============================================
@@ -1916,7 +1529,7 @@ function initTradingView() {
             const sym = $('symbolSelect').value + 'USDT';
             
             const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
-            const url = `${protocol}//${window.location.host}/wss/${sym}`;
+            const url = `${protocol}//${window.location.host}/ws/${sym}`;
             
             if (state.ws) {
                 try { state.ws.close(); } catch(e) {}
@@ -1973,14 +1586,11 @@ function initTradingView() {
             
             priceEl.textContent = fmtPrice(price);
             
-            const updateEl = $('lastUpdateText');
-            if (updateEl) {
-                updateEl.innerHTML = `<i class="far fa-clock"></i> <span>Son güncelleme: ${fmtTime()}</span>`;
-            }
+            $('lastUpdateText').innerHTML = `<i class="far fa-clock"></i> <span>Son güncelleme: ${fmtTime()}</span>`;
         }
 
         // =============================================
-        // ANALYZE
+        // ANALYZE - GERÇEK BACKEND
         // =============================================
         async function analyzeSymbol() {
             const symbol = $('symbolSelect').value + 'USDT';
@@ -1990,10 +1600,7 @@ function initTradingView() {
             btn.innerHTML = '<div class="spinner"></div> ANALİZ EDİLİYOR...';
             btn.disabled = true;
             
-            const updateEl = $('lastUpdateText');
-            if (updateEl) {
-                updateEl.innerHTML = '<i class="far fa-clock"></i> <span>Analiz yapılıyor...</span>';
-            }
+            $('lastUpdateText').innerHTML = '<i class="far fa-clock"></i> <span>Analiz yapılıyor...</span>';
             
             try {
                 const response = await fetch(`/api/analyze/${symbol}?interval=${interval}&limit=200`);
@@ -2003,6 +1610,7 @@ function initTradingView() {
                 }
                 
                 const data = await response.json();
+                
                 if (!data.success) {
                     throw new Error(data.detail || 'Analiz başarısız');
                 }
@@ -2015,10 +1623,7 @@ function initTradingView() {
                 
                 $('signalLabel').textContent = 'HATA';
                 $('signalLabel').className = 'signal-label sig-NEUTRAL';
-                
-                if (updateEl) {
-                    updateEl.innerHTML = `<i class="far fa-clock"></i> <span>HATA - ${fmtTime()}</span>`;
-                }
+                $('lastUpdateText').innerHTML = `<i class="far fa-clock"></i> <span>HATA - ${fmtTime()}</span>`;
             } finally {
                 btn.innerHTML = '<i class="fas fa-search"></i> ANALİZ ET';
                 btn.disabled = false;
@@ -2026,37 +1631,34 @@ function initTradingView() {
         }
 
         // =============================================
-        // RENDER DASHBOARD
+        // RENDER DASHBOARD - GERÇEK VERİ
         // =============================================
         function renderDashboard(data) {
             if (!data) return;
             
             // Symbol
-            const sym = (data.symbol || 'BTC/USDT').replace('USDT', ' / USDT');
-            setText('priceSymLabel', sym);
+            setText('priceSymLabel', (data.symbol || 'BTC/USDT').replace('USDT', '/USDT'));
             
             // Price
             if (data.price) {
                 const p = data.price;
                 
                 setText('priceEl', fmtPrice(p.current));
-                setText('volEl', fmtVolume(p.volume_24h_approx));
-                setText('hiLoEl', `${fmtPrice(p.high)} / ${fmtPrice(p.low)}`);
+                setText('volEl', fmtVolume(p.volume_24h));
+                setText('hiLoEl', `${fmtPrice(p.high_24h)} / ${fmtPrice(p.low_24h)}`);
                 setText('srcCountEl', data.active_sources?.length || 0);
                 
-                const chg = p.change_percent || 0;
+                const chg = p.change_24h_percent || 0;
                 const chgEl = $('priceChgEl');
-                if (chgEl) {
-                    if (chg > 0) {
-                        chgEl.className = 'price-change up';
-                        chgEl.innerHTML = `<i class="fas fa-arrow-up"></i> <span>+${chg.toFixed(2)}%</span>`;
-                    } else if (chg < 0) {
-                        chgEl.className = 'price-change down';
-                        chgEl.innerHTML = `<i class="fas fa-arrow-down"></i> <span>${chg.toFixed(2)}%</span>`;
-                    } else {
-                        chgEl.className = 'price-change flat';
-                        chgEl.innerHTML = `<i class="fas fa-minus"></i> <span>0.00%</span>`;
-                    }
+                if (chg > 0.01) {
+                    chgEl.className = 'price-change up';
+                    chgEl.innerHTML = `<i class="fas fa-arrow-up"></i> <span>+${chg.toFixed(2)}%</span>`;
+                } else if (chg < -0.01) {
+                    chgEl.className = 'price-change down';
+                    chgEl.innerHTML = `<i class="fas fa-arrow-down"></i> <span>${chg.toFixed(2)}%</span>`;
+                } else {
+                    chgEl.className = 'price-change flat';
+                    chgEl.innerHTML = `<i class="fas fa-minus"></i> <span>0.00%</span>`;
                 }
             }
             
@@ -2069,14 +1671,11 @@ function initTradingView() {
                 $('signalLabel').textContent = sig.replace(/_/g, ' ');
                 $('signalLabel').className = 'signal-label sig-' + sig;
                 
-                setText('confPct', '%' + Math.round(conf));
+                setText('confPct', Math.round(conf) + '%');
                 $('confBar').style.width = clamp(conf, 0, 100) + '%';
                 
-                const tp = s.tp_level ? fmtPrice(s.tp_level) : '—';
-                const sl = s.sl_level ? fmtPrice(s.sl_level) : '—';
-                setText('tpSlLevel', `${tp} / ${sl}`);
-                
-                setText('signalCounts', `B${s.buy_count || 0} S${s.sell_count || 0}`);
+                setText('tpSlLevel', `${fmtPrice(s.tp_level)} / ${fmtPrice(s.sl_level)}`);
+                setText('signalCounts', `B${s.buy_signals || 0} S${s.sell_signals || 0}`);
                 setText('recText', s.recommendation || '—');
             }
             
@@ -2094,8 +1693,8 @@ function initTradingView() {
                 setText('techAtr', t.atr_percent?.toFixed(2) + '%' || '—');
                 setText('techBbPos', t.bb_position?.toFixed(1) + '%' || '—');
                 setText('techBbWidth', t.bb_width?.toFixed(1) + '%' || '—');
-                setText('techEma20', fmtPrice(t.sma_20));
-                setText('techEma50', fmtPrice(t.sma_50));
+                setText('techEma20', fmtPrice(t.ema_20));
+                setText('techEma50', fmtPrice(t.ema_50));
                 setText('techMom5', fmtPercent(t.momentum_5));
                 setText('techMom10', fmtPercent(t.momentum_10));
                 setText('techVolRatio', t.volume_ratio?.toFixed(2) + 'x' || '—');
@@ -2105,127 +1704,38 @@ function initTradingView() {
                 setText('haTrend', t.ha_trend || '—');
                 setText('haRsi', t.ha_rsi?.toFixed(1) || '—');
                 setText('haStr', t.ha_trend_strength ? t.ha_trend_strength + '%' : '—');
-                
-                const haColor = t.ha_color_change === 1 ? '🟢' : t.ha_color_change === -1 ? '🔴' : '⚪';
-                setText('haColor', haColor);
-                
+                setText('haColor', t.ha_color === 1 ? '🟢' : t.ha_color === -1 ? '🔴' : '⚪');
                 setText('haMom', fmtPercent(t.ha_momentum));
             }
             
             // Pattern Counts
-            let ictCount = 0, ictBull = 0, ictBear = 0;
-            let candleCount = 0, candleBull = 0, candleBear = 0;
-            let classicalCount = 0, classicalBull = 0, classicalBear = 0;
-            let smartProCount = 0, smartProBull = 0, smartProBear = 0;
-            
-            // ICT Patterns
-            if (data.ict_patterns) {
-                for (const [key, patterns] of Object.entries(data.ict_patterns)) {
-                    ictCount += patterns.length;
-                    patterns.forEach(p => {
-                        if (p.direction?.includes('bull')) ictBull++;
-                        else if (p.direction?.includes('bear')) ictBear++;
-                    });
-                }
-            }
-            
-            // Candle Patterns
-            if (data.candle_patterns) {
-                candleCount = data.candle_patterns.length;
-                data.candle_patterns.forEach(p => {
-                    if (p.direction?.includes('bull')) candleBull++;
-                    else if (p.direction?.includes('bear')) candleBear++;
-                });
-            }
-            
-            // Classical Patterns
-            if (data.classical_patterns) {
-                classicalCount = data.classical_patterns.length;
-                data.classical_patterns.forEach(p => {
-                    if (p.direction?.includes('bull')) classicalBull++;
-                    else if (p.direction?.includes('bear')) classicalBear++;
-                });
-            }
-            
-            // SmartPro
-            if (data.ictsmartpro_signals) {
-                smartProCount = data.ictsmartpro_signals.length;
-                data.ictsmartpro_signals.forEach(p => {
-                    if (p.direction?.includes('bull')) smartProBull++;
-                    else if (p.direction?.includes('bear')) smartProBear++;
-                });
-            }
-            
-            setText('patternIct', ictCount);
-            setText('patternIctBull', ictBull);
-            setText('patternIctBear', ictBear);
-            
-            setText('patternCandle', candleCount);
-            setText('patternCandleBull', candleBull);
-            setText('patternCandleBear', candleBear);
-            
-            setText('patternClassical', classicalCount);
-            setText('patternClassicalBull', classicalBull);
-            setText('patternClassicalBear', classicalBear);
-            
-            setText('patternSmartPro', smartProCount);
-            setText('patternSmartProBull', smartProBull);
-            setText('patternSmartProBear', smartProBear);
-            
-            const totalPatterns = ictCount + candleCount + classicalCount + smartProCount;
-            const totalBull = ictBull + candleBull + classicalBull + smartProBull;
-            const totalBear = ictBear + candleBear + classicalBear + smartProBear;
-            
-            setText('totalPatterns', totalPatterns);
-            setText('bullBearRatio', `${totalBull} / ${totalBear}`);
-            
-            // Pattern Badge
-            const patternBadge = $('patternCountBadge');
-            if (patternBadge) {
-                patternBadge.innerHTML = `<i class="fas fa-chart-pie"></i> <span>${totalPatterns} Pattern</span>`;
-            }
-            
-            // Pattern List
-            const patternsList = [];
-            if (data.ict_patterns) {
-                for (const [key, patterns] of Object.entries(data.ict_patterns)) {
-                    patterns.slice(0, 3).forEach(p => {
-                        const dir = p.direction?.includes('bull') ? 'bull' : p.direction?.includes('bear') ? 'bear' : 'neutral';
-                        patternsList.push(`<span class="chip ${dir}">${p.pattern || key}</span>`);
-                    });
-                }
-            }
-            
-            if (data.candle_patterns) {
-                data.candle_patterns.slice(0, 5).forEach(p => {
-                    const dir = p.direction?.includes('bull') ? 'bull' : p.direction?.includes('bear') ? 'bear' : 'neutral';
-                    patternsList.push(`<span class="chip ${dir}">${p.pattern}</span>`);
-                });
-            }
-            
-            if (data.classical_patterns) {
-                data.classical_patterns.slice(0, 5).forEach(p => {
-                    const dir = p.direction?.includes('bull') ? 'bull' : p.direction?.includes('bear') ? 'bear' : 'neutral';
-                    patternsList.push(`<span class="chip ${dir}">${p.pattern}</span>`);
-                });
-            }
-            
-            if (data.ictsmartpro_signals) {
-                data.ictsmartpro_signals.slice(0, 3).forEach(p => {
-                    const dir = p.direction?.includes('bull') ? 'bull' : p.direction?.includes('bear') ? 'bear' : 'neutral';
-                    patternsList.push(`<span class="chip ${dir}">${p.pattern}</span>`);
-                });
-            }
-            
-            if (patternsList.length > 0) {
-                setHtml('patternsList', patternsList.join(' '));
-            } else {
-                setHtml('patternsList', '<div class="empty-state">◈ No data — run analysis</div>');
-            }
-            
-            // Recommendation
-            if (data.signal?.recommendation) {
-                setHtml('recommendationText', data.signal.recommendation);
+            if (data.patterns) {
+                setText('patternIct', data.patterns.ict?.total || 0);
+                setText('patternIctBull', data.patterns.ict?.bullish || 0);
+                setText('patternIctBear', data.patterns.ict?.bearish || 0);
+                
+                setText('patternCandle', data.patterns.candle?.total || 0);
+                setText('patternCandleBull', data.patterns.candle?.bullish || 0);
+                setText('patternCandleBear', data.patterns.candle?.bearish || 0);
+                
+                setText('patternClassical', data.patterns.classical?.total || 0);
+                setText('patternClassicalBull', data.patterns.classical?.bullish || 0);
+                setText('patternClassicalBear', data.patterns.classical?.bearish || 0);
+                
+                setText('patternSmartPro', data.patterns.smartpro?.total || 0);
+                setText('patternSmartProBull', data.patterns.smartpro?.bullish || 0);
+                setText('patternSmartProBear', data.patterns.smartpro?.bearish || 0);
+                
+                const total = (data.patterns.ict?.total || 0) + (data.patterns.candle?.total || 0) + 
+                             (data.patterns.classical?.total || 0) + (data.patterns.smartpro?.total || 0);
+                const totalBull = (data.patterns.ict?.bullish || 0) + (data.patterns.candle?.bullish || 0) + 
+                                 (data.patterns.classical?.bullish || 0) + (data.patterns.smartpro?.bullish || 0);
+                const totalBear = (data.patterns.ict?.bearish || 0) + (data.patterns.candle?.bearish || 0) + 
+                                 (data.patterns.classical?.bearish || 0) + (data.patterns.smartpro?.bearish || 0);
+                
+                setText('totalPatterns', total);
+                setText('bullBearRatio', `${totalBull} / ${totalBear}`);
+                $('patternCountBadge').innerHTML = `<i class="fas fa-chart-pie"></i> <span>${total} Pattern</span>`;
             }
             
             // Market Structure
@@ -2240,33 +1750,28 @@ function initTradingView() {
                 setText('msVolIndex', ms.volatility_index || '—');
                 
                 if (ms.swings) {
-                    const hhCount = ms.swings.hh?.length || 0;
-                    const hlCount = ms.swings.hl?.length || 0;
-                    const lhCount = ms.swings.lh?.length || 0;
-                    const llCount = ms.swings.ll?.length || 0;
-                    
-                    setText('swingBull', `HH:${hhCount} HL:${hlCount}`);
-                    setText('swingBear', `LH:${lhCount} LL:${llCount}`);
+                    setText('swingBull', `HH:${ms.swings.hh_count || 0} HL:${ms.swings.hl_count || 0}`);
+                    setText('swingBear', `LH:${ms.swings.lh_count || 0} LL:${ms.swings.ll_count || 0}`);
                 }
                 
-                if (ms.support_resistance && ms.support_resistance.length > 0) {
+                if (ms.support_resistance?.length > 0) {
                     const zones = ms.support_resistance.slice(0, 5).map(z => 
                         `<div class="stat-row">
                             <span class="stat-label">${z.type}</span>
-                            <span class="stat-value">${z.level} (${z.strength}%)</span>
+                            <span class="stat-value">${fmtPrice(z.level)} (${z.strength}%)</span>
                         </div>`
                     ).join('');
                     setHtml('srZones', zones);
-                } else {
-                    setHtml('srZones', '<div class="empty-state">No zones detected</div>');
                 }
             }
             
-            // Update time
-            const updateEl = $('lastUpdateText');
-            if (updateEl) {
-                updateEl.innerHTML = `<i class="far fa-clock"></i> <span>Son güncelleme: ${fmtTime()}</span>`;
+            // Recommendation
+            if (data.signal?.recommendation_text) {
+                setHtml('recommendationText', data.signal.recommendation_text);
             }
+            
+            // Update time
+            $('lastUpdateText').innerHTML = `<i class="far fa-clock"></i> <span>Son güncelleme: ${fmtTime()}</span>`;
             
             // Fetch stats
             fetchStats();
@@ -2277,20 +1782,27 @@ function initTradingView() {
         // =============================================
         async function fetchStats() {
             try {
-                const res = await fetch('/api/stats');
-                if (res.ok) {
-                    const data = await res.json();
+                const [statsRes, exchangeRes] = await Promise.all([
+                    fetch('/api/stats'),
+                    fetch('/api/exchange-stats')
+                ]);
+                
+                if (statsRes.ok) {
+                    const data = await statsRes.json();
                     if (data.success) {
                         state.stats = data;
                         
-                        setText('sysUptime', data.uptime || '—');
+                        const uptime = Math.floor((Date.now() - state.uptimeStart) / 1000);
+                        const hours = Math.floor(uptime / 3600);
+                        const minutes = Math.floor((uptime % 3600) / 60);
+                        
+                        setText('sysUptime', `${hours}s ${minutes}d`);
                         setText('sysSuccess', data.success_rate ? data.success_rate + '%' : '—');
                         setText('sysTotal', data.total_requests || '—');
                         setText('sysWs', data.active_websockets || '—');
                     }
                 }
                 
-                const exchangeRes = await fetch('/api/exchange-stats');
                 if (exchangeRes.ok) {
                     const exData = await exchangeRes.json();
                     if (exData.success && exData.stats) {
@@ -2320,21 +1832,15 @@ function initTradingView() {
             const rsi = d.technical?.rsi || 50;
             const trend = d.market_structure?.trend || '—';
             
-            const ictCount = (d.ict_patterns?.fair_value_gaps?.length || 0) +
-                            (d.ict_patterns?.order_blocks?.length || 0) +
-                            (d.ict_patterns?.break_of_structure?.length || 0);
-            
-            const candleCount = d.candle_patterns?.length || 0;
-            const classicalCount = d.classical_patterns?.length || 0;
-            const smartProCount = d.ictsmartpro_signals?.length || 0;
+            const patternTotal = (d.patterns?.ict?.total || 0) + (d.patterns?.candle?.total || 0) + 
+                                (d.patterns?.classical?.total || 0) + (d.patterns?.smartpro?.total || 0);
             
             let comment = '';
             if (conf > 75) comment = '🔥 Yüksek güven – sinyal güçlü';
             else if (conf > 60) comment = '✅ Orta güven – teyit önerilir';
             else comment = '⚠️ Düşük güven – temkinli yaklaş';
             
-            if (ictCount > 3) comment += ' • Yoğun ICT aktivitesi';
-            if (smartProCount > 0) comment += ' • SmartPro sinyali var';
+            if (d.patterns?.smartpro?.total > 0) comment += ' • SmartPro sinyali var';
             
             const empty = chatBox.querySelector('.empty-state');
             if (empty) empty.remove();
@@ -2351,7 +1857,7 @@ function initTradingView() {
                 </div>
                 <div><strong>Fiyat:</strong> ${fmtPrice(price)} | <strong>RSI:</strong> ${rsi.toFixed(1)}</div>
                 <div><strong>Trend:</strong> ${trend}</div>
-                <div><strong>Pattern:</strong> ICT:${ictCount} Candle:${candleCount} Klasik:${classicalCount} SP:${smartProCount}</div>
+                <div><strong>Toplam Pattern:</strong> ${patternTotal}</div>
                 <div style="margin-top:8px; color:var(--accent-cyan);">${comment}</div>
                 <div class="warning">
                     <i class="fas fa-triangle-exclamation"></i>
@@ -2371,11 +1877,7 @@ function initTradingView() {
             
             try {
                 const res = await fetch('/health');
-                if (res.ok) {
-                    setPill('backendPill', 'green', 'BACKEND');
-                } else {
-                    setPill('backendPill', 'red', 'BACKEND HATA');
-                }
+                setPill('backendPill', res.ok ? 'green' : 'red', res.ok ? 'BACKEND' : 'BACKEND HATA');
             } catch {
                 setPill('backendPill', 'red', 'BAĞLANTI YOK');
             }
@@ -2385,7 +1887,7 @@ function initTradingView() {
             fetchStats();
             setInterval(fetchStats, 30000);
             
-            setTimeout(analyzeSymbol, 500);
+            setTimeout(analyzeSymbol, 1000);
         }
 
         // =============================================
@@ -2408,4 +1910,3 @@ function initTradingView() {
     </script>
 </body>
 </html>
-  
