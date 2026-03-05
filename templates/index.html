@@ -542,66 +542,6 @@
             color: #ff3860;
         }
 
-        /* PAYMENT SECTION */
-        .payment-section {
-            padding: 100px 0;
-            background: rgba(20, 24, 31, 0.8);
-            border-top: 2px solid var(--neon-green);
-            border-bottom: 2px solid var(--neon-green);
-        }
-
-        .payment-card {
-            background: rgba(20, 24, 31, 0.95);
-            backdrop-filter: blur(12px);
-            border: 2px solid var(--neon-green);
-            border-radius: 28px;
-            padding: 45px;
-            max-width: 600px;
-            margin: 0 auto;
-            box-shadow: 0 0 40px rgba(0, 255, 157, 0.15);
-            transition: 0.4s;
-        }
-
-        .payment-card:hover {
-            border-color: var(--neon-cyan);
-            box-shadow: 0 0 50px rgba(0, 255, 157, 0.3);
-            transform: translateY(-5px);
-        }
-
-        .wallet-address {
-            background: rgba(0, 0, 0, 0.3);
-            border: 2px dashed var(--neon-green);
-            border-radius: 16px;
-            padding: 20px;
-            word-break: break-all;
-            font-family: monospace;
-            font-size: 1.1rem;
-            margin: 20px 0;
-            cursor: pointer;
-            transition: 0.3s;
-        }
-
-        .wallet-address:hover {
-            background: rgba(0, 255, 157, 0.05);
-            border-color: var(--neon-cyan);
-        }
-
-        .txid-input {
-            background: rgba(255, 255, 255, 0.05);
-            border: 2px solid var(--neon-purple);
-            border-radius: 16px;
-            padding: 15px;
-            color: white;
-            width: 100%;
-            font-family: monospace;
-        }
-
-        .txid-input:focus {
-            border-color: var(--neon-green);
-            box-shadow: 0 0 20px var(--neon-green);
-            outline: none;
-        }
-
         /* RESPONSIVE */
         @media (max-width: 992px) {
             .hero-title { font-size: 3rem; }
@@ -642,9 +582,6 @@
                     </li>
                     <li class="nav-item">
                         <a class="nav-link" href="#features">Özellikler</a>
-                    </li>
-                    <li class="nav-item">
-                        <a class="nav-link" href="#payment">Ödeme</a>
                     </li>
                     <li class="nav-item ms-lg-3">
                         <button class="btn-auth" id="authToggleBtn">
@@ -858,53 +795,6 @@
         </div>
     </section>
 
-    <!-- ========== PAYMENT SECTION ========== -->
-    <section id="payment" class="payment-section">
-        <div class="container-fluid">
-            <h2 class="section-title">Premium Üyelik</h2>
-            <p class="text-center" style="color: var(--text-secondary); font-size: 1.2rem; margin-bottom: 50px;">
-                20 USDT ile 30 gün premium üyelik kazanın
-            </p>
-            
-            <div class="payment-card" id="paymentCard">
-                <div class="text-center mb-4">
-                    <i class="fas fa-crown" style="font-size: 3rem; color: var(--neon-green);"></i>
-                    <h3 style="color: var(--neon-green); margin-top: 15px;">20 USDT (TRC-20)</h3>
-                    <p style="color: var(--text-secondary);">30 Gün Premium Erişim</p>
-                </div>
-                
-                <!-- ÖDEME DURUMU -->
-                <div class="alert" id="paymentAlert" style="display: none;"></div>
-                
-                <!-- CÜZDAN ADRESİ -->
-                <label class="form-label">📤 Gönderilecek Adres:</label>
-                <div class="wallet-address" id="walletAddress" onclick="copyWalletAddress()">
-                    <span id="walletAddressText">TCzUvqZvZvZvZvZvZvZvZvZvZvZvZvZ</span>
-                    <i class="fas fa-copy ms-2" style="color: var(--neon-green);"></i>
-                </div>
-                
-                <!-- TXID GİRİŞ -->
-                <label class="form-label mt-4">🔍 TXID ile Kontrol Et:</label>
-                <input type="text" class="txid-input" id="txidInput" placeholder="64 karakter TXID girin..." maxlength="64">
-                
-                <button class="btn-submit mt-3" onclick="checkTxidManuel()" id="checkTxidBtn">
-                    <i class="fas fa-search me-2"></i>TXID Kontrol Et
-                </button>
-                
-                <div class="text-center mt-4">
-                    <button class="btn-hero btn-primary-hero" onclick="startAutoCheck()" id="autoCheckBtn" style="padding: 12px 30px; font-size: 1rem;">
-                        <i class="fas fa-play me-2"></i>Otomatik Kontrol Başlat
-                    </button>
-                </div>
-                
-                <p class="text-center mt-3" style="color: var(--text-dim); font-size: 0.9rem;">
-                    <i class="fas fa-info-circle me-1"></i>
-                    Ödeme yaptıktan sonra TXID girin veya otomatik kontrolü başlatın
-                </p>
-            </div>
-        </div>
-    </section>
-
     <!-- ========== FOOTER ========== -->
     <footer class="footer">
         <div class="container-fluid">
@@ -921,7 +811,6 @@
                 <a href="#">Ana Sayfa</a>
                 <a href="#about">Hakkımızda</a>
                 <a href="#features">Özellikler</a>
-                <a href="#payment">Ödeme</a>
                 <a href="#">Gizlilik Politikası</a>
                 <a href="#">Kullanım Şartları</a>
                 <a href="#">Risk Bildirimi</a>
@@ -966,16 +855,8 @@
                 }
             };
 
-            // TRON ÖDEME KONFİGÜRASYONU
-            const TRON_CONFIG = {
-                WALLET_ADDRESS: 'TCzUvqZvZvZvZvZvZvZvZvZvZvZvZvZ', // BUNU DEĞİŞTİR!
-                REQUIRED_USDT: 20,
-                TRONGRID_API: 'https://api.trongrid.io'
-            };
-
             // ---------- STATE ----------
             let currentUser = null;
-            let autoCheckInterval = null;
 
             // ---------- YARDIMCI FONKSİYONLAR ----------
             function showAlert(elementId, message, type) {
@@ -1028,6 +909,7 @@
                 return user && user.password === password;
             }
 
+            // ---------- SESSION YÖNETİMİ ----------
             function setSession(user) {
                 const sessionUser = {
                     id: user.id,
@@ -1076,119 +958,6 @@
                 document.getElementById('loginCard').style.display = 'block';
                 document.getElementById('registerCard').classList.remove('active');
                 document.getElementById('loginCard').classList.add('active');
-            };
-
-            // ---------- ÖDEME FONKSİYONLARI ----------
-            window.copyWalletAddress = function() {
-                const address = TRON_CONFIG.WALLET_ADDRESS;
-                navigator.clipboard.writeText(address).then(() => {
-                    showAlert('paymentAlert', 'Adres kopyalandı!', 'success');
-                }).catch(() => {
-                    showAlert('paymentAlert', 'Kopyalama başarısız', 'error');
-                });
-            };
-
-            function validateTxid(txid) {
-                return /^[a-fA-F0-9]{64}$/.test(txid);
-            }
-
-            async function checkPayment(txid = null) {
-                if (!currentUser) {
-                    showAlert('paymentAlert', 'Lütfen önce giriş yapın', 'error');
-                    return false;
-                }
-
-                let url = '/api/check-payment';
-                if (txid) {
-                    url += `?txid=${encodeURIComponent(txid)}`;
-                }
-
-                try {
-                    const response = await fetch(url, {
-                        method: 'POST',
-                        headers: {
-                            'Content-Type': 'application/json',
-                            'X-User': currentUser.username
-                        }
-                    });
-                    
-                    const data = await response.json();
-                    
-                    if (data.paid) {
-                        showAlert('paymentAlert', '✅ Ödeme onaylandı! Premium üyelik aktif.', 'success');
-                        
-                        // Kullanıcıyı güncelle
-                        if (currentUser) {
-                            currentUser.has_subscription = true;
-                            localStorage.setItem(APP_CONFIG.STORAGE_KEYS.CURRENT_USER, JSON.stringify(currentUser));
-                        }
-                        
-                        // Otomatik kontrolü durdur
-                        if (autoCheckInterval) {
-                            clearInterval(autoCheckInterval);
-                            autoCheckInterval = null;
-                        }
-                        
-                        return true;
-                    } else {
-                        if (txid) {
-                            showAlert('paymentAlert', data.message || 'Ödeme bulunamadı', 'error');
-                        }
-                        return false;
-                    }
-                } catch (error) {
-                    console.error('Kontrol hatası:', error);
-                    showAlert('paymentAlert', 'Bağlantı hatası', 'error');
-                    return false;
-                }
-            }
-
-            window.checkTxidManuel = async function() {
-                const txid = document.getElementById('txidInput').value.trim();
-                
-                if (!txid) {
-                    showAlert('paymentAlert', 'TXID girin', 'error');
-                    return;
-                }
-                
-                if (!validateTxid(txid)) {
-                    showAlert('paymentAlert', 'Geçersiz TXID (64 karakter hex olmalı)', 'error');
-                    return;
-                }
-                
-                const btn = document.getElementById('checkTxidBtn');
-                btn.innerHTML = '<i class="fas fa-spinner fa-spin me-2"></i>Kontrol ediliyor...';
-                btn.disabled = true;
-                
-                await checkPayment(txid);
-                
-                btn.innerHTML = '<i class="fas fa-search me-2"></i>TXID Kontrol Et';
-                btn.disabled = false;
-            };
-
-            window.startAutoCheck = function() {
-                if (!currentUser) {
-                    showAlert('paymentAlert', 'Lütfen önce giriş yapın', 'error');
-                    return;
-                }
-
-                if (autoCheckInterval) {
-                    clearInterval(autoCheckInterval);
-                    autoCheckInterval = null;
-                    document.getElementById('autoCheckBtn').innerHTML = '<i class="fas fa-play me-2"></i>Otomatik Kontrol Başlat';
-                    showAlert('paymentAlert', 'Otomatik kontrol durduruldu', 'info');
-                    return;
-                }
-
-                autoCheckInterval = setInterval(() => {
-                    checkPayment();
-                }, 10000); // 10 saniye
-
-                document.getElementById('autoCheckBtn').innerHTML = '<i class="fas fa-stop me-2"></i>Otomatik Kontrolü Durdur';
-                showAlert('paymentAlert', 'Otomatik kontrol başladı (10 saniyede bir)', 'success');
-                
-                // İlk kontrolü hemen yap
-                checkPayment();
             };
 
             // ---------- DASHBOARD YÖNLENDİRME ----------
@@ -1254,9 +1023,7 @@
                             setSession(user);
                             updateUIBasedOnAuth();
                             showAlert('loginAlert', `✅ Hoş geldiniz, ${user.username}!`, 'success');
-                            setTimeout(() => {
-                                window.location.href = '#payment';
-                            }, 800);
+                            setTimeout(redirectToDashboard, 800);
                         } else {
                             showAlert('loginAlert', '❌ Kullanıcı adı veya şifre hatalı', 'error');
                             loginBtn.innerHTML = '<i class="fas fa-sign-in-alt me-2"></i>Giriş Yap';
@@ -1329,7 +1096,7 @@
                             username: username,
                             email: email,
                             password: password,
-                            has_subscription: false,
+                            has_subscription: true,
                             is_admin: false,
                             is_verified: true,
                             credits: 50,
@@ -1341,26 +1108,22 @@
                         saveUser(newUser);
                         setSession(newUser);
                         updateUIBasedOnAuth();
-                        showAlert('registerAlert', '✅ Hesabınız oluşturuldu!', 'success');
-                        setTimeout(() => {
-                            window.location.href = '#payment';
-                        }, 800);
+                        showAlert('registerAlert', '✅ Hesabınız oluşturuldu! 14 günlük deneme süreniz başladı.', 'success');
+                        setTimeout(redirectToDashboard, 800);
                     }, 800);
                 });
 
                 // ÜCRETSİZ BAŞLA BUTONU
                 document.getElementById('getStartedBtn')?.addEventListener('click', function() {
                     if (currentUser) {
-                        window.location.href = '#payment';
+                        redirectToDashboard();
                         return;
                     }
                     
                     const trialUser = createTrialUser();
                     updateUIBasedOnAuth();
-                    showAlert('loginAlert', `🎉 Hoş geldiniz, ${trialUser.username}!`, 'success');
-                    setTimeout(() => {
-                        window.location.href = '#payment';
-                    }, 800);
+                    showAlert('loginAlert', `🎉 Hoş geldiniz, ${trialUser.username}! 14 günlük deneme süreniz başladı.`, 'success');
+                    setTimeout(redirectToDashboard, 800);
                 });
 
                 // AUTH TOGGLE BUTTON
@@ -1375,20 +1138,10 @@
                         document.getElementById('loginCard').scrollIntoView({ behavior: 'smooth' });
                     }
                 });
-
-                // TXID input enter tuşu
-                document.getElementById('txidInput')?.addEventListener('keypress', function(e) {
-                    if (e.key === 'Enter') {
-                        checkTxidManuel();
-                    }
-                });
             }
 
             // ---------- BAŞLANGIÇ ----------
             function init() {
-                // Cüzdan adresini göster
-                document.getElementById('walletAddressText').textContent = TRON_CONFIG.WALLET_ADDRESS;
-                
                 // Mevcut oturumu kontrol et
                 try {
                     const savedUser = localStorage.getItem(APP_CONFIG.STORAGE_KEYS.CURRENT_USER);
@@ -1411,4 +1164,4 @@
     </script>
 
 </body>
-</html>
+</html>  
