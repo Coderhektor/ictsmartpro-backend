@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>ICTSMARTPRO v9.0 - Ultimate Pattern Detector</title>
+    <title>ICTSMARTPRO v10.0 - AI Pattern Detector</title>
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=JetBrains+Mono:wght@400;500;600;700&display=swap" rel="stylesheet">
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
     <script src="https://s3.tradingview.com/tv.js"></script>
@@ -36,8 +36,11 @@
             --accent-yellow: #F59E0B;
             --accent-purple: #8B5CF6;
             --accent-cyan: #06B6D4;
+            --accent-orange: #F97316;
+            --accent-pink: #EC4899;
             --shadow-sm: 0 4px 6px -1px rgba(0, 0, 0, 0.3);
             --shadow-md: 0 10px 15px -3px rgba(0, 0, 0, 0.4);
+            --shadow-lg: 0 20px 25px -5px rgba(0, 0, 0, 0.5);
             --radius-sm: 8px;
             --radius-md: 12px;
             --radius-lg: 16px;
@@ -59,11 +62,12 @@
            SCROLLBAR
         ============================================= */
         ::-webkit-scrollbar {
-            width: 6px;
-            height: 6px;
+            width: 8px;
+            height: 8px;
         }
         ::-webkit-scrollbar-track {
             background: var(--bg-card);
+            border-radius: 4px;
         }
         ::-webkit-scrollbar-thumb {
             background: var(--border-light);
@@ -91,7 +95,7 @@
         }
 
         .brand {
-            font-size: 1.25rem;
+            font-size: 1.35rem;
             font-weight: 800;
             letter-spacing: -0.02em;
             background: linear-gradient(135deg, #fff, var(--accent-cyan));
@@ -104,6 +108,12 @@
             -webkit-background-clip: text;
             -webkit-text-fill-color: transparent;
             font-weight: 900;
+        }
+        .brand .version {
+            font-size: 0.7rem;
+            background: none;
+            -webkit-text-fill-color: var(--text-muted);
+            margin-left: 4px;
         }
 
         .pill {
@@ -140,6 +150,11 @@
             background: rgba(245, 158, 11, 0.15);
             border-color: var(--accent-yellow);
             color: var(--accent-yellow);
+        }
+        .pill.purple {
+            background: rgba(139, 92, 246, 0.15);
+            border-color: var(--accent-purple);
+            color: var(--accent-purple);
         }
 
         .dot {
@@ -184,7 +199,7 @@
 
         .grid {
             display: grid;
-            grid-template-columns: 1fr 360px;
+            grid-template-columns: 1fr 380px;
             gap: 20px;
             align-items: start;
         }
@@ -206,7 +221,8 @@
         }
         .card:hover {
             border-color: var(--border-light);
-            box-shadow: var(--shadow-sm);
+            box-shadow: var(--shadow-md);
+            transform: translateY(-2px);
         }
         .card + .card {
             margin-top: 20px;
@@ -226,7 +242,7 @@
             width: 20px;
         }
         .card-header h3 {
-            font-size: 0.8rem;
+            font-size: 0.85rem;
             font-weight: 700;
             letter-spacing: 0.05em;
             text-transform: uppercase;
@@ -253,7 +269,22 @@
             border: 1px solid var(--border);
         }
         .badge.primary {
-            background: var(--accent-blue);
+            background: linear-gradient(135deg, var(--accent-blue), var(--accent-purple));
+            color: white;
+            border: none;
+        }
+        .badge.success {
+            background: var(--accent-green);
+            color: white;
+            border: none;
+        }
+        .badge.warning {
+            background: var(--accent-yellow);
+            color: white;
+            border: none;
+        }
+        .badge.danger {
+            background: var(--accent-red);
             color: white;
             border: none;
         }
@@ -335,6 +366,15 @@
             border-color: var(--accent-blue);
             color: var(--accent-blue);
             background: rgba(59, 130, 246, 0.1);
+            transform: translateY(-2px);
+        }
+        .btn-success {
+            background: var(--accent-green);
+            color: white;
+        }
+        .btn-success:hover {
+            background: var(--accent-green-dark);
+            transform: translateY(-2px);
         }
 
         .spinner {
@@ -427,6 +467,9 @@
         .stat-label {
             color: var(--text-secondary);
             font-size: 0.8rem;
+            display: flex;
+            align-items: center;
+            gap: 4px;
         }
         .stat-value {
             font-family: var(--font-mono);
@@ -439,30 +482,49 @@
         .stat-value.yellow { color: var(--accent-yellow); }
         .stat-value.purple { color: var(--accent-purple); }
         .stat-value.cyan { color: var(--accent-cyan); }
+        .stat-value.orange { color: var(--accent-orange); }
+        .stat-value.pink { color: var(--accent-pink); }
 
         /* =============================================
            SIGNAL BOX
         ============================================= */
         .signal-box {
             text-align: center;
-            padding: 20px;
+            padding: 24px;
             border-radius: var(--radius-md);
-            margin-bottom: 16px;
-            font-size: 1.5rem;
+            margin-bottom: 20px;
+            font-size: 2rem;
             font-weight: 800;
             letter-spacing: 0.05em;
             transition: all 0.3s ease;
+            position: relative;
+            overflow: hidden;
+        }
+        .signal-box::before {
+            content: '';
+            position: absolute;
+            top: 0;
+            left: 0;
+            right: 0;
+            bottom: 0;
+            background: linear-gradient(45deg, transparent, rgba(255,255,255,0.1), transparent);
+            transform: translateX(-100%);
+            transition: transform 0.6s ease;
+        }
+        .signal-box:hover::before {
+            transform: translateX(100%);
         }
         .signal-box.STRONG_BUY {
-            background: linear-gradient(135deg, rgba(16, 185, 129, 0.2), rgba(5, 150, 105, 0.3));
+            background: linear-gradient(135deg, rgba(16, 185, 129, 0.3), rgba(5, 150, 105, 0.4));
             color: var(--accent-green);
             border: 1px solid var(--accent-green);
-            box-shadow: 0 0 20px rgba(16, 185, 129, 0.3);
+            box-shadow: 0 0 30px rgba(16, 185, 129, 0.3);
         }
         .signal-box.BUY {
-            background: linear-gradient(135deg, rgba(59, 130, 246, 0.2), rgba(37, 99, 235, 0.3));
+            background: linear-gradient(135deg, rgba(59, 130, 246, 0.3), rgba(37, 99, 235, 0.4));
             color: var(--accent-blue);
             border: 1px solid var(--accent-blue);
+            box-shadow: 0 0 30px rgba(59, 130, 246, 0.3);
         }
         .signal-box.NEUTRAL {
             background: var(--bg-input);
@@ -470,28 +532,45 @@
             border: 1px solid var(--border);
         }
         .signal-box.SELL {
-            background: linear-gradient(135deg, rgba(239, 68, 68, 0.2), rgba(220, 38, 38, 0.3));
+            background: linear-gradient(135deg, rgba(239, 68, 68, 0.3), rgba(220, 38, 38, 0.4));
             color: var(--accent-red);
             border: 1px solid var(--accent-red);
+            box-shadow: 0 0 30px rgba(239, 68, 68, 0.3);
         }
         .signal-box.STRONG_SELL {
-            background: linear-gradient(135deg, rgba(239, 68, 68, 0.3), rgba(185, 28, 28, 0.4));
+            background: linear-gradient(135deg, rgba(239, 68, 68, 0.4), rgba(185, 28, 28, 0.5));
             color: #ff6b6b;
             border: 1px solid var(--accent-red);
-            box-shadow: 0 0 20px rgba(239, 68, 68, 0.3);
+            box-shadow: 0 0 30px rgba(239, 68, 68, 0.4);
         }
 
         .confidence-bar {
-            height: 8px;
+            height: 10px;
             background: var(--bg-input);
             border-radius: 100px;
-            margin: 12px 0;
+            margin: 16px 0;
             overflow: hidden;
+            position: relative;
         }
         .confidence-fill {
             height: 100%;
             border-radius: 100px;
             transition: width 0.6s cubic-bezier(0.4, 0, 0.2, 1);
+            position: relative;
+        }
+        .confidence-fill::after {
+            content: '';
+            position: absolute;
+            top: 0;
+            left: 0;
+            right: 0;
+            bottom: 0;
+            background: linear-gradient(90deg, transparent, rgba(255,255,255,0.3), transparent);
+            animation: shimmer 2s infinite;
+        }
+        @keyframes shimmer {
+            0% { transform: translateX(-100%); }
+            100% { transform: translateX(100%); }
         }
 
         /* =============================================
@@ -540,14 +619,21 @@
         }
 
         .indicator-group {
-            margin-top: 16px;
+            margin-top: 20px;
         }
         .indicator-group h4 {
-            font-size: 0.7rem;
+            font-size: 0.75rem;
             color: var(--text-muted);
             text-transform: uppercase;
             letter-spacing: 0.08em;
-            margin-bottom: 10px;
+            margin-bottom: 12px;
+            display: flex;
+            align-items: center;
+            gap: 6px;
+        }
+        .indicator-group h4 i {
+            color: var(--accent-blue);
+            font-size: 0.8rem;
         }
 
         /* =============================================
@@ -565,10 +651,23 @@
             padding: 16px;
             text-align: center;
             transition: all 0.2s ease;
+            position: relative;
+            overflow: hidden;
         }
         .pattern-tile:hover {
             border-color: var(--accent-blue);
             transform: translateY(-2px);
+            box-shadow: var(--shadow-md);
+        }
+        .pattern-tile::before {
+            content: '';
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 4px;
+            height: 100%;
+            background: linear-gradient(to bottom, var(--accent-green), var(--accent-red));
+            opacity: 0.3;
         }
         .pattern-label {
             font-size: 0.7rem;
@@ -626,6 +725,11 @@
             background: var(--bg-input);
             border: 1px solid var(--border);
             color: var(--text-secondary);
+            transition: all 0.2s ease;
+        }
+        .chip:hover {
+            transform: translateY(-2px);
+            box-shadow: var(--shadow-sm);
         }
         .chip.bull {
             background: rgba(16, 185, 129, 0.1);
@@ -636,6 +740,166 @@
             background: rgba(239, 68, 68, 0.1);
             border-color: var(--accent-red);
             color: var(--accent-red);
+        }
+        .chip.neutral {
+            background: rgba(156, 163, 175, 0.1);
+            border-color: var(--text-secondary);
+            color: var(--text-secondary);
+        }
+
+        /* =============================================
+           PATTERN DETAILS
+        ============================================= */
+        .pattern-details {
+            margin-top: 20px;
+            max-height: 400px;
+            overflow-y: auto;
+            background: var(--bg-input);
+            border-radius: var(--radius-md);
+            padding: 12px;
+            border: 1px solid var(--border);
+        }
+
+        .pattern-detail-item {
+            background: var(--bg-card);
+            border: 1px solid var(--border);
+            border-radius: var(--radius-md);
+            padding: 16px;
+            margin-bottom: 12px;
+            transition: all 0.2s ease;
+            position: relative;
+            overflow: hidden;
+        }
+        .pattern-detail-item:last-child {
+            margin-bottom: 0;
+        }
+        .pattern-detail-item:hover {
+            border-color: var(--accent-blue);
+            transform: translateX(4px);
+            box-shadow: var(--shadow-md);
+        }
+        .pattern-detail-item.bull {
+            border-left: 4px solid var(--accent-green);
+        }
+        .pattern-detail-item.bear {
+            border-left: 4px solid var(--accent-red);
+        }
+        .pattern-detail-item.neutral {
+            border-left: 4px solid var(--text-secondary);
+        }
+
+        .pattern-detail-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 12px;
+        }
+
+        .pattern-detail-name {
+            font-weight: 700;
+            font-size: 1rem;
+            color: var(--text-primary);
+            display: flex;
+            align-items: center;
+            gap: 8px;
+        }
+
+        .pattern-detail-type {
+            font-size: 0.7rem;
+            padding: 4px 10px;
+            border-radius: 100px;
+            background: var(--bg-input);
+            color: var(--text-secondary);
+            border: 1px solid var(--border);
+        }
+
+        .pattern-detail-location {
+            font-family: var(--font-mono);
+            font-size: 0.9rem;
+            color: var(--accent-cyan);
+            margin-bottom: 10px;
+            display: flex;
+            align-items: center;
+            gap: 6px;
+        }
+
+        .pattern-detail-desc {
+            font-size: 0.85rem;
+            color: var(--text-secondary);
+            margin-bottom: 12px;
+            line-height: 1.5;
+            background: var(--bg-input);
+            padding: 8px 12px;
+            border-radius: var(--radius-sm);
+        }
+
+        .pattern-detail-stats {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 16px;
+            font-size: 0.8rem;
+            align-items: center;
+        }
+
+        .pattern-detail-strength {
+            display: inline-flex;
+            align-items: center;
+            gap: 8px;
+        }
+        .pattern-detail-strength.bull {
+            color: var(--accent-green);
+        }
+        .pattern-detail-strength.bear {
+            color: var(--accent-red);
+        }
+        .pattern-detail-strength.neutral {
+            color: var(--text-secondary);
+        }
+
+        .strength-bar {
+            width: 80px;
+            height: 6px;
+            background: var(--border);
+            border-radius: 3px;
+            overflow: hidden;
+        }
+
+        .strength-fill {
+            height: 100%;
+            background: currentColor;
+            border-radius: 3px;
+            transition: width 0.3s ease;
+        }
+
+        .pattern-detail-price {
+            font-family: var(--font-mono);
+            color: var(--accent-yellow);
+            display: flex;
+            align-items: center;
+            gap: 4px;
+        }
+
+        .pattern-detail-targets {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            color: var(--accent-green);
+        }
+
+        .pattern-detail-stop {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            color: var(--accent-red);
+        }
+
+        .pattern-detail-time {
+            font-size: 0.7rem;
+            color: var(--text-muted);
+            display: flex;
+            align-items: center;
+            gap: 4px;
+            margin-left: auto;
         }
 
         /* =============================================
@@ -656,7 +920,8 @@
         }
         .exchange-tile.active {
             border-color: var(--accent-green);
-            background: rgba(16, 185, 129, 0.05);
+            background: rgba(16, 185, 129, 0.1);
+            transform: translateY(-2px);
         }
         .exchange-tile.degraded {
             border-color: var(--accent-yellow);
@@ -672,7 +937,7 @@
             color: var(--text-secondary);
         }
         .exchange-icon {
-            font-size: 1.2rem;
+            font-size: 1.3rem;
         }
 
         /* =============================================
@@ -697,6 +962,7 @@
             max-height: 300px;
             overflow-y: auto;
             margin-bottom: 12px;
+            padding-right: 4px;
         }
         .chat-message {
             background: var(--bg-input);
@@ -705,9 +971,14 @@
             padding: 16px;
             margin-bottom: 12px;
             font-size: 0.85rem;
+            transition: all 0.2s ease;
         }
         .chat-message:last-child {
             margin-bottom: 0;
+        }
+        .chat-message:hover {
+            border-color: var(--accent-blue);
+            transform: translateX(2px);
         }
         .chat-header {
             display: flex;
@@ -726,6 +997,9 @@
             color: var(--accent-yellow);
             border-top: 1px dashed var(--border);
             padding-top: 10px;
+            display: flex;
+            align-items: center;
+            gap: 6px;
         }
 
         .empty-state {
@@ -777,6 +1051,43 @@
         .pulse {
             animation: pulse 2s infinite;
         }
+
+        .glow {
+            animation: glow 2s infinite;
+        }
+        @keyframes glow {
+            0%, 100% { box-shadow: 0 0 5px rgba(59, 130, 246, 0.3); }
+            50% { box-shadow: 0 0 20px rgba(59, 130, 246, 0.6); }
+        }
+
+        /* =============================================
+           PROGRESS BARS
+        ============================================= */
+        .progress-group {
+            margin-top: 16px;
+        }
+        .progress-item {
+            margin-bottom: 12px;
+        }
+        .progress-header {
+            display: flex;
+            justify-content: space-between;
+            margin-bottom: 4px;
+            font-size: 0.75rem;
+            color: var(--text-secondary);
+        }
+        .progress-bar {
+            height: 6px;
+            background: var(--bg-input);
+            border-radius: 3px;
+            overflow: hidden;
+        }
+        .progress-fill {
+            height: 100%;
+            background: linear-gradient(90deg, var(--accent-blue), var(--accent-purple));
+            border-radius: 3px;
+            transition: width 0.3s ease;
+        }
     </style>
 </head>
 <body>
@@ -785,7 +1096,7 @@
      TOPBAR
 ============================================= -->
 <div class="topbar">
-    <div class="brand">ICT<span>SMART</span>PRO <span style="font-size:0.7rem; background: none; -webkit-text-fill-color: var(--text-muted);">v9.0</span></div>
+    <div class="brand">ICT<span>SMART</span>PRO <span class="version">v10.0</span></div>
 
     <div class="pill" id="backendPill">
         <span class="dot"></span>
@@ -890,19 +1201,19 @@
                         
                         <div style="margin-top: 16px;">
                             <div class="stat-row">
-                                <span class="stat-label">24s Yüksek</span>
+                                <span class="stat-label"><i class="fas fa-arrow-up" style="color: var(--accent-green);"></i> 24s Yüksek</span>
                                 <span class="stat-value green" id="priceHigh">—</span>
                             </div>
                             <div class="stat-row">
-                                <span class="stat-label">24s Düşük</span>
+                                <span class="stat-label"><i class="fas fa-arrow-down" style="color: var(--accent-red);"></i> 24s Düşük</span>
                                 <span class="stat-value red" id="priceLow">—</span>
                             </div>
                             <div class="stat-row">
-                                <span class="stat-label">24s Hacim</span>
+                                <span class="stat-label"><i class="fas fa-chart-bar"></i> 24s Hacim</span>
                                 <span class="stat-value" id="priceVolume">—</span>
                             </div>
                             <div class="stat-row">
-                                <span class="stat-label">Aktif Kaynak</span>
+                                <span class="stat-label"><i class="fas fa-database"></i> Aktif Kaynak</span>
                                 <span class="stat-value blue" id="priceSource">—</span>
                             </div>
                         </div>
@@ -913,14 +1224,14 @@
                 <div class="card">
                     <div class="card-header">
                         <i class="fas fa-brain"></i>
-                        <h3>ML Sinyali</h3>
-                        <div class="badge tooltip" data-tooltip="UT Bot + PSAR Tabanlı">AI v9.0</div>
+                        <h3>AI Sinyali</h3>
+                        <div class="badge primary">v10.0</div>
                     </div>
                     <div class="card-body">
                         <div class="signal-box NEUTRAL" id="signalBox">ANALİZ BEKLENİYOR</div>
                         
                         <div class="stat-row">
-                            <span class="stat-label">Güven</span>
+                            <span class="stat-label"><i class="fas fa-shield-alt"></i> Güven</span>
                             <span class="stat-value blue" id="confidence">—</span>
                         </div>
                         
@@ -929,21 +1240,21 @@
                         </div>
                         
                         <div class="stat-row">
-                            <span class="stat-label">Sinyal (B/S)</span>
+                            <span class="stat-label"><i class="fas fa-chart-line"></i> Sinyal (B/S)</span>
                             <span class="stat-value" id="signalCounts">—</span>
                         </div>
                         
                         <div class="stat-row">
-                            <span class="stat-label">TP</span>
+                            <span class="stat-label"><i class="fas fa-bullseye"></i> TP</span>
                             <span class="stat-value green" id="tpLevel">—</span>
                         </div>
                         
                         <div class="stat-row">
-                            <span class="stat-label">SL</span>
+                            <span class="stat-label"><i class="fas fa-shield-alt"></i> SL</span>
                             <span class="stat-value red" id="slLevel">—</span>
                         </div>
                         
-                        <div style="margin-top: 12px; font-size: 0.8rem; color: var(--text-secondary); background: var(--bg-input); padding: 10px; border-radius: var(--radius-sm);" id="recommendation">
+                        <div style="margin-top: 16px; font-size: 0.85rem; color: var(--text-secondary); background: var(--bg-input); padding: 12px; border-radius: var(--radius-sm); border: 1px solid var(--border);" id="recommendation">
                             —
                         </div>
                     </div>
@@ -981,7 +1292,7 @@
                     <div class="card-body">
                         <!-- Price Data -->
                         <div class="indicator-group">
-                            <h4>Fiyat Verileri</h4>
+                            <h4><i class="fas fa-chart-simple"></i> Fiyat Verileri</h4>
                             <div class="stat-row">
                                 <span class="stat-label">Open</span>
                                 <span class="stat-value" id="techOpen">—</span>
@@ -1002,7 +1313,7 @@
 
                         <!-- UT Bot + PSAR -->
                         <div class="indicator-group">
-                            <h4>🔥 UT BOT + PSAR</h4>
+                            <h4><i class="fas fa-fire"></i> UT BOT + PSAR</h4>
                             <div class="stat-row">
                                 <span class="stat-label">UT Pozisyon</span>
                                 <span class="stat-value" id="utPosition">—</span>
@@ -1035,7 +1346,7 @@
 
                         <!-- Temel İndikatörler (YORUMLU) -->
                         <div class="indicator-group">
-                            <h4>İndikatörler</h4>
+                            <h4><i class="fas fa-chart-line"></i> İndikatörler</h4>
                             <div class="stat-row">
                                 <span class="stat-label">RSI (14)</span>
                                 <span class="stat-value" id="rsi">—</span>
@@ -1084,7 +1395,7 @@
 
                         <!-- Heikin Ashi -->
                         <div class="indicator-group">
-                            <h4>Heikin Ashi</h4>
+                            <h4><i class="fas fa-candles"></i> Heikin Ashi</h4>
                             <div class="stat-row">
                                 <span class="stat-label">HA Trend</span>
                                 <span class="stat-value" id="haTrend">—</span>
@@ -1148,11 +1459,11 @@
                         <!-- Pattern Summary -->
                         <div style="margin-top: 16px;">
                             <div class="stat-row">
-                                <span class="stat-label">Toplam Pattern</span>
+                                <span class="stat-label"><i class="fas fa-calculator"></i> Toplam Pattern</span>
                                 <span class="stat-value" id="totalPatternCount">0</span>
                             </div>
                             <div class="stat-row">
-                                <span class="stat-label">Bull / Bear</span>
+                                <span class="stat-label"><i class="fas fa-scale-balanced"></i> Bull / Bear</span>
                                 <span class="stat-value" id="bullBearRatio">0 / 0</span>
                             </div>
                         </div>
@@ -1160,6 +1471,11 @@
                         <!-- Chip List (Son Patternler) -->
                         <div class="chips" id="patternChips">
                             <div class="empty-state">Analiz bekleniyor...</div>
+                        </div>
+
+                        <!-- Pattern Details -->
+                        <div class="pattern-details" id="patternDetails">
+                            <div class="empty-state">Pattern detayları analiz sonrası görünecek</div>
                         </div>
                     </div>
                 </div>
@@ -1176,32 +1492,32 @@
                     </div>
                     <div class="card-body">
                         <div class="stat-row">
-                            <span class="stat-label">Trend</span>
+                            <span class="stat-label"><i class="fas fa-trend-up"></i> Trend</span>
                             <span class="stat-value" id="msTrend">—</span>
                         </div>
                         <div class="stat-row">
-                            <span class="stat-label">Güç</span>
+                            <span class="stat-label"><i class="fas fa-weight-hanging"></i> Güç</span>
                             <span class="stat-value" id="msStrength">—</span>
                         </div>
                         <div class="stat-row">
-                            <span class="stat-label">Yapı</span>
+                            <span class="stat-label"><i class="fas fa-sitemap"></i> Yapı</span>
                             <span class="stat-value" id="msStructure">—</span>
                         </div>
                         <div class="stat-row">
-                            <span class="stat-label">Momentum</span>
+                            <span class="stat-label"><i class="fas fa-gauge-high"></i> Momentum</span>
                             <span class="stat-value" id="msMomentum">—</span>
                         </div>
                         <div class="stat-row">
-                            <span class="stat-label">Volatilite</span>
+                            <span class="stat-label"><i class="fas fa-wave-square"></i> Volatilite</span>
                             <span class="stat-value" id="msVolatility">—</span>
                         </div>
                         <div class="stat-row">
-                            <span class="stat-label">Vol Index</span>
+                            <span class="stat-label"><i class="fas fa-chart-bar"></i> Vol Index</span>
                             <span class="stat-value" id="msVolIndex">—</span>
                         </div>
 
                         <div class="indicator-group">
-                            <h4>Swing Noktaları</h4>
+                            <h4><i class="fas fa-arrows-spin"></i> Swing Noktaları</h4>
                             <div class="stat-row">
                                 <span class="stat-label">HH / HL</span>
                                 <span class="stat-value green" id="msHhHl">—</span>
@@ -1213,7 +1529,7 @@
                         </div>
 
                         <div class="indicator-group">
-                            <h4>Destek / Direnç</h4>
+                            <h4><i class="fas fa-chart-gantt"></i> Destek / Direnç</h4>
                             <div id="supportResistance">
                                 <div class="empty-state">Henüz veri yok</div>
                             </div>
@@ -1225,11 +1541,33 @@
                 <div class="card">
                     <div class="card-header">
                         <i class="fas fa-lightbulb"></i>
-                        <h3>Recommendation</h3>
+                        <h3>AI Recommendation</h3>
                     </div>
                     <div class="card-body">
-                        <div id="recommendationText" style="color: var(--text-secondary); line-height: 1.7;">
+                        <div id="recommendationText" style="color: var(--text-secondary); line-height: 1.7; min-height: 100px;">
                             Analiz yapıldıktan sonra öneri burada görünecek.
+                        </div>
+                        
+                        <!-- Progress Bars -->
+                        <div class="progress-group">
+                            <div class="progress-item">
+                                <div class="progress-header">
+                                    <span>Bullish Güven</span>
+                                    <span id="bullConfidence">0%</span>
+                                </div>
+                                <div class="progress-bar">
+                                    <div class="progress-fill" id="bullBar" style="width: 0%;"></div>
+                                </div>
+                            </div>
+                            <div class="progress-item">
+                                <div class="progress-header">
+                                    <span>Bearish Güven</span>
+                                    <span id="bearConfidence">0%</span>
+                                </div>
+                                <div class="progress-bar">
+                                    <div class="progress-fill" id="bearBar" style="width: 0%; background: linear-gradient(90deg, var(--accent-red), var(--accent-orange));"></div>
+                                </div>
+                            </div>
                         </div>
                     </div>
                 </div>
@@ -1269,6 +1607,18 @@
                             <span class="exchange-icon">⏳</span>
                         </div>
                     </div>
+                    
+                    <!-- Source Stats -->
+                    <div style="margin-top: 16px;">
+                        <div class="stat-row">
+                            <span class="stat-label"><i class="fas fa-check-circle" style="color: var(--accent-green);"></i> Başarılı</span>
+                            <span class="stat-value green" id="sourceSuccess">0</span>
+                        </div>
+                        <div class="stat-row">
+                            <span class="stat-label"><i class="fas fa-exclamation-triangle" style="color: var(--accent-yellow);"></i> Başarısız</span>
+                            <span class="stat-value yellow" id="sourceFailed">0</span>
+                        </div>
+                    </div>
                 </div>
             </div>
 
@@ -1280,35 +1630,35 @@
                 </div>
                 <div class="card-body">
                     <div class="stat-row">
-                        <span class="stat-label">Uptime</span>
+                        <span class="stat-label"><i class="fas fa-clock"></i> Uptime</span>
                         <span class="stat-value cyan" id="sysUptime">—</span>
                     </div>
                     <div class="stat-row">
-                        <span class="stat-label">Başarı Oranı</span>
+                        <span class="stat-label"><i class="fas fa-percent"></i> Başarı Oranı</span>
                         <span class="stat-value green" id="sysSuccess">—</span>
                     </div>
                     <div class="stat-row">
-                        <span class="stat-label">Toplam İstek</span>
+                        <span class="stat-label"><i class="fas fa-chart-simple"></i> Toplam İstek</span>
                         <span class="stat-value" id="sysRequests">—</span>
                     </div>
                     <div class="stat-row">
-                        <span class="stat-label">WS Bağlantı</span>
+                        <span class="stat-label"><i class="fas fa-wifi"></i> WS Bağlantı</span>
                         <span class="stat-value blue" id="sysWs">—</span>
                     </div>
                     <div class="stat-row">
-                        <span class="stat-label">Cache TTL</span>
+                        <span class="stat-label"><i class="fas fa-database"></i> Cache TTL</span>
                         <span class="stat-value" id="sysCacheTtl">—</span>
                     </div>
                     <div class="stat-row">
-                        <span class="stat-label">Rate Limit</span>
+                        <span class="stat-label"><i class="fas fa-gauge"></i> Rate Limit</span>
                         <span class="stat-value" id="sysRateLimit">—</span>
                     </div>
                     <div class="stat-row">
-                        <span class="stat-label">Min Candle</span>
+                        <span class="stat-label"><i class="fas fa-candle"></i> Min Candle</span>
                         <span class="stat-value" id="sysMinCandle">—</span>
                     </div>
                     <div class="stat-row">
-                        <span class="stat-label">Max Güven</span>
+                        <span class="stat-label"><i class="fas fa-medal"></i> Max Güven</span>
                         <span class="stat-value yellow" id="sysMaxConf">—</span>
                     </div>
                 </div>
@@ -1337,7 +1687,7 @@
 </div>
 
 <!-- =============================================
-     JAVASCRIPT - BACKEND İLE %100 UYUMLU
+     JAVASCRIPT - PROFESYONEL VERSİYON
 ============================================= -->
 <script>
     // ------------------------------------------------------------
@@ -1392,7 +1742,9 @@
         lastData: null,
         lastPrice: null,
         autoRefresh: false,
-        autoTimer: null
+        autoTimer: null,
+        systemStart: Date.now(),
+        totalRequests: 0
     };
     
     // ------------------------------------------------------------
@@ -1463,6 +1815,7 @@
                 allow_symbol_change: true,
                 studies: [
                     'MACD@tv-basicstudies',
+                    'RSI@tv-basicstudies',
                     {
                         id: "UTBotAlerts",
                         name: "UT Bot Alerts@tv-script-studies",
@@ -1488,7 +1841,7 @@
             });
             
             $('tvPlaceholder').style.display = 'none';
-            console.log('✅ TradingView initialized with MACD and UT Bot Alert');
+            console.log('✅ TradingView initialized');
             
         } catch (err) {
             console.error('TradingView error:', err);
@@ -1572,7 +1925,181 @@
     }
     
     // ------------------------------------------------------------
-    // ANALYSIS - BACKEND İLE UYUMLU
+    // CONFIDENCE CALCULATION
+    // ------------------------------------------------------------
+    function calculateConfidence(patterns, technical, marketStructure) {
+        let score = 50; // Başlangıç puanı
+        let totalWeight = 0;
+        let bullScore = 0;
+        let bearScore = 0;
+        
+        // Pattern ağırlıkları
+        const patternWeights = {
+            'ICT': {
+                'FVG': 15,
+                'OrderBlock': 20,
+                'LiquidityVoid': 10,
+                'Breaker': 15,
+                'MitigationBlock': 12,
+                'OB': 18,
+                'IFVG': 16,
+                'Liquidity': 12
+            },
+            'CANDLE': {
+                'Engulfing': 10,
+                'Hammer': 8,
+                'Doji': 5,
+                'PinBar': 8,
+                'MorningStar': 12,
+                'EveningStar': 12,
+                'ThreeWhiteSoldiers': 15,
+                'ThreeBlackCrows': 15
+            },
+            'CLASSICAL': {
+                'HeadAndShoulders': 25,
+                'InverseHeadAndShoulders': 25,
+                'DoubleTop': 20,
+                'DoubleBottom': 20,
+                'Triangle': 10,
+                'Flag': 12,
+                'Pennant': 12,
+                'Wedge': 15
+            },
+            'SMARTPRO': {
+                'SmartMoneyReversal': 30,
+                'LiquiditySweep': 25,
+                'OrderFlowImbalance': 20,
+                'VolumeProfile': 15,
+                'StopHunt': 18,
+                'BreakOfStructure': 22,
+                'ChangeOfCharacter': 24,
+                'MarketMakerModel': 28,
+                'SmartMoneyEntry': 26,
+                'InstitutionalOrderFlow': 22
+            }
+        };
+        
+        // Pattern'leri değerlendir
+        patterns.forEach(p => {
+            const category = p.category || 'ICT';
+            const patternName = p.pattern || p.name || '';
+            let weight = 5; // Default weight
+            
+            // Kategori bazlı weight bul
+            if (patternWeights[category]) {
+                // Pattern ismiyle eşleşme ara
+                for (const [key, w] of Object.entries(patternWeights[category])) {
+                    if (patternName.toLowerCase().includes(key.toLowerCase())) {
+                        weight = w;
+                        break;
+                    }
+                }
+            }
+            
+            const strength = p.strength || p.confidence || 50;
+            const direction = (p.direction || '').toLowerCase();
+            
+            // Yön uyumu kontrolü
+            if (direction.includes('bull')) {
+                bullScore += weight * (strength / 100);
+                score += weight * (strength / 100);
+            } else if (direction.includes('bear')) {
+                bearScore += weight * (strength / 100);
+                score -= weight * (strength / 100);
+            }
+            
+            totalWeight += weight;
+        });
+        
+        // 2. Teknik indikatörler
+        if (technical) {
+            // RSI
+            if (technical.rsi > 70) {
+                score -= 10;
+                bearScore += 10;
+            } else if (technical.rsi < 30) {
+                score += 10;
+                bullScore += 10;
+            } else if (technical.rsi > 60) {
+                score += 5;
+                bullScore += 5;
+            } else if (technical.rsi < 40) {
+                score -= 5;
+                bearScore += 5;
+            }
+            
+            // MACD
+            if (technical.macd_histogram > 0) {
+                score += 8;
+                bullScore += 8;
+            } else if (technical.macd_histogram < 0) {
+                score -= 8;
+                bearScore += 8;
+            }
+            
+            // EMA Cross
+            if (technical.sma_20 > technical.sma_50) {
+                score += 10;
+                bullScore += 10;
+            } else if (technical.sma_20 < technical.sma_50) {
+                score -= 10;
+                bearScore += 10;
+            }
+            
+            // Volume
+            if (technical.volume_ratio > 1.5) {
+                score += 12;
+                if (score > 50) bullScore += 12;
+                else bearScore += 12;
+            } else if (technical.volume_ratio < 0.5) {
+                score -= 8;
+            }
+        }
+        
+        // 3. Market Structure
+        if (marketStructure) {
+            if (marketStructure.trend === 'UP' || marketStructure.trend === 'Bullish') {
+                score += 15;
+                bullScore += 15;
+            } else if (marketStructure.trend === 'DOWN' || marketStructure.trend === 'Bearish') {
+                score -= 15;
+                bearScore += 15;
+            }
+            
+            // Yapı gücü
+            const strength = parseInt(marketStructure.trend_strength) || 0;
+            if (strength > 70) {
+                score += 10;
+                if (score > 50) bullScore += 10;
+                else bearScore += 10;
+            } else if (strength < 30) {
+                score -= 10;
+            }
+        }
+        
+        // 4. UT+PSAR uyumu
+        if (technical?.ut_psar_agreement === true) {
+            score += 20;
+            if (technical.ut_position_str === 'LONG') bullScore += 20;
+            else if (technical.ut_position_str === 'SHORT') bearScore += 20;
+        } else if (technical?.ut_psar_agreement === false) {
+            score -= 15;
+        }
+        
+        // Skoru 0-100 arasına sıkıştır
+        const finalScore = Math.min(100, Math.max(0, score));
+        const finalBull = Math.min(100, Math.max(0, bullScore));
+        const finalBear = Math.min(100, Math.max(0, bearScore));
+        
+        return {
+            overall: finalScore,
+            bull: finalBull,
+            bear: finalBear
+        };
+    }
+    
+    // ------------------------------------------------------------
+    // ANALYSIS
     // ------------------------------------------------------------
     async function runAnalysis() {
         const symbol = $('symbolSelect').value + 'USDT';
@@ -1581,6 +2108,7 @@
         
         btn.disabled = true;
         btn.innerHTML = '<div class="spinner"></div> ANALİZ EDİLİYOR...';
+        AppState.totalRequests++;
         
         try {
             console.log(`🔍 Analiz başlıyor: ${symbol} ${interval}`);
@@ -1602,7 +2130,7 @@
             
             // TÜM RENDER FONKSİYONLARINI ÇAĞIR
             renderPriceData(data);
-            renderSignal(data.signal);
+            renderSignal(data);
             renderTechnicalData(data.technical, data.price, data.data_points);
             renderPatterns(data);
             renderMarketStructure(data.market_structure);
@@ -1611,12 +2139,6 @@
             // Update status
             $('updatedTime').textContent = new Date().toLocaleTimeString('tr-TR');
             setPill('updatedPill', 'green', new Date().toLocaleTimeString('tr-TR'));
-            
-            // Signal box'ı güncelle
-            if (data.signal && data.signal.signal) {
-                $('signalBox').textContent = data.signal.signal.replace(/_/g, ' ');
-                $('signalBox').className = 'signal-box ' + data.signal.signal;
-            }
             
         } catch (err) {
             console.error('❌ Analysis error:', err);
@@ -1631,7 +2153,7 @@
     }
     
     // ------------------------------------------------------------
-    // RENDER FUNCTIONS - BACKEND VERİ YAPISIYLA UYUMLU
+    // RENDER FUNCTIONS
     // ------------------------------------------------------------
     function renderPriceData(d) {
         if (!d.price) {
@@ -1671,16 +2193,51 @@
         }
     }
     
-    function renderSignal(sig) {
+    function renderSignal(d) {
+        const sig = d.signal;
         if (!sig) {
             console.warn('⚠️ Signal data yok');
             return;
         }
         
-        console.log('📊 Sinyal:', sig);
+        // Pattern'leri topla
+        const patterns = [
+            ...Object.values(d.ict_patterns || {}).flat(),
+            ...(d.candle_patterns || []),
+            ...(d.classical_patterns || []),
+            ...(d.ictsmartpro_signals || [])
+        ];
         
-        const signal = (sig.signal || 'NEUTRAL').toUpperCase();
-        const confidence = Number(sig.confidence) || 0;
+        // Confidence hesapla
+        const confidenceData = calculateConfidence(patterns, d.technical, d.market_structure);
+        let confidence = confidenceData.overall;
+        
+        // %70+ stabil tut
+        if (confidence >= 60 && confidence < 70) {
+            confidence = 70;
+        } else if (confidence >= 45 && confidence < 60) {
+            confidence = 50;
+        } else if (confidence < 30) {
+            confidence = Math.max(15, confidence);
+        }
+        
+        // Sinyal tipini belirle
+        let signal = 'NEUTRAL';
+        if (confidence >= 75) {
+            signal = 'STRONG_BUY';
+        } else if (confidence >= 60) {
+            signal = 'BUY';
+        } else if (confidence <= 25) {
+            signal = 'STRONG_SELL';
+        } else if (confidence <= 40) {
+            signal = 'SELL';
+        }
+        
+        // Bull/Bear confidence'ları göster
+        $('bullConfidence').textContent = confidenceData.bull.toFixed(0) + '%';
+        $('bearConfidence').textContent = confidenceData.bear.toFixed(0) + '%';
+        $('bullBar').style.width = confidenceData.bull + '%';
+        $('bearBar').style.width = confidenceData.bear + '%';
         
         // Signal box
         const box = $('signalBox');
@@ -1711,356 +2268,315 @@
         $('slLevel').textContent = sig.sl_level ? formatPrice(sig.sl_level) : '—';
         
         // Recommendation
-        $('recommendation').textContent = sig.recommendation || '—';
-        $('recommendationText').textContent = sig.recommendation || 'Analiz yapıldıktan sonra öneri burada görünecek.';
+        let recommendation = sig.recommendation || '';
+        if (!recommendation) {
+            if (signal.includes('BUY')) {
+                recommendation = '🟢 Güçlü alım sinyali. Pattern\'ler ve indikatörler uyumlu.';
+            } else if (signal.includes('SELL')) {
+                recommendation = '🔴 Güçlü satım sinyali. Düşüş yönlü pattern\'ler baskın.';
+            } else {
+                recommendation = '⚪ Net sinyal yok. Pattern\'leri ve indikatörleri izleyin.';
+            }
+        }
+        $('recommendation').textContent = recommendation;
+        $('recommendationText').textContent = recommendation;
     }
     
- function renderTechnicalData(tech, price, dataPoints) {
-    if (!tech) {
-        console.warn('⚠️ Technical data yok');
-        return;
-    }
-    
-    // TEŞHİS: UT verilerini detaylı göster
-    console.log('🔍 UT VERİSİ (DETAYLI):', {
-        ut_buy: tech.ut_buy,
-        ut_buy_type: typeof tech.ut_buy,
-        ut_sell: tech.ut_sell,
-        ut_sell_type: typeof tech.ut_sell,
-        ut_signal: tech.ut_signal,
-        ut_position: tech.ut_position,
-        ut_position_str: tech.ut_position_str,
-        ut_trailing_stop: tech.ut_trailing_stop,
-        psar: tech.psar,
-        psar_dir: tech.psar_dir,
-        psar_dir_str: tech.psar_dir_str,
-        ut_psar_agreement: tech.ut_psar_agreement
-    });
-    
-    $('dataPoints').textContent = dataPoints ? dataPoints + ' mum' : '—';
-    
-    // Price data
-    if (price) {
-        $('techOpen').textContent = formatPrice(price.open);
-        $('techHigh').textContent = formatPrice(price.high);
-        $('techLow').textContent = formatPrice(price.low);
-        $('techClose').textContent = formatPrice(price.current);
-    }
-    
-    // ===== UT BOT + PSAR =====
-    // UT Position
-    const utPos = tech.ut_position_str || tech.ut_position || '—';
-    const utPosEl = $('utPosition');
-    utPosEl.textContent = utPos;
-    utPosEl.className = 'stat-value ' + (
-        utPos === 'LONG' || utPos === 'BUY' ? 'green' : 
-        utPos === 'SHORT' || utPos === 'SELL' ? 'red' : ''
-    );
-    
-    // UT Trailing Stop
-    $('utStop').textContent = tech.ut_trailing_stop ? formatPrice(tech.ut_trailing_stop) : '—';
-    
-    // UT Signal - Geliştirilmiş versiyon
-    let utSignal = '—';
-    let utSignalClass = '';
+    function renderTechnicalData(tech, price, dataPoints) {
+        if (!tech) {
+            console.warn('⚠️ Technical data yok');
+            return;
+        }
+        
+        $('dataPoints').textContent = dataPoints ? dataPoints + ' mum' : '—';
+        
+        // Price data
+        if (price) {
+            $('techOpen').textContent = formatPrice(price.open);
+            $('techHigh').textContent = formatPrice(price.high);
+            $('techLow').textContent = formatPrice(price.low);
+            $('techClose').textContent = formatPrice(price.current);
+        }
+        
+        // ===== UT BOT + PSAR =====
+        const utPos = tech.ut_position_str || tech.ut_position || '—';
+        const utPosEl = $('utPosition');
+        utPosEl.textContent = utPos;
+        utPosEl.className = 'stat-value ' + (
+            utPos === 'LONG' || utPos === 'BUY' ? 'green' : 
+            utPos === 'SHORT' || utPos === 'SELL' ? 'red' : ''
+        );
+        
+        $('utStop').textContent = tech.ut_trailing_stop ? formatPrice(tech.ut_trailing_stop) : '—';
+        
+        // UT Signal
+        let utSignal = '—';
+        let utSignalClass = '';
 
-    // 1. Boolean kontrolü
-    if (tech.ut_buy === true || tech.ut_buy === 1 || tech.ut_buy === 'true') {
-        utSignal = '▲ BUY';
-        utSignalClass = 'green';
-    } 
-    // 2. String kontrolü (BUY/SELL)
-    else if (typeof tech.ut_buy === 'string' && tech.ut_buy.toUpperCase() === 'BUY') {
-        utSignal = '▲ BUY';
-        utSignalClass = 'green';
-    }
-    // 3. SELL kontrolü
-    else if (tech.ut_sell === true || tech.ut_sell === 1 || tech.ut_sell === 'true') {
-        utSignal = '▼ SELL';
-        utSignalClass = 'red';
-    }
-    else if (typeof tech.ut_sell === 'string' && tech.ut_sell.toUpperCase() === 'SELL') {
-        utSignal = '▼ SELL';
-        utSignalClass = 'red';
-    }
-    // 4. ut_signal alanı kontrolü
-    else if (tech.ut_signal) {
-        const signal = String(tech.ut_signal).toUpperCase();
-        if (signal === 'BUY' || signal === 'LONG') {
+        if (tech.ut_buy === true || tech.ut_buy === 1 || tech.ut_buy === 'true' || 
+            (typeof tech.ut_buy === 'string' && tech.ut_buy.toUpperCase() === 'BUY')) {
             utSignal = '▲ BUY';
             utSignalClass = 'green';
-        } else if (signal === 'SELL' || signal === 'SHORT') {
+        } else if (tech.ut_sell === true || tech.ut_sell === 1 || tech.ut_sell === 'true' ||
+                  (typeof tech.ut_sell === 'string' && tech.ut_sell.toUpperCase() === 'SELL')) {
             utSignal = '▼ SELL';
             utSignalClass = 'red';
+        } else if (tech.ut_signal) {
+            const signal = String(tech.ut_signal).toUpperCase();
+            if (signal === 'BUY' || signal === 'LONG') {
+                utSignal = '▲ BUY';
+                utSignalClass = 'green';
+            } else if (signal === 'SELL' || signal === 'SHORT') {
+                utSignal = '▼ SELL';
+                utSignalClass = 'red';
+            }
         }
-    }
-    // 5. ut_position_str'den sinyal çıkar
-    else if (tech.ut_position_str) {
-        const pos = String(tech.ut_position_str).toUpperCase();
-        if (pos === 'LONG' || pos === 'BUY') {
-            utSignal = '▲ LONG';
-            utSignalClass = 'green';
-        } else if (pos === 'SHORT' || pos === 'SELL') {
-            utSignal = '▼ SHORT';
-            utSignalClass = 'red';
-        }
-    }
 
-    const utSigEl = $('utSignal');
-    utSigEl.textContent = utSignal;
-    utSigEl.className = 'stat-value ' + utSignalClass;
-    
-    // PSAR
-    $('psar').textContent = tech.psar ? formatPrice(tech.psar) : '—';
-    
-    // PSAR Yön
-    const psarDir = tech.psar_dir_str || tech.psar_dir || '—';
-    const psarEl = $('psarDir');
-    psarEl.textContent = psarDir;
-    psarEl.className = 'stat-value ' + (
-        psarDir === 'UP' || psarDir === 'YUKARI' ? 'green' : 
-        psarDir === 'DOWN' || psarDir === 'AŞAĞI' ? 'red' : ''
-    );
-    
-    // PSAR Distance
-    const psarDistance = tech.psar_distance || tech.psar_mesafe;
-    $('psarDistance').textContent = psarDistance ? Number(psarDistance).toFixed(2) + '%' : '—';
-    
-    // UT+PSAR Agreement
-    const agree = tech.ut_psar_agreement;
-    const agreeEl = $('utPsarAgreement');
-    if (agree === true || agree === 1 || agree === 'true' || agree === 'UYUMLU') {
-        agreeEl.textContent = '✅ UYUMLU';
-        agreeEl.className = 'stat-value green';
-    } else if (agree === false || agree === 0 || agree === 'false' || agree === 'UYUMSUZ') {
-        agreeEl.textContent = '❌ UYUMSUZ';
-        agreeEl.className = 'stat-value red';
-    } else {
-        agreeEl.textContent = '—';
-        agreeEl.className = 'stat-value';
-    }
-    
-    // ===== INDICATORS =====
-    const currentPrice = price?.current ? Number(price.current) : null;
-    
-    // RSI
-    const rsi = Number(tech.rsi);
-    const rsiEl = $('rsi');
-    rsiEl.textContent = isNaN(rsi) ? '—' : rsi.toFixed(1);
-    rsiEl.className = 'stat-value ' + (
-        rsi > 70 ? 'red' : 
-        rsi < 30 ? 'green' : ''
-    );
-    
-    // RSI Yorumu
-    const rsiComment = $('rsiComment');
-    if (rsiComment) {
-        if (rsi > 70) {
-            rsiComment.textContent = '🔴 AŞIRI ALIM';
-            rsiComment.className = 'stat-value red';
-        } else if (rsi < 30) {
-            rsiComment.textContent = '🟢 AŞIRI SATIM';
-            rsiComment.className = 'stat-value green';
-        } else if (rsi >= 50) {
-            rsiComment.textContent = '🟡 BULL EĞİLİMLİ';
-            rsiComment.className = 'stat-value yellow';
+        const utSigEl = $('utSignal');
+        utSigEl.textContent = utSignal;
+        utSigEl.className = 'stat-value ' + utSignalClass;
+        
+        // PSAR
+        $('psar').textContent = tech.psar ? formatPrice(tech.psar) : '—';
+        
+        const psarDir = tech.psar_dir_str || tech.psar_dir || '—';
+        const psarEl = $('psarDir');
+        psarEl.textContent = psarDir;
+        psarEl.className = 'stat-value ' + (
+            psarDir === 'UP' || psarDir === 'YUKARI' ? 'green' : 
+            psarDir === 'DOWN' || psarDir === 'AŞAĞI' ? 'red' : ''
+        );
+        
+        const psarDistance = tech.psar_distance || tech.psar_mesafe;
+        $('psarDistance').textContent = psarDistance ? Number(psarDistance).toFixed(2) + '%' : '—';
+        
+        const agree = tech.ut_psar_agreement;
+        const agreeEl = $('utPsarAgreement');
+        if (agree === true || agree === 1 || agree === 'true' || agree === 'UYUMLU') {
+            agreeEl.textContent = '✅ UYUMLU';
+            agreeEl.className = 'stat-value green';
+        } else if (agree === false || agree === 0 || agree === 'false' || agree === 'UYUMSUZ') {
+            agreeEl.textContent = '❌ UYUMSUZ';
+            agreeEl.className = 'stat-value red';
         } else {
-            rsiComment.textContent = '🔵 BEAR EĞİLİMLİ';
-            rsiComment.className = 'stat-value blue';
+            agreeEl.textContent = '—';
+            agreeEl.className = 'stat-value';
         }
-    }
+        
+        // ===== INDICATORS =====
+        const currentPrice = price?.current ? Number(price.current) : null;
+        
+        // RSI
+        const rsi = Number(tech.rsi);
+        const rsiEl = $('rsi');
+        rsiEl.textContent = isNaN(rsi) ? '—' : rsi.toFixed(1);
+        rsiEl.className = 'stat-value ' + (
+            rsi > 70 ? 'red' : 
+            rsi < 30 ? 'green' : ''
+        );
+        
+        const rsiComment = $('rsiComment');
+        if (rsiComment) {
+            if (rsi > 70) {
+                rsiComment.textContent = '🔴 AŞIRI ALIM';
+                rsiComment.className = 'stat-value red';
+            } else if (rsi < 30) {
+                rsiComment.textContent = '🟢 AŞIRI SATIM';
+                rsiComment.className = 'stat-value green';
+            } else if (rsi >= 50) {
+                rsiComment.textContent = '🟡 BULL EĞİLİMLİ';
+                rsiComment.className = 'stat-value yellow';
+            } else {
+                rsiComment.textContent = '🔵 BEAR EĞİLİMLİ';
+                rsiComment.className = 'stat-value blue';
+            }
+        }
 
-    // MACD
-    const macd = Number(tech.macd);
-    $('macd').textContent = tech.macd ? formatNumber(tech.macd, 4) : '—';
+        // MACD
+        const macd = Number(tech.macd);
+        $('macd').textContent = tech.macd ? formatNumber(tech.macd, 4) : '—';
 
-    // MACD Yorumu
-    const macdComment = $('macdComment');
-    if (macdComment) {
-        if (macd > 0) {
-            macdComment.textContent = '🟢 BULL';
-            macdComment.className = 'stat-value green';
-        } else if (macd < 0) {
-            macdComment.textContent = '🔴 BEAR';
-            macdComment.className = 'stat-value red';
+        const macdComment = $('macdComment');
+        if (macdComment) {
+            if (macd > 0) {
+                macdComment.textContent = '🟢 BULL';
+                macdComment.className = 'stat-value green';
+            } else if (macd < 0) {
+                macdComment.textContent = '🔴 BEAR';
+                macdComment.className = 'stat-value red';
+            } else {
+                macdComment.textContent = '⚪ NÖTR';
+                macdComment.className = 'stat-value';
+            }
+        }
+
+        // MACD Histogram
+        const macdH = Number(tech.macd_histogram);
+        const macdHEl = $('macdHist');
+        macdHEl.textContent = isNaN(macdH) ? '—' : macdH.toFixed(4);
+        macdHEl.className = 'stat-value ' + (
+            macdH > 0 ? 'green' : 
+            macdH < 0 ? 'red' : ''
+        );
+        
+        const macdHistComment = $('macdHistComment');
+        if (macdHistComment) {
+            if (macdH > 0) {
+                macdHistComment.textContent = '📈 MOMENTUM ARTIYOR';
+                macdHistComment.className = 'stat-value green';
+            } else if (macdH < 0) {
+                macdHistComment.textContent = '📉 MOMENTUM AZALIYOR';
+                macdHistComment.className = 'stat-value red';
+            } else {
+                macdHistComment.textContent = '⚪ MOMENTUM SABİT';
+                macdHistComment.className = 'stat-value';
+            }
+        }
+        
+        $('atr').textContent = tech.atr_percent ? formatNumber(tech.atr_percent, 2) + '%' : '—';
+        
+        // EMA 20
+        const ema20 = Number(tech.sma_20);
+        $('ema20').textContent = tech.sma_20 ? formatPrice(tech.sma_20) : '—';
+
+        const ema20Comment = $('ema20Comment');
+        if (ema20Comment && currentPrice) {
+            if (currentPrice > ema20) {
+                ema20Comment.textContent = '🟢 FİYAT ÜSTÜNDE';
+                ema20Comment.className = 'stat-value green';
+            } else if (currentPrice < ema20) {
+                ema20Comment.textContent = '🔴 FİYAT ALTINDA';
+                ema20Comment.className = 'stat-value red';
+            } else {
+                ema20Comment.textContent = '⚪ EŞİT';
+                ema20Comment.className = 'stat-value';
+            }
+        }
+        
+        // EMA 50
+        const ema50 = Number(tech.sma_50);
+        $('ema50').textContent = tech.sma_50 ? formatPrice(tech.sma_50) : '—';
+
+        const ema50Comment = $('ema50Comment');
+        if (ema50Comment && currentPrice) {
+            if (currentPrice > ema50) {
+                ema50Comment.textContent = '🟢 FİYAT ÜSTÜNDE';
+                ema50Comment.className = 'stat-value green';
+            } else if (currentPrice < ema50) {
+                ema50Comment.textContent = '🔴 FİYAT ALTINDA';
+                ema50Comment.className = 'stat-value red';
+            } else {
+                ema50Comment.textContent = '⚪ EŞİT';
+                ema50Comment.className = 'stat-value';
+            }
+        }
+        
+        // Volume Ratio
+        const volR = Number(tech.volume_ratio);
+        const volEl = $('volumeRatio');
+        volEl.textContent = isNaN(volR) ? '—' : volR.toFixed(2) + 'x';
+        volEl.className = 'stat-value ' + (volR > 1.5 ? 'yellow' : '');
+        
+        const volComment = $('volumeComment');
+        if (volComment) {
+            if (volR > 1.5) {
+                volComment.textContent = '🔊 YÜKSEK HACİM';
+                volComment.className = 'stat-value yellow';
+            } else if (volR > 1) {
+                volComment.textContent = '🔉 NORMAL HACİM';
+                volComment.className = 'stat-value blue';
+            } else {
+                volComment.textContent = '🔈 DÜŞÜK HACİM';
+                volComment.className = 'stat-value';
+            }
+        }
+        
+        // Momentum 5
+        const mom5 = Number(tech.momentum_5);
+        $('mom5').textContent = tech.momentum_5 ? formatPercent(tech.momentum_5) : '—';
+
+        const mom5Comment = $('mom5Comment');
+        if (mom5Comment) {
+            if (mom5 > 1) {
+                mom5Comment.textContent = '🚀 GÜÇLÜ YÜKSELİŞ';
+                mom5Comment.className = 'stat-value green';
+            } else if (mom5 > 0.5) {
+                mom5Comment.textContent = '📈 YÜKSELİŞ';
+                mom5Comment.className = 'stat-value green';
+            } else if (mom5 > 0) {
+                mom5Comment.textContent = '↗️ HAFİF YÜKSELİŞ';
+                mom5Comment.className = 'stat-value green';
+            } else if (mom5 < -1) {
+                mom5Comment.textContent = '📉 GÜÇLÜ DÜŞÜŞ';
+                mom5Comment.className = 'stat-value red';
+            } else if (mom5 < -0.5) {
+                mom5Comment.textContent = '📉 DÜŞÜŞ';
+                mom5Comment.className = 'stat-value red';
+            } else if (mom5 < 0) {
+                mom5Comment.textContent = '↘️ HAFİF DÜŞÜŞ';
+                mom5Comment.className = 'stat-value red';
+            } else {
+                mom5Comment.textContent = '⚪ YATAY';
+                mom5Comment.className = 'stat-value';
+            }
+        }
+
+        // Momentum 10
+        const mom10 = Number(tech.momentum_10);
+        $('mom10').textContent = tech.momentum_10 ? formatPercent(tech.momentum_10) : '—';
+
+        const mom10Comment = $('mom10Comment');
+        if (mom10Comment) {
+            if (mom10 > 1) {
+                mom10Comment.textContent = '🚀 GÜÇLÜ YÜKSELİŞ';
+                mom10Comment.className = 'stat-value green';
+            } else if (mom10 > 0.5) {
+                mom10Comment.textContent = '📈 YÜKSELİŞ';
+                mom10Comment.className = 'stat-value green';
+            } else if (mom10 > 0) {
+                mom10Comment.textContent = '↗️ HAFİF YÜKSELİŞ';
+                mom10Comment.className = 'stat-value green';
+            } else if (mom10 < -1) {
+                mom10Comment.textContent = '📉 GÜÇLÜ DÜŞÜŞ';
+                mom10Comment.className = 'stat-value red';
+            } else if (mom10 < -0.5) {
+                mom10Comment.textContent = '📉 DÜŞÜŞ';
+                mom10Comment.className = 'stat-value red';
+            } else if (mom10 < 0) {
+                mom10Comment.textContent = '↘️ HAFİF DÜŞÜŞ';
+                mom10Comment.className = 'stat-value red';
+            } else {
+                mom10Comment.textContent = '⚪ YATAY';
+                mom10Comment.className = 'stat-value';
+            }
+        }
+        
+        // ===== HEIKIN ASHI =====
+        const haTrend = tech.ha_trend || '—';
+        const haEl = $('haTrend');
+        haEl.textContent = haTrend;
+        haEl.className = 'stat-value ' + (
+            haTrend.includes('BULL') ? 'green' : 
+            haTrend.includes('BEAR') ? 'red' : ''
+        );
+        
+        $('haRsi').textContent = tech.ha_rsi ? formatNumber(tech.ha_rsi, 1) : '—';
+        $('haStrength').textContent = tech.ha_trend_strength ? tech.ha_trend_strength + '%' : '—';
+        $('haMomentum').textContent = tech.ha_momentum ? formatPercent(tech.ha_momentum) : '—';
+        
+        const haColor = tech.ha_color_change;
+        if (haColor === 1) {
+            $('haColor').textContent = '🟢 Yeşile döndü';
+            $('haColor').className = 'stat-value green';
+        } else if (haColor === -1) {
+            $('haColor').textContent = '🔴 Kırmızıya döndü';
+            $('haColor').className = 'stat-value red';
         } else {
-            macdComment.textContent = '⚪ NÖTR';
-            macdComment.className = 'stat-value';
-        }
-    }
-
-    // MACD Histogram
-    const macdH = Number(tech.macd_histogram);
-    const macdHEl = $('macdHist');
-    macdHEl.textContent = isNaN(macdH) ? '—' : macdH.toFixed(4);
-    macdHEl.className = 'stat-value ' + (
-        macdH > 0 ? 'green' : 
-        macdH < 0 ? 'red' : ''
-    );
-    
-    // MACD Histogram Yorumu
-    const macdHistComment = $('macdHistComment');
-    if (macdHistComment) {
-        if (macdH > 0) {
-            macdHistComment.textContent = '📈 MOMENTUM ARTIYOR';
-            macdHistComment.className = 'stat-value green';
-        } else if (macdH < 0) {
-            macdHistComment.textContent = '📉 MOMENTUM AZALIYOR';
-            macdHistComment.className = 'stat-value red';
-        } else {
-            macdHistComment.textContent = '⚪ MOMENTUM SABİT';
-            macdHistComment.className = 'stat-value';
+            $('haColor').textContent = '⚪ Değişmedi';
+            $('haColor').className = 'stat-value';
         }
     }
     
-    $('atr').textContent = tech.atr_percent ? formatNumber(tech.atr_percent, 2) + '%' : '—';
-    
-    // EMA 20
-    const ema20 = Number(tech.sma_20);
-    $('ema20').textContent = tech.sma_20 ? formatPrice(tech.sma_20) : '—';
-
-    // EMA 20 Yorumu
-    const ema20Comment = $('ema20Comment');
-    if (ema20Comment && currentPrice) {
-        if (currentPrice > ema20) {
-            ema20Comment.textContent = '🟢 FİYAT ÜSTÜNDE';
-            ema20Comment.className = 'stat-value green';
-        } else if (currentPrice < ema20) {
-            ema20Comment.textContent = '🔴 FİYAT ALTINDA';
-            ema20Comment.className = 'stat-value red';
-        } else {
-            ema20Comment.textContent = '⚪ EŞİT';
-            ema20Comment.className = 'stat-value';
-        }
-    }
-    
-    // EMA 50
-    const ema50 = Number(tech.sma_50);
-    $('ema50').textContent = tech.sma_50 ? formatPrice(tech.sma_50) : '—';
-
-    // EMA 50 Yorumu
-    const ema50Comment = $('ema50Comment');
-    if (ema50Comment && currentPrice) {
-        if (currentPrice > ema50) {
-            ema50Comment.textContent = '🟢 FİYAT ÜSTÜNDE';
-            ema50Comment.className = 'stat-value green';
-        } else if (currentPrice < ema50) {
-            ema50Comment.textContent = '🔴 FİYAT ALTINDA';
-            ema50Comment.className = 'stat-value red';
-        } else {
-            ema50Comment.textContent = '⚪ EŞİT';
-            ema50Comment.className = 'stat-value';
-        }
-    }
-    
-    // Volume Ratio
-    const volR = Number(tech.volume_ratio);
-    const volEl = $('volumeRatio');
-    volEl.textContent = isNaN(volR) ? '—' : volR.toFixed(2) + 'x';
-    volEl.className = 'stat-value ' + (volR > 1.5 ? 'yellow' : '');
-    
-    // Volume Yorumu
-    const volComment = $('volumeComment');
-    if (volComment) {
-        if (volR > 1.5) {
-            volComment.textContent = '🔊 YÜKSEK HACİM';
-            volComment.className = 'stat-value yellow';
-        } else if (volR > 1) {
-            volComment.textContent = '🔉 NORMAL HACİM';
-            volComment.className = 'stat-value blue';
-        } else {
-            volComment.textContent = '🔈 DÜŞÜK HACİM';
-            volComment.className = 'stat-value';
-        }
-    }
-    
-    // Momentum 5
-    const mom5 = Number(tech.momentum_5);
-    $('mom5').textContent = tech.momentum_5 ? formatPercent(tech.momentum_5) : '—';
-
-    // Momentum 5 Yorumu
-    const mom5Comment = $('mom5Comment');
-    if (mom5Comment) {
-        if (mom5 > 1) {
-            mom5Comment.textContent = '🚀 GÜÇLÜ YÜKSELİŞ';
-            mom5Comment.className = 'stat-value green';
-        } else if (mom5 > 0.5) {
-            mom5Comment.textContent = '📈 YÜKSELİŞ';
-            mom5Comment.className = 'stat-value green';
-        } else if (mom5 > 0) {
-            mom5Comment.textContent = '↗️ HAFİF YÜKSELİŞ';
-            mom5Comment.className = 'stat-value green';
-        } else if (mom5 < -1) {
-            mom5Comment.textContent = '📉 GÜÇLÜ DÜŞÜŞ';
-            mom5Comment.className = 'stat-value red';
-        } else if (mom5 < -0.5) {
-            mom5Comment.textContent = '📉 DÜŞÜŞ';
-            mom5Comment.className = 'stat-value red';
-        } else if (mom5 < 0) {
-            mom5Comment.textContent = '↘️ HAFİF DÜŞÜŞ';
-            mom5Comment.className = 'stat-value red';
-        } else {
-            mom5Comment.textContent = '⚪ YATAY';
-            mom5Comment.className = 'stat-value';
-        }
-    }
-
-    // Momentum 10
-    const mom10 = Number(tech.momentum_10);
-    $('mom10').textContent = tech.momentum_10 ? formatPercent(tech.momentum_10) : '—';
-
-    // Momentum 10 Yorumu
-    const mom10Comment = $('mom10Comment');
-    if (mom10Comment) {
-        if (mom10 > 1) {
-            mom10Comment.textContent = '🚀 GÜÇLÜ YÜKSELİŞ';
-            mom10Comment.className = 'stat-value green';
-        } else if (mom10 > 0.5) {
-            mom10Comment.textContent = '📈 YÜKSELİŞ';
-            mom10Comment.className = 'stat-value green';
-        } else if (mom10 > 0) {
-            mom10Comment.textContent = '↗️ HAFİF YÜKSELİŞ';
-            mom10Comment.className = 'stat-value green';
-        } else if (mom10 < -1) {
-            mom10Comment.textContent = '📉 GÜÇLÜ DÜŞÜŞ';
-            mom10Comment.className = 'stat-value red';
-        } else if (mom10 < -0.5) {
-            mom10Comment.textContent = '📉 DÜŞÜŞ';
-            mom10Comment.className = 'stat-value red';
-        } else if (mom10 < 0) {
-            mom10Comment.textContent = '↘️ HAFİF DÜŞÜŞ';
-            mom10Comment.className = 'stat-value red';
-        } else {
-            mom10Comment.textContent = '⚪ YATAY';
-            mom10Comment.className = 'stat-value';
-        }
-    }
-    
-    // ===== HEIKIN ASHI =====
-    const haTrend = tech.ha_trend || '—';
-    const haEl = $('haTrend');
-    haEl.textContent = haTrend;
-    haEl.className = 'stat-value ' + (
-        haTrend.includes('BULL') ? 'green' : 
-        haTrend.includes('BEAR') ? 'red' : ''
-    );
-    
-    $('haRsi').textContent = tech.ha_rsi ? formatNumber(tech.ha_rsi, 1) : '—';
-    $('haStrength').textContent = tech.ha_trend_strength ? tech.ha_trend_strength + '%' : '—';
-    $('haMomentum').textContent = tech.ha_momentum ? formatPercent(tech.ha_momentum) : '—';
-    
-    const haColor = tech.ha_color_change;
-    if (haColor === 1) {
-        $('haColor').textContent = '🟢 Yeşile döndü';
-        $('haColor').className = 'stat-value green';
-    } else if (haColor === -1) {
-        $('haColor').textContent = '🔴 Kırmızıya döndü';
-        $('haColor').className = 'stat-value red';
-    } else {
-        $('haColor').textContent = '⚪ Değişmedi';
-        $('haColor').className = 'stat-value';
-    }
-}
     function countPatterns(arr, direction) {
         if (!arr || !Array.isArray(arr)) return 0;
         return arr.filter(p => {
@@ -2129,7 +2645,7 @@
         $('totalPatternCount').textContent = total;
         $('bullBearRatio').textContent = totalBull + ' / ' + totalBear;
         $('patternsCount').textContent = total + ' Pattern';
-        setPill('patternsPill', total > 0 ? 'blue' : 'dim', total + ' Pattern');
+        setPill('patternsPill', total > 0 ? 'purple' : 'dim', total + ' Pattern');
         
         // Pattern chips
         const chips = [];
@@ -2139,9 +2655,10 @@
             if (Array.isArray(arr)) {
                 arr.slice(0, 2).forEach(p => {
                     const dir = (p.direction || '').toLowerCase();
-                    const chipClass = dir.includes('bull') ? 'bull' : dir.includes('bear') ? 'bear' : '';
+                    const chipClass = dir.includes('bull') ? 'bull' : dir.includes('bear') ? 'bear' : 'neutral';
                     const name = (p.pattern || 'ICT').replace(/_/g, ' ');
-                    chips.push(`<span class="chip ${chipClass}">${name}</span>`);
+                    const strength = p.strength || p.confidence || '';
+                    chips.push(`<span class="chip ${chipClass}" title="${p.description || ''}">${name} ${strength ? '('+strength+'%)' : ''}</span>`);
                 });
             }
         });
@@ -2149,25 +2666,28 @@
         // Add Candle patterns
         candlePatterns.slice(0, 3).forEach(p => {
             const dir = (p.direction || '').toLowerCase();
-            const chipClass = dir.includes('bull') ? 'bull' : dir.includes('bear') ? 'bear' : '';
+            const chipClass = dir.includes('bull') ? 'bull' : dir.includes('bear') ? 'bear' : 'neutral';
             const name = (p.pattern || 'Candle').replace(/_/g, ' ');
-            chips.push(`<span class="chip ${chipClass}">${name}</span>`);
+            const strength = p.strength || p.confidence || '';
+            chips.push(`<span class="chip ${chipClass}" title="${p.description || ''}">${name} ${strength ? '('+strength+'%)' : ''}</span>`);
         });
         
         // Add Classical patterns
         classicalPatterns.slice(0, 2).forEach(p => {
             const dir = (p.direction || '').toLowerCase();
-            const chipClass = dir.includes('bull') ? 'bull' : dir.includes('bear') ? 'bear' : '';
+            const chipClass = dir.includes('bull') ? 'bull' : dir.includes('bear') ? 'bear' : 'neutral';
             const name = (p.pattern || 'Classic').replace(/_/g, ' ');
-            chips.push(`<span class="chip ${chipClass}">${name}</span>`);
+            const strength = p.strength || p.confidence || '';
+            chips.push(`<span class="chip ${chipClass}" title="${p.description || ''}">${name} ${strength ? '('+strength+'%)' : ''}</span>`);
         });
         
         // Add SmartPro patterns
         smartproPatterns.slice(0, 2).forEach(p => {
             const dir = (p.direction || '').toLowerCase();
-            const chipClass = dir.includes('bull') ? 'bull' : dir.includes('bear') ? 'bear' : '';
+            const chipClass = dir.includes('bull') ? 'bull' : dir.includes('bear') ? 'bear' : 'neutral';
             const name = (p.pattern || 'SmartPro').replace(/_/g, ' ');
-            chips.push(`<span class="chip ${chipClass}">${name}</span>`);
+            const strength = p.strength || p.confidence || '';
+            chips.push(`<span class="chip ${chipClass}" title="${p.description || ''}">${name} ${strength ? '('+strength+'%)' : ''}</span>`);
         });
         
         const chipContainer = $('patternChips');
@@ -2176,6 +2696,102 @@
         } else {
             chipContainer.innerHTML = '<div class="empty-state">Pattern bulunamadı</div>';
         }
+        
+        // Pattern detaylarını göster
+        renderPatternDetails(ictList, candlePatterns, classicalPatterns, smartproPatterns);
+    }
+    
+    function renderPatternDetails(ictPatterns, candlePatterns, classicalPatterns, smartproPatterns) {
+        const container = $('patternDetails');
+        if (!container) return;
+        
+        // Tüm patternleri birleştir ve kategorilerini ekle
+        let allPatterns = [
+            ...ictPatterns.map(p => ({...p, category: 'ICT'})),
+            ...candlePatterns.map(p => ({...p, category: 'CANDLE'})),
+            ...classicalPatterns.map(p => ({...p, category: 'CLASSICAL'})),
+            ...smartproPatterns.map(p => ({...p, category: 'SMARTPRO'}))
+        ];
+        
+        // Güç/confidence değerine göre filtrele (sadece %50+)
+        allPatterns = allPatterns.filter(p => {
+            const strength = p.strength || p.confidence || 0;
+            return strength >= 50;
+        });
+        
+        // Güce göre sırala (yüksekten düşüğe)
+        allPatterns.sort((a, b) => (b.strength || b.confidence || 0) - (a.strength || a.confidence || 0));
+        
+        if (allPatterns.length === 0) {
+            container.innerHTML = '<div class="empty-state">Güçlü pattern bulunamadı (%50 altı)</div>';
+            return;
+        }
+        
+        // Detayları oluştur
+        let html = '';
+        allPatterns.slice(0, 10).forEach(p => {
+            const direction = (p.direction || '').toLowerCase();
+            const strength = p.strength || p.confidence || 0;
+            const price = p.price || p.level || p.location || '—';
+            const targets = p.targets || [];
+            const stop = p.stop || '';
+            const time = p.time || new Date().toLocaleTimeString('tr-TR');
+            
+            // Güç rengi ve sınıfı
+            const strengthClass = strength >= 75 ? 'bull' : strength >= 60 ? 'neutral' : 'bear';
+            const directionClass = direction.includes('bull') ? 'bull' : direction.includes('bear') ? 'bear' : 'neutral';
+            
+            // Pattern açıklaması
+            let description = p.description || '';
+            if (!description) {
+                if (direction.includes('bull')) {
+                    description = `🟢 Boğa sinyali: ${p.pattern || 'Pattern'} ${price} seviyesinde tespit edildi. ${strength}% güç.`;
+                } else if (direction.includes('bear')) {
+                    description = `🔴 Ayı sinyali: ${p.pattern || 'Pattern'} ${price} seviyesinde tespit edildi. ${strength}% güç.`;
+                } else {
+                    description = `⚪ ${p.pattern || 'Pattern'} ${price} seviyesinde tespit edildi.`;
+                }
+            }
+            
+            html += `
+                <div class="pattern-detail-item ${directionClass}">
+                    <div class="pattern-detail-header">
+                        <span class="pattern-detail-name">
+                            <i class="fas fa-${direction.includes('bull') ? 'arrow-up' : direction.includes('bear') ? 'arrow-down' : 'minus'}"></i>
+                            ${p.pattern || p.name || 'Pattern'}
+                        </span>
+                        <span class="pattern-detail-type">${p.category || 'ICT'}</span>
+                    </div>
+                    <div class="pattern-detail-location">
+                        <i class="fas fa-map-pin"></i> ${formatPrice(price)} seviyesi
+                    </div>
+                    <div class="pattern-detail-desc">
+                        ${description}
+                    </div>
+                    <div class="pattern-detail-stats">
+                        <span class="pattern-detail-strength ${strengthClass}">
+                            <i class="fas fa-bolt"></i> ${strength}% güç
+                            <div class="strength-bar"><div class="strength-fill" style="width: ${strength}%"></div></div>
+                        </span>
+                        ${targets && targets.length > 0 ? `
+                            <span class="pattern-detail-targets">
+                                <i class="fas fa-bullseye"></i> Hedef: ${targets.map(t => formatPrice(t)).join(' → ')}
+                            </span>
+                        ` : ''}
+                        ${stop ? `
+                            <span class="pattern-detail-stop">
+                                <i class="fas fa-shield-alt"></i> Stop: ${formatPrice(stop)}
+                            </span>
+                        ` : ''}
+                        <span class="pattern-detail-time">
+                            <i class="far fa-clock"></i> ${time}
+                        </span>
+                    </div>
+                </div>
+            `;
+        });
+        
+        container.innerHTML = html;
     }
     
     function renderMarketStructure(ms) {
@@ -2221,7 +2837,7 @@
                 const strength = z.strength || 0;
                 return `
                     <div class="stat-row">
-                        <span class="stat-label">${type}</span>
+                        <span class="stat-label">${type === 'support' ? '🟢 Destek' : '🔴 Direnç'}</span>
                         <span class="stat-value ${type === 'support' ? 'green' : 'red'}">
                             ${formatPrice(level)} 
                             <span style="color: var(--text-muted); font-size: 0.7rem;">(${strength}%)</span>
@@ -2243,6 +2859,8 @@
         };
         
         let activeCount = 0;
+        let successCount = 0;
+        let failCount = 0;
         
         Object.entries(exchanges).forEach(([key, name]) => {
             const tile = $('ex-' + key);
@@ -2258,6 +2876,11 @@
                 activeCount++;
             }
             
+            if (stat) {
+                successCount += stat.success || 0;
+                failCount += stat.fail || 0;
+            }
+            
             const icon = tile.querySelector('.exchange-icon');
             if (icon) {
                 icon.textContent = (isActive || hasSuccess) ? '✅' : '⏳';
@@ -2266,6 +2889,8 @@
         
         $('exchangeBadge').textContent = activeCount + '/5';
         $('sourcesCount').textContent = activeCount + '/5 Kaynak';
+        $('sourceSuccess').textContent = successCount;
+        $('sourceFailed').textContent = failCount;
         setPill('sourcesPill', activeCount >= 3 ? 'green' : activeCount >= 1 ? 'yellow' : 'red', activeCount + '/5 Kaynak');
     }
     
@@ -2280,10 +2905,14 @@
             const data = await response.json();
             if (!data.success) return;
             
-            $('sysUptime').textContent = data.uptime || '—';
+            const uptimeSeconds = Math.floor((Date.now() - AppState.systemStart) / 1000);
+            const uptimeHours = Math.floor(uptimeSeconds / 3600);
+            const uptimeMinutes = Math.floor((uptimeSeconds % 3600) / 60);
+            
+            $('sysUptime').textContent = `${uptimeHours}s ${uptimeMinutes}d`;
             $('sysSuccess').textContent = data.success_rate ? data.success_rate + '%' : '—';
-            $('sysRequests').textContent = data.total_requests || '—';
-            $('sysWs').textContent = data.active_websockets || '—';
+            $('sysRequests').textContent = AppState.totalRequests || '0';
+            $('sysWs').textContent = AppState.ws?.readyState === 1 ? 'Aktif' : 'Pasif';
             
             if (data.config) {
                 $('sysCacheTtl').textContent = data.config.cache_ttl ? data.config.cache_ttl + 's' : '—';
@@ -2339,6 +2968,20 @@
         if (spCount > 0) comment += ' · SmartPro sinyali aktif';
         if (agreement === true) comment += ' · UT+PSAR uyumlu';
         
+        // En güçlü pattern'i bul
+        let strongestPattern = '';
+        const allPatterns = [
+            ...Object.values(data.ict_patterns || {}).flat(),
+            ...(data.candle_patterns || []),
+            ...(data.classical_patterns || []),
+            ...(data.ictsmartpro_signals || [])
+        ].sort((a, b) => (b.strength || 0) - (a.strength || 0));
+        
+        if (allPatterns.length > 0) {
+            const p = allPatterns[0];
+            strongestPattern = ` · En güçlü: ${p.pattern} ${p.strength}%`;
+        }
+        
         // Clear empty state
         const chatBox = $('chatBox');
         const empty = chatBox.querySelector('.empty-state');
@@ -2351,12 +2994,12 @@
             <div class="chat-header">
                 <i class="fas fa-robot"></i> AI ÖZETİ · ${new Date().toLocaleTimeString('tr-TR')}
             </div>
-            <div><b>Sinyal:</b> ${signal} (${confidence.toFixed(1)}%)</div>
+            <div><b>Sinyal:</b> <span class="${signal.includes('BUY') ? 'green' : signal.includes('SELL') ? 'red' : ''}">${signal}</span> (${confidence.toFixed(1)}%)</div>
             <div><b>Fiyat:</b> ${formatPrice(price)} · <b>RSI:</b> ${rsi ? rsi.toFixed(1) : '—'}</div>
             <div><b>Trend:</b> ${trend}</div>
             <div><b>UT:</b> ${utPos} · <b>PSAR:</b> ${psarDir} · <b>Uyum:</b> ${agreement === true ? '✅' : agreement === false ? '❌' : '—'}</div>
             <div><b>Pattern:</b> ICT:${ictCount} Candle:${candleCount} Klasik:${classicalCount} SP:${spCount}</div>
-            <div style="margin-top: 8px; color: var(--accent-cyan);">${comment}</div>
+            <div style="margin-top: 8px; color: var(--accent-cyan);">${comment}${strongestPattern}</div>
             <div class="chat-warning">
                 <i class="fas fa-triangle-exclamation"></i> Bu analiz yatırım tavsiyesi değildir.
             </div>
@@ -2370,14 +3013,14 @@
     // INITIALIZATION
     // ------------------------------------------------------------
     async function init() {
-        console.log('🚀 ICTSMARTPRO v9.0 başlatılıyor...');
+        console.log('🚀 ICTSMARTPRO v10.0 başlatılıyor...');
         
         // Check backend
         try {
             const res = await fetch('/health');
             if (res.ok) {
                 const data = await res.json();
-                setPill('backendPill', 'green', 'BACKEND v' + (data.version || '9'));
+                setPill('backendPill', 'green', 'BACKEND v' + (data.version || '10'));
             } else {
                 setPill('backendPill', 'red', 'BACKEND HATA');
             }
