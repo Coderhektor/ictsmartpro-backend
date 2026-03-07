@@ -1033,20 +1033,23 @@
                             </div>
                         </div>
 
-                        <!-- Temel İndikatörler -->
+                        <!-- Temel İndikatörler (YORUMLU) -->
                         <div class="indicator-group">
                             <h4>İndikatörler</h4>
                             <div class="stat-row">
                                 <span class="stat-label">RSI (14)</span>
                                 <span class="stat-value" id="rsi">—</span>
+                                <span class="stat-value" id="rsiComment" style="font-size: 0.7rem; margin-left: 5px;"></span>
                             </div>
                             <div class="stat-row">
                                 <span class="stat-label">MACD</span>
                                 <span class="stat-value" id="macd">—</span>
+                                <span class="stat-value" id="macdComment" style="font-size: 0.7rem; margin-left: 5px;"></span>
                             </div>
                             <div class="stat-row">
                                 <span class="stat-label">MACD Hist</span>
                                 <span class="stat-value" id="macdHist">—</span>
+                                <span class="stat-value" id="macdHistComment" style="font-size: 0.7rem; margin-left: 5px;"></span>
                             </div>
                             <div class="stat-row">
                                 <span class="stat-label">ATR %</span>
@@ -1055,22 +1058,27 @@
                             <div class="stat-row">
                                 <span class="stat-label">EMA 20</span>
                                 <span class="stat-value" id="ema20">—</span>
+                                <span class="stat-value" id="ema20Comment" style="font-size: 0.7rem; margin-left: 5px;"></span>
                             </div>
                             <div class="stat-row">
                                 <span class="stat-label">EMA 50</span>
                                 <span class="stat-value" id="ema50">—</span>
+                                <span class="stat-value" id="ema50Comment" style="font-size: 0.7rem; margin-left: 5px;"></span>
                             </div>
                             <div class="stat-row">
                                 <span class="stat-label">Volume Ratio</span>
                                 <span class="stat-value" id="volumeRatio">—</span>
+                                <span class="stat-value" id="volumeComment" style="font-size: 0.7rem; margin-left: 5px;"></span>
                             </div>
                             <div class="stat-row">
                                 <span class="stat-label">Mom 5</span>
                                 <span class="stat-value" id="mom5">—</span>
+                                <span class="stat-value" id="mom5Comment" style="font-size: 0.7rem; margin-left: 5px;"></span>
                             </div>
                             <div class="stat-row">
                                 <span class="stat-label">Mom 10</span>
                                 <span class="stat-value" id="mom10">—</span>
+                                <span class="stat-value" id="mom10Comment" style="font-size: 0.7rem; margin-left: 5px;"></span>
                             </div>
                         </div>
 
@@ -1424,74 +1432,69 @@
         '1h': '60', '4h': '240', '1d': 'D', '1w': 'W'
     };
     
- function initTradingView() {
-    const symbol = $('symbolSelect').value + 'USDT';
-    const interval = TV_INTERVALS[$('intervalSelect').value] || '60';
-    
-    if (AppState.tvWidget) {
-        try { AppState.tvWidget.remove(); } catch (e) {}
-        AppState.tvWidget = null;
-    }
-    
-    $('tvContainer').innerHTML = '';
-    $('tvPlaceholder').style.display = 'flex';
-    
-    if (typeof TradingView === 'undefined') {
-        setTimeout(initTradingView, 500);
-        return;
-    }
-    
-    try {
-        AppState.tvWidget = new TradingView.widget({
-            autosize: true,
-            symbol: 'BINANCE:' + symbol,
-            interval: interval,
-            timezone: 'Europe/Istanbul',
-            theme: 'dark',
-            style: '1',
-            locale: 'tr',
-            toolbar_bg: '#12141E',
-            enable_publishing: false,
-            allow_symbol_change: true,
-            // SADECE MACD ve UT BOT ALERTS
-          studies: [
-    // 1. MACD (built-in)
-    'MACD@tv-basicstudies',
-
-    // 2. UT Bot Alerts (en popüler community sürümü)
-    {
-        id: "UTBotAlerts",
-        name: "UT Bot Alerts@tv-script-studies",
-        force_overlay: true,
-        settings: {
-            "Sensitivity": 2,           // genelde 1-5 arası mantıklı
-            "Key Value": 1,             // ATR çarpanı
-            "Use Heikin Ashi": false    // çoğu kişi false tercih eder
-            // "Lookback": 10           // bazı versiyonlarda var
+    function initTradingView() {
+        const symbol = $('symbolSelect').value + 'USDT';
+        const interval = TV_INTERVALS[$('intervalSelect').value] || '60';
+        
+        if (AppState.tvWidget) {
+            try { AppState.tvWidget.remove(); } catch (e) {}
+            AppState.tvWidget = null;
+        }
+        
+        $('tvContainer').innerHTML = '';
+        $('tvPlaceholder').style.display = 'flex';
+        
+        if (typeof TradingView === 'undefined') {
+            setTimeout(initTradingView, 500);
+            return;
+        }
+        
+        try {
+            AppState.tvWidget = new TradingView.widget({
+                autosize: true,
+                symbol: 'BINANCE:' + symbol,
+                interval: interval,
+                timezone: 'Europe/Istanbul',
+                theme: 'dark',
+                style: '1',
+                locale: 'tr',
+                toolbar_bg: '#12141E',
+                enable_publishing: false,
+                allow_symbol_change: true,
+                studies: [
+                    'MACD@tv-basicstudies',
+                    {
+                        id: "UTBotAlerts",
+                        name: "UT Bot Alerts@tv-script-studies",
+                        force_overlay: true,
+                        settings: {
+                            "Sensitivity": 2,
+                            "Key Value": 1,
+                            "Use Heikin Ashi": false
+                        }
+                    }
+                ],
+                container_id: 'tvContainer',
+                overrides: {
+                    'paneProperties.background': '#12141E',
+                    'paneProperties.vertGridProperties.color': '#2A2F3F',
+                    'paneProperties.horzGridProperties.color': '#2A2F3F',
+                    'symbolWatermarkProperties.transparency': 90
+                },
+                disabled_features: [
+                    'header_saveload', 'header_undo_redo',
+                    'header_screenshot', 'timeframes_toolbar'
+                ]
+            });
+            
+            $('tvPlaceholder').style.display = 'none';
+            console.log('✅ TradingView initialized with MACD and UT Bot Alert');
+            
+        } catch (err) {
+            console.error('TradingView error:', err);
+            $('tvPlaceholder').innerHTML = '<span style="color: var(--accent-red);">Grafik yüklenemedi</span>';
         }
     }
-],
-            container_id: 'tvContainer',
-            overrides: {
-                'paneProperties.background': '#12141E',
-                'paneProperties.vertGridProperties.color': '#2A2F3F',
-                'paneProperties.horzGridProperties.color': '#2A2F3F',
-                'symbolWatermarkProperties.transparency': 90
-            },
-            disabled_features: [
-                'header_saveload', 'header_undo_redo',
-                'header_screenshot', 'timeframes_toolbar'
-            ]
-        });
-        
-        $('tvPlaceholder').style.display = 'none';
-        console.log('✅ TradingView initialized with MACD and UT Bot Alert');
-        
-    } catch (err) {
-        console.error('TradingView error:', err);
-        $('tvPlaceholder').innerHTML = '<span style="color: var(--accent-red);">Grafik yüklenemedi</span>';
-    }
-}
     
     // ------------------------------------------------------------
     // WEBSOCKET CONNECTION
@@ -1780,6 +1783,8 @@
         }
         
         // ===== INDICATORS =====
+        const currentPrice = price?.current ? Number(price.current) : null;
+        
         // RSI
         const rsi = Number(tech.rsi);
         const rsiEl = $('rsi');
@@ -1789,9 +1794,44 @@
             rsi < 30 ? 'green' : ''
         );
         
+        // RSI Yorumu
+        const rsiComment = $('rsiComment');
+        if (rsiComment) {
+            if (rsi > 70) {
+                rsiComment.textContent = '🔴 AŞIRI ALIM';
+                rsiComment.className = 'stat-value red';
+            } else if (rsi < 30) {
+                rsiComment.textContent = '🟢 AŞIRI SATIM';
+                rsiComment.className = 'stat-value green';
+            } else if (rsi >= 50) {
+                rsiComment.textContent = '🟡 BULL EĞİLİMLİ';
+                rsiComment.className = 'stat-value yellow';
+            } else {
+                rsiComment.textContent = '🔵 BEAR EĞİLİMLİ';
+                rsiComment.className = 'stat-value blue';
+            }
+        }
+
         // MACD
+        const macd = Number(tech.macd);
         $('macd').textContent = tech.macd ? formatNumber(tech.macd, 4) : '—';
-        
+
+        // MACD Yorumu
+        const macdComment = $('macdComment');
+        if (macdComment) {
+            if (macd > 0) {
+                macdComment.textContent = '🟢 BULL';
+                macdComment.className = 'stat-value green';
+            } else if (macd < 0) {
+                macdComment.textContent = '🔴 BEAR';
+                macdComment.className = 'stat-value red';
+            } else {
+                macdComment.textContent = '⚪ NÖTR';
+                macdComment.className = 'stat-value';
+            }
+        }
+
+        // MACD Histogram
         const macdH = Number(tech.macd_histogram);
         const macdHEl = $('macdHist');
         macdHEl.textContent = isNaN(macdH) ? '—' : macdH.toFixed(4);
@@ -1800,17 +1840,143 @@
             macdH < 0 ? 'red' : ''
         );
         
-        $('atr').textContent = tech.atr_percent ? formatNumber(tech.atr_percent, 2) + '%' : '—';
-        $('ema20').textContent = tech.sma_20 ? formatPrice(tech.sma_20) : '—';
-        $('ema50').textContent = tech.sma_50 ? formatPrice(tech.sma_50) : '—';
+        // MACD Histogram Yorumu
+        const macdHistComment = $('macdHistComment');
+        if (macdHistComment) {
+            if (macdH > 0) {
+                macdHistComment.textContent = '📈 MOMENTUM ARTIYOR';
+                macdHistComment.className = 'stat-value green';
+            } else if (macdH < 0) {
+                macdHistComment.textContent = '📉 MOMENTUM AZALIYOR';
+                macdHistComment.className = 'stat-value red';
+            } else {
+                macdHistComment.textContent = '⚪ MOMENTUM SABİT';
+                macdHistComment.className = 'stat-value';
+            }
+        }
         
+        $('atr').textContent = tech.atr_percent ? formatNumber(tech.atr_percent, 2) + '%' : '—';
+        
+        // EMA 20
+        const ema20 = Number(tech.sma_20);
+        $('ema20').textContent = tech.sma_20 ? formatPrice(tech.sma_20) : '—';
+
+        // EMA 20 Yorumu
+        const ema20Comment = $('ema20Comment');
+        if (ema20Comment && currentPrice) {
+            if (currentPrice > ema20) {
+                ema20Comment.textContent = '🟢 FİYAT ÜSTÜNDE';
+                ema20Comment.className = 'stat-value green';
+            } else if (currentPrice < ema20) {
+                ema20Comment.textContent = '🔴 FİYAT ALTINDA';
+                ema20Comment.className = 'stat-value red';
+            } else {
+                ema20Comment.textContent = '⚪ EŞİT';
+                ema20Comment.className = 'stat-value';
+            }
+        }
+        
+        // EMA 50
+        const ema50 = Number(tech.sma_50);
+        $('ema50').textContent = tech.sma_50 ? formatPrice(tech.sma_50) : '—';
+
+        // EMA 50 Yorumu
+        const ema50Comment = $('ema50Comment');
+        if (ema50Comment && currentPrice) {
+            if (currentPrice > ema50) {
+                ema50Comment.textContent = '🟢 FİYAT ÜSTÜNDE';
+                ema50Comment.className = 'stat-value green';
+            } else if (currentPrice < ema50) {
+                ema50Comment.textContent = '🔴 FİYAT ALTINDA';
+                ema50Comment.className = 'stat-value red';
+            } else {
+                ema50Comment.textContent = '⚪ EŞİT';
+                ema50Comment.className = 'stat-value';
+            }
+        }
+        
+        // Volume Ratio
         const volR = Number(tech.volume_ratio);
         const volEl = $('volumeRatio');
         volEl.textContent = isNaN(volR) ? '—' : volR.toFixed(2) + 'x';
         volEl.className = 'stat-value ' + (volR > 1.5 ? 'yellow' : '');
         
+        // Volume Yorumu
+        const volComment = $('volumeComment');
+        if (volComment) {
+            if (volR > 1.5) {
+                volComment.textContent = '🔊 YÜKSEK HACİM';
+                volComment.className = 'stat-value yellow';
+            } else if (volR > 1) {
+                volComment.textContent = '🔉 NORMAL HACİM';
+                volComment.className = 'stat-value blue';
+            } else {
+                volComment.textContent = '🔈 DÜŞÜK HACİM';
+                volComment.className = 'stat-value';
+            }
+        }
+        
+        // Momentum 5
+        const mom5 = Number(tech.momentum_5);
         $('mom5').textContent = tech.momentum_5 ? formatPercent(tech.momentum_5) : '—';
+
+        // Momentum 5 Yorumu
+        const mom5Comment = $('mom5Comment');
+        if (mom5Comment) {
+            if (mom5 > 1) {
+                mom5Comment.textContent = '🚀 GÜÇLÜ YÜKSELİŞ';
+                mom5Comment.className = 'stat-value green';
+            } else if (mom5 > 0.5) {
+                mom5Comment.textContent = '📈 YÜKSELİŞ';
+                mom5Comment.className = 'stat-value green';
+            } else if (mom5 > 0) {
+                mom5Comment.textContent = '↗️ HAFİF YÜKSELİŞ';
+                mom5Comment.className = 'stat-value green';
+            } else if (mom5 < -1) {
+                mom5Comment.textContent = '📉 GÜÇLÜ DÜŞÜŞ';
+                mom5Comment.className = 'stat-value red';
+            } else if (mom5 < -0.5) {
+                mom5Comment.textContent = '📉 DÜŞÜŞ';
+                mom5Comment.className = 'stat-value red';
+            } else if (mom5 < 0) {
+                mom5Comment.textContent = '↘️ HAFİF DÜŞÜŞ';
+                mom5Comment.className = 'stat-value red';
+            } else {
+                mom5Comment.textContent = '⚪ YATAY';
+                mom5Comment.className = 'stat-value';
+            }
+        }
+
+        // Momentum 10
+        const mom10 = Number(tech.momentum_10);
         $('mom10').textContent = tech.momentum_10 ? formatPercent(tech.momentum_10) : '—';
+
+        // Momentum 10 Yorumu
+        const mom10Comment = $('mom10Comment');
+        if (mom10Comment) {
+            if (mom10 > 1) {
+                mom10Comment.textContent = '🚀 GÜÇLÜ YÜKSELİŞ';
+                mom10Comment.className = 'stat-value green';
+            } else if (mom10 > 0.5) {
+                mom10Comment.textContent = '📈 YÜKSELİŞ';
+                mom10Comment.className = 'stat-value green';
+            } else if (mom10 > 0) {
+                mom10Comment.textContent = '↗️ HAFİF YÜKSELİŞ';
+                mom10Comment.className = 'stat-value green';
+            } else if (mom10 < -1) {
+                mom10Comment.textContent = '📉 GÜÇLÜ DÜŞÜŞ';
+                mom10Comment.className = 'stat-value red';
+            } else if (mom10 < -0.5) {
+                mom10Comment.textContent = '📉 DÜŞÜŞ';
+                mom10Comment.className = 'stat-value red';
+            } else if (mom10 < 0) {
+                mom10Comment.textContent = '↘️ HAFİF DÜŞÜŞ';
+                mom10Comment.className = 'stat-value red';
+            } else {
+                mom10Comment.textContent = '⚪ YATAY';
+                mom10Comment.className = 'stat-value';
+            }
+        }
         
         // ===== HEIKIN ASHI =====
         const haTrend = tech.ha_trend || '—';
